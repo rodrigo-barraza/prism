@@ -1,7 +1,7 @@
 import { ProviderError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
 import { OPENAI_COMPATIBLE_BASE_URL } from '../secrets.js';
-import { TEXT2TEXT, IMAGE2TEXT } from '../config.js';
+import { TYPES, getDefaultModels } from '../config.js';
 
 function getBaseUrl() {
   return OPENAI_COMPATIBLE_BASE_URL;
@@ -12,7 +12,7 @@ const openaiCompatibleProvider = {
 
   async generateText(
     messages,
-    model = TEXT2TEXT.DEFAULT_MODELS['openai-compatible'],
+    model = getDefaultModels(TYPES.TEXT, TYPES.TEXT)['openai-compatible'],
     options = {},
   ) {
     const baseUrl = getBaseUrl();
@@ -62,7 +62,7 @@ const openaiCompatibleProvider = {
   async captionImage(
     imageUrlOrBase64,
     prompt = 'Describe this image.',
-    model = IMAGE2TEXT.DEFAULT_MODELS['openai-compatible'],
+    model = getDefaultModels(TYPES.IMAGE, TYPES.TEXT)['openai-compatible'],
   ) {
     const baseUrl = getBaseUrl();
     logger.provider(

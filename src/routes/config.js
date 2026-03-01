@@ -1,5 +1,13 @@
 import express from 'express';
-import * as config from '../config.js';
+import {
+  PROVIDERS,
+  PROVIDER_LIST,
+  TYPES,
+  VOICES,
+  DEFAULT_VOICES,
+  getModelOptions,
+  getDefaultModels,
+} from '../config.js';
 
 const router = express.Router();
 
@@ -9,30 +17,29 @@ const router = express.Router();
  */
 router.get('/', (_req, res) => {
   res.json({
-    providers: config.PROVIDERS,
-    providerList: config.PROVIDER_LIST,
-    capabilities: config.PROVIDER_CAPABILITIES,
+    providers: PROVIDERS,
+    providerList: PROVIDER_LIST,
     textToText: {
-      models: config.TEXT2TEXT.MODEL_OPTIONS,
-      defaults: config.TEXT2TEXT.DEFAULT_MODELS,
+      models: getModelOptions(TYPES.TEXT, TYPES.TEXT),
+      defaults: getDefaultModels(TYPES.TEXT, TYPES.TEXT),
     },
     textToSpeech: {
-      models: config.TEXT2SPEECH.MODEL_OPTIONS,
-      defaults: config.TEXT2SPEECH.DEFAULT_MODELS,
-      voices: config.TEXT2SPEECH.VOICES,
-      defaultVoices: config.TEXT2SPEECH.DEFAULT_VOICES,
+      models: getModelOptions(TYPES.TEXT, TYPES.AUDIO),
+      defaults: getDefaultModels(TYPES.TEXT, TYPES.AUDIO),
+      voices: VOICES,
+      defaultVoices: DEFAULT_VOICES,
     },
     textToImage: {
-      models: config.TEXT2IMAGE.MODEL_OPTIONS,
-      defaults: config.TEXT2IMAGE.DEFAULT_MODELS,
+      models: getModelOptions(TYPES.TEXT, TYPES.IMAGE),
+      defaults: getDefaultModels(TYPES.TEXT, TYPES.IMAGE),
     },
     imageToText: {
-      models: config.IMAGE2TEXT.MODEL_OPTIONS,
-      defaults: config.IMAGE2TEXT.DEFAULT_MODELS,
+      models: getModelOptions(TYPES.IMAGE, TYPES.TEXT),
+      defaults: getDefaultModels(TYPES.IMAGE, TYPES.TEXT),
     },
     embedding: {
-      models: config.EMBEDDING.MODEL_OPTIONS,
-      defaults: config.EMBEDDING.DEFAULT_MODELS,
+      models: getModelOptions(TYPES.TEXT, TYPES.EMBEDDING),
+      defaults: getDefaultModels(TYPES.TEXT, TYPES.EMBEDDING),
     },
   });
 });

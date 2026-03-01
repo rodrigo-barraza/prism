@@ -2,7 +2,7 @@ import WebSocket from 'ws';
 import { ProviderError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
 import { ELEVENLABS_API_KEY } from '../secrets.js';
-import { TEXT2SPEECH } from '../config.js';
+import { TYPES, DEFAULT_VOICES, getDefaultModels } from '../config.js';
 
 function getApiKey() {
   if (!ELEVENLABS_API_KEY) {
@@ -16,7 +16,7 @@ const elevenlabsProvider = {
 
   async generateSpeech(
     text,
-    voiceId = TEXT2SPEECH.DEFAULT_VOICES.elevenlabs,
+    voiceId = DEFAULT_VOICES.elevenlabs,
     options = {},
   ) {
     logger.provider('ElevenLabs', `generateSpeech voiceId=${voiceId}`);
@@ -33,7 +33,9 @@ const elevenlabsProvider = {
           },
           body: JSON.stringify({
             text,
-            model_id: options.modelId || TEXT2SPEECH.DEFAULT_MODELS.elevenlabs,
+            model_id:
+              options.modelId ||
+              getDefaultModels(TYPES.TEXT, TYPES.AUDIO).elevenlabs,
             voice_settings: {
               stability: options.stability || 0.5,
               similarity_boost: options.similarityBoost || 0.8,
@@ -65,12 +67,13 @@ const elevenlabsProvider = {
    */
   async *generateSpeechStream(
     textStream,
-    voiceId = TEXT2SPEECH.DEFAULT_VOICES.elevenlabs,
+    voiceId = DEFAULT_VOICES.elevenlabs,
     options = {},
   ) {
     logger.provider('ElevenLabs', `generateSpeechStream voiceId=${voiceId}`);
     const apiKey = getApiKey();
-    const modelId = options.modelId || TEXT2SPEECH.DEFAULT_MODELS.elevenlabs;
+    const modelId =
+      options.modelId || getDefaultModels(TYPES.TEXT, TYPES.AUDIO).elevenlabs;
     const wsUrl = `wss://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream-input?model_id=${modelId}`;
 
     const ws = new WebSocket(wsUrl, {

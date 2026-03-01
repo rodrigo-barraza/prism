@@ -3,7 +3,7 @@ import { Readable } from 'stream';
 import { ProviderError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
 import { GOOGLE_API_KEY } from '../secrets.js';
-import { TEXT2TEXT, IMAGE2TEXT, TEXT2IMAGE, TEXT2SPEECH } from '../config.js';
+import { TYPES, MODELS, DEFAULT_VOICES, getDefaultModels } from '../config.js';
 
 let client = null;
 
@@ -58,7 +58,7 @@ const googleProvider = {
 
   async generateText(
     messages,
-    model = TEXT2TEXT.DEFAULT_MODELS.google,
+    model = getDefaultModels(TYPES.TEXT, TYPES.TEXT).google,
     options = {},
   ) {
     logger.provider('Google', `generateText model=${model}`);
@@ -91,7 +91,7 @@ const googleProvider = {
 
   async *generateTextStream(
     messages,
-    model = TEXT2TEXT.DEFAULT_MODELS.google,
+    model = getDefaultModels(TYPES.TEXT, TYPES.TEXT).google,
     options = {},
   ) {
     logger.provider('Google', `generateTextStream model=${model}`);
@@ -133,7 +133,7 @@ const googleProvider = {
   async captionImage(
     imageUrlOrBase64,
     prompt = 'Describe this image.',
-    model = IMAGE2TEXT.DEFAULT_MODELS.google,
+    model = getDefaultModels(TYPES.IMAGE, TYPES.TEXT).google,
   ) {
     logger.provider('Google', `captionImage model=${model}`);
     try {
@@ -179,7 +179,7 @@ const googleProvider = {
   async generateImage(
     prompt,
     images = [],
-    model = TEXT2IMAGE.MODELS.GEMINI_3_PRO_IMAGE.name,
+    model = MODELS.GEMINI_3_PRO_IMAGE.name,
   ) {
     logger.provider('Google', `generateImage model=${model}`);
     try {
@@ -231,11 +231,7 @@ const googleProvider = {
     }
   },
 
-  async generateSpeech(
-    text,
-    voice = TEXT2SPEECH.DEFAULT_VOICES.google,
-    options = {},
-  ) {
+  async generateSpeech(text, voice = DEFAULT_VOICES.google, options = {}) {
     logger.provider('Google', `generateSpeech voice=${voice}`);
     try {
       const config = {
@@ -251,7 +247,8 @@ const googleProvider = {
       };
 
       const response = await getClient().models.generateContent({
-        model: options.model || TEXT2SPEECH.DEFAULT_MODELS.google,
+        model:
+          options.model || getDefaultModels(TYPES.TEXT, TYPES.AUDIO).google,
         contents: [
           {
             role: 'user',

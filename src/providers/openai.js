@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { ProviderError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
 import { OPENAI_API_KEY } from '../secrets.js';
-import { TEXT2TEXT, TEXT2SPEECH, EMBEDDING } from '../config.js';
+import { TYPES, DEFAULT_VOICES, getDefaultModels } from '../config.js';
 
 let client = null;
 
@@ -21,7 +21,7 @@ const openaiProvider = {
 
   async generateText(
     messages,
-    model = TEXT2TEXT.DEFAULT_MODELS.openai,
+    model = getDefaultModels(TYPES.TEXT, TYPES.TEXT).openai,
     options = {},
   ) {
     logger.provider('OpenAI', `generateText model=${model}`);
@@ -51,7 +51,7 @@ const openaiProvider = {
 
   async *generateTextStream(
     messages,
-    model = TEXT2TEXT.DEFAULT_MODELS.openai,
+    model = getDefaultModels(TYPES.TEXT, TYPES.TEXT).openai,
     options = {},
   ) {
     logger.provider('OpenAI', `generateTextStream model=${model}`);
@@ -90,15 +90,12 @@ const openaiProvider = {
     }
   },
 
-  async generateSpeech(
-    text,
-    voice = TEXT2SPEECH.DEFAULT_VOICES.openai,
-    options = {},
-  ) {
+  async generateSpeech(text, voice = DEFAULT_VOICES.openai, options = {}) {
     logger.provider('OpenAI', `generateSpeech voice=${voice}`);
     try {
       const response = await getClient().audio.speech.create({
-        model: options.model || TEXT2SPEECH.DEFAULT_MODELS.openai,
+        model:
+          options.model || getDefaultModels(TYPES.TEXT, TYPES.AUDIO).openai,
         voice,
         input: text,
         instructions: options.instructions || undefined,
@@ -118,7 +115,7 @@ const openaiProvider = {
   async captionImage(
     imageUrl,
     prompt = "What's in this image?",
-    model = TEXT2TEXT.DEFAULT_MODELS.openai,
+    model = getDefaultModels(TYPES.TEXT, TYPES.TEXT).openai,
   ) {
     logger.provider('OpenAI', `captionImage model=${model}`);
     try {
@@ -147,7 +144,10 @@ const openaiProvider = {
     }
   },
 
-  async generateEmbedding(text, model = EMBEDDING.DEFAULT_MODELS.openai) {
+  async generateEmbedding(
+    text,
+    model = getDefaultModels(TYPES.TEXT, TYPES.EMBEDDING).openai,
+  ) {
     logger.provider('OpenAI', `generateEmbedding model=${model}`);
     try {
       const response = await getClient().embeddings.create({

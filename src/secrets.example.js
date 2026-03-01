@@ -9,7 +9,7 @@
 export const PORT = 3000;
 
 // Gateway Auth
-export const GATEWAY_SECRET = "";
+export const GATEWAY_SECRET = '';
 
 // OpenAI
 export const OPENAI_API_KEY = '';
@@ -23,9 +23,12 @@ export const GOOGLE_API_KEY = '';
 // ElevenLabs
 export const ELEVENLABS_API_KEY = '';
 
+// Inworld (Base64-encoded apiKey:apiSecret)
+export const INWORLD_BASIC = '';
+
 // OpenAI-Compatible / Local (LMStudio, LocalAI, Ollama, etc.)
 export const OPENAI_COMPATIBLE_BASE_URL = 'http://localhost:1234';
 
 // Mongo
-export const MONGO_URI = "mongodb://127.0.0.1:27017";
-export const MONGO_DB_NAME = "";
+export const MONGO_URI = 'mongodb://127.0.0.1:27017';
+export const MONGO_DB_NAME = '';
