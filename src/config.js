@@ -140,53 +140,57 @@ const TEXT2TEXT = {
 // ============================================================
 // TEXT-TO-SPEECH MODELS & VOICES
 // ============================================================
+// Each model is defined once with all its metadata.
+// MODEL_OPTIONS and DEFAULT_MODELS are derived below.
 
 const TEXT2SPEECH_MODELS = {
+  // OpenAI
+  GPT_4O_MINI_TTS: {
+    name: 'gpt-4o-mini-tts',
+    label: 'GPT 4o Mini TTS',
+    provider: PROVIDERS.OPENAI,
+    default: true,
+  },
+
   // Google
-  GEMINI_2_FLASH_LITE_PREVIEW_TTS: 'gemini-2.0-flash-lite-preview-tts',
-  GEMINI_25_FLASH_LITE_TTS: 'gemini-2.5-flash-lite-preview-tts',
-  GEMINI_25_FLASH_TTS: 'gemini-2.5-flash-tts',
-  GEMINI_25_PRO: 'gemini-2.5-pro-tts',
-  ESPEAKNG: 'espeak-ng',
+  GEMINI_2_FLASH_LITE_PREVIEW_TTS: {
+    name: 'gemini-2.0-flash-lite-preview-tts',
+    label: 'Gemini 2.0 Flash Lite TTS',
+    provider: PROVIDERS.GOOGLE,
+  },
+  GEMINI_25_FLASH_LITE_TTS: {
+    name: 'gemini-2.5-flash-lite-preview-tts',
+    label: 'Gemini 2.5 Flash Lite TTS',
+    provider: PROVIDERS.GOOGLE,
+  },
+  GEMINI_25_FLASH_TTS: {
+    name: 'gemini-2.5-flash-tts',
+    label: 'Gemini 2.5 Flash TTS',
+    provider: PROVIDERS.GOOGLE,
+  },
+  GEMINI_25_PRO: {
+    name: 'gemini-2.5-pro-tts',
+    label: 'Gemini 2.5 Pro TTS',
+    provider: PROVIDERS.GOOGLE,
+    default: true,
+  },
+  ESPEAKNG: {
+    name: 'espeak-ng',
+    label: 'eSpeak NG',
+    provider: PROVIDERS.GOOGLE,
+    listed: false,
+  },
 
-  // OpenAI (provider-specific)
-  GPT_4O_MINI_TTS: 'gpt-4o-mini-tts',
-
-  // ElevenLabs (provider-specific)
-  ELEVEN_TURBO_V2: 'eleven_turbo_v2',
+  // ElevenLabs
+  ELEVEN_TURBO_V2: {
+    name: 'eleven_turbo_v2',
+    label: 'Eleven Turbo v2',
+    provider: PROVIDERS.ELEVENLABS,
+    default: true,
+  },
 };
 
-const TEXT2SPEECH_MODEL_OPTIONS = {
-  [PROVIDERS.OPENAI]: [
-    { name: TEXT2SPEECH_MODELS.GPT_4O_MINI_TTS, label: 'GPT 4o Mini TTS' },
-  ],
-  [PROVIDERS.GOOGLE]: [
-    {
-      name: TEXT2SPEECH_MODELS.GEMINI_2_FLASH_LITE_PREVIEW_TTS,
-      label: 'Gemini 2.0 Flash Lite TTS',
-    },
-    {
-      name: TEXT2SPEECH_MODELS.GEMINI_25_FLASH_LITE_TTS,
-      label: 'Gemini 2.5 Flash Lite TTS',
-    },
-    {
-      name: TEXT2SPEECH_MODELS.GEMINI_25_FLASH_TTS,
-      label: 'Gemini 2.5 Flash TTS',
-    },
-    { name: TEXT2SPEECH_MODELS.GEMINI_25_PRO, label: 'Gemini 2.5 Pro TTS' },
-  ],
-  [PROVIDERS.ELEVENLABS]: [
-    { name: TEXT2SPEECH_MODELS.ELEVEN_TURBO_V2, label: 'Eleven Turbo v2' },
-  ],
-};
-
-const TEXT2SPEECH_DEFAULT_MODELS = {
-  [PROVIDERS.OPENAI]: TEXT2SPEECH_MODELS.GPT_4O_MINI_TTS,
-  [PROVIDERS.GOOGLE]: TEXT2SPEECH_MODELS.GEMINI_25_PRO,
-  [PROVIDERS.ELEVENLABS]: TEXT2SPEECH_MODELS.ELEVEN_TURBO_V2,
-};
-
-// --- Voices ---
+// --- Voices (per provider) ---
 
 const OPENAI_VOICES = [
   { name: 'alloy', gender: 'Neutral' },
@@ -248,86 +252,177 @@ const ELEVENLABS_VOICES = [
   { name: 'yoZ06aMxZJJ28mfd3POQ', label: 'Sam', gender: 'Male' },
 ];
 
-const TEXT2SPEECH_VOICES = {
-  [PROVIDERS.OPENAI]: OPENAI_VOICES,
-  [PROVIDERS.GOOGLE]: GOOGLE_VOICES,
-  [PROVIDERS.ELEVENLABS]: ELEVENLABS_VOICES,
-};
+// --- Derived convenience maps (auto-built from TEXT2SPEECH_MODELS) ---
 
-const TEXT2SPEECH_DEFAULT_VOICES = {
-  [PROVIDERS.OPENAI]: 'echo',
-  [PROVIDERS.GOOGLE]: 'Kore',
-  [PROVIDERS.ELEVENLABS]: '21m00Tcm4TlvDq8ikWAM',
+const _t2sModelOptions = {};
+const _t2sDefaultModels = {};
+
+for (const model of Object.values(TEXT2SPEECH_MODELS)) {
+  if (model.listed !== false) {
+    (_t2sModelOptions[model.provider] ??= []).push({
+      name: model.name,
+      label: model.label,
+    });
+  }
+  if (model.default) {
+    _t2sDefaultModels[model.provider] = model.name;
+  }
+}
+
+const TEXT2SPEECH = {
+  MODELS: TEXT2SPEECH_MODELS,
+  MODEL_OPTIONS: _t2sModelOptions,
+  DEFAULT_MODELS: _t2sDefaultModels,
+  VOICES: {
+    [PROVIDERS.OPENAI]: OPENAI_VOICES,
+    [PROVIDERS.GOOGLE]: GOOGLE_VOICES,
+    [PROVIDERS.ELEVENLABS]: ELEVENLABS_VOICES,
+  },
+  DEFAULT_VOICES: {
+    [PROVIDERS.OPENAI]: 'echo',
+    [PROVIDERS.GOOGLE]: 'Kore',
+    [PROVIDERS.ELEVENLABS]: '21m00Tcm4TlvDq8ikWAM',
+  },
 };
 
 // ============================================================
 // TEXT-TO-IMAGE MODELS
 // ============================================================
+// Each model is defined once with all its metadata.
+// MODEL_OPTIONS and DEFAULT_MODELS are derived below.
 
-// All text-to-image models are currently defined in the node backend.
-const TEXT2IMAGE_MODELS = {};
+const TEXT2IMAGE_MODELS = {
+  // Google
+  GEMINI_3_PRO_IMAGE: {
+    name: 'gemini-3-pro-image-preview',
+    label: 'Gemini 3 Pro Image',
+    provider: PROVIDERS.GOOGLE,
+    default: true,
+  },
+};
 
-const TEXT2IMAGE_MODEL_OPTIONS = {};
+// --- Derived convenience maps (auto-built from TEXT2IMAGE_MODELS) ---
 
-const TEXT2IMAGE_DEFAULT_MODELS = {};
+const _t2iModelOptions = {};
+const _t2iDefaultModels = {};
+
+for (const model of Object.values(TEXT2IMAGE_MODELS)) {
+  if (model.listed !== false) {
+    (_t2iModelOptions[model.provider] ??= []).push({
+      name: model.name,
+      label: model.label,
+    });
+  }
+  if (model.default) {
+    _t2iDefaultModels[model.provider] = model.name;
+  }
+}
+
+const TEXT2IMAGE = {
+  MODELS: TEXT2IMAGE_MODELS,
+  MODEL_OPTIONS: _t2iModelOptions,
+  DEFAULT_MODELS: _t2iDefaultModels,
+};
 
 // ============================================================
 // IMAGE-TO-TEXT (VISION) MODELS
 // ============================================================
+// Each model is defined once with all its metadata.
+// MODEL_OPTIONS and DEFAULT_MODELS are derived below.
 
 const IMAGE2TEXT_MODELS = {
   // Google
-  GEMINI_3_FLASH: 'gemini-3-flash-preview',
-  GEMINI_3_PRO: 'gemini-3-pro-image-preview',
+  GEMINI_3_FLASH: {
+    name: 'gemini-3-flash-preview',
+    label: 'Gemini 3 Flash',
+    provider: PROVIDERS.GOOGLE,
+    default: true,
+  },
+  GEMINI_31_PRO: {
+    name: 'gemini-3.1-pro-preview',
+    label: 'Gemini 3.1 Pro',
+    provider: PROVIDERS.GOOGLE,
+  },
 
   // OpenAI-Compatible / Local
-  QWEN_VL_8B: 'qwen/qwen3-vl-8b',
+  QWEN_VL_8B: {
+    name: 'qwen/qwen3-vl-8b',
+    label: 'Qwen3-VL-8B',
+    provider: PROVIDERS.OPENAI_COMPATIBLE,
+    default: true,
+  },
 };
 
-const IMAGE2TEXT_MODEL_OPTIONS = {
-  [PROVIDERS.GOOGLE]: [
-    { name: IMAGE2TEXT_MODELS.GEMINI_3_FLASH, label: 'Gemini 3 Flash' },
-    { name: IMAGE2TEXT_MODELS.GEMINI_3_PRO, label: 'Gemini 3 Pro' },
-  ],
-  [PROVIDERS.OPENAI_COMPATIBLE]: [
-    { name: IMAGE2TEXT_MODELS.QWEN_VL_8B, label: 'Qwen3-VL-8B' },
-  ],
-};
+// --- Derived convenience maps (auto-built from IMAGE2TEXT_MODELS) ---
 
-const IMAGE2TEXT_DEFAULT_MODELS = {
-  [PROVIDERS.GOOGLE]: IMAGE2TEXT_MODELS.GEMINI_3_FLASH,
-  [PROVIDERS.OPENAI_COMPATIBLE]: IMAGE2TEXT_MODELS.QWEN_VL_8B,
+const _i2tModelOptions = {};
+const _i2tDefaultModels = {};
+
+for (const model of Object.values(IMAGE2TEXT_MODELS)) {
+  if (model.listed !== false) {
+    (_i2tModelOptions[model.provider] ??= []).push({
+      name: model.name,
+      label: model.label,
+    });
+  }
+  if (model.default) {
+    _i2tDefaultModels[model.provider] = model.name;
+  }
+}
+
+const IMAGE2TEXT = {
+  MODELS: IMAGE2TEXT_MODELS,
+  MODEL_OPTIONS: _i2tModelOptions,
+  DEFAULT_MODELS: _i2tDefaultModels,
 };
 
 // ============================================================
 // EMBEDDING MODELS
 // ============================================================
+// Each model is defined once with all its metadata.
+// MODEL_OPTIONS and DEFAULT_MODELS are derived below.
 
 const EMBEDDING_MODELS = {
-  TEXT_EMBEDDING_3_SMALL: 'text-embedding-3-small',
-  TEXT_EMBEDDING_3_LARGE: 'text-embedding-3-large',
-  TEXT_EMBEDDING_ADA_002: 'text-embedding-ada-002',
+  // OpenAI
+  TEXT_EMBEDDING_3_SMALL: {
+    name: 'text-embedding-3-small',
+    label: 'Embedding 3 Small',
+    provider: PROVIDERS.OPENAI,
+    default: true,
+  },
+  TEXT_EMBEDDING_3_LARGE: {
+    name: 'text-embedding-3-large',
+    label: 'Embedding 3 Large',
+    provider: PROVIDERS.OPENAI,
+  },
+  TEXT_EMBEDDING_ADA_002: {
+    name: 'text-embedding-ada-002',
+    label: 'Ada 002 (Legacy)',
+    provider: PROVIDERS.OPENAI,
+  },
 };
 
-const EMBEDDING_MODEL_OPTIONS = {
-  [PROVIDERS.OPENAI]: [
-    {
-      name: EMBEDDING_MODELS.TEXT_EMBEDDING_3_SMALL,
-      label: 'Embedding 3 Small',
-    },
-    {
-      name: EMBEDDING_MODELS.TEXT_EMBEDDING_3_LARGE,
-      label: 'Embedding 3 Large',
-    },
-    {
-      name: EMBEDDING_MODELS.TEXT_EMBEDDING_ADA_002,
-      label: 'Ada 002 (Legacy)',
-    },
-  ],
-};
+// --- Derived convenience maps (auto-built from EMBEDDING_MODELS) ---
 
-const EMBEDDING_DEFAULT_MODELS = {
-  [PROVIDERS.OPENAI]: EMBEDDING_MODELS.TEXT_EMBEDDING_3_SMALL,
+const _embModelOptions = {};
+const _embDefaultModels = {};
+
+for (const model of Object.values(EMBEDDING_MODELS)) {
+  if (model.listed !== false) {
+    (_embModelOptions[model.provider] ??= []).push({
+      name: model.name,
+      label: model.label,
+    });
+  }
+  if (model.default) {
+    _embDefaultModels[model.provider] = model.name;
+  }
+}
+
+const EMBEDDING = {
+  MODELS: EMBEDDING_MODELS,
+  MODEL_OPTIONS: _embModelOptions,
+  DEFAULT_MODELS: _embDefaultModels,
 };
 
 // ============================================================
@@ -392,27 +487,14 @@ export {
   TEXT2TEXT,
 
   // Text-to-Speech
-  TEXT2SPEECH_MODELS,
-  TEXT2SPEECH_MODEL_OPTIONS,
-  TEXT2SPEECH_DEFAULT_MODELS,
-  TEXT2SPEECH_VOICES,
-  TEXT2SPEECH_DEFAULT_VOICES,
-  OPENAI_VOICES,
-  GOOGLE_VOICES,
-  ELEVENLABS_VOICES,
+  TEXT2SPEECH,
 
   // Text-to-Image
-  TEXT2IMAGE_MODELS,
-  TEXT2IMAGE_MODEL_OPTIONS,
-  TEXT2IMAGE_DEFAULT_MODELS,
+  TEXT2IMAGE,
 
   // Image-to-Text
-  IMAGE2TEXT_MODELS,
-  IMAGE2TEXT_MODEL_OPTIONS,
-  IMAGE2TEXT_DEFAULT_MODELS,
+  IMAGE2TEXT,
 
   // Embeddings
-  EMBEDDING_MODELS,
-  EMBEDDING_MODEL_OPTIONS,
-  EMBEDDING_DEFAULT_MODELS,
+  EMBEDDING,
 };
