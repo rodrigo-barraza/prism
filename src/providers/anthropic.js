@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { ProviderError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
 import { ANTHROPIC_API_KEY } from '../secrets.js';
-import { TEXT2TEXT_DEFAULT_MODELS } from '../config.js';
+import { TEXT2TEXT } from '../config.js';
 
 let client = null;
 
@@ -58,7 +58,7 @@ function prepareMessages(messages) {
 const anthropicProvider = {
     name: 'anthropic',
 
-    async generateText(messages, model = TEXT2TEXT_DEFAULT_MODELS.anthropic, options = {}) {
+    async generateText(messages, model = TEXT2TEXT.DEFAULT_MODELS.anthropic, options = {}) {
         logger.provider('Anthropic', `generateText model=${model}`);
         try {
             const prepared = prepareMessages(messages);
@@ -83,7 +83,7 @@ const anthropicProvider = {
         }
     },
 
-    async *generateTextStream(messages, model = TEXT2TEXT_DEFAULT_MODELS.anthropic, options = {}) {
+    async *generateTextStream(messages, model = TEXT2TEXT.DEFAULT_MODELS.anthropic, options = {}) {
         logger.provider('Anthropic', `generateTextStream model=${model}`);
         try {
             const prepared = prepareMessages(messages);

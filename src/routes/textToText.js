@@ -2,7 +2,7 @@ import express from "express";
 import crypto from "crypto";
 import { getProvider } from "../providers/index.js";
 import { ProviderError } from "../utils/errors.js";
-import { TEXT2TEXT_PRICING, TEXT2TEXT_DEFAULT_MODELS } from "../config.js";
+import { TEXT2TEXT } from "../config.js";
 import logger from "../utils/logger.js";
 import RequestLogger from "../services/RequestLogger.js";
 
@@ -35,7 +35,7 @@ router.post("/", async (req, res, next) => {
             throw new ProviderError(providerName, `Provider "${providerName}" does not support text generation`, 400);
         }
 
-        resolvedModel = model || TEXT2TEXT_DEFAULT_MODELS[providerName];
+        resolvedModel = model || TEXT2TEXT.DEFAULT_MODELS[providerName];
         const generationStart = performance.now();
         const result = await provider.generateText(messages, resolvedModel, options || {});
         const now = performance.now();
@@ -44,7 +44,7 @@ router.post("/", async (req, res, next) => {
         const totalSec = (now - requestStart) / 1000;
 
         const usage = result.usage || { inputTokens: 0, outputTokens: 0 };
-        const pricing = TEXT2TEXT_PRICING[resolvedModel];
+        const pricing = TEXT2TEXT.PRICING[resolvedModel];
         let estimatedCost = null;
         if (pricing) {
             estimatedCost =

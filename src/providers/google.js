@@ -4,7 +4,7 @@ import { ProviderError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
 import { GOOGLE_API_KEY } from '../secrets.js';
 import {
-    TEXT2TEXT_DEFAULT_MODELS,
+    TEXT2TEXT,
     IMAGE2TEXT_DEFAULT_MODELS,
     IMAGE2TEXT_MODELS,
     TEXT2SPEECH_DEFAULT_MODELS,
@@ -62,7 +62,7 @@ function convertMessages(messages) {
 const googleProvider = {
     name: 'google',
 
-    async generateText(messages, model = TEXT2TEXT_DEFAULT_MODELS.google, options = {}) {
+    async generateText(messages, model = TEXT2TEXT.DEFAULT_MODELS.google, options = {}) {
         logger.provider('Google', `generateText model=${model}`);
         try {
             const contents = convertMessages(messages);
@@ -91,7 +91,7 @@ const googleProvider = {
         }
     },
 
-    async *generateTextStream(messages, model = TEXT2TEXT_DEFAULT_MODELS.google, options = {}) {
+    async *generateTextStream(messages, model = TEXT2TEXT.DEFAULT_MODELS.google, options = {}) {
         logger.provider('Google', `generateTextStream model=${model}`);
         try {
             const contents = convertMessages(messages);

@@ -13,8 +13,8 @@ router.get('/', (_req, res) => {
         providerList: config.PROVIDER_LIST,
         capabilities: config.PROVIDER_CAPABILITIES,
         textToText: {
-            models: config.TEXT2TEXT_MODEL_OPTIONS,
-            defaults: config.TEXT2TEXT_DEFAULT_MODELS,
+            models: config.TEXT2TEXT.MODEL_OPTIONS,
+            defaults: config.TEXT2TEXT.DEFAULT_MODELS,
         },
         textToSpeech: {
             models: config.TEXT2SPEECH_MODEL_OPTIONS,

@@ -3,7 +3,7 @@ import { ProviderError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
 import { OPENAI_API_KEY } from '../secrets.js';
 import {
-    TEXT2TEXT_DEFAULT_MODELS,
+    TEXT2TEXT,
     TEXT2SPEECH_DEFAULT_MODELS,
     TEXT2SPEECH_DEFAULT_VOICES,
     EMBEDDING_DEFAULT_MODELS,
@@ -24,7 +24,7 @@ function getClient() {
 const openaiProvider = {
     name: 'openai',
 
-    async generateText(messages, model = TEXT2TEXT_DEFAULT_MODELS.openai, options = {}) {
+    async generateText(messages, model = TEXT2TEXT.DEFAULT_MODELS.openai, options = {}) {
         logger.provider('OpenAI', `generateText model=${model}`);
         try {
             const response = await getClient().chat.completions.create({
@@ -45,7 +45,7 @@ const openaiProvider = {
         }
     },
 
-    async *generateTextStream(messages, model = TEXT2TEXT_DEFAULT_MODELS.openai, options = {}) {
+    async *generateTextStream(messages, model = TEXT2TEXT.DEFAULT_MODELS.openai, options = {}) {
         logger.provider('OpenAI', `generateTextStream model=${model}`);
         try {
             const stream = await getClient().chat.completions.create({
@@ -93,7 +93,7 @@ const openaiProvider = {
         }
     },
 
-    async captionImage(imageUrl, prompt = "What's in this image?", model = TEXT2TEXT_DEFAULT_MODELS.openai) {
+    async captionImage(imageUrl, prompt = "What's in this image?", model = TEXT2TEXT.DEFAULT_MODELS.openai) {
         logger.provider('OpenAI', `captionImage model=${model}`);
         try {
             const messages = [

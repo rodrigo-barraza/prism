@@ -16,77 +16,55 @@ const PROVIDER_LIST = Object.values(PROVIDERS);
 // ============================================================
 // TEXT-TO-TEXT MODELS
 // ============================================================
+// Each model is defined once with all its metadata.
+// MODEL_OPTIONS, DEFAULT_MODELS, and PRICING are derived below.
 
 const TEXT2TEXT_MODELS = {
     // OpenAI
-    GPT_5_2: "gpt-5.2",
-    GPT_5_MINI: "gpt-5-mini",
-    GPT_5_NANO: "gpt-5-nano",
+    GPT_5_2: { name: "gpt-5.2", label: "GPT 5.2", provider: PROVIDERS.OPENAI, pricing: { inputPerMillion: 1.75, outputPerMillion: 14.00 } },
+    GPT_5_MINI: { name: "gpt-5-mini", label: "GPT 5 Mini", provider: PROVIDERS.OPENAI, default: true, pricing: { inputPerMillion: 0.25, outputPerMillion: 2.00 } },
+    GPT_5_NANO: { name: "gpt-5-nano", label: "GPT 5 Nano", provider: PROVIDERS.OPENAI, pricing: { inputPerMillion: 0.05, outputPerMillion: 0.40 } },
 
     // Anthropic
-    OPUS_45: "claude-opus-4-5-20251101",
-    OPUS_46: "claude-opus-4-6",
-    SONNET_45: "claude-sonnet-4-5-20250929",
-    SONNET_46: "claude-sonnet-4-6",
-    HAIKU_45: "claude-haiku-4-5-20251001",
+    HAIKU_45: { name: "claude-haiku-4-5-20251001", label: "Haiku 4.5", provider: PROVIDERS.ANTHROPIC, pricing: { inputPerMillion: 1.00, outputPerMillion: 5.00 } },
+    SONNET_45: { name: "claude-sonnet-4-5-20250929", label: "Sonnet 4.5", provider: PROVIDERS.ANTHROPIC, default: true, pricing: { inputPerMillion: 3.00, outputPerMillion: 15.00 } },
+    SONNET_46: { name: "claude-sonnet-4-6", label: "Sonnet 4.6", provider: PROVIDERS.ANTHROPIC, pricing: { inputPerMillion: 3.00, outputPerMillion: 15.00 } },
+    OPUS_45: { name: "claude-opus-4-5-20251101", label: "Opus 4.5", provider: PROVIDERS.ANTHROPIC, pricing: { inputPerMillion: 5.00, outputPerMillion: 25.00 } },
+    OPUS_46: { name: "claude-opus-4-6", label: "Opus 4.6", provider: PROVIDERS.ANTHROPIC, pricing: { inputPerMillion: 5.00, outputPerMillion: 25.00 } },
 
     // Google
-    GEMINI_3_PRO: "gemini-3-pro-preview",
-    GEMINI_31_PRO: "gemini-3.1-pro-preview",
-    GEMINI_3_FLASH: "gemini-3-flash-preview",
+    GEMINI_3_FLASH: { name: "gemini-3-flash-preview", label: "Gemini 3 Flash", provider: PROVIDERS.GOOGLE, default: true, pricing: { inputPerMillion: 0.50, outputPerMillion: 3.00 } },
+    GEMINI_3_PRO: { name: "gemini-3-pro-preview", label: "Gemini 3 Pro", provider: PROVIDERS.GOOGLE, pricing: { inputPerMillion: 2.00, outputPerMillion: 12.00 } },
+    GEMINI_31_PRO: { name: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro", provider: PROVIDERS.GOOGLE, pricing: { inputPerMillion: 2.00, outputPerMillion: 12.00 } },
 
     // OpenAI-Compatible / Local
-    QWEN_VL_8B: "qwen/qwen3-vl-8b",
-    JOSIEFIED_QWEN: "josiefied-qwen3-8b-abliterated-v1",
+    QWEN_VL_8B: { name: "qwen/qwen3-vl-8b", label: "Qwen3 VL 8B", provider: PROVIDERS.OPENAI_COMPATIBLE, listed: false },
+    JOSIEFIED_QWEN: { name: "josiefied-qwen3-8b-abliterated-v1", label: "Josiefied Qwen3 8B", provider: PROVIDERS.OPENAI_COMPATIBLE },
 };
 
-const TEXT2TEXT_MODEL_OPTIONS = {
-    [PROVIDERS.OPENAI]: [
-        { name: TEXT2TEXT_MODELS.GPT_5_2, label: "GPT 5.2" },
-        { name: TEXT2TEXT_MODELS.GPT_5_MINI, label: "GPT 5 Mini" },
-        { name: TEXT2TEXT_MODELS.GPT_5_NANO, label: "GPT 5 Nano" },
-    ],
-    [PROVIDERS.ANTHROPIC]: [
-        { name: TEXT2TEXT_MODELS.HAIKU_45, label: "Haiku 4.5" },
-        { name: TEXT2TEXT_MODELS.SONNET_45, label: "Sonnet 4.5" },
-        { name: TEXT2TEXT_MODELS.SONNET_46, label: "Sonnet 4.6" },
-        { name: TEXT2TEXT_MODELS.OPUS_45, label: "Opus 4.5" },
-        { name: TEXT2TEXT_MODELS.OPUS_46, label: "Opus 4.6" },
-    ],
-    [PROVIDERS.GOOGLE]: [
-        { name: TEXT2TEXT_MODELS.GEMINI_3_FLASH, label: "Gemini 3 Flash" },
-        { name: TEXT2TEXT_MODELS.GEMINI_3_PRO, label: "Gemini 3 Pro" },
-        { name: TEXT2TEXT_MODELS.GEMINI_31_PRO, label: "Gemini 3.1 Pro" },
-    ],
-    [PROVIDERS.OPENAI_COMPATIBLE]: [{ name: TEXT2TEXT_MODELS.JOSIEFIED_QWEN, label: "Josiefied Qwen3 8B" }],
-};
+// --- Derived convenience maps (auto-built from TEXT2TEXT_MODELS) ---
 
-const TEXT2TEXT_DEFAULT_MODELS = {
-    [PROVIDERS.OPENAI]: TEXT2TEXT_MODELS.GPT_5_MINI,
-    [PROVIDERS.ANTHROPIC]: TEXT2TEXT_MODELS.SONNET_45,
-    [PROVIDERS.GOOGLE]: TEXT2TEXT_MODELS.GEMINI_3_FLASH,
-    [PROVIDERS.OPENAI_COMPATIBLE]: "default",
-};
+const _t2tModelOptions = {};
+const _t2tDefaultModels = { [PROVIDERS.OPENAI_COMPATIBLE]: "default" };
+const _t2tPricing = {};
 
-// Token pricing (USD per 1M tokens)
-// Update manually when provider pricing changes.
-const TEXT2TEXT_PRICING = {
-    // OpenAI
-    [TEXT2TEXT_MODELS.GPT_5_2]: { inputPerMillion: 1.75, outputPerMillion: 14.00 },
-    [TEXT2TEXT_MODELS.GPT_5_MINI]: { inputPerMillion: 0.25, outputPerMillion: 2.00 },
-    [TEXT2TEXT_MODELS.GPT_5_NANO]: { inputPerMillion: 0.05, outputPerMillion: 0.40 },
+for (const model of Object.values(TEXT2TEXT_MODELS)) {
+    if (model.listed !== false) {
+        (_t2tModelOptions[model.provider] ??= []).push({ name: model.name, label: model.label });
+    }
+    if (model.default) {
+        _t2tDefaultModels[model.provider] = model.name;
+    }
+    if (model.pricing) {
+        _t2tPricing[model.name] = model.pricing;
+    }
+}
 
-    // Anthropic
-    [TEXT2TEXT_MODELS.OPUS_45]: { inputPerMillion: 5.00, outputPerMillion: 25.00 },
-    [TEXT2TEXT_MODELS.OPUS_46]: { inputPerMillion: 5.00, outputPerMillion: 25.00 },
-    [TEXT2TEXT_MODELS.SONNET_45]: { inputPerMillion: 3.00, outputPerMillion: 15.00 },
-    [TEXT2TEXT_MODELS.SONNET_46]: { inputPerMillion: 3.00, outputPerMillion: 15.00 },
-    [TEXT2TEXT_MODELS.HAIKU_45]: { inputPerMillion: 1.00, outputPerMillion: 5.00 },
-
-    // Google
-    [TEXT2TEXT_MODELS.GEMINI_3_PRO]: { inputPerMillion: 2.00, outputPerMillion: 12.00 },
-    [TEXT2TEXT_MODELS.GEMINI_31_PRO]: { inputPerMillion: 2.00, outputPerMillion: 12.00 },
-    [TEXT2TEXT_MODELS.GEMINI_3_FLASH]: { inputPerMillion: 0.50, outputPerMillion: 3.00 },
+const TEXT2TEXT = {
+    MODELS: TEXT2TEXT_MODELS,
+    MODEL_OPTIONS: _t2tModelOptions,
+    DEFAULT_MODELS: _t2tDefaultModels,
+    PRICING: _t2tPricing,
 };
 
 // ============================================================
@@ -317,10 +295,7 @@ export {
     PROVIDER_CAPABILITIES,
 
     // Text-to-Text
-    TEXT2TEXT_MODELS,
-    TEXT2TEXT_MODEL_OPTIONS,
-    TEXT2TEXT_DEFAULT_MODELS,
-    TEXT2TEXT_PRICING,
+    TEXT2TEXT,
 
     // Text-to-Speech
     TEXT2SPEECH_MODELS,

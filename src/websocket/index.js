@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { getProvider } from "../providers/index.js";
 import { GATEWAY_SECRET } from "../secrets.js";
-import { TEXT2TEXT_PRICING, TEXT2TEXT_DEFAULT_MODELS } from "../config.js";
+import { TEXT2TEXT } from "../config.js";
 import logger from "../utils/logger.js";
 import RequestLogger from "../services/RequestLogger.js";
 
@@ -77,7 +77,7 @@ function handleTextToTextStream(ws, project) {
                 return;
             }
 
-            resolvedModel = data.model || TEXT2TEXT_DEFAULT_MODELS[providerName];
+            resolvedModel = data.model || TEXT2TEXT.DEFAULT_MODELS[providerName];
             const stream = provider.generateTextStream(messages, resolvedModel, options);
             let usage = null;
             let firstTokenTime = null;
@@ -105,7 +105,7 @@ function handleTextToTextStream(ws, project) {
 
             // Log token usage + cost
             if (usage) {
-                const pricing = TEXT2TEXT_PRICING[resolvedModel];
+                const pricing = TEXT2TEXT.PRICING[resolvedModel];
                 let estimatedCost = null;
                 if (pricing) {
                     estimatedCost =
