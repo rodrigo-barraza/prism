@@ -1,8 +1,9 @@
-import { getProvider } from '../providers/index.js';
-import { GATEWAY_SECRET } from '../secrets.js';
-import { TEXT2TEXT_PRICING } from '../pricing.js';
-import { TEXT2TEXT_DEFAULT_MODELS } from '../config.js';
-import logger from '../utils/logger.js';
+import crypto from "crypto";
+import { getProvider } from "../providers/index.js";
+import { GATEWAY_SECRET } from "../secrets.js";
+import { TEXT2TEXT_PRICING, TEXT2TEXT_DEFAULT_MODELS } from "../config.js";
+import logger from "../utils/logger.js";
+import RequestLogger from "../services/RequestLogger.js";
 
 /**
  * Set up WebSocket handlers on the HTTP server.
@@ -11,7 +12,7 @@ import logger from '../utils/logger.js';
  *   /text-to-speech/stream   — Streaming TTS (ElevenLabs only)
  */
 export function setupWebSocket(wss) {
-    wss.on('connection', (ws, req) => {
+    wss.on("connection", (ws, req) => {
         const url = new URL(req.url, `http://${req.headers.host}`);
         const pathname = url.pathname;
 
@@ -27,12 +28,12 @@ export function setupWebSocket(wss) {
         const project = req.headers["x-project"] || url.searchParams.get("project") || "unknown";
         logger.info(`WebSocket connection on ${pathname} (project: ${project})`);
 
-        if (pathname === '/text-to-text/stream') {
-            handleTextToTextStream(ws);
-        } else if (pathname === '/text-to-speech/stream') {
+        if (pathname === "/text-to-text/stream") {
+            handleTextToTextStream(ws, project);
+        } else if (pathname === "/text-to-speech/stream") {
             handleTextToSpeechStream(ws);
         } else {
-            ws.send(JSON.stringify({ type: 'error', message: `Unknown WebSocket path: ${pathname}` }));
+            ws.send(JSON.stringify({ type: "error", message: `Unknown WebSocket path: ${pathname}` }));
             ws.close();
         }
     });
@@ -43,39 +44,48 @@ export function setupWebSocket(wss) {
  * Client sends: { provider, model?, messages, options? }
  * Server sends: { type: "chunk", content } | { type: "done", usage?, estimatedCost? } | { type: "error", message }
  */
-function handleTextToTextStream(ws) {
-    ws.on('message', async (rawData) => {
+function handleTextToTextStream(ws, project) {
+    ws.on("message", async (rawData) => {
         const requestStart = performance.now();
+        const requestId = crypto.randomUUID();
+        let providerName = null;
+        let resolvedModel = null;
+        let messages = null;
+        let options = null;
+
         let data;
         try {
             data = JSON.parse(rawData.toString());
         } catch {
-            ws.send(JSON.stringify({ type: 'error', message: 'Invalid JSON' }));
+            ws.send(JSON.stringify({ type: "error", message: "Invalid JSON" }));
             return;
         }
 
-        const { provider: providerName, model, messages, options } = data;
+        providerName = data.provider;
+        messages = data.messages;
+        options = data.options || {};
 
         if (!providerName || !messages) {
-            ws.send(JSON.stringify({ type: 'error', message: 'Missing required fields: provider, messages' }));
+            ws.send(JSON.stringify({ type: "error", message: "Missing required fields: provider, messages" }));
             return;
         }
 
         try {
             const provider = getProvider(providerName);
             if (!provider.generateTextStream) {
-                ws.send(JSON.stringify({ type: 'error', message: `Provider "${providerName}" does not support streaming` }));
+                ws.send(JSON.stringify({ type: "error", message: `Provider "${providerName}" does not support streaming` }));
                 return;
             }
 
-            const resolvedModel = model || TEXT2TEXT_DEFAULT_MODELS[providerName];
-            const stream = provider.generateTextStream(messages, resolvedModel, options || {});
+            resolvedModel = data.model || TEXT2TEXT_DEFAULT_MODELS[providerName];
+            const stream = provider.generateTextStream(messages, resolvedModel, options);
             let usage = null;
             let firstTokenTime = null;
             let generationEnd = null;
+            let outputCharacters = 0;
             for await (const chunk of stream) {
                 // Providers yield a { type: 'usage', usage } object as the final item
-                if (chunk && typeof chunk === 'object' && chunk.type === 'usage') {
+                if (chunk && typeof chunk === "object" && chunk.type === "usage") {
                     usage = chunk.usage;
                     continue;
                 }
@@ -83,8 +93,9 @@ function handleTextToTextStream(ws) {
                     firstTokenTime = performance.now();
                 }
                 generationEnd = performance.now();
+                outputCharacters += chunk.length;
                 if (ws.readyState === ws.OPEN) {
-                    ws.send(JSON.stringify({ type: 'chunk', content: chunk }));
+                    ws.send(JSON.stringify({ type: "chunk", content: chunk }));
                 }
             }
             const now = performance.now();
@@ -92,7 +103,7 @@ function handleTextToTextStream(ws) {
             const generationSec = firstTokenTime && generationEnd ? (generationEnd - firstTokenTime) / 1000 : null;
             const totalSec = (now - requestStart) / 1000;
 
-            // Log token usage + cost (mirrors REST /text-to-text behaviour)
+            // Log token usage + cost
             if (usage) {
                 const pricing = TEXT2TEXT_PRICING[resolvedModel];
                 let estimatedCost = null;
@@ -111,16 +122,51 @@ function handleTextToTextStream(ws) {
                     `total: ${totalSec.toFixed(2)}s` +
                     (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
                 );
+
+                // Fire-and-forget DB log
+                RequestLogger.log({
+                    requestId,
+                    endpoint: "text-to-text/stream",
+                    project,
+                    provider: providerName,
+                    model: resolvedModel,
+                    success: true,
+                    inputTokens: usage.inputTokens,
+                    outputTokens: usage.outputTokens,
+                    estimatedCost,
+                    tokensPerSec: parseFloat(tokensPerSec) || null,
+                    temperature: options?.temperature ?? null,
+                    maxTokens: options?.maxTokens ?? null,
+                    messageCount: messages.length,
+                    inputCharacters: messages.reduce((sum, m) => sum + (typeof m.content === "string" ? m.content.length : 0), 0),
+                    outputCharacters,
+                    timeToGeneration: timeToGenerationSec,
+                    generationTime: generationSec,
+                    totalTime: totalSec,
+                });
+
                 if (ws.readyState === ws.OPEN) {
-                    ws.send(JSON.stringify({ type: 'done', usage, estimatedCost, tokensPerSec: parseFloat(tokensPerSec) || null, timeToGeneration: timeToGenerationSec, generationTime: generationSec, totalTime: totalSec }));
+                    ws.send(JSON.stringify({ type: "done", usage, estimatedCost, tokensPerSec: parseFloat(tokensPerSec) || null, timeToGeneration: timeToGenerationSec, generationTime: generationSec, totalTime: totalSec }));
                 }
             } else if (ws.readyState === ws.OPEN) {
-                ws.send(JSON.stringify({ type: 'done' }));
+                ws.send(JSON.stringify({ type: "done" }));
             }
         } catch (error) {
             logger.error(`Stream error (${providerName}):`, error.message);
+            const totalSec = (performance.now() - requestStart) / 1000;
+            RequestLogger.log({
+                requestId,
+                endpoint: "text-to-text/stream",
+                project,
+                provider: providerName,
+                model: resolvedModel,
+                success: false,
+                errorMessage: error.message,
+                messageCount: messages ? messages.length : 0,
+                totalTime: totalSec,
+            });
             if (ws.readyState === ws.OPEN) {
-                ws.send(JSON.stringify({ type: 'error', message: error.message }));
+                ws.send(JSON.stringify({ type: "error", message: error.message }));
             }
         }
     });
@@ -165,14 +211,14 @@ function handleTextToSpeechStream(ws) {
         }
     }
 
-    ws.on('message', async (rawData) => {
+    ws.on("message", async (rawData) => {
         const message = rawData.toString();
 
         if (!configured) {
             // First message is config
             try {
                 const config = JSON.parse(message);
-                providerName = config.provider || 'elevenlabs';
+                providerName = config.provider || "elevenlabs";
                 voiceId = config.voiceId || config.voice;
                 options = config.options || {};
                 configured = true;
@@ -180,7 +226,7 @@ function handleTextToSpeechStream(ws) {
                 const provider = getProvider(providerName);
                 if (!provider.generateSpeechStream) {
                     ws.send(
-                        JSON.stringify({ type: 'error', message: `Provider "${providerName}" does not support streaming TTS` }),
+                        JSON.stringify({ type: "error", message: `Provider "${providerName}" does not support streaming TTS` }),
                     );
                     ws.close();
                     return;
@@ -196,22 +242,22 @@ function handleTextToSpeechStream(ws) {
                             }
                         }
                         if (ws.readyState === ws.OPEN) {
-                            ws.send(JSON.stringify({ type: 'done' }));
+                            ws.send(JSON.stringify({ type: "done" }));
                         }
                     } catch (error) {
                         logger.error(`TTS stream error (${providerName}):`, error.message);
                         if (ws.readyState === ws.OPEN) {
-                            ws.send(JSON.stringify({ type: 'error', message: error.message }));
+                            ws.send(JSON.stringify({ type: "error", message: error.message }));
                         }
                     }
                 })();
 
-                ws.send(JSON.stringify({ type: 'ready' }));
+                ws.send(JSON.stringify({ type: "ready" }));
             } catch {
                 ws.send(
                     JSON.stringify({
-                        type: 'error',
-                        message: 'First message must be JSON config: { provider, voiceId?, options? }',
+                        type: "error",
+                        message: "First message must be JSON config: { provider, voiceId?, options? }",
                     }),
                 );
             }
@@ -219,7 +265,7 @@ function handleTextToSpeechStream(ws) {
         }
 
         // Subsequent messages are text chunks
-        if (message === '__END__') {
+        if (message === "__END__") {
             textEnded = true;
             pushText(null); // Signal end
         } else {
@@ -227,7 +273,7 @@ function handleTextToSpeechStream(ws) {
         }
     });
 
-    ws.on('close', () => {
+    ws.on("close", () => {
         textEnded = true;
         pushText(null);
     });

@@ -1,9 +1,10 @@
-import express from 'express';
-import { getProvider } from '../providers/index.js';
-import { ProviderError } from '../utils/errors.js';
-import { TEXT2TEXT_PRICING } from '../pricing.js';
-import { TEXT2TEXT_DEFAULT_MODELS } from '../config.js';
-import logger from '../utils/logger.js';
+import express from "express";
+import crypto from "crypto";
+import { getProvider } from "../providers/index.js";
+import { ProviderError } from "../utils/errors.js";
+import { TEXT2TEXT_PRICING, TEXT2TEXT_DEFAULT_MODELS } from "../config.js";
+import logger from "../utils/logger.js";
+import RequestLogger from "../services/RequestLogger.js";
 
 const router = express.Router();
 
@@ -12,16 +13,21 @@ const router = express.Router();
  * Body: { provider, model?, messages, options? }
  * Response: { text, provider, model, usage, estimatedCost }
  */
-router.post('/', async (req, res, next) => {
+router.post("/", async (req, res, next) => {
     const requestStart = performance.now();
+    const requestId = crypto.randomUUID();
+    let providerName = null;
+    let resolvedModel = null;
+
     try {
-        const { provider: providerName, model, messages, options } = req.body;
+        const { provider: pName, model, messages, options } = req.body;
+        providerName = pName;
 
         if (!providerName) {
-            throw new ProviderError('server', 'Missing required field: provider', 400);
+            throw new ProviderError("server", "Missing required field: provider", 400);
         }
         if (!messages || !Array.isArray(messages)) {
-            throw new ProviderError('server', 'Missing or invalid field: messages (must be an array)', 400);
+            throw new ProviderError("server", "Missing or invalid field: messages (must be an array)", 400);
         }
 
         const provider = getProvider(providerName);
@@ -29,7 +35,7 @@ router.post('/', async (req, res, next) => {
             throw new ProviderError(providerName, `Provider "${providerName}" does not support text generation`, 400);
         }
 
-        const resolvedModel = model || TEXT2TEXT_DEFAULT_MODELS[providerName];
+        resolvedModel = model || TEXT2TEXT_DEFAULT_MODELS[providerName];
         const generationStart = performance.now();
         const result = await provider.generateText(messages, resolvedModel, options || {});
         const now = performance.now();
@@ -57,6 +63,28 @@ router.post('/', async (req, res, next) => {
             (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
         );
 
+        // Fire-and-forget DB log
+        RequestLogger.log({
+            requestId,
+            endpoint: "text-to-text",
+            project: req.project,
+            provider: providerName,
+            model: resolvedModel,
+            success: true,
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            estimatedCost,
+            tokensPerSec: parseFloat(tokensPerSec) || null,
+            temperature: options?.temperature ?? null,
+            maxTokens: options?.maxTokens ?? null,
+            messageCount: messages.length,
+            inputCharacters: messages.reduce((sum, m) => sum + (typeof m.content === "string" ? m.content.length : 0), 0),
+            outputCharacters: result.text ? result.text.length : 0,
+            timeToGeneration: timeToGenerationSec,
+            generationTime: generationSec,
+            totalTime: totalSec,
+        });
+
         res.json({
             text: result.text,
             provider: providerName,
@@ -65,6 +93,17 @@ router.post('/', async (req, res, next) => {
             estimatedCost,
         });
     } catch (error) {
+        const totalSec = (performance.now() - requestStart) / 1000;
+        RequestLogger.log({
+            requestId,
+            endpoint: "text-to-text",
+            project: req.project,
+            provider: providerName,
+            model: resolvedModel,
+            success: false,
+            errorMessage: error.message,
+            totalTime: totalSec,
+        });
         next(error);
     }
 });

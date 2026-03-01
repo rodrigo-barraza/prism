@@ -68,6 +68,27 @@ const TEXT2TEXT_DEFAULT_MODELS = {
     [PROVIDERS.OPENAI_COMPATIBLE]: "default",
 };
 
+// Token pricing (USD per 1M tokens)
+// Update manually when provider pricing changes.
+const TEXT2TEXT_PRICING = {
+    // OpenAI
+    [TEXT2TEXT_MODELS.GPT_5_2]: { inputPerMillion: 1.75, outputPerMillion: 14.00 },
+    [TEXT2TEXT_MODELS.GPT_5_MINI]: { inputPerMillion: 0.25, outputPerMillion: 2.00 },
+    [TEXT2TEXT_MODELS.GPT_5_NANO]: { inputPerMillion: 0.05, outputPerMillion: 0.40 },
+
+    // Anthropic
+    [TEXT2TEXT_MODELS.OPUS_45]: { inputPerMillion: 5.00, outputPerMillion: 25.00 },
+    [TEXT2TEXT_MODELS.OPUS_46]: { inputPerMillion: 5.00, outputPerMillion: 25.00 },
+    [TEXT2TEXT_MODELS.SONNET_45]: { inputPerMillion: 3.00, outputPerMillion: 15.00 },
+    [TEXT2TEXT_MODELS.SONNET_46]: { inputPerMillion: 3.00, outputPerMillion: 15.00 },
+    [TEXT2TEXT_MODELS.HAIKU_45]: { inputPerMillion: 1.00, outputPerMillion: 5.00 },
+
+    // Google
+    [TEXT2TEXT_MODELS.GEMINI_3_PRO]: { inputPerMillion: 2.00, outputPerMillion: 12.00 },
+    [TEXT2TEXT_MODELS.GEMINI_31_PRO]: { inputPerMillion: 2.00, outputPerMillion: 12.00 },
+    [TEXT2TEXT_MODELS.GEMINI_3_FLASH]: { inputPerMillion: 0.50, outputPerMillion: 3.00 },
+};
+
 // ============================================================
 // TEXT-TO-SPEECH MODELS & VOICES
 // ============================================================
@@ -299,6 +320,7 @@ export {
     TEXT2TEXT_MODELS,
     TEXT2TEXT_MODEL_OPTIONS,
     TEXT2TEXT_DEFAULT_MODELS,
+    TEXT2TEXT_PRICING,
 
     // Text-to-Speech
     TEXT2SPEECH_MODELS,
