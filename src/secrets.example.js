@@ -1,0 +1,27 @@
+// ============================================================
+// Prism the AI Gateway — Secrets Template
+// ============================================================
+// Copy this file to secrets.js and fill in your real values.
+//   cp src/secrets.example.js src/secrets.js
+// ============================================================
+
+// Server
+export const PORT = 3000;
+
+// Gateway Auth
+export const GATEWAY_SECRET = "";
+
+// OpenAI
+export const OPENAI_API_KEY = '';
+
+// Anthropic
+export const ANTHROPIC_API_KEY = '';
+
+// Google GenAI
+export const GOOGLE_API_KEY = '';
+
+// ElevenLabs
+export const ELEVENLABS_API_KEY = '';
+
+// OpenAI-Compatible / Local (LMStudio, LocalAI, Ollama, etc.)
+export const OPENAI_COMPATIBLE_BASE_URL = 'http://localhost:1234';

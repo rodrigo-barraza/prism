@@ -1,0 +1,39 @@
+{
+  "name": "prism-ai-gateway",
+  "version": "1.0.0",
+  "description": "Prism the AI Gateway — a centralized backend for routing requests to multiple AI providers",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "format": "prettier --write \"src/**/*.js\"",
+    "format:check": "prettier --check \"src/**/*.js\""
+  },
+  "keywords": [
+    "ai",
+    "gateway",
+    "openai",
+    "anthropic",
+    "google",
+    "elevenlabs"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
+    "@google/genai": "^1.43.0",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "openai": "^6.25.0",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.3",
+    "eslint": "^9.39.3",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.1"
+  }
+}
