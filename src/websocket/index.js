@@ -45,6 +45,7 @@ export function setupWebSocket(wss) {
  */
 function handleTextToTextStream(ws) {
     ws.on('message', async (rawData) => {
+        const requestStart = performance.now();
         let data;
         try {
             data = JSON.parse(rawData.toString());
@@ -69,19 +70,27 @@ function handleTextToTextStream(ws) {
 
             const resolvedModel = model || TEXT2TEXT_DEFAULT_MODELS[providerName];
             const stream = provider.generateTextStream(messages, resolvedModel, options || {});
-            const startTime = performance.now();
             let usage = null;
+            let firstTokenTime = null;
+            let generationEnd = null;
             for await (const chunk of stream) {
                 // Providers yield a { type: 'usage', usage } object as the final item
                 if (chunk && typeof chunk === 'object' && chunk.type === 'usage') {
                     usage = chunk.usage;
                     continue;
                 }
+                if (!firstTokenTime) {
+                    firstTokenTime = performance.now();
+                }
+                generationEnd = performance.now();
                 if (ws.readyState === ws.OPEN) {
                     ws.send(JSON.stringify({ type: 'chunk', content: chunk }));
                 }
             }
-            const elapsedSec = (performance.now() - startTime) / 1000;
+            const now = performance.now();
+            const timeToGenerationSec = firstTokenTime ? (firstTokenTime - requestStart) / 1000 : null;
+            const generationSec = firstTokenTime && generationEnd ? (generationEnd - firstTokenTime) / 1000 : null;
+            const totalSec = (now - requestStart) / 1000;
 
             // Log token usage + cost (mirrors REST /text-to-text behaviour)
             if (usage) {
@@ -92,15 +101,18 @@ function handleTextToTextStream(ws) {
                         (usage.inputTokens / 1_000_000) * pricing.inputPerMillion +
                         (usage.outputTokens / 1_000_000) * pricing.outputPerMillion;
                 }
-                const tokensPerSec = elapsedSec > 0 ? (usage.outputTokens / elapsedSec).toFixed(1) : "N/A";
+                const tokensPerSec = generationSec && generationSec > 0 ? (usage.outputTokens / generationSec).toFixed(1) : "N/A";
                 logger.info(
                     `[${providerName}] ${resolvedModel} — ` +
                     `in: ${usage.inputTokens} tokens, out: ${usage.outputTokens} tokens, ` +
-                    `speed: ${tokensPerSec} tok/s` +
+                    `speed: ${tokensPerSec} tok/s, ` +
+                    `ttg: ${timeToGenerationSec !== null ? timeToGenerationSec.toFixed(2) + "s" : "N/A"}, ` +
+                    `generation: ${generationSec !== null ? generationSec.toFixed(2) + "s" : "N/A"}, ` +
+                    `total: ${totalSec.toFixed(2)}s` +
                     (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
                 );
                 if (ws.readyState === ws.OPEN) {
-                    ws.send(JSON.stringify({ type: 'done', usage, estimatedCost, tokensPerSec: parseFloat(tokensPerSec) || null }));
+                    ws.send(JSON.stringify({ type: 'done', usage, estimatedCost, tokensPerSec: parseFloat(tokensPerSec) || null, timeToGeneration: timeToGenerationSec, generationTime: generationSec, totalTime: totalSec }));
                 }
             } else if (ws.readyState === ws.OPEN) {
                 ws.send(JSON.stringify({ type: 'done' }));

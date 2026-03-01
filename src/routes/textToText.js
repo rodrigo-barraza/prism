@@ -13,6 +13,7 @@ const router = express.Router();
  * Response: { text, provider, model, usage, estimatedCost }
  */
 router.post('/', async (req, res, next) => {
+    const requestStart = performance.now();
     try {
         const { provider: providerName, model, messages, options } = req.body;
 
@@ -29,9 +30,12 @@ router.post('/', async (req, res, next) => {
         }
 
         const resolvedModel = model || TEXT2TEXT_DEFAULT_MODELS[providerName];
-        const startTime = performance.now();
+        const generationStart = performance.now();
         const result = await provider.generateText(messages, resolvedModel, options || {});
-        const elapsedSec = (performance.now() - startTime) / 1000;
+        const now = performance.now();
+        const timeToGenerationSec = (generationStart - requestStart) / 1000;
+        const generationSec = (now - generationStart) / 1000;
+        const totalSec = (now - requestStart) / 1000;
 
         const usage = result.usage || { inputTokens: 0, outputTokens: 0 };
         const pricing = TEXT2TEXT_PRICING[resolvedModel];
@@ -41,12 +45,15 @@ router.post('/', async (req, res, next) => {
                 (usage.inputTokens / 1_000_000) * pricing.inputPerMillion +
                 (usage.outputTokens / 1_000_000) * pricing.outputPerMillion;
         }
-        const tokensPerSec = elapsedSec > 0 ? (usage.outputTokens / elapsedSec).toFixed(1) : "N/A";
+        const tokensPerSec = generationSec > 0 ? (usage.outputTokens / generationSec).toFixed(1) : "N/A";
 
         logger.info(
             `[${providerName}] ${resolvedModel} — ` +
             `in: ${usage.inputTokens} tokens, out: ${usage.outputTokens} tokens, ` +
-            `speed: ${tokensPerSec} tok/s` +
+            `speed: ${tokensPerSec} tok/s, ` +
+            `ttg: ${timeToGenerationSec.toFixed(2)}s, ` +
+            `generation: ${generationSec.toFixed(2)}s, ` +
+            `total: ${totalSec.toFixed(2)}s` +
             (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
         );
 
