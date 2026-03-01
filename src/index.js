@@ -8,7 +8,8 @@ import logger from './utils/logger.js';
 import { listProviders } from './providers/index.js';
 import { setupWebSocket } from './websocket/index.js';
 import { authMiddleware } from './middleware/AuthMiddleware.js';
-import { PORT } from './secrets.js';
+import { PORT, MONGO_URI, MONGO_DB_NAME } from './secrets.js';
+import MongoWrapper from './wrappers/MongoWrapper.js';
 
 // Routes
 import textToTextRouter from './routes/textToText.js';
@@ -60,9 +61,13 @@ const wss = new WebSocketServer({ server });
 setupWebSocket(wss);
 
 // Start
-server.listen(PORT, () => {
-    logger.success(`Prism the AI Gateway is running on port ${PORT}`);
-    logger.info("Available providers:", listProviders().join(", "));
-    ENDPOINTS.rest.forEach((ep) => logger.info(`  REST  →  http://localhost:${PORT}${ep}`));
-    ENDPOINTS.websocket.forEach((ep) => logger.info(`  WS    →  ws://localhost:${PORT}${ep}`));
-});
+(async () => {
+    await MongoWrapper.createClient(MONGO_DB_NAME, MONGO_URI);
+
+    server.listen(PORT, () => {
+        logger.success(`Prism the AI Gateway is running on port ${PORT}`);
+        logger.info("Available providers:", listProviders().join(", "));
+        ENDPOINTS.rest.forEach((ep) => logger.info(`  REST  →  http://localhost:${PORT}${ep}`));
+        ENDPOINTS.websocket.forEach((ep) => logger.info(`  WS    →  ws://localhost:${PORT}${ep}`));
+    });
+})();

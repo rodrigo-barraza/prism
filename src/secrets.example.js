@@ -25,3 +25,7 @@ export const ELEVENLABS_API_KEY = '';
 
 // OpenAI-Compatible / Local (LMStudio, LocalAI, Ollama, etc.)
 export const OPENAI_COMPATIBLE_BASE_URL = 'http://localhost:1234';
+
+// Mongo
+export const MONGO_URI = "mongodb://127.0.0.1:27017";
+export const MONGO_DB_NAME = "";
