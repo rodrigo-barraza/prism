@@ -1,5 +1,7 @@
 import { getProvider } from '../providers/index.js';
 import { GATEWAY_SECRET } from '../secrets.js';
+import { TEXT2TEXT_PRICING } from '../pricing.js';
+import { TEXT2TEXT_DEFAULT_MODELS } from '../config.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -39,7 +41,7 @@ export function setupWebSocket(wss) {
 /**
  * Handle streaming text generation.
  * Client sends: { provider, model?, messages, options? }
- * Server sends: { type: "chunk", content } | { type: "done" } | { type: "error", message }
+ * Server sends: { type: "chunk", content } | { type: "done", usage?, estimatedCost? } | { type: "error", message }
  */
 function handleTextToTextStream(ws) {
     ws.on('message', async (rawData) => {
@@ -65,14 +67,42 @@ function handleTextToTextStream(ws) {
                 return;
             }
 
-            const stream = provider.generateTextStream(messages, model, options || {});
+            const resolvedModel = model || TEXT2TEXT_DEFAULT_MODELS[providerName];
+            const stream = provider.generateTextStream(messages, resolvedModel, options || {});
+            const startTime = performance.now();
+            let usage = null;
             for await (const chunk of stream) {
+                // Providers yield a { type: 'usage', usage } object as the final item
+                if (chunk && typeof chunk === 'object' && chunk.type === 'usage') {
+                    usage = chunk.usage;
+                    continue;
+                }
                 if (ws.readyState === ws.OPEN) {
                     ws.send(JSON.stringify({ type: 'chunk', content: chunk }));
                 }
             }
+            const elapsedSec = (performance.now() - startTime) / 1000;
 
-            if (ws.readyState === ws.OPEN) {
+            // Log token usage + cost (mirrors REST /text-to-text behaviour)
+            if (usage) {
+                const pricing = TEXT2TEXT_PRICING[resolvedModel];
+                let estimatedCost = null;
+                if (pricing) {
+                    estimatedCost =
+                        (usage.inputTokens / 1_000_000) * pricing.inputPerMillion +
+                        (usage.outputTokens / 1_000_000) * pricing.outputPerMillion;
+                }
+                const tokensPerSec = elapsedSec > 0 ? (usage.outputTokens / elapsedSec).toFixed(1) : "N/A";
+                logger.info(
+                    `[${providerName}] ${resolvedModel} — ` +
+                    `in: ${usage.inputTokens} tokens, out: ${usage.outputTokens} tokens, ` +
+                    `speed: ${tokensPerSec} tok/s` +
+                    (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
+                );
+                if (ws.readyState === ws.OPEN) {
+                    ws.send(JSON.stringify({ type: 'done', usage, estimatedCost, tokensPerSec: parseFloat(tokensPerSec) || null }));
+                }
+            } else if (ws.readyState === ws.OPEN) {
                 ws.send(JSON.stringify({ type: 'done' }));
             }
         } catch (error) {

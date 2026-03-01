@@ -79,7 +79,13 @@ const googleProvider = {
                 contents,
                 config,
             });
-            return { text: response.text };
+            return {
+                text: response.text,
+                usage: {
+                    inputTokens: response.usageMetadata?.promptTokenCount ?? 0,
+                    outputTokens: response.usageMetadata?.candidatesTokenCount ?? 0,
+                },
+            };
         } catch (error) {
             throw new ProviderError('google', error.message, 500, error);
         }
@@ -102,10 +108,20 @@ const googleProvider = {
                 contents,
                 config,
             });
+            let usage = null;
             for await (const chunk of responseStream) {
                 if (chunk.text) {
                     yield chunk.text;
                 }
+                if (chunk.usageMetadata) {
+                    usage = {
+                        inputTokens: chunk.usageMetadata.promptTokenCount ?? 0,
+                        outputTokens: chunk.usageMetadata.candidatesTokenCount ?? 0,
+                    };
+                }
+            }
+            if (usage) {
+                yield { type: 'usage', usage };
             }
         } catch (error) {
             throw new ProviderError('google', error.message, 500, error);

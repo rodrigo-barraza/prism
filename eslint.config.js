@@ -18,6 +18,7 @@ export default [
                 clearInterval: 'readonly',
                 setTimeout: 'readonly',
                 clearTimeout: 'readonly',
+                performance: 'readonly',
             },
         },
         rules: {

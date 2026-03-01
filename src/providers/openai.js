@@ -33,7 +33,13 @@ const openaiProvider = {
                 max_tokens: options.maxTokens || undefined,
                 temperature: options.temperature || undefined,
             });
-            return { text: response.choices[0].message.content };
+            return {
+                text: response.choices[0].message.content,
+                usage: {
+                    inputTokens: response.usage?.prompt_tokens ?? 0,
+                    outputTokens: response.usage?.completion_tokens ?? 0,
+                },
+            };
         } catch (error) {
             throw new ProviderError('openai', error.message, error.status || 500, error);
         }
@@ -48,12 +54,23 @@ const openaiProvider = {
                 max_tokens: options.maxTokens || undefined,
                 temperature: options.temperature || undefined,
                 stream: true,
+                stream_options: { include_usage: true },
             });
+            let usage = null;
             for await (const chunk of stream) {
+                if (chunk.usage) {
+                    usage = {
+                        inputTokens: chunk.usage.prompt_tokens ?? 0,
+                        outputTokens: chunk.usage.completion_tokens ?? 0,
+                    };
+                }
                 const content = chunk.choices[0]?.delta?.content || '';
                 if (content) {
                     yield content;
                 }
+            }
+            if (usage) {
+                yield { type: 'usage', usage };
             }
         } catch (error) {
             throw new ProviderError('openai', error.message, error.status || 500, error);

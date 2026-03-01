@@ -71,7 +71,13 @@ const anthropicProvider = {
             });
 
             const text = response.content?.[0]?.text || '';
-            return { text };
+            return {
+                text,
+                usage: {
+                    inputTokens: response.usage?.input_tokens ?? 0,
+                    outputTokens: response.usage?.output_tokens ?? 0,
+                },
+            };
         } catch (error) {
             throw new ProviderError('anthropic', error.message, error.status || 500, error);
         }
@@ -89,10 +95,28 @@ const anthropicProvider = {
                 temperature: options.temperature || undefined,
             });
 
+            let usage = null;
             for await (const chunk of stream) {
                 if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
                     yield chunk.delta.text;
                 }
+                if (chunk.type === 'message_delta' && chunk.usage) {
+                    usage = {
+                        inputTokens: 0,
+                        outputTokens: chunk.usage.output_tokens ?? 0,
+                    };
+                }
+            }
+            // Get full usage from the finalized message
+            const finalMessage = await stream.finalMessage();
+            if (finalMessage?.usage) {
+                usage = {
+                    inputTokens: finalMessage.usage.input_tokens ?? 0,
+                    outputTokens: finalMessage.usage.output_tokens ?? 0,
+                };
+            }
+            if (usage) {
+                yield { type: 'usage', usage };
             }
         } catch (error) {
             throw new ProviderError('anthropic', error.message, error.status || 500, error);

@@ -39,7 +39,13 @@ const openaiCompatibleProvider = {
 
             const data = await response.json();
             const text = data.choices?.[0]?.message?.content || '';
-            return { text };
+            return {
+                text,
+                usage: {
+                    inputTokens: data.usage?.prompt_tokens ?? 0,
+                    outputTokens: data.usage?.completion_tokens ?? 0,
+                },
+            };
         } catch (error) {
             if (error instanceof ProviderError) throw error;
             throw new ProviderError('openai-compatible', error.message, 500, error);
