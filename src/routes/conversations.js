@@ -64,7 +64,7 @@ router.get('/:id', async (req, res, next) => {
 /**
  * POST /conversations
  * Create or update a conversation.
- * Body: { id?: string, title?: string, messages: array, systemPrompt?: string }
+ * Body: { id?: string, title?: string, messages: array, systemPrompt?: string, settings?: object }
  */
 router.post('/', async (req, res, next) => {
     try {
@@ -74,7 +74,7 @@ router.post('/', async (req, res, next) => {
         }
 
         const project = req.project || 'default';
-        const { id, title, messages, systemPrompt } = req.body;
+        const { id, title, messages, systemPrompt, settings } = req.body;
 
         const conversationId = id || crypto.randomUUID();
         const now = new Date().toISOString();
@@ -86,6 +86,7 @@ router.post('/', async (req, res, next) => {
                 title: title || 'New Conversation',
                 messages: messages || [],
                 systemPrompt: systemPrompt || '',
+                ...(settings ? { settings } : {}),
                 updatedAt: now,
             },
             $setOnInsert: {
