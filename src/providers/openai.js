@@ -20,7 +20,7 @@ function getClient() {
  */
 function prepareOpenAIMessages(messages) {
     return messages.map((m) => {
-        if (m.images && m.images.length > 0 && m.role === 'user') {
+        if (m.images && m.images.length > 0) {
             const content = [];
             for (const img of m.images) {
                 content.push({ type: 'image_url', image_url: { url: img } });

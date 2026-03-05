@@ -130,6 +130,26 @@ function handleTextToTextStream(ws, project) {
                     }
                     continue;
                 }
+                // Code execution chunks
+                if (chunk && typeof chunk === 'object' && chunk.type === 'executableCode') {
+                    if (ws.readyState === ws.OPEN) {
+                        ws.send(JSON.stringify({ type: 'executableCode', code: chunk.code, language: chunk.language }));
+                    }
+                    continue;
+                }
+                if (chunk && typeof chunk === 'object' && chunk.type === 'codeExecutionResult') {
+                    if (ws.readyState === ws.OPEN) {
+                        ws.send(JSON.stringify({ type: 'codeExecutionResult', output: chunk.output, outcome: chunk.outcome }));
+                    }
+                    continue;
+                }
+                // Web search result chunks (citations from Anthropic)
+                if (chunk && typeof chunk === 'object' && chunk.type === 'webSearchResult') {
+                    if (ws.readyState === ws.OPEN) {
+                        ws.send(JSON.stringify({ type: 'webSearchResult', results: chunk.results }));
+                    }
+                    continue;
+                }
                 if (!firstTokenTime) {
                     firstTokenTime = performance.now();
                 }

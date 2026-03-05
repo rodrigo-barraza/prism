@@ -47,6 +47,7 @@ const MODELS = {
         streaming: true,
         thinking: true,
         webSearch: 'Web Search',
+        tools: ['Web Search', 'Function Calling', 'File Search'],
     },
     GPT_5_MINI: {
         name: 'gpt-5-mini',
@@ -61,6 +62,7 @@ const MODELS = {
         streaming: true,
         thinking: true,
         webSearch: 'Web Search',
+        tools: ['Web Search', 'Function Calling', 'File Search'],
     },
     GPT_5_NANO: {
         name: 'gpt-5-nano',
@@ -74,6 +76,7 @@ const MODELS = {
         streaming: true,
         thinking: false,
         webSearch: 'Web Search',
+        tools: ['Web Search', 'Function Calling', 'File Search'],
     },
 
     // ----- Anthropic — Text Generation -----
@@ -88,6 +91,10 @@ const MODELS = {
         outputTypes: [TYPES.TEXT],
         streaming: true,
         thinking: true,
+        assistantImages: false,
+        webSearch: 'Web Search',
+        codeExecution: true,
+        tools: ['Web Search', 'Function Calling', 'Code Execution'],
     },
     SONNET_45: {
         name: 'claude-sonnet-4-5-20250929',
@@ -101,6 +108,11 @@ const MODELS = {
         outputTypes: [TYPES.TEXT],
         streaming: true,
         thinking: true,
+        assistantImages: false,
+        webSearch: 'Web Search',
+        webFetch: true,
+        codeExecution: true,
+        tools: ['Web Search', 'Web Fetch', 'Function Calling', 'Computer Use', 'Code Execution'],
     },
     SONNET_46: {
         name: 'claude-sonnet-4-6',
@@ -113,6 +125,11 @@ const MODELS = {
         outputTypes: [TYPES.TEXT],
         streaming: true,
         thinking: true,
+        assistantImages: false,
+        webSearch: 'Web Search',
+        webFetch: true,
+        codeExecution: true,
+        tools: ['Web Search', 'Web Fetch', 'Function Calling', 'Computer Use', 'Code Execution'],
     },
     OPUS_45: {
         name: 'claude-opus-4-5-20251101',
@@ -125,6 +142,11 @@ const MODELS = {
         outputTypes: [TYPES.TEXT],
         streaming: true,
         thinking: true,
+        assistantImages: false,
+        webSearch: 'Web Search',
+        webFetch: true,
+        codeExecution: true,
+        tools: ['Web Search', 'Web Fetch', 'Function Calling', 'Computer Use', 'Code Execution'],
     },
     OPUS_46: {
         name: 'claude-opus-4-6',
@@ -137,6 +159,11 @@ const MODELS = {
         outputTypes: [TYPES.TEXT],
         streaming: true,
         thinking: true,
+        assistantImages: false,
+        webSearch: 'Web Search',
+        webFetch: true,
+        codeExecution: true,
+        tools: ['Web Search', 'Web Fetch', 'Function Calling', 'Computer Use', 'Code Execution'],
     },
 
     // ----- Google — Text Generation -----
@@ -153,6 +180,9 @@ const MODELS = {
         streaming: true,
         thinking: true,
         webSearch: 'Google Search',
+        codeExecution: true,
+        urlContext: true,
+        tools: ['Google Search', 'Function Calling', 'Code Execution', 'URL Context'],
     },
     GEMINI_3_PRO: {
         name: 'gemini-3-pro-preview',
@@ -166,6 +196,9 @@ const MODELS = {
         streaming: true,
         thinking: true,
         webSearch: 'Google Search',
+        codeExecution: true,
+        urlContext: true,
+        tools: ['Google Search', 'Function Calling', 'Code Execution', 'URL Context'],
     },
     GEMINI_31_PRO: {
         name: 'gemini-3.1-pro-preview',
@@ -179,6 +212,9 @@ const MODELS = {
         streaming: true,
         thinking: true,
         webSearch: 'Google Search',
+        codeExecution: true,
+        urlContext: true,
+        tools: ['Google Search', 'Function Calling', 'Code Execution', 'URL Context'],
     },
 
     // ----- OpenAI-Compatible / Local — Text Generation -----
@@ -292,10 +328,27 @@ const MODELS = {
         default: true,
         pricing: { inputPerMillion: 2.0, outputPerMillion: 120.0 },
         maxInputTokens: 1_048_576,
+        maxOutputTokens: 32_768,
         inputTypes: [TYPES.TEXT, TYPES.IMAGE],
         outputTypes: [TYPES.TEXT, TYPES.IMAGE],
         streaming: false,
         thinking: true,
+        webSearch: 'Google Search',
+        tools: ['Image Generation', 'Google Search'],
+    },
+    GEMINI_31_FLASH_IMAGE: {
+        name: 'gemini-3.1-flash-image-preview',
+        label: 'Gemini 3.1 Flash Image',
+        provider: PROVIDERS.GOOGLE,
+        pricing: { inputPerMillion: 0.5, outputPerMillion: 60.0 },
+        maxInputTokens: 131_072,
+        maxOutputTokens: 32_768,
+        inputTypes: [TYPES.TEXT, TYPES.IMAGE, TYPES.PDF],
+        outputTypes: [TYPES.TEXT, TYPES.IMAGE],
+        streaming: false,
+        thinking: true,
+        webSearch: 'Google Search',
+        tools: ['Image Generation', 'Google Search'],
     },
 
     // ----- Embeddings -----
@@ -362,6 +415,11 @@ function getModelOptions(inputType, outputType) {
             if (m.webSearch) entry.webSearch = m.webSearch;
             if (m.inputTypes) entry.inputTypes = m.inputTypes;
             if (m.outputTypes) entry.outputTypes = m.outputTypes;
+            if (m.tools) entry.tools = m.tools;
+            if (m.assistantImages === false) entry.assistantImages = false;
+            if (m.codeExecution) entry.codeExecution = true;
+            if (m.webFetch) entry.webFetch = true;
+            if (m.urlContext) entry.urlContext = true;
             (opts[m.provider] ??= []).push(entry);
         }
     }

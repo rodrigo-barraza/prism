@@ -1,8 +1,8 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { ProviderError } from '../utils/errors.js';
-import logger from '../utils/logger.js';
-import { ANTHROPIC_API_KEY } from '../secrets.js';
-import { TYPES, getDefaultModels } from '../config.js';
+import Anthropic from "@anthropic-ai/sdk";
+import { ProviderError } from "../utils/errors.js";
+import logger from "../utils/logger.js";
+import { ANTHROPIC_API_KEY } from "../secrets.js";
+import { TYPES, getDefaultModels } from "../config.js";
 
 
 // Default budget tokens mapped from effort level (for non-adaptive models)
@@ -17,7 +17,7 @@ let client = null;
 function getClient() {
     if (!client) {
         if (!ANTHROPIC_API_KEY) {
-            throw new ProviderError('anthropic', 'ANTHROPIC_API_KEY is not set', 401);
+            throw new ProviderError("anthropic", "ANTHROPIC_API_KEY is not set", 401);
         }
         client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
     }
@@ -33,17 +33,17 @@ function prepareMessages(messages) {
 
     // Extract system message
     const conversation = messages.map((m) => ({ ...m }));
-    if (conversation.length > 0 && conversation[0].role === 'system') {
+    if (conversation.length > 0 && conversation[0].role === "system") {
         systemMessage = conversation.shift().content;
     }
 
     // Remove unsupported properties and convert image content
     const cleaned = conversation
-        .filter((m) => m.role === 'user' || m.role === 'assistant')
+        .filter((m) => m.role === "user" || m.role === "assistant")
         .map((m) => {
             const { name: _name, id: _id, images, ...rest } = m;
             // Convert messages with images to Anthropic content block format
-            if (images && images.length > 0 && rest.role === 'user') {
+            if (images && images.length > 0) {
                 const contentBlocks = [];
                 for (const img of images) {
                     // img is a base64 data URL: data:image/png;base64,....
@@ -53,15 +53,15 @@ function prepareMessages(messages) {
                         // Detect actual MIME type from base64 magic bytes
                         // (the data URL header can be wrong)
                         let mediaType = match[1];
-                        if (data.startsWith('/9j/')) mediaType = 'image/jpeg';
-                        else if (data.startsWith('iVBOR')) mediaType = 'image/png';
-                        else if (data.startsWith('R0lG')) mediaType = 'image/gif';
-                        else if (data.startsWith('UklG')) mediaType = 'image/webp';
+                        if (data.startsWith("/9j/")) mediaType = "image/jpeg";
+                        else if (data.startsWith("iVBOR")) mediaType = "image/png";
+                        else if (data.startsWith("R0lG")) mediaType = "image/gif";
+                        else if (data.startsWith("UklG")) mediaType = "image/webp";
 
                         contentBlocks.push({
-                            type: 'image',
+                            type: "image",
                             source: {
-                                type: 'base64',
+                                type: "base64",
                                 media_type: mediaType,
                                 data,
                             },
@@ -69,7 +69,7 @@ function prepareMessages(messages) {
                     }
                 }
                 if (rest.content) {
-                    contentBlocks.push({ type: 'text', text: rest.content });
+                    contentBlocks.push({ type: "text", text: rest.content });
                 }
                 return { role: rest.role, content: contentBlocks };
             }
@@ -81,15 +81,15 @@ function prepareMessages(messages) {
         if (acc.length && acc[acc.length - 1].role === cur.role) {
             const prev = acc[acc.length - 1];
             // Handle merging when content might be string or array
-            if (typeof prev.content === 'string' && typeof cur.content === 'string') {
+            if (typeof prev.content === "string" && typeof cur.content === "string") {
                 prev.content += `\n\n${cur.content}`;
             } else {
                 // Convert both to arrays and concat
-                const prevBlocks = typeof prev.content === 'string'
-                    ? [{ type: 'text', text: prev.content }]
+                const prevBlocks = typeof prev.content === "string"
+                    ? [{ type: "text", text: prev.content }]
                     : prev.content;
-                const curBlocks = typeof cur.content === 'string'
-                    ? [{ type: 'text', text: cur.content }]
+                const curBlocks = typeof cur.content === "string"
+                    ? [{ type: "text", text: cur.content }]
                     : cur.content;
                 prev.content = [...prevBlocks, ...curBlocks];
             }
@@ -100,25 +100,98 @@ function prepareMessages(messages) {
     }, []);
 
     // Ensure conversation starts with a user message
-    if (merged.length > 0 && merged[0].role === 'assistant') {
+    if (merged.length > 0 && merged[0].role === "assistant") {
         merged.shift();
     }
 
     return { systemMessage, messages: merged };
 }
 
+/**
+ * Build the tools array based on options.
+ */
+function buildTools(options) {
+    const tools = [];
+    if (options.webSearch) {
+        tools.push({
+            type: "web_search_20250305",
+            name: "web_search",
+            max_uses: 5,
+        });
+    }
+    if (options.webFetch) {
+        tools.push({
+            type: "web_fetch_20250910",
+            name: "web_fetch",
+            max_uses: 10,
+        });
+    }
+    if (options.codeExecution) {
+        tools.push({
+            type: "code_execution_20250825",
+            name: "code_execution",
+        });
+    }
+    return tools.length > 0 ? tools : undefined;
+}
+
+/**
+ * Extract text, thinking, citations, and code results from a multi-block response.
+ */
+function extractResponseContent(contentBlocks) {
+    let text = "";
+    let thinking = null;
+    const citations = [];
+
+    for (const block of contentBlocks || []) {
+        if (block.type === "text") {
+            text += block.text || "";
+            // Collect inline citations from this text block
+            if (block.citations) {
+                for (const cite of block.citations) {
+                    if (cite.type === "web_search_result_location") {
+                        citations.push({
+                            url: cite.url,
+                            title: cite.title,
+                            citedText: cite.cited_text,
+                        });
+                    }
+                }
+            }
+        } else if (block.type === "thinking") {
+            thinking = block.thinking;
+        }
+        // server_tool_use and *_tool_result blocks are informational — skip
+    }
+
+    return { text, thinking, citations };
+}
+
+/**
+ * Build the common usage object from an Anthropic response.
+ */
+function buildUsage(responseUsage) {
+    return {
+        inputTokens: responseUsage?.input_tokens ?? 0,
+        outputTokens: responseUsage?.output_tokens ?? 0,
+        cacheReadInputTokens: responseUsage?.cache_read_input_tokens ?? 0,
+        cacheCreationInputTokens: responseUsage?.cache_creation_input_tokens ?? 0,
+    };
+}
+
 const anthropicProvider = {
-    name: 'anthropic',
+    name: "anthropic",
 
     async generateText(
         messages,
         model = getDefaultModels(TYPES.TEXT, TYPES.TEXT).anthropic,
         options = {},
     ) {
-        logger.provider('Anthropic', `generateText model=${model}`);
+        logger.provider("Anthropic", `generateText model=${model}`);
         try {
             const prepared = prepareMessages(messages);
             const payload = {
+                cache_control: { type: "ephemeral" },
                 system: prepared.systemMessage,
                 model,
                 messages: prepared.messages,
@@ -129,12 +202,15 @@ const anthropicProvider = {
                 stop_sequences: options.stopSequences !== undefined ? options.stopSequences : undefined,
             };
 
+            // Server tools
+            const tools = buildTools(options);
+            if (tools) payload.tools = tools;
 
             if (options.thinkingBudget || options.reasoningEffort) {
                 const budget = options.thinkingBudget
                     ? parseInt(options.thinkingBudget)
                     : (EFFORT_BUDGET_MAP[options.reasoningEffort] || EFFORT_BUDGET_MAP.high);
-                payload.thinking = { type: 'enabled', budget_tokens: budget };
+                payload.thinking = { type: "enabled", budget_tokens: budget };
                 if (payload.max_tokens <= budget) {
                     payload.max_tokens = budget + 1024;
                 }
@@ -146,25 +222,17 @@ const anthropicProvider = {
 
             const response = await getClient().messages.create(payload);
 
-            // When thinking is enabled, response.content contains multiple blocks:
-            // [{ type: 'thinking', thinking: '...' }, { type: 'text', text: '...' }]
-            const textBlock = response.content?.find((b) => b.type === 'text');
-            const thinkingBlock = response.content?.find((b) => b.type === 'thinking');
-            const text = textBlock?.text || '';
+            const { text, thinking, citations } = extractResponseContent(response.content);
             const result = {
                 text,
-                usage: {
-                    inputTokens: response.usage?.input_tokens ?? 0,
-                    outputTokens: response.usage?.output_tokens ?? 0,
-                },
+                usage: buildUsage(response.usage),
             };
-            if (thinkingBlock?.thinking) {
-                result.thinking = thinkingBlock.thinking;
-            }
+            if (thinking) result.thinking = thinking;
+            if (citations.length > 0) result.citations = citations;
             return result;
         } catch (error) {
             throw new ProviderError(
-                'anthropic',
+                "anthropic",
                 error.message,
                 error.status || 500,
                 error,
@@ -177,10 +245,11 @@ const anthropicProvider = {
         model = getDefaultModels(TYPES.TEXT, TYPES.TEXT).anthropic,
         options = {},
     ) {
-        logger.provider('Anthropic', `generateTextStream model=${model}`);
+        logger.provider("Anthropic", `generateTextStream model=${model}`);
         try {
             const prepared = prepareMessages(messages);
-            const ObjectPayload = {
+            const streamPayload = {
+                cache_control: { type: "ephemeral" },
                 system: prepared.systemMessage,
                 model,
                 messages: prepared.messages,
@@ -191,58 +260,143 @@ const anthropicProvider = {
                 stop_sequences: options.stopSequences !== undefined ? options.stopSequences : undefined,
             };
 
+            // Server tools
+            const tools = buildTools(options);
+            if (tools) streamPayload.tools = tools;
 
             if (options.thinkingBudget || options.reasoningEffort) {
                 const budget = options.thinkingBudget
                     ? parseInt(options.thinkingBudget)
                     : (EFFORT_BUDGET_MAP[options.reasoningEffort] || EFFORT_BUDGET_MAP.high);
-                ObjectPayload.thinking = { type: 'enabled', budget_tokens: budget };
-                if (ObjectPayload.max_tokens <= budget) {
-                    ObjectPayload.max_tokens = budget + 1024;
+                streamPayload.thinking = { type: "enabled", budget_tokens: budget };
+                if (streamPayload.max_tokens <= budget) {
+                    streamPayload.max_tokens = budget + 1024;
                 }
                 // Anthropic requires temperature=1 and top_p/top_k unset when thinking is enabled
-                ObjectPayload.temperature = 1;
-                delete ObjectPayload.top_p;
-                delete ObjectPayload.top_k;
+                streamPayload.temperature = 1;
+                delete streamPayload.top_p;
+                delete streamPayload.top_k;
             }
 
-            const stream = getClient().messages.stream(ObjectPayload);
+            const stream = getClient().messages.stream(streamPayload);
 
+            // Track current content block type for server tool response processing
+            let currentBlockType = null;
+            let currentBlockName = null;
+            let codeInput = "";
             let usage = null;
+
             for await (const chunk of stream) {
-                if (
-                    chunk.type === 'content_block_delta' &&
-                    chunk.delta.type === 'thinking_delta'
-                ) {
-                    yield { type: 'thinking', content: chunk.delta.thinking };
+                // Content block start — track what kind of block we're in
+                if (chunk.type === "content_block_start") {
+                    const block = chunk.content_block;
+                    currentBlockType = block?.type || null;
+                    currentBlockName = block?.name || null;
+                    codeInput = "";
+
+                    // Server tool use start — yield the tool name being invoked
+                    if (block?.type === "server_tool_use" && block?.name === "code_execution") {
+                        // Code execution starting — we'll accumulate the input
+                    }
+                    continue;
                 }
-                if (
-                    chunk.type === 'content_block_delta' &&
-                    chunk.delta.type === 'text_delta'
-                ) {
-                    yield chunk.delta.text;
+
+                // Content block stop
+                if (chunk.type === "content_block_stop") {
+                    // If we accumulated code execution input, yield it
+                    if (currentBlockType === "server_tool_use" && currentBlockName === "code_execution" && codeInput) {
+                        try {
+                            const parsed = JSON.parse(codeInput);
+                            if (parsed.code) {
+                                yield {
+                                    type: "executableCode",
+                                    code: parsed.code,
+                                    language: parsed.language || "bash",
+                                };
+                            }
+                        } catch {
+                            // Not valid JSON, skip
+                        }
+                    }
+                    currentBlockType = null;
+                    currentBlockName = null;
+                    codeInput = "";
+                    continue;
                 }
-                if (chunk.type === 'message_delta' && chunk.usage) {
+
+                // Content block deltas
+                if (chunk.type === "content_block_delta") {
+                    // Thinking delta
+                    if (chunk.delta.type === "thinking_delta") {
+                        yield { type: "thinking", content: chunk.delta.thinking };
+                        continue;
+                    }
+                    // Text delta
+                    if (chunk.delta.type === "text_delta") {
+                        yield chunk.delta.text;
+                        continue;
+                    }
+                    // Input JSON delta for server tool use (accumulate code execution input)
+                    if (chunk.delta.type === "input_json_delta" && currentBlockType === "server_tool_use") {
+                        codeInput += chunk.delta.partial_json || "";
+                        continue;
+                    }
+                }
+
+                // Code execution tool result
+                if (chunk.type === "content_block_start" && chunk.content_block?.type === "code_execution_tool_result") {
+                    const result = chunk.content_block.content;
+                    if (result) {
+                        yield {
+                            type: "codeExecutionResult",
+                            output: result.stdout || result.stderr || "",
+                            outcome: result.return_code === 0 ? "OK" : "ERROR",
+                        };
+                    }
+                    continue;
+                }
+
+                // Web search / web fetch tool result — extract citations
+                if (chunk.type === "content_block_start" && (
+                    chunk.content_block?.type === "web_search_tool_result" ||
+                    chunk.content_block?.type === "web_fetch_tool_result"
+                )) {
+                    const content = chunk.content_block.content;
+                    if (Array.isArray(content)) {
+                        const results = content
+                            .filter((r) => r.type === "web_search_result" || r.type === "web_fetch_result")
+                            .map((r) => ({
+                                url: r.url,
+                                title: r.title,
+                                pageAge: r.page_age,
+                            }));
+                        if (results.length > 0) {
+                            yield { type: "webSearchResult", results };
+                        }
+                    }
+                    continue;
+                }
+
+                // Message delta (final usage)
+                if (chunk.type === "message_delta" && chunk.usage) {
                     usage = {
                         inputTokens: 0,
                         outputTokens: chunk.usage.output_tokens ?? 0,
                     };
                 }
             }
+
             // Get full usage from the finalized message
             const finalMessage = await stream.finalMessage();
             if (finalMessage?.usage) {
-                usage = {
-                    inputTokens: finalMessage.usage.input_tokens ?? 0,
-                    outputTokens: finalMessage.usage.output_tokens ?? 0,
-                };
+                usage = buildUsage(finalMessage.usage);
             }
             if (usage) {
-                yield { type: 'usage', usage };
+                yield { type: "usage", usage };
             }
         } catch (error) {
             throw new ProviderError(
-                'anthropic',
+                "anthropic",
                 error.message,
                 error.status || 500,
                 error,

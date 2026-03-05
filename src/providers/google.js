@@ -51,7 +51,7 @@ function convertMessages(messages) {
     return messages.map((item) => {
         const parts = [];
         // Handle image attachments
-        if (item.images && item.images.length > 0 && item.role === 'user') {
+        if (item.images && item.images.length > 0) {
             for (const img of item.images) {
                 const match = img.match(/^data:(image\/\w+);base64,(.+)$/);
                 if (match) {
@@ -174,9 +174,12 @@ const googleProvider = {
                     config.thinkingConfig.thinkingBudgetTokens = parseInt(options.thinkingBudget);
                 }
             }
-            if (options.webSearch) {
-                config.tools = [{ googleSearch: {} }];
-            }
+            // Build tools array based on enabled options
+            const tools = [];
+            if (options.webSearch) tools.push({ googleSearch: {} });
+            if (options.codeExecution) tools.push({ codeExecution: {} });
+            if (options.urlContext) tools.push({ urlContext: {} });
+            if (tools.length > 0) config.tools = tools;
 
             // For models that output images, enable multimodal response
             const modelDef = Object.values(MODELS).find((m) => m.name === model);
@@ -201,6 +204,18 @@ const googleProvider = {
                                 type: 'image',
                                 data: part.inlineData.data,
                                 mimeType: part.inlineData.mimeType || 'image/png',
+                            };
+                        } else if (part.executableCode?.code) {
+                            yield {
+                                type: 'executableCode',
+                                code: part.executableCode.code,
+                                language: part.executableCode.language || 'python',
+                            };
+                        } else if (part.codeExecutionResult) {
+                            yield {
+                                type: 'codeExecutionResult',
+                                output: part.codeExecutionResult.output || '',
+                                outcome: part.codeExecutionResult.outcome || 'OK',
                             };
                         }
                     }
