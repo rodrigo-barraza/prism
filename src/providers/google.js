@@ -56,7 +56,7 @@ function convertMessages(messages) {
         // require a thought_signature when sent back, so we skip them.
         if (item.role !== 'assistant' && item.images && item.images.length > 0) {
             for (const img of item.images) {
-                const match = img.match(/^data:(image\/\w+);base64,(.+)$/);
+                const match = img.match(/^data:([\w-]+\/[\w.+-]+);base64,(.+)$/);
                 if (match) {
                     parts.push({
                         inlineData: { mimeType: match[1], data: match[2] },
