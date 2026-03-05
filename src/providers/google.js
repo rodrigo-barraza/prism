@@ -45,12 +45,30 @@ function addWavHeader(buffer, sampleRate = 24000, numChannels = 1) {
 
 /**
  * Convert OpenAI-style messages to Google GenAI content format.
+ * Handles image content from base64 data URLs.
  */
 function convertMessages(messages) {
-    return messages.map((item) => ({
-        role: item.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: item.content }],
-    }));
+    return messages.map((item) => {
+        const parts = [];
+        // Handle image attachments
+        if (item.images && item.images.length > 0 && item.role === 'user') {
+            for (const img of item.images) {
+                const match = img.match(/^data:(image\/\w+);base64,(.+)$/);
+                if (match) {
+                    parts.push({
+                        inlineData: { mimeType: match[1], data: match[2] },
+                    });
+                }
+            }
+        }
+        if (item.content) {
+            parts.push({ text: item.content });
+        }
+        return {
+            role: item.role === 'assistant' ? 'model' : 'user',
+            parts,
+        };
+    });
 }
 
 const googleProvider = {
@@ -85,6 +103,19 @@ const googleProvider = {
             }
             if (options.maxTokens !== undefined) {
                 config.maxOutputTokens = options.maxTokens;
+            }
+            if (options.thinkingLevel || options.thinkingBudget !== undefined) {
+                config.thinkingConfig = {};
+                if (options.thinkingLevel) {
+                    config.thinkingConfig.thinkingLevel = options.thinkingLevel;
+                }
+                if (options.thinkingBudget !== undefined && options.thinkingBudget !== "") {
+                    // GenAI SDK might use thinkingBudgetTokens or thinkingBudget
+                    config.thinkingConfig.thinkingBudgetTokens = parseInt(options.thinkingBudget);
+                }
+            }
+            if (options.webSearch) {
+                config.tools = [{ googleSearch: {} }];
             }
 
             const response = await getClient().models.generateContent({
@@ -134,6 +165,24 @@ const googleProvider = {
             if (options.maxTokens !== undefined) {
                 config.maxOutputTokens = options.maxTokens;
             }
+            if (options.thinkingLevel || options.thinkingBudget !== undefined) {
+                config.thinkingConfig = {};
+                if (options.thinkingLevel) {
+                    config.thinkingConfig.thinkingLevel = options.thinkingLevel;
+                }
+                if (options.thinkingBudget !== undefined && options.thinkingBudget !== "") {
+                    config.thinkingConfig.thinkingBudgetTokens = parseInt(options.thinkingBudget);
+                }
+            }
+            if (options.webSearch) {
+                config.tools = [{ googleSearch: {} }];
+            }
+
+            // For models that output images, enable multimodal response
+            const modelDef = Object.values(MODELS).find((m) => m.name === model);
+            if (modelDef?.outputTypes?.includes(TYPES.IMAGE)) {
+                config.responseModalities = ['TEXT', 'IMAGE'];
+            }
 
             const responseStream = await getClient().models.generateContentStream({
                 model,
@@ -142,7 +191,20 @@ const googleProvider = {
             });
             let usage = null;
             for await (const chunk of responseStream) {
-                if (chunk.text) {
+                // Process all parts in the chunk
+                if (chunk.candidates?.[0]?.content?.parts) {
+                    for (const part of chunk.candidates[0].content.parts) {
+                        if (part.text) {
+                            yield part.text;
+                        } else if (part.inlineData) {
+                            yield {
+                                type: 'image',
+                                data: part.inlineData.data,
+                                mimeType: part.inlineData.mimeType || 'image/png',
+                            };
+                        }
+                    }
+                } else if (chunk.text) {
                     yield chunk.text;
                 }
                 if (chunk.usageMetadata) {

@@ -116,6 +116,7 @@ router.post('/', async (req, res, next) => {
 
         res.json({
             text: result.text,
+            thinking: result.thinking || null,
             provider: providerName,
             model: resolvedModel,
             usage,

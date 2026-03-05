@@ -15,6 +15,24 @@ function getClient() {
     }
     return client;
 }
+/**
+ * Convert messages with images to OpenAI multimodal content format.
+ */
+function prepareOpenAIMessages(messages) {
+    return messages.map((m) => {
+        if (m.images && m.images.length > 0 && m.role === 'user') {
+            const content = [];
+            for (const img of m.images) {
+                content.push({ type: 'image_url', image_url: { url: img } });
+            }
+            if (m.content) {
+                content.push({ type: 'text', text: m.content });
+            }
+            return { role: m.role, content };
+        }
+        return { role: m.role, content: m.content };
+    });
+}
 
 const openaiProvider = {
     name: 'openai',
@@ -28,12 +46,14 @@ const openaiProvider = {
         try {
             const modelDef = getModelByName(model);
             const isReasoning = modelDef?.thinking || model.includes('o1') || model.includes('o3');
+            const prepared = prepareOpenAIMessages(messages);
             const payload = {
                 model,
-                messages,
+                messages: prepared,
             };
             if (isReasoning) {
                 if (options.maxTokens) payload.max_completion_tokens = options.maxTokens;
+                if (options.reasoningEffort) payload.reasoning_effort = options.reasoningEffort;
             } else {
                 if (options.temperature !== undefined) payload.temperature = options.temperature;
                 if (options.topP !== undefined) payload.top_p = options.topP;
@@ -41,6 +61,9 @@ const openaiProvider = {
                 if (options.presencePenalty !== undefined) payload.presence_penalty = options.presencePenalty;
                 if (options.stopSequences !== undefined) payload.stop = options.stopSequences;
                 if (options.maxTokens) payload.max_tokens = options.maxTokens;
+            }
+            if (options.webSearch) {
+                payload.tools = [{ type: 'web_search_preview' }];
             }
 
             const response = await getClient().chat.completions.create(payload);
@@ -70,14 +93,16 @@ const openaiProvider = {
         try {
             const modelDef = getModelByName(model);
             const isReasoning = modelDef?.thinking || model.includes('o1') || model.includes('o3');
+            const prepared = prepareOpenAIMessages(messages);
             const payload = {
                 model,
-                messages,
+                messages: prepared,
                 stream: true,
                 stream_options: { include_usage: true },
             };
             if (isReasoning) {
                 if (options.maxTokens) payload.max_completion_tokens = options.maxTokens;
+                if (options.reasoningEffort) payload.reasoning_effort = options.reasoningEffort;
             } else {
                 if (options.temperature !== undefined) payload.temperature = options.temperature;
                 if (options.topP !== undefined) payload.top_p = options.topP;
@@ -85,6 +110,9 @@ const openaiProvider = {
                 if (options.presencePenalty !== undefined) payload.presence_penalty = options.presencePenalty;
                 if (options.stopSequences !== undefined) payload.stop = options.stopSequences;
                 if (options.maxTokens) payload.max_tokens = options.maxTokens;
+            }
+            if (options.webSearch) {
+                payload.tools = [{ type: 'web_search_preview' }];
             }
 
             const stream = await getClient().chat.completions.create(payload);
