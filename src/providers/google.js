@@ -46,12 +46,15 @@ function addWavHeader(buffer, sampleRate = 24000, numChannels = 1) {
 /**
  * Convert OpenAI-style messages to Google GenAI content format.
  * Handles image content from base64 data URLs.
+ * Note: Images on assistant/model messages are stripped to avoid
+ * Gemini's thought_signature requirement for model-generated images.
  */
 function convertMessages(messages) {
     return messages.map((item) => {
         const parts = [];
-        // Handle image attachments
-        if (item.images && item.images.length > 0) {
+        // Only include images for user messages — model-generated images
+        // require a thought_signature when sent back, so we skip them.
+        if (item.role !== 'assistant' && item.images && item.images.length > 0) {
             for (const img of item.images) {
                 const match = img.match(/^data:(image\/\w+);base64,(.+)$/);
                 if (match) {
