@@ -4,6 +4,14 @@ import logger from '../utils/logger.js';
 import { OPENAI_API_KEY } from '../secrets.js';
 import { TYPES, DEFAULT_VOICES, getDefaultModels, getModelByName } from '../config.js';
 
+/**
+ * Check if a model should use the Responses API.
+ */
+function useResponsesAPI(model) {
+    const modelDef = getModelByName(model);
+    return modelDef?.responsesAPI === true;
+}
+
 let client = null;
 
 function getClient() {
@@ -16,7 +24,7 @@ function getClient() {
     return client;
 }
 /**
- * Convert messages with images to OpenAI multimodal content format.
+ * Convert messages with images to OpenAI multimodal content format (Chat Completions).
  */
 function prepareOpenAIMessages(messages) {
     return messages.map((m) => {
@@ -34,6 +42,27 @@ function prepareOpenAIMessages(messages) {
     });
 }
 
+/**
+ * Convert messages to Responses API input format.
+ * System messages become developer messages; images use input_image.
+ */
+function prepareResponsesInput(messages) {
+    return messages.map((m) => {
+        const role = m.role === 'system' ? 'developer' : m.role;
+        if (m.images && m.images.length > 0) {
+            const content = [];
+            for (const img of m.images) {
+                content.push({ type: 'input_image', image_url: img });
+            }
+            if (m.content) {
+                content.push({ type: 'input_text', text: m.content });
+            }
+            return { role, content };
+        }
+        return { role, content: m.content };
+    });
+}
+
 const openaiProvider = {
     name: 'openai',
 
@@ -44,36 +73,10 @@ const openaiProvider = {
     ) {
         logger.provider('OpenAI', `generateText model=${model}`);
         try {
-            const modelDef = getModelByName(model);
-            const isReasoning = modelDef?.thinking || model.includes('o1') || model.includes('o3');
-            const prepared = prepareOpenAIMessages(messages);
-            const payload = {
-                model,
-                messages: prepared,
-            };
-            if (isReasoning) {
-                if (options.maxTokens) payload.max_completion_tokens = options.maxTokens;
-                if (options.reasoningEffort) payload.reasoning_effort = options.reasoningEffort;
-            } else {
-                if (options.temperature !== undefined) payload.temperature = options.temperature;
-                if (options.topP !== undefined) payload.top_p = options.topP;
-                if (options.frequencyPenalty !== undefined) payload.frequency_penalty = options.frequencyPenalty;
-                if (options.presencePenalty !== undefined) payload.presence_penalty = options.presencePenalty;
-                if (options.stopSequences !== undefined) payload.stop = options.stopSequences;
-                if (options.maxTokens) payload.max_tokens = options.maxTokens;
+            if (useResponsesAPI(model)) {
+                return await this._generateTextResponses(messages, model, options);
             }
-            if (options.webSearch) {
-                payload.tools = [{ type: 'web_search_preview' }];
-            }
-
-            const response = await getClient().chat.completions.create(payload);
-            return {
-                text: response.choices[0].message.content,
-                usage: {
-                    inputTokens: response.usage?.prompt_tokens ?? 0,
-                    outputTokens: response.usage?.completion_tokens ?? 0,
-                },
-            };
+            return await this._generateTextChatCompletions(messages, model, options);
         } catch (error) {
             throw new ProviderError(
                 'openai',
@@ -84,6 +87,87 @@ const openaiProvider = {
         }
     },
 
+    /**
+     * Responses API path for GPT-5.2/5.4 models.
+     */
+    async _generateTextResponses(messages, model, options) {
+        const input = prepareResponsesInput(messages);
+        const payload = { model, input };
+
+        // Reasoning
+        const reasoning = {};
+        if (options.reasoningEffort) reasoning.effort = options.reasoningEffort;
+        if (options.reasoningSummary) reasoning.summary = options.reasoningSummary;
+        if (Object.keys(reasoning).length > 0) payload.reasoning = reasoning;
+
+        // Text / verbosity
+        const text = {};
+        if (options.verbosity) text.format = { type: 'text' };
+        if (options.verbosity) text.verbosity = options.verbosity;
+        if (Object.keys(text).length > 0) payload.text = text;
+
+        if (options.maxTokens) payload.max_output_tokens = options.maxTokens;
+
+        // Temperature/topP only work with reasoning.effort=none
+        if (options.reasoningEffort === 'none') {
+            if (options.temperature !== undefined) payload.temperature = options.temperature;
+            if (options.topP !== undefined) payload.top_p = options.topP;
+            if (options.frequencyPenalty !== undefined) payload.frequency_penalty = options.frequencyPenalty;
+            if (options.presencePenalty !== undefined) payload.presence_penalty = options.presencePenalty;
+            if (options.stopSequences !== undefined) payload.stop = options.stopSequences;
+        }
+
+        // Web search tool
+        if (options.webSearch) {
+            payload.tools = [{ type: 'web_search_preview' }];
+        }
+
+        const response = await getClient().responses.create(payload);
+        return {
+            text: response.output_text,
+            usage: {
+                inputTokens: response.usage?.input_tokens ?? 0,
+                outputTokens: response.usage?.output_tokens ?? 0,
+            },
+        };
+    },
+
+    /**
+     * Chat Completions fallback for older models.
+     */
+    async _generateTextChatCompletions(messages, model, options) {
+        const modelDef = getModelByName(model);
+        const isReasoning = modelDef?.thinking || model.includes('o1') || model.includes('o3');
+        const prepared = prepareOpenAIMessages(messages);
+        const payload = {
+            model,
+            messages: prepared,
+        };
+        if (isReasoning) {
+            if (options.maxTokens) payload.max_completion_tokens = options.maxTokens;
+            if (options.reasoningEffort) payload.reasoning_effort = options.reasoningEffort;
+        } else {
+            if (options.temperature !== undefined) payload.temperature = options.temperature;
+            if (options.topP !== undefined) payload.top_p = options.topP;
+            if (options.frequencyPenalty !== undefined) payload.frequency_penalty = options.frequencyPenalty;
+            if (options.presencePenalty !== undefined) payload.presence_penalty = options.presencePenalty;
+            if (options.stopSequences !== undefined) payload.stop = options.stopSequences;
+            if (options.maxTokens) payload.max_tokens = options.maxTokens;
+        }
+        if (options.webSearch) {
+            payload.tools = [{ type: 'web_search_preview' }];
+        }
+
+        const response = await getClient().chat.completions.create(payload);
+        return {
+            text: response.choices[0].message.content,
+            usage: {
+                inputTokens: response.usage?.prompt_tokens ?? 0,
+                outputTokens: response.usage?.completion_tokens ?? 0,
+            },
+        };
+    },
+
     async *generateTextStream(
         messages,
         model = getDefaultModels(TYPES.TEXT, TYPES.TEXT).openai,
@@ -91,46 +175,10 @@ const openaiProvider = {
     ) {
         logger.provider('OpenAI', `generateTextStream model=${model}`);
         try {
-            const modelDef = getModelByName(model);
-            const isReasoning = modelDef?.thinking || model.includes('o1') || model.includes('o3');
-            const prepared = prepareOpenAIMessages(messages);
-            const payload = {
-                model,
-                messages: prepared,
-                stream: true,
-                stream_options: { include_usage: true },
-            };
-            if (isReasoning) {
-                if (options.maxTokens) payload.max_completion_tokens = options.maxTokens;
-                if (options.reasoningEffort) payload.reasoning_effort = options.reasoningEffort;
+            if (useResponsesAPI(model)) {
+                yield* this._streamResponses(messages, model, options);
             } else {
-                if (options.temperature !== undefined) payload.temperature = options.temperature;
-                if (options.topP !== undefined) payload.top_p = options.topP;
-                if (options.frequencyPenalty !== undefined) payload.frequency_penalty = options.frequencyPenalty;
-                if (options.presencePenalty !== undefined) payload.presence_penalty = options.presencePenalty;
-                if (options.stopSequences !== undefined) payload.stop = options.stopSequences;
-                if (options.maxTokens) payload.max_tokens = options.maxTokens;
-            }
-            if (options.webSearch) {
-                payload.tools = [{ type: 'web_search_preview' }];
-            }
-
-            const stream = await getClient().chat.completions.create(payload);
-            let usage = null;
-            for await (const chunk of stream) {
-                if (chunk.usage) {
-                    usage = {
-                        inputTokens: chunk.usage.prompt_tokens ?? 0,
-                        outputTokens: chunk.usage.completion_tokens ?? 0,
-                    };
-                }
-                const content = chunk.choices[0]?.delta?.content || '';
-                if (content) {
-                    yield content;
-                }
-            }
-            if (usage) {
-                yield { type: 'usage', usage };
+                yield* this._streamChatCompletions(messages, model, options);
             }
         } catch (error) {
             throw new ProviderError(
@@ -139,6 +187,112 @@ const openaiProvider = {
                 error.status || 500,
                 error,
             );
+        }
+    },
+
+    /**
+     * Streaming via the Responses API.
+     */
+    async *_streamResponses(messages, model, options) {
+        const input = prepareResponsesInput(messages);
+        const payload = { model, input, stream: true };
+
+        // Reasoning
+        const reasoning = {};
+        if (options.reasoningEffort) reasoning.effort = options.reasoningEffort;
+        if (options.reasoningSummary) reasoning.summary = options.reasoningSummary;
+        if (Object.keys(reasoning).length > 0) payload.reasoning = reasoning;
+
+        // Text / verbosity
+        const text = {};
+        if (options.verbosity) text.format = { type: 'text' };
+        if (options.verbosity) text.verbosity = options.verbosity;
+        if (Object.keys(text).length > 0) payload.text = text;
+
+        if (options.maxTokens) payload.max_output_tokens = options.maxTokens;
+
+        // Temperature/topP only work with reasoning.effort=none
+        if (options.reasoningEffort === 'none') {
+            if (options.temperature !== undefined) payload.temperature = options.temperature;
+            if (options.topP !== undefined) payload.top_p = options.topP;
+            if (options.frequencyPenalty !== undefined) payload.frequency_penalty = options.frequencyPenalty;
+            if (options.presencePenalty !== undefined) payload.presence_penalty = options.presencePenalty;
+            if (options.stopSequences !== undefined) payload.stop = options.stopSequences;
+        }
+
+        // Web search tool
+        if (options.webSearch) {
+            payload.tools = [{ type: 'web_search_preview' }];
+        }
+
+        const stream = await getClient().responses.create(payload);
+        let usage = null;
+        for await (const event of stream) {
+            // Text delta from output_text
+            if (event.type === 'response.output_text.delta') {
+                yield event.delta || '';
+            }
+            // Reasoning / thinking summary delta
+            if (event.type === 'response.reasoning_summary_text.delta') {
+                yield { type: 'thinking', content: event.delta || '' };
+            }
+            // Completed response — extract usage
+            if (event.type === 'response.completed' && event.response?.usage) {
+                usage = {
+                    inputTokens: event.response.usage.input_tokens ?? 0,
+                    outputTokens: event.response.usage.output_tokens ?? 0,
+                };
+            }
+        }
+        if (usage) {
+            yield { type: 'usage', usage };
+        }
+    },
+
+    /**
+     * Streaming via Chat Completions (fallback for older models).
+     */
+    async *_streamChatCompletions(messages, model, options) {
+        const modelDef = getModelByName(model);
+        const isReasoning = modelDef?.thinking || model.includes('o1') || model.includes('o3');
+        const prepared = prepareOpenAIMessages(messages);
+        const payload = {
+            model,
+            messages: prepared,
+            stream: true,
+            stream_options: { include_usage: true },
+        };
+        if (isReasoning) {
+            if (options.maxTokens) payload.max_completion_tokens = options.maxTokens;
+            if (options.reasoningEffort) payload.reasoning_effort = options.reasoningEffort;
+        } else {
+            if (options.temperature !== undefined) payload.temperature = options.temperature;
+            if (options.topP !== undefined) payload.top_p = options.topP;
+            if (options.frequencyPenalty !== undefined) payload.frequency_penalty = options.frequencyPenalty;
+            if (options.presencePenalty !== undefined) payload.presence_penalty = options.presencePenalty;
+            if (options.stopSequences !== undefined) payload.stop = options.stopSequences;
+            if (options.maxTokens) payload.max_tokens = options.maxTokens;
+        }
+        if (options.webSearch) {
+            payload.tools = [{ type: 'web_search_preview' }];
+        }
+
+        const stream = await getClient().chat.completions.create(payload);
+        let usage = null;
+        for await (const chunk of stream) {
+            if (chunk.usage) {
+                usage = {
+                    inputTokens: chunk.usage.prompt_tokens ?? 0,
+                    outputTokens: chunk.usage.completion_tokens ?? 0,
+                };
+            }
+            const content = chunk.choices[0]?.delta?.content || '';
+            if (content) {
+                yield content;
+            }
+        }
+        if (usage) {
+            yield { type: 'usage', usage };
         }
     },
 

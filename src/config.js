@@ -47,6 +47,9 @@ const MODELS = {
         outputTypes: [TYPES.TEXT],
         streaming: true,
         thinking: true,
+        verbosity: true,
+        reasoningSummary: true,
+        responsesAPI: true,
         webSearch: true,
         tools: ['Web Search', 'Function Calling', 'File Search'],
     },
@@ -54,7 +57,6 @@ const MODELS = {
         name: 'gpt-5-mini',
         label: 'GPT 5 Mini',
         provider: PROVIDERS.OPENAI,
-        default: true,
         defaultTemperature: 1.0,
         pricing: { inputPerMillion: 0.25, outputPerMillion: 2.0 },
         maxInputTokens: 400_000,
@@ -110,6 +112,43 @@ const MODELS = {
         thinking: true,
         webSearch: true,
         tools: ['Web Search', 'Function Calling', 'File Search'],
+    },
+    GPT_54: {
+        name: 'gpt-5.4',
+        label: 'GPT 5.4',
+        provider: PROVIDERS.OPENAI,
+        default: true,
+        defaultTemperature: 1.0,
+        pricing: { inputPerMillion: 2.5, outputPerMillion: 15.0 },
+        maxInputTokens: 1_050_000,
+        maxOutputTokens: 128_000,
+        inputTypes: [TYPES.TEXT, TYPES.IMAGE],
+        outputTypes: [TYPES.TEXT],
+        streaming: true,
+        thinking: true,
+        verbosity: true,
+        reasoningSummary: true,
+        responsesAPI: true,
+        webSearch: true,
+        tools: ['Web Search', 'Function Calling', 'File Search', 'Computer Use'],
+    },
+    GPT_54_PRO: {
+        name: 'gpt-5.4-pro',
+        label: 'GPT 5.4 Pro',
+        provider: PROVIDERS.OPENAI,
+        defaultTemperature: 1.0,
+        pricing: { inputPerMillion: 30.0, outputPerMillion: 180.0 },
+        maxInputTokens: 1_050_000,
+        maxOutputTokens: 128_000,
+        inputTypes: [TYPES.TEXT, TYPES.IMAGE],
+        outputTypes: [TYPES.TEXT],
+        streaming: true,
+        thinking: true,
+        verbosity: true,
+        reasoningSummary: true,
+        responsesAPI: true,
+        webSearch: true,
+        tools: ['Web Search', 'Function Calling', 'File Search', 'Computer Use'],
     },
     // ----- Anthropic — Text Generation -----
     HAIKU_45: {
@@ -465,6 +504,9 @@ function getModelOptions(inputType, outputType) {
             if (m.webFetch) entry.webFetch = true;
             if (m.urlContext) entry.urlContext = true;
             if (m.defaultTemperature !== undefined) entry.defaultTemperature = m.defaultTemperature;
+            if (m.verbosity) entry.verbosity = true;
+            if (m.reasoningSummary) entry.reasoningSummary = true;
+            if (m.responsesAPI) entry.responsesAPI = true;
             (opts[m.provider] ??= []).push(entry);
         }
     }
