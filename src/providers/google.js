@@ -108,12 +108,13 @@ const googleProvider = {
                 config.maxOutputTokens = options.maxTokens;
             }
             if (options.thinkingLevel || options.thinkingBudget !== undefined) {
-                config.thinkingConfig = {};
+                config.thinkingConfig = {
+                    includeThoughts: true,
+                };
                 if (options.thinkingLevel) {
                     config.thinkingConfig.thinkingLevel = options.thinkingLevel;
                 }
                 if (options.thinkingBudget !== undefined && options.thinkingBudget !== "") {
-                    // GenAI SDK might use thinkingBudgetTokens or thinkingBudget
                     config.thinkingConfig.thinkingBudgetTokens = parseInt(options.thinkingBudget);
                 }
             }
@@ -169,7 +170,9 @@ const googleProvider = {
                 config.maxOutputTokens = options.maxTokens;
             }
             if (options.thinkingLevel || options.thinkingBudget !== undefined) {
-                config.thinkingConfig = {};
+                config.thinkingConfig = {
+                    includeThoughts: true,
+                };
                 if (options.thinkingLevel) {
                     config.thinkingConfig.thinkingLevel = options.thinkingLevel;
                 }
@@ -200,7 +203,9 @@ const googleProvider = {
                 // Process all parts in the chunk
                 if (chunk.candidates?.[0]?.content?.parts) {
                     for (const part of chunk.candidates[0].content.parts) {
-                        if (part.text) {
+                        if (part.thought && part.text) {
+                            yield { type: 'thinking', content: part.text };
+                        } else if (part.text) {
                             yield part.text;
                         } else if (part.inlineData) {
                             yield {
