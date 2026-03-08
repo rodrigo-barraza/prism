@@ -51,7 +51,7 @@ const MODELS = {
         reasoningSummary: true,
         responsesAPI: true,
         webSearch: true,
-        tools: ['Web Search', 'Function Calling', 'File Search'],
+        tools: ['Thinking', 'Web Search', 'Function Calling', 'File Search'],
     },
     GPT_5_MINI: {
         name: 'gpt-5-mini',
@@ -66,7 +66,7 @@ const MODELS = {
         streaming: true,
         thinking: true,
         webSearch: true,
-        tools: ['Web Search', 'Function Calling', 'File Search'],
+        tools: ['Thinking', 'Web Search', 'Function Calling', 'File Search'],
     },
     GPT_5_NANO: {
         name: 'gpt-5-nano',
@@ -96,7 +96,7 @@ const MODELS = {
         streaming: true,
         thinking: true,
         webSearch: true,
-        tools: ['Web Search', 'Function Calling', 'File Search'],
+        tools: ['Thinking', 'Web Search', 'Function Calling', 'File Search'],
     },
     GPT_53_CODEX: {
         name: 'gpt-5.3-codex',
@@ -111,7 +111,7 @@ const MODELS = {
         streaming: true,
         thinking: true,
         webSearch: true,
-        tools: ['Web Search', 'Function Calling', 'File Search'],
+        tools: ['Thinking', 'Web Search', 'Function Calling', 'File Search'],
     },
     GPT_54: {
         name: 'gpt-5.4',
@@ -130,7 +130,7 @@ const MODELS = {
         reasoningSummary: true,
         responsesAPI: true,
         webSearch: true,
-        tools: ['Web Search', 'Function Calling', 'File Search', 'Computer Use'],
+        tools: ['Thinking', 'Web Search', 'Function Calling', 'File Search', 'Computer Use'],
     },
     GPT_54_PRO: {
         name: 'gpt-5.4-pro',
@@ -148,7 +148,7 @@ const MODELS = {
         reasoningSummary: true,
         responsesAPI: true,
         webSearch: true,
-        tools: ['Web Search', 'Function Calling', 'File Search', 'Computer Use'],
+        tools: ['Thinking', 'Web Search', 'Function Calling', 'File Search', 'Computer Use'],
     },
     // ----- Anthropic — Text Generation -----
     HAIKU_45: {
@@ -166,7 +166,7 @@ const MODELS = {
         assistantImages: false,
         webSearch: true,
         codeExecution: true,
-        tools: ['Web Search', 'Function Calling', 'Code Execution'],
+        tools: ['Thinking', 'Web Search', 'Function Calling', 'Code Execution'],
     },
     SONNET_45: {
         name: 'claude-sonnet-4-5-20250929',
@@ -185,7 +185,7 @@ const MODELS = {
         webSearch: true,
         webFetch: true,
         codeExecution: true,
-        tools: ['Web Search', 'Function Calling', 'Computer Use', 'Code Execution'],
+        tools: ['Thinking', 'Web Search', 'Function Calling', 'Computer Use', 'Code Execution'],
     },
     SONNET_46: {
         name: 'claude-sonnet-4-6',
@@ -203,7 +203,7 @@ const MODELS = {
         webSearch: true,
         webFetch: true,
         codeExecution: true,
-        tools: ['Web Search', 'Function Calling', 'Computer Use', 'Code Execution'],
+        tools: ['Thinking', 'Web Search', 'Function Calling', 'Computer Use', 'Code Execution'],
     },
     OPUS_45: {
         name: 'claude-opus-4-5-20251101',
@@ -221,7 +221,7 @@ const MODELS = {
         webSearch: true,
         webFetch: true,
         codeExecution: true,
-        tools: ['Web Search', 'Function Calling', 'Computer Use', 'Code Execution'],
+        tools: ['Thinking', 'Web Search', 'Function Calling', 'Computer Use', 'Code Execution'],
     },
     OPUS_46: {
         name: 'claude-opus-4-6',
@@ -239,7 +239,7 @@ const MODELS = {
         webSearch: true,
         webFetch: true,
         codeExecution: true,
-        tools: ['Web Search', 'Function Calling', 'Computer Use', 'Code Execution'],
+        tools: ['Thinking', 'Web Search', 'Function Calling', 'Computer Use', 'Code Execution'],
     },
 
     // ----- Google — Text Generation -----
@@ -249,7 +249,7 @@ const MODELS = {
         provider: PROVIDERS.GOOGLE,
         default: true,
         defaultTemperature: 1.0,
-        pricing: { inputPerMillion: 0.5, outputPerMillion: 3.0 },
+        pricing: { inputPerMillion: 0.5, audioInputPerMillion: 1.0, outputPerMillion: 3.0 },
         maxInputTokens: 1_048_576,
         maxOutputTokens: 65_536,
         inputTypes: [TYPES.TEXT, TYPES.IMAGE, TYPES.AUDIO, TYPES.VIDEO, TYPES.PDF],
@@ -259,14 +259,14 @@ const MODELS = {
         webSearch: 'Google Search',
         codeExecution: true,
         urlContext: true,
-        tools: ['Google Search', 'Function Calling', 'Code Execution', 'URL Context'],
+        tools: ['Thinking', 'Google Search', 'Function Calling', 'Code Execution', 'URL Context'],
     },
     GEMINI_3_PRO: {
         name: 'gemini-3-pro-preview',
         label: 'Gemini 3 Pro',
         provider: PROVIDERS.GOOGLE,
         defaultTemperature: 1.0,
-        pricing: { inputPerMillion: 2.0, outputPerMillion: 12.0 },
+        pricing: { inputPerMillion: 2.0, audioInputPerMillion: 4.0, outputPerMillion: 12.0 },
         maxInputTokens: 1_048_576,
         maxOutputTokens: 65_536,
         inputTypes: [TYPES.TEXT, TYPES.IMAGE, TYPES.AUDIO, TYPES.VIDEO, TYPES.PDF],
@@ -276,14 +276,14 @@ const MODELS = {
         webSearch: 'Google Search',
         codeExecution: true,
         urlContext: true,
-        tools: ['Google Search', 'Function Calling', 'Code Execution', 'URL Context'],
+        tools: ['Thinking', 'Google Search', 'Function Calling', 'Code Execution', 'URL Context'],
     },
     GEMINI_31_PRO: {
         name: 'gemini-3.1-pro-preview',
         label: 'Gemini 3.1 Pro',
         provider: PROVIDERS.GOOGLE,
         defaultTemperature: 1.0,
-        pricing: { inputPerMillion: 2.0, outputPerMillion: 12.0 },
+        pricing: { inputPerMillion: 2.0, audioInputPerMillion: 4.0, outputPerMillion: 12.0 },
         maxInputTokens: 1_048_576,
         maxOutputTokens: 65_536,
         inputTypes: [TYPES.TEXT, TYPES.IMAGE, TYPES.AUDIO, TYPES.VIDEO, TYPES.PDF],
@@ -293,7 +293,7 @@ const MODELS = {
         webSearch: 'Google Search',
         codeExecution: true,
         urlContext: true,
-        tools: ['Google Search', 'Function Calling', 'Code Execution', 'URL Context'],
+        tools: ['Thinking', 'Google Search', 'Function Calling', 'Code Execution', 'URL Context'],
     },
 
     // ----- OpenAI-Compatible / Local — Text Generation -----
@@ -330,7 +330,7 @@ const MODELS = {
         label: 'GPT 4o Mini TTS',
         provider: PROVIDERS.OPENAI,
         default: true,
-        pricing: { inputPerMillion: 0.6, outputPerMillion: 12.0 },
+        pricing: { inputPerMillion: 0.6, audioOutputPerMillion: 12.0 },
         inputTypes: [TYPES.TEXT],
         outputTypes: [TYPES.AUDIO],
         streaming: true,
@@ -339,7 +339,7 @@ const MODELS = {
         name: 'gemini-2.0-flash-lite-preview-tts',
         label: 'Gemini 2.0 Flash Lite TTS',
         provider: PROVIDERS.GOOGLE,
-        pricing: { inputPerMillion: 0.075, outputPerMillion: 0.3 },
+        pricing: { inputPerMillion: 0.075, audioOutputPerMillion: 0.3 },
         inputTypes: [TYPES.TEXT],
         outputTypes: [TYPES.AUDIO],
         streaming: true,
@@ -348,7 +348,7 @@ const MODELS = {
         name: 'gemini-2.5-flash-lite-preview-tts',
         label: 'Gemini 2.5 Flash Lite TTS',
         provider: PROVIDERS.GOOGLE,
-        pricing: { inputPerMillion: 0.3, outputPerMillion: 2.5 },
+        pricing: { inputPerMillion: 0.3, audioOutputPerMillion: 2.5 },
         inputTypes: [TYPES.TEXT],
         outputTypes: [TYPES.AUDIO],
         streaming: true,
@@ -357,7 +357,7 @@ const MODELS = {
         name: 'gemini-2.5-flash-tts',
         label: 'Gemini 2.5 Flash TTS',
         provider: PROVIDERS.GOOGLE,
-        pricing: { inputPerMillion: 0.5, outputPerMillion: 10.0 },
+        pricing: { inputPerMillion: 0.5, audioOutputPerMillion: 10.0 },
         inputTypes: [TYPES.TEXT],
         outputTypes: [TYPES.AUDIO],
         streaming: true,
@@ -367,7 +367,7 @@ const MODELS = {
         label: 'Gemini 2.5 Pro TTS',
         provider: PROVIDERS.GOOGLE,
         default: true,
-        pricing: { inputPerMillion: 1.0, outputPerMillion: 20.0 },
+        pricing: { inputPerMillion: 1.0, audioOutputPerMillion: 20.0 },
         inputTypes: [TYPES.TEXT],
         outputTypes: [TYPES.AUDIO],
         streaming: true,
@@ -408,7 +408,7 @@ const MODELS = {
         provider: PROVIDERS.GOOGLE,
         default: true,
         defaultTemperature: 1.0,
-        pricing: { inputPerMillion: 2.0, outputPerMillion: 120.0 },
+        pricing: { inputPerMillion: 2.0, outputPerMillion: 12.0, imageOutputPerMillion: 120.0 },
         maxInputTokens: 1_048_576,
         maxOutputTokens: 32_768,
         inputTypes: [TYPES.TEXT, TYPES.IMAGE],
@@ -416,14 +416,14 @@ const MODELS = {
         streaming: false,
         thinking: true,
         webSearch: true,
-        tools: ['Image Generation', 'Web Search'],
+        tools: ['Thinking', 'Image Generation', 'Web Search'],
     },
     GEMINI_31_FLASH_IMAGE: {
         name: 'gemini-3.1-flash-image-preview',
         label: 'Gemini 3.1 Flash Image',
         provider: PROVIDERS.GOOGLE,
         defaultTemperature: 1.0,
-        pricing: { inputPerMillion: 0.5, outputPerMillion: 60.0 },
+        pricing: { inputPerMillion: 0.25, outputPerMillion: 1.5, imageOutputPerMillion: 60.0 },
         maxInputTokens: 131_072,
         maxOutputTokens: 32_768,
         inputTypes: [TYPES.TEXT, TYPES.IMAGE, TYPES.PDF],
@@ -431,7 +431,7 @@ const MODELS = {
         streaming: false,
         thinking: true,
         webSearch: true,
-        tools: ['Image Generation', 'Web Search'],
+        tools: ['Thinking', 'Image Generation', 'Web Search'],
     },
 
     // ----- Embeddings -----
@@ -499,6 +499,7 @@ function getModelOptions(inputType, outputType) {
             if (m.inputTypes) entry.inputTypes = m.inputTypes;
             if (m.outputTypes) entry.outputTypes = m.outputTypes;
             if (m.tools) entry.tools = m.tools;
+            if (m.pricing) entry.pricing = m.pricing;
             if (m.assistantImages === false) entry.assistantImages = false;
             if (m.codeExecution) entry.codeExecution = true;
             if (m.webFetch) entry.webFetch = true;
