@@ -1,11 +1,53 @@
 import express from 'express';
 import crypto from 'crypto';
 import MongoWrapper from '../wrappers/MongoWrapper.js';
+import FileService from '../services/FileService.js';
 import { MONGO_DB_NAME } from '../../secrets.js';
 import logger from '../utils/logger.js';
 
 const router = express.Router();
 const COLLECTION = 'conversations';
+
+/**
+ * Upload any base64 data URLs in message images to external storage.
+ * Replaces inline data with minio:// refs when MinIO is available.
+ * @param {Array} messages
+ * @returns {Promise<Array>} messages with refs replacing inline data
+ */
+async function extractFiles(messages) {
+    if (!messages || !FileService.isExternalStorage()) return messages;
+
+    const processed = [];
+    for (const msg of messages) {
+        if (msg.images && msg.images.length > 0) {
+            const category = msg.role === 'assistant' ? 'generations' : 'uploads';
+            const newImages = [];
+            for (const img of msg.images) {
+                // Skip if already a minio ref or a URL
+                if (FileService.isMinioRef(img) || img.startsWith('http')) {
+                    newImages.push(img);
+                    continue;
+                }
+                // Upload base64 data URL to MinIO
+                if (img.startsWith('data:')) {
+                    try {
+                        const { ref } = await FileService.uploadFile(img, category);
+                        newImages.push(ref);
+                    } catch (err) {
+                        logger.error(`Failed to upload file: ${err.message}`);
+                        newImages.push(img); // fallback to inline
+                    }
+                } else {
+                    newImages.push(img);
+                }
+            }
+            processed.push({ ...msg, images: newImages });
+        } else {
+            processed.push(msg);
+        }
+    }
+    return processed;
+}
 
 /**
  * GET /conversations
@@ -76,6 +118,9 @@ router.post('/', async (req, res, next) => {
         const project = req.project || 'default';
         const { id, title, messages, systemPrompt, settings } = req.body;
 
+        // Extract base64 files to MinIO (if available)
+        const processedMessages = await extractFiles(messages);
+
         const conversationId = id || crypto.randomUUID();
         const now = new Date().toISOString();
 
@@ -84,7 +129,7 @@ router.post('/', async (req, res, next) => {
                 id: conversationId,
                 project,
                 title: title || 'New Conversation',
-                messages: messages || [],
+                messages: processedMessages || [],
                 systemPrompt: systemPrompt || '',
                 ...(settings ? { settings } : {}),
                 updatedAt: now,

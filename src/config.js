@@ -313,6 +313,7 @@ const MODELS = {
         provider: PROVIDERS.LM_STUDIO,
         default: true,
         defaultTemperature: 0.7,
+        size: '5.6 GB',
         maxInputTokens: 131_072,
         maxOutputTokens: 8_192,
         inputTypes: [TYPES.TEXT, TYPES.IMAGE],
@@ -326,6 +327,7 @@ const MODELS = {
         label: 'Josiefied Qwen3 8B',
         provider: PROVIDERS.LM_STUDIO,
         defaultTemperature: 0.7,
+        size: '5.5 GB',
         maxInputTokens: 32_768,
         maxOutputTokens: 8_192,
         inputTypes: [TYPES.TEXT],
@@ -598,6 +600,7 @@ function getModelOptions(inputType, outputType) {
             if (m.verbosity) entry.verbosity = true;
             if (m.reasoningSummary) entry.reasoningSummary = true;
             if (m.responsesAPI) entry.responsesAPI = true;
+            if (m.size) entry.size = m.size;
             (opts[m.provider] ??= []).push(entry);
         }
     }

@@ -7,6 +7,32 @@ function getBaseUrl() {
   return LM_STUDIO_BASE_URL;
 }
 
+/**
+ * Convert messages with images to OpenAI-compatible multipart content format.
+ * LM Studio uses the same format as OpenAI Chat Completions.
+ */
+function prepareLMStudioMessages(messages) {
+  return messages.map((m) => {
+    const { name: _name, id: _id, ...rest } = m;
+    if (m.images && m.images.length > 0) {
+      const content = [];
+      for (const dataUrl of m.images) {
+        content.push({ type: "image_url", image_url: { url: dataUrl } });
+      }
+      if (m.content) {
+        content.push({ type: "text", text: m.content });
+      }
+      return { role: rest.role, content };
+    }
+    return { role: rest.role, content: rest.content };
+  });
+}
+
+/** Small helper — resolves after `ms` milliseconds. */
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 const lmStudioProvider = {
   name: "lm-studio",
 
@@ -18,17 +44,13 @@ const lmStudioProvider = {
     const baseUrl = getBaseUrl();
     logger.provider("LM Studio", `generateText model=${model} baseUrl=${baseUrl}`);
     try {
-      // Remove unsupported properties
-      const cleaned = messages.map((m) => {
-        const { name: _name, id: _id, ...rest } = m;
-        return rest;
-      });
+      const prepared = prepareLMStudioMessages(messages);
 
       const response = await fetch(`${baseUrl}/v1/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: cleaned,
+          messages: prepared,
           model,
           temperature:
             options.temperature !== undefined ? options.temperature : 0.7,
@@ -86,33 +108,58 @@ const lmStudioProvider = {
         const modelEntry = (models || []).find((m) => m.key === model);
         const isLoaded = modelEntry?.loaded_instances?.length > 0;
         if (!isLoaded) {
-          yield { type: "status", message: "Loading model…" };
-
           // Unload any other loaded models first (single-model enforcement)
           for (const m of models || []) {
             for (const inst of m.loaded_instances || []) {
+              yield { type: "status", message: "Unloading previous model…" };
               logger.info(`Auto-unloading ${inst.id} before loading ${model}`);
               await this.unloadModel(inst.id);
             }
           }
 
           logger.info(`Auto-loading model ${model} for streaming`);
-          await this.loadModel(model);
+          yield { type: "status", message: "Loading model… 0%" };
+
+          // Start load (non-blocking) and poll for progress
+          let loadDone = false;
+          let loadError = null;
+          const loadPromise = this.loadModel(model)
+            .then(() => { loadDone = true; })
+            .catch((err) => { loadDone = true; loadError = err; });
+
+          const startTime = Date.now();
+          const EXPECTED_LOAD_MS = 15_000; // soft guess for the progress curve
+          let lastPct = 0;
+
+          while (!loadDone) {
+            await sleep(500);
+            if (loadDone) break;
+
+            const elapsed = Date.now() - startTime;
+            // Asymptotic curve: ramps quickly at first, caps at 95%
+            const pct = Math.min(95, Math.round((elapsed / (elapsed + EXPECTED_LOAD_MS)) * 100));
+            if (pct > lastPct) {
+              lastPct = pct;
+              yield { type: "status", message: `Loading model… ${pct}%` };
+            }
+          }
+
+          // Ensure promise is settled
+          await loadPromise;
+          if (loadError) throw loadError;
+          yield { type: "status", message: "Loading model… 100%" };
         }
       } catch (loadCheckErr) {
         logger.warn(`Could not check/load model before streaming: ${loadCheckErr.message}`);
       }
 
-      const cleaned = messages.map((m) => {
-        const { name: _name, id: _id, ...rest } = m;
-        return rest;
-      });
+      const prepared = prepareLMStudioMessages(messages);
 
       const response = await fetch(`${baseUrl}/v1/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: cleaned,
+          messages: prepared,
           model,
           temperature:
             options.temperature !== undefined ? options.temperature : 0.7,

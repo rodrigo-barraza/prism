@@ -8,8 +8,17 @@ import logger from './utils/logger.js';
 import { listProviders } from './providers/index.js';
 import { setupWebSocket } from './websocket/index.js';
 import { authMiddleware } from './middleware/AuthMiddleware.js';
-import { PORT, MONGO_URI, MONGO_DB_NAME } from '../secrets.js';
+import {
+  PORT,
+  MONGO_URI,
+  MONGO_DB_NAME,
+  MINIO_ENDPOINT,
+  MINIO_ACCESS_KEY,
+  MINIO_SECRET_KEY,
+  MINIO_BUCKET_NAME,
+} from '../secrets.js';
 import MongoWrapper from './wrappers/MongoWrapper.js';
+import MinioWrapper from './wrappers/MinioWrapper.js';
 
 // Routes
 import textToTextRouter from './routes/textToText.js';
@@ -20,6 +29,7 @@ import textToEmbeddingRouter from './routes/textToEmbedding.js';
 import audioToTextRouter from './routes/audioToText.js';
 import configRouter from './routes/config.js';
 import conversationsRouter from './routes/conversations.js';
+import filesRouter from './routes/files.js';
 import adminRouter from './routes/admin.js';
 
 const app = express();
@@ -40,6 +50,7 @@ const ENDPOINTS = {
     '/text-to-embedding',
     '/audio-to-text',
     '/conversations',
+    '/files',
   ],
   websocket: ['/text-to-text/stream', '/text-to-speech/stream'],
   admin: ['/admin', '/admin/lm-studio'],
@@ -70,6 +81,7 @@ app.use('/text-to-speech', textToSpeechRouter);
 app.use('/text-to-embedding', textToEmbeddingRouter);
 app.use('/audio-to-text', audioToTextRouter);
 app.use('/conversations', conversationsRouter);
+app.use('/files', filesRouter);
 
 // Error handler (must be last)
 app.use(errorHandler);
@@ -81,6 +93,13 @@ setupWebSocket(wss);
 // Start
 (async () => {
   await MongoWrapper.createClient(MONGO_DB_NAME, MONGO_URI);
+
+  // Initialize MinIO if all secrets are configured
+  if (MINIO_ENDPOINT && MINIO_ACCESS_KEY && MINIO_SECRET_KEY && MINIO_BUCKET_NAME) {
+    await MinioWrapper.init(MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY, MINIO_BUCKET_NAME);
+  } else {
+    logger.info('MinIO not configured — files will be stored inline in MongoDB');
+  }
 
   server.listen(PORT, () => {
     logger.success(`Prism the AI Gateway is running on port ${PORT}`);

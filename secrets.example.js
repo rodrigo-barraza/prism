@@ -35,3 +35,9 @@ export const LM_STUDIO_BASE_URL = 'http://localhost:1234';
 // Mongo
 export const MONGO_URI = 'mongodb://127.0.0.1:27017';
 export const MONGO_DB_NAME = '';
+
+// MinIO (Optional — files stored inline in MongoDB if not set)
+export const MINIO_ENDPOINT = '';
+export const MINIO_ACCESS_KEY = '';
+export const MINIO_SECRET_KEY = '';
+export const MINIO_BUCKET_NAME = '';

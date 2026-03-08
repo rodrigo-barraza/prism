@@ -6,7 +6,7 @@ import logger from '../utils/logger.js';
  * and attaches the x-project header to the request.
  */
 export function authMiddleware(req, res, next) {
-  const secret = req.headers['x-api-secret'];
+  const secret = req.headers['x-api-secret'] || req.query.secret;
 
   if (!secret || secret !== GATEWAY_SECRET) {
     logger.error(
