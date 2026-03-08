@@ -116,7 +116,7 @@ router.post('/', async (req, res, next) => {
         }
 
         const project = req.project || 'default';
-        const { id, title, messages, systemPrompt, settings } = req.body;
+        const { id, title, messages, systemPrompt, settings, isGenerating } = req.body;
 
         // Extract base64 files to MinIO (if available)
         const processedMessages = await extractFiles(messages);
@@ -132,6 +132,7 @@ router.post('/', async (req, res, next) => {
                 messages: processedMessages || [],
                 systemPrompt: systemPrompt || '',
                 ...(settings ? { settings } : {}),
+                ...(isGenerating !== undefined ? { isGenerating } : {}),
                 updatedAt: now,
             },
             $setOnInsert: {

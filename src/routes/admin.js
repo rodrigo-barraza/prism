@@ -461,6 +461,7 @@ router.get("/live", async (req, res, next) => {
           title: 1,
           updatedAt: 1,
           messages: 1,
+          isGenerating: 1,
         })
         .sort({ updatedAt: -1 })
         .toArray(),
@@ -494,6 +495,7 @@ router.get("/live", async (req, res, next) => {
         messageCount: msgs.length,
         lastMessage: lastMessageText,
         lastMessageRole: lastMsg?.role || null,
+        isGenerating: c.isGenerating || false,
       };
     });
 
