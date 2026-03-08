@@ -451,7 +451,7 @@ router.get("/live", async (req, res, next) => {
       Date.now() - parseInt(minutes, 10) * 60 * 1000,
     ).toISOString();
 
-    const [conversations, recentRequests] = await Promise.all([
+    const [rawConversations, recentRequests] = await Promise.all([
       db
         .collection(CONVERSATIONS_COL)
         .find({ updatedAt: { $gte: since } })
@@ -460,7 +460,7 @@ router.get("/live", async (req, res, next) => {
           project: 1,
           title: 1,
           updatedAt: 1,
-          messageCount: { $size: { $ifNull: ["$messages", []] } },
+          messages: 1,
         })
         .sort({ updatedAt: -1 })
         .toArray(),
@@ -472,6 +472,31 @@ router.get("/live", async (req, res, next) => {
         .toArray(),
     ]);
 
+    // Enrich conversations with lastMessage info and remap fields
+    const conversations = rawConversations.map((c) => {
+      const msgs = c.messages || [];
+      const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
+      let lastMessageText = null;
+      if (lastMsg) {
+        const content = lastMsg.content;
+        if (typeof content === "string") {
+          lastMessageText = content;
+        } else if (Array.isArray(content)) {
+          const textPart = content.find((p) => p.type === "text");
+          lastMessageText = textPart?.text || null;
+        }
+      }
+      return {
+        id: c.id,
+        project: c.project,
+        title: c.title,
+        lastActivity: c.updatedAt,
+        messageCount: msgs.length,
+        lastMessage: lastMessageText,
+        lastMessageRole: lastMsg?.role || null,
+      };
+    });
+
     // Calc requests per minute
     const totalRecent = await db
       .collection(REQUESTS_COL)
@@ -479,7 +504,7 @@ router.get("/live", async (req, res, next) => {
     const requestsPerMinute = totalRecent / parseInt(minutes, 10);
 
     res.json({
-      activeConversations: conversations,
+      conversations,
       recentRequests,
       requestsPerMinute: Math.round(requestsPerMinute * 100) / 100,
       activeCount: conversations.length,

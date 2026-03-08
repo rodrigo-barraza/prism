@@ -319,6 +319,7 @@ const MODELS = {
         outputTypes: [TYPES.TEXT],
         streaming: true,
         thinking: false,
+        pricing: { inputPerMillion: 0, outputPerMillion: 0 },
     },
     JOSIEFIED_QWEN: {
         name: 'josiefied-qwen3-8b-abliterated-v1',
@@ -331,6 +332,7 @@ const MODELS = {
         outputTypes: [TYPES.TEXT],
         streaming: true,
         thinking: false,
+        pricing: { inputPerMillion: 0, outputPerMillion: 0 },
     },
 
     // ----- Text-to-Speech -----
@@ -426,7 +428,7 @@ const MODELS = {
         label: 'GPT Image 1.5',
         provider: PROVIDERS.OPENAI,
         defaultTemperature: 1.0,
-        arena: { textToImage: 1307, imageEdit: 1348 },
+        arena: { image: 1307, imageEdit: 1348 },
         pricing: {
             inputPerMillion: 2.50,
             cachedInputPerMillion: 0.63,
@@ -448,7 +450,7 @@ const MODELS = {
         provider: PROVIDERS.GOOGLE,
         default: true,
         defaultTemperature: 1.0,
-        arena: { textToImage: 1233, imageEdit: 1391 },
+        arena: { image: 1233, imageEdit: 1391 },
         pricing: { inputPerMillion: 2.0, outputPerMillion: 12.0, imageOutputPerMillion: 120.0 },
         maxInputTokens: 1_048_576,
         maxOutputTokens: 32_768,
@@ -464,7 +466,7 @@ const MODELS = {
         label: 'Gemini 3.1 Flash Image',
         provider: PROVIDERS.GOOGLE,
         defaultTemperature: 1.0,
-        arena: { textToImage: 1268, imageEdit: 1388 },
+        arena: { image: 1268, imageEdit: 1388 },
         pricing: { inputPerMillion: 0.25, outputPerMillion: 1.5, imageOutputPerMillion: 60.0 },
         maxInputTokens: 131_072,
         maxOutputTokens: 32_768,

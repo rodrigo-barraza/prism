@@ -198,6 +198,13 @@ function handleTextToTextStream(ws, project) {
                     }
                     continue;
                 }
+                // Status messages (e.g. "Loading model…")
+                if (chunk && typeof chunk === 'object' && chunk.type === 'status') {
+                    if (ws.readyState === ws.OPEN) {
+                        ws.send(JSON.stringify({ type: 'status', message: chunk.message }));
+                    }
+                    continue;
+                }
                 if (!firstTokenTime) {
                     firstTokenTime = performance.now();
                 }

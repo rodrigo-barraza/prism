@@ -80,6 +80,29 @@ const lmStudioProvider = {
     const baseUrl = getBaseUrl();
     logger.provider("LM Studio", `generateTextStream model=${model} baseUrl=${baseUrl}`);
     try {
+      // Auto-load the model if not currently loaded
+      try {
+        const { models } = await this.listModels();
+        const modelEntry = (models || []).find((m) => m.key === model);
+        const isLoaded = modelEntry?.loaded_instances?.length > 0;
+        if (!isLoaded) {
+          yield { type: "status", message: "Loading model…" };
+
+          // Unload any other loaded models first (single-model enforcement)
+          for (const m of models || []) {
+            for (const inst of m.loaded_instances || []) {
+              logger.info(`Auto-unloading ${inst.id} before loading ${model}`);
+              await this.unloadModel(inst.id);
+            }
+          }
+
+          logger.info(`Auto-loading model ${model} for streaming`);
+          await this.loadModel(model);
+        }
+      } catch (loadCheckErr) {
+        logger.warn(`Could not check/load model before streaming: ${loadCheckErr.message}`);
+      }
+
       const cleaned = messages.map((m) => {
         const { name: _name, id: _id, ...rest } = m;
         return rest;
@@ -108,6 +131,7 @@ const lmStudioProvider = {
               : undefined,
           max_tokens: options.maxTokens || -1,
           stream: true,
+          stream_options: { include_usage: true },
         }),
       });
 
