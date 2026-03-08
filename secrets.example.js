@@ -11,6 +11,9 @@ export const PORT = 3000;
 // Gateway Auth
 export const GATEWAY_SECRET = '';
 
+// Admin Auth (Iris Dashboard)
+export const ADMIN_SECRET = '';
+
 // OpenAI
 export const OPENAI_API_KEY = '';
 
@@ -26,8 +29,8 @@ export const ELEVENLABS_API_KEY = '';
 // Inworld (Base64-encoded apiKey:apiSecret)
 export const INWORLD_BASIC = '';
 
-// OpenAI-Compatible / Local (LMStudio, LocalAI, Ollama, etc.)
-export const OPENAI_COMPATIBLE_BASE_URL = 'http://localhost:1234';
+// LM Studio (Local LLM Server)
+export const LM_STUDIO_BASE_URL = 'http://localhost:1234';
 
 // Mongo
 export const MONGO_URI = 'mongodb://127.0.0.1:27017';

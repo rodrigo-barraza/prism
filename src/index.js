@@ -20,6 +20,7 @@ import textToEmbeddingRouter from './routes/textToEmbedding.js';
 import audioToTextRouter from './routes/audioToText.js';
 import configRouter from './routes/config.js';
 import conversationsRouter from './routes/conversations.js';
+import adminRouter from './routes/admin.js';
 
 const app = express();
 const server = http.createServer(app);
@@ -41,6 +42,7 @@ const ENDPOINTS = {
     '/conversations',
   ],
   websocket: ['/text-to-text/stream', '/text-to-speech/stream'],
+  admin: ['/admin', '/admin/lm-studio'],
 };
 
 // Health check (public — no auth required)
@@ -52,6 +54,9 @@ app.get('/', (_req, res) => {
     endpoints: ENDPOINTS,
   });
 });
+
+// Admin routes (own auth via x-admin-secret)
+app.use('/admin', adminRouter);
 
 // Auth gate — everything below requires a valid x-api-secret header
 app.use(authMiddleware);

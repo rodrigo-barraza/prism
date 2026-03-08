@@ -84,6 +84,6 @@ describe('GET /config', () => {
     expect(list).toContain('google');
     expect(list).toContain('elevenlabs');
     expect(list).toContain('inworld');
-    expect(list).toContain('openai-compatible');
+    expect(list).toContain('lm-studio');
   });
 });

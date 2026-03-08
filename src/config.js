@@ -9,7 +9,7 @@ const PROVIDERS = {
     GOOGLE: 'google',
     ELEVENLABS: 'elevenlabs',
     INWORLD: 'inworld',
-    OPENAI_COMPATIBLE: 'openai-compatible',
+    LM_STUDIO: 'lm-studio',
 };
 
 const PROVIDER_LIST = Object.values(PROVIDERS);
@@ -306,31 +306,30 @@ const MODELS = {
         tools: ['Thinking', 'Google Search', 'Function Calling', 'Code Execution', 'URL Context'],
     },
 
-    // ----- OpenAI-Compatible / Local — Text Generation -----
+    // ----- LM Studio — Local Text Generation -----
     QWEN_VL_8B: {
         name: 'qwen/qwen3-vl-8b',
         label: 'Qwen3 VL 8B',
-        provider: PROVIDERS.OPENAI_COMPATIBLE,
-        listed: false,
+        provider: PROVIDERS.LM_STUDIO,
+        default: true,
         defaultTemperature: 0.7,
-        maxInputTokens: 32_768,
+        maxInputTokens: 131_072,
         maxOutputTokens: 8_192,
         inputTypes: [TYPES.TEXT, TYPES.IMAGE],
         outputTypes: [TYPES.TEXT],
-        streaming: false,
+        streaming: true,
         thinking: false,
     },
     JOSIEFIED_QWEN: {
         name: 'josiefied-qwen3-8b-abliterated-v1',
         label: 'Josiefied Qwen3 8B',
-        provider: PROVIDERS.OPENAI_COMPATIBLE,
-        default: true,
+        provider: PROVIDERS.LM_STUDIO,
         defaultTemperature: 0.7,
         maxInputTokens: 32_768,
         maxOutputTokens: 8_192,
         inputTypes: [TYPES.TEXT],
         outputTypes: [TYPES.TEXT],
-        streaming: false,
+        streaming: true,
         thinking: false,
     },
 

@@ -1,9 +1,9 @@
-import openaiProvider from './openai.js';
-import anthropicProvider from './anthropic.js';
-import googleProvider from './google.js';
-import elevenlabsProvider from './elevenlabs.js';
-import inworldProvider from './inworld.js';
-import openaiCompatibleProvider from './openai-compatible.js';
+import openaiProvider from "./openai.js";
+import anthropicProvider from "./anthropic.js";
+import googleProvider from "./google.js";
+import elevenlabsProvider from "./elevenlabs.js";
+import inworldProvider from "./inworld.js";
+import lmStudioProvider from "./lm-studio.js";
 
 const providers = {
   openai: openaiProvider,
@@ -11,13 +11,13 @@ const providers = {
   google: googleProvider,
   elevenlabs: elevenlabsProvider,
   inworld: inworldProvider,
-  'openai-compatible': openaiCompatibleProvider,
+  "lm-studio": lmStudioProvider,
 };
 
 export function getProvider(name) {
   const provider = providers[name];
   if (!provider) {
-    const available = Object.keys(providers).join(', ');
+    const available = Object.keys(providers).join(", ");
     throw new Error(`Unknown provider "${name}". Available: ${available}`);
   }
   return provider;
