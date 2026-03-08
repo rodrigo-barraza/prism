@@ -1,6 +1,6 @@
 import { ProviderError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
-import { OPENAI_COMPATIBLE_BASE_URL } from '../secrets.js';
+import { OPENAI_COMPATIBLE_BASE_URL } from '../../secrets.js';
 import { TYPES, getDefaultModels } from '../config.js';
 
 function getBaseUrl() {

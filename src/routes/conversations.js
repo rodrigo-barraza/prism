@@ -1,7 +1,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import MongoWrapper from '../wrappers/MongoWrapper.js';
-import { MONGO_DB_NAME } from '../secrets.js';
+import { MONGO_DB_NAME } from '../../secrets.js';
 import logger from '../utils/logger.js';
 
 const router = express.Router();

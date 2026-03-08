@@ -1,7 +1,7 @@
 import OpenAI, { toFile } from 'openai';
 import { ProviderError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
-import { OPENAI_API_KEY } from '../secrets.js';
+import { OPENAI_API_KEY } from '../../secrets.js';
 import { TYPES, DEFAULT_VOICES, getDefaultModels, getModelByName } from '../config.js';
 
 /**

@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
-import { ANTHROPIC_API_KEY } from "../secrets.js";
+import { ANTHROPIC_API_KEY } from "../../secrets.js";
 import { TYPES, getDefaultModels } from "../config.js";
 
 

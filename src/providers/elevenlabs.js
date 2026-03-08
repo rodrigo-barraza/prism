@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import { ProviderError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
-import { ELEVENLABS_API_KEY } from '../secrets.js';
+import { ELEVENLABS_API_KEY } from '../../secrets.js';
 import { TYPES, DEFAULT_VOICES, getDefaultModels } from '../config.js';
 
 function getApiKey() {

@@ -1,7 +1,7 @@
 import { Readable } from 'stream';
 import { ProviderError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
-import { INWORLD_BASIC } from '../secrets.js';
+import { INWORLD_BASIC } from '../../secrets.js';
 import { DEFAULT_VOICES, getDefaultModels, TYPES } from '../config.js';
 
 const INWORLD_TTS_URL = 'https://api.inworld.ai/tts/v1/voice:stream';

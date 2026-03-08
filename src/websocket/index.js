@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { getProvider } from '../providers/index.js';
-import { GATEWAY_SECRET } from '../secrets.js';
+import { GATEWAY_SECRET } from '../../secrets.js';
 import { TYPES, getDefaultModels, getPricing, getModelByName } from '../config.js';
 import logger from '../utils/logger.js';
 import RequestLogger from '../services/RequestLogger.js';

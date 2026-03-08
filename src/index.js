@@ -8,7 +8,7 @@ import logger from './utils/logger.js';
 import { listProviders } from './providers/index.js';
 import { setupWebSocket } from './websocket/index.js';
 import { authMiddleware } from './middleware/AuthMiddleware.js';
-import { PORT, MONGO_URI, MONGO_DB_NAME } from './secrets.js';
+import { PORT, MONGO_URI, MONGO_DB_NAME } from '../secrets.js';
 import MongoWrapper from './wrappers/MongoWrapper.js';
 
 // Routes

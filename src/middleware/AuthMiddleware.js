@@ -1,4 +1,4 @@
-import { GATEWAY_SECRET } from '../secrets.js';
+import { GATEWAY_SECRET } from '../../secrets.js';
 import logger from '../utils/logger.js';
 
 /**

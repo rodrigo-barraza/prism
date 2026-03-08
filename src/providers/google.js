@@ -2,7 +2,7 @@ import { GoogleGenAI } from '@google/genai';
 import { Readable } from 'stream';
 import { ProviderError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
-import { GOOGLE_API_KEY } from '../secrets.js';
+import { GOOGLE_API_KEY } from '../../secrets.js';
 import { TYPES, MODELS, DEFAULT_VOICES, getDefaultModels } from '../config.js';
 
 let client = null;
