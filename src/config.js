@@ -364,7 +364,7 @@ const MODELS = {
         streaming: true,
     },
     GEMINI_25_FLASH_TTS: {
-        name: 'gemini-2.5-flash-tts',
+        name: 'gemini-2.5-flash-preview-tts',
         label: 'Gemini 2.5 Flash TTS',
         provider: PROVIDERS.GOOGLE,
         pricing: { inputPerMillion: 0.5, audioOutputPerMillion: 10.0 },
@@ -373,7 +373,7 @@ const MODELS = {
         streaming: true,
     },
     GEMINI_25_PRO_TTS: {
-        name: 'gemini-2.5-pro-tts',
+        name: 'gemini-2.5-pro-preview-tts',
         label: 'Gemini 2.5 Pro TTS',
         provider: PROVIDERS.GOOGLE,
         default: true,
