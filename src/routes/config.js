@@ -41,6 +41,10 @@ router.get('/', (_req, res) => {
       models: getModelOptions(TYPES.TEXT, TYPES.EMBEDDING),
       defaults: getDefaultModels(TYPES.TEXT, TYPES.EMBEDDING),
     },
+    audioToText: {
+      models: getModelOptions(TYPES.AUDIO, TYPES.TEXT),
+      defaults: getDefaultModels(TYPES.AUDIO, TYPES.TEXT),
+    },
   });
 });
 

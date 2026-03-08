@@ -17,6 +17,7 @@ import textToImageRouter from './routes/textToImage.js';
 import imageToTextRouter from './routes/imageToText.js';
 import textToSpeechRouter from './routes/textToSpeech.js';
 import textToEmbeddingRouter from './routes/textToEmbedding.js';
+import audioToTextRouter from './routes/audioToText.js';
 import configRouter from './routes/config.js';
 import conversationsRouter from './routes/conversations.js';
 
@@ -36,6 +37,7 @@ const ENDPOINTS = {
     '/image-to-text',
     '/text-to-speech',
     '/text-to-embedding',
+    '/audio-to-text',
     '/conversations',
   ],
   websocket: ['/text-to-text/stream', '/text-to-speech/stream'],
@@ -61,6 +63,7 @@ app.use('/text-to-image', textToImageRouter);
 app.use('/image-to-text', imageToTextRouter);
 app.use('/text-to-speech', textToSpeechRouter);
 app.use('/text-to-embedding', textToEmbeddingRouter);
+app.use('/audio-to-text', audioToTextRouter);
 app.use('/conversations', conversationsRouter);
 
 // Error handler (must be last)

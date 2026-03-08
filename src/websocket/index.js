@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { getProvider } from '../providers/index.js';
 import { GATEWAY_SECRET } from '../secrets.js';
-import { TYPES, getDefaultModels, getPricing } from '../config.js';
+import { TYPES, getDefaultModels, getPricing, getModelByName } from '../config.js';
 import logger from '../utils/logger.js';
 import RequestLogger from '../services/RequestLogger.js';
 
@@ -101,6 +101,54 @@ function handleTextToTextStream(ws, project) {
 
             resolvedModel =
                 data.model || getDefaultModels(TYPES.TEXT, TYPES.TEXT)[providerName];
+
+            // Check if this is an image-generation model that needs the Images API
+            const modelDef = getModelByName(resolvedModel);
+            const isImageModel = modelDef?.imageAPI && provider.generateImage;
+
+            if (isImageModel) {
+                // Route through the Images API instead of streaming text
+                const lastUserMsg = messages.filter((m) => m.role === 'user').pop();
+                const prompt = lastUserMsg?.content || '';
+
+                // Collect all images from the conversation (user-uploaded + assistant-generated)
+                const allImages = [];
+                for (const msg of messages) {
+                    if (msg.images && msg.images.length > 0) {
+                        allImages.push(...msg.images);
+                    }
+                }
+                const requestStart2 = performance.now();
+
+                try {
+                    const result = await provider.generateImage(prompt, allImages, resolvedModel);
+                    const totalSec = (performance.now() - requestStart2) / 1000;
+
+                    if (ws.readyState === ws.OPEN) {
+                        if (result.text) {
+                            ws.send(JSON.stringify({ type: 'chunk', content: result.text }));
+                        }
+                        ws.send(JSON.stringify({
+                            type: 'image',
+                            data: result.imageData,
+                            mimeType: result.mimeType || 'image/png',
+                        }));
+                        ws.send(JSON.stringify({
+                            type: 'done',
+                            usage: result.usage || null,
+                            estimatedCost: null,
+                            totalTime: totalSec,
+                        }));
+                    }
+                } catch (imgError) {
+                    logger.error(`Image generation error (${providerName}):`, imgError.message);
+                    if (ws.readyState === ws.OPEN) {
+                        ws.send(JSON.stringify({ type: 'error', message: imgError.message }));
+                    }
+                }
+                return;
+            }
+
             const stream = provider.generateTextStream(
                 messages,
                 resolvedModel,

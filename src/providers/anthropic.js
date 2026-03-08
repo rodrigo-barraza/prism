@@ -37,22 +37,23 @@ function prepareMessages(messages) {
         systemMessage = conversation.shift().content;
     }
 
-    // Remove unsupported properties and convert image content
+    // Remove unsupported properties and convert media content
     const cleaned = conversation
         .filter((m) => m.role === "user" || m.role === "assistant")
         .map((m) => {
             const { name: _name, id: _id, images, ...rest } = m;
-            // Convert messages with images to Anthropic content block format
+            // Convert messages with media to Anthropic content block format
             if (images && images.length > 0) {
                 const contentBlocks = [];
-                for (const img of images) {
-                    // img is a base64 data URL: data:image/png;base64,....
-                    const match = img.match(/^data:(image\/[\w+]+);base64,(.+)$/);
-                    if (match) {
-                        const data = match[2];
-                        // Detect actual MIME type from base64 magic bytes
-                        // (the data URL header can be wrong)
-                        let mediaType = match[1];
+                for (const dataUrl of images) {
+                    const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+                    if (!match) continue;
+                    const mimeType = match[1];
+                    const data = match[2];
+
+                    if (mimeType.startsWith("image/")) {
+                        // Image content block
+                        let mediaType = mimeType;
                         if (data.startsWith("/9j/")) mediaType = "image/jpeg";
                         else if (data.startsWith("iVBOR")) mediaType = "image/png";
                         else if (data.startsWith("R0lG")) mediaType = "image/gif";
@@ -66,12 +67,31 @@ function prepareMessages(messages) {
                                 data,
                             },
                         });
+                    } else if (mimeType === "application/pdf") {
+                        // PDF document content block
+                        contentBlocks.push({
+                            type: "document",
+                            source: {
+                                type: "base64",
+                                media_type: "application/pdf",
+                                data,
+                            },
+                        });
+                    } else if (mimeType.startsWith("text/") || mimeType === "application/json") {
+                        // Text-based files — decode and inline as text
+                        try {
+                            const decoded = Buffer.from(data, "base64").toString("utf-8");
+                            contentBlocks.push({ type: "text", text: `[Attached file (${mimeType})]:\n${decoded}` });
+                        } catch {
+                            // Skip if decoding fails
+                        }
                     }
+                    // Other MIME types (audio, video) are not supported by Anthropic — skip
                 }
                 if (rest.content) {
                     contentBlocks.push({ type: "text", text: rest.content });
                 }
-                return { role: rest.role, content: contentBlocks };
+                return { role: rest.role, content: contentBlocks.length > 0 ? contentBlocks : rest.content };
             }
             return rest;
         });

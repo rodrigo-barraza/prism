@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import OpenAI, { toFile } from 'openai';
 import { ProviderError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
 import { OPENAI_API_KEY } from '../secrets.js';
@@ -24,17 +24,42 @@ function getClient() {
     return client;
 }
 /**
- * Convert messages with images to OpenAI multimodal content format (Chat Completions).
+ * Detect MIME category from a base64 data URL.
+ */
+function getDataUrlMimeType(dataUrl) {
+    const match = dataUrl.match(/^data:([^;]+);base64,/);
+    return match ? match[1] : null;
+}
+
+/**
+ * Convert messages with media to OpenAI multimodal content format (Chat Completions).
  */
 function prepareOpenAIMessages(messages) {
     return messages.map((m) => {
         if (m.images && m.images.length > 0) {
             const content = [];
-            for (const img of m.images) {
-                content.push({ type: 'image_url', image_url: { url: img } });
+            for (const dataUrl of m.images) {
+                const mime = getDataUrlMimeType(dataUrl);
+                if (mime && mime.startsWith("image/")) {
+                    content.push({ type: "image_url", image_url: { url: dataUrl } });
+                } else if (mime === "application/pdf") {
+                    content.push({ type: "file", file: { file_data: dataUrl, filename: "document.pdf" } });
+                } else if (mime && (mime.startsWith("text/") || mime === "application/json")) {
+                    // Decode text files and inline as text
+                    try {
+                        const base64 = dataUrl.split(";base64,")[1];
+                        const decoded = Buffer.from(base64, "base64").toString("utf-8");
+                        content.push({ type: "text", text: `[Attached file (${mime})]:\n${decoded}` });
+                    } catch {
+                        content.push({ type: "text", text: `[Attached file (${mime}): unable to decode]` });
+                    }
+                } else {
+                    // Other file types — try sending as file
+                    content.push({ type: "file", file: { file_data: dataUrl, filename: "attachment" } });
+                }
             }
             if (m.content) {
-                content.push({ type: 'text', text: m.content });
+                content.push({ type: "text", text: m.content });
             }
             return { role: m.role, content };
         }
@@ -44,18 +69,35 @@ function prepareOpenAIMessages(messages) {
 
 /**
  * Convert messages to Responses API input format.
- * System messages become developer messages; images use input_image.
+ * System messages become developer messages; images use input_image, PDFs use input_file.
  */
 function prepareResponsesInput(messages) {
     return messages.map((m) => {
-        const role = m.role === 'system' ? 'developer' : m.role;
+        const role = m.role === "system" ? "developer" : m.role;
         if (m.images && m.images.length > 0) {
             const content = [];
-            for (const img of m.images) {
-                content.push({ type: 'input_image', image_url: img });
+            for (const dataUrl of m.images) {
+                const mime = getDataUrlMimeType(dataUrl);
+                if (mime && mime.startsWith("image/")) {
+                    content.push({ type: "input_image", image_url: dataUrl });
+                } else if (mime === "application/pdf" || mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+                    content.push({ type: "input_file", file_data: dataUrl });
+                } else if (mime && (mime.startsWith("text/") || mime === "application/json")) {
+                    // Decode text files and inline as text
+                    try {
+                        const base64 = dataUrl.split(";base64,")[1];
+                        const decoded = Buffer.from(base64, "base64").toString("utf-8");
+                        content.push({ type: "input_text", text: `[Attached file (${mime})]:\n${decoded}` });
+                    } catch {
+                        content.push({ type: "input_text", text: `[Attached file (${mime}): unable to decode]` });
+                    }
+                } else {
+                    // Other file types — try sending as file
+                    content.push({ type: "input_file", file_data: dataUrl });
+                }
             }
             if (m.content) {
-                content.push({ type: 'input_text', text: m.content });
+                content.push({ type: "input_text", text: m.content });
             }
             return { role, content };
         }
@@ -123,8 +165,24 @@ const openaiProvider = {
         }
 
         const response = await getClient().responses.create(payload);
+
+        // Collect any generated images from output items
+        const images = [];
+        if (response.output) {
+            for (const item of response.output) {
+                if (item.type === 'image_generation_call' && item.result) {
+                    images.push({
+                        type: 'image',
+                        data: item.result,
+                        mimeType: 'image/png',
+                    });
+                }
+            }
+        }
+
         return {
-            text: response.output_text,
+            text: response.output_text || '',
+            images,
             usage: {
                 inputTokens: response.usage?.input_tokens ?? 0,
                 outputTokens: response.usage?.output_tokens ?? 0,
@@ -236,6 +294,14 @@ const openaiProvider = {
             if (event.type === 'response.reasoning_summary_text.delta') {
                 yield { type: 'thinking', content: event.delta || '' };
             }
+            // Image generation completed
+            if (event.type === 'response.image_generation_call.completed' && event.result) {
+                yield {
+                    type: 'image',
+                    data: event.result,
+                    mimeType: 'image/png',
+                };
+            }
             // Completed response — extract usage
             if (event.type === 'response.completed' && event.response?.usage) {
                 usage = {
@@ -318,6 +384,66 @@ const openaiProvider = {
         }
     },
 
+    async generateImage(
+        prompt,
+        images = [],
+        model = 'gpt-image-1.5',
+    ) {
+        logger.provider('OpenAI', `generateImage model=${model} images=${images.length}`);
+        try {
+            let response;
+
+            if (images.length > 0) {
+                // Use the edit endpoint when input images are provided
+                // Take the last image in conversation as the one to edit
+                const lastImage = images[images.length - 1];
+                const base64Match = lastImage.match(/^data:([^;]+);base64,(.+)$/);
+                if (!base64Match) {
+                    throw new Error('Invalid image data URL format');
+                }
+                const imageBuffer = Buffer.from(base64Match[2], 'base64');
+                const mimeType = base64Match[1];
+                const ext = mimeType.split('/')[1] || 'png';
+                const imageFile = await toFile(imageBuffer, `input.${ext}`, { type: mimeType });
+
+                response = await getClient().images.edit({
+                    model,
+                    prompt,
+                    image: imageFile,
+                    size: '1024x1024',
+                });
+            } else {
+                // Generate new image
+                response = await getClient().images.generate({
+                    model,
+                    prompt,
+                    output_format: 'png',
+                    size: '1024x1024',
+                    quality: 'high',
+                });
+            }
+
+            const imageData = response.data?.[0]?.b64_json
+                || response.data?.[0]?.b64
+                || response.b64;
+            if (!imageData) {
+                throw new Error('No image data received from OpenAI');
+            }
+            return {
+                imageData,
+                mimeType: 'image/png',
+                text: response.data?.[0]?.revised_prompt || '',
+            };
+        } catch (error) {
+            throw new ProviderError(
+                'openai',
+                error.message,
+                error.status || 500,
+                error,
+            );
+        }
+    },
+
     async captionImage(
         imageUrl,
         prompt = "What's in this image?",
@@ -361,6 +487,42 @@ const openaiProvider = {
                 input: text,
             });
             return { embedding: response.data[0].embedding };
+        } catch (error) {
+            throw new ProviderError(
+                'openai',
+                error.message,
+                error.status || 500,
+                error,
+            );
+        }
+    },
+
+    async transcribeAudio(audioBuffer, mimeType, model = 'gpt-4o-transcribe', options = {}) {
+        logger.provider('OpenAI', `transcribeAudio model=${model}`);
+        try {
+            const ext = mimeType.split('/')[1] || 'wav';
+            const file = await toFile(audioBuffer, `audio.${ext}`, { type: mimeType });
+            const payload = {
+                file,
+                model,
+            };
+            if (options.language) payload.language = options.language;
+            if (options.prompt) payload.prompt = options.prompt;
+
+            const response = await getClient().audio.transcriptions.create(payload);
+            const usage = {};
+            if (response.usage) {
+                if (response.usage.type === 'tokens') {
+                    usage.inputTokens = response.usage.input_tokens ?? 0;
+                    usage.outputTokens = response.usage.output_tokens ?? 0;
+                } else if (response.usage.type === 'duration') {
+                    usage.durationSeconds = response.usage.seconds ?? 0;
+                }
+            }
+            return {
+                text: response.text,
+                usage,
+            };
         } catch (error) {
             throw new ProviderError(
                 'openai',

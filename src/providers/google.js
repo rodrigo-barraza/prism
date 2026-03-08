@@ -400,6 +400,46 @@ const googleProvider = {
             throw new ProviderError('google', error.message, 500, error);
         }
     },
+
+    async transcribeAudio(audioBuffer, mimeType, model = 'gemini-3-flash-preview', options = {}) {
+        logger.provider('Google', `transcribeAudio model=${model}`);
+        try {
+            const audioBase64 = audioBuffer.toString('base64');
+            const prompt = options.prompt
+                || 'Transcribe the following audio accurately. Return only the transcription text, nothing else.';
+
+            const contents = [
+                {
+                    role: 'user',
+                    parts: [
+                        { inlineData: { mimeType, data: audioBase64 } },
+                        { text: prompt },
+                    ],
+                },
+            ];
+
+            const config = {};
+            if (options.language) {
+                config.systemInstruction = `Transcribe in ${options.language}.`;
+            }
+
+            const response = await getClient().models.generateContent({
+                model,
+                contents,
+                config,
+            });
+
+            return {
+                text: response.text || '',
+                usage: {
+                    inputTokens: response.usageMetadata?.promptTokenCount ?? 0,
+                    outputTokens: response.usageMetadata?.candidatesTokenCount ?? 0,
+                },
+            };
+        } catch (error) {
+            throw new ProviderError('google', error.message, 500, error);
+        }
+    },
 };
 
 export default googleProvider;
