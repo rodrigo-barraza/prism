@@ -33,6 +33,133 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/**
+ * Extract <think>…</think> blocks from a complete response string.
+ * Returns { thinking, text } where thinking is the concatenated think content
+ * and text is the remaining content with think tags removed.
+ */
+function extractThinkTags(raw) {
+  const thinkRegex = /<think>([\s\S]*?)<\/think>/gi;
+  const thinkParts = [];
+  let match;
+  while ((match = thinkRegex.exec(raw)) !== null) {
+    thinkParts.push(match[1].trim());
+  }
+  const text = raw.replace(thinkRegex, "").trim();
+  return {
+    thinking: thinkParts.length > 0 ? thinkParts.join("\n\n") : null,
+    text,
+  };
+}
+
+/**
+ * Stateful parser for streaming <think> tag detection.
+ * Handles tags that arrive split across chunk boundaries.
+ *
+ * feed(chunk) returns an array of items:
+ *   - { type: "thinking", content: string }
+ *   - { type: "text", content: string }
+ */
+class ThinkTagParser {
+  constructor() {
+    this.insideThink = false;
+    this.buffer = "";
+  }
+
+  feed(chunk) {
+    this.buffer += chunk;
+    const results = [];
+
+    while (this.buffer.length > 0) {
+      if (this.insideThink) {
+        const closeIdx = this.buffer.indexOf("</think>");
+        if (closeIdx !== -1) {
+          // Found closing tag — emit thinking content up to it
+          const thinkContent = this.buffer.slice(0, closeIdx);
+          if (thinkContent) {
+            results.push({ type: "thinking", content: thinkContent });
+          }
+          this.buffer = this.buffer.slice(closeIdx + "</think>".length);
+          this.insideThink = false;
+        } else {
+          // No closing tag yet — check if buffer might end with a partial </think>
+          const partialMatch = this._partialEndTag(this.buffer);
+          if (partialMatch > 0) {
+            // Emit everything except the potential partial tag
+            const safe = this.buffer.slice(0, this.buffer.length - partialMatch);
+            if (safe) {
+              results.push({ type: "thinking", content: safe });
+            }
+            this.buffer = this.buffer.slice(this.buffer.length - partialMatch);
+          } else {
+            // Emit all as thinking
+            results.push({ type: "thinking", content: this.buffer });
+            this.buffer = "";
+          }
+          break;
+        }
+      } else {
+        const openIdx = this.buffer.indexOf("<think>");
+        if (openIdx !== -1) {
+          // Found opening tag — emit text before it
+          const textBefore = this.buffer.slice(0, openIdx);
+          if (textBefore) {
+            results.push({ type: "text", content: textBefore });
+          }
+          this.buffer = this.buffer.slice(openIdx + "<think>".length);
+          this.insideThink = true;
+        } else {
+          // No opening tag — check for partial <think> at end
+          const partialMatch = this._partialStartTag(this.buffer);
+          if (partialMatch > 0) {
+            const safe = this.buffer.slice(0, this.buffer.length - partialMatch);
+            if (safe) {
+              results.push({ type: "text", content: safe });
+            }
+            this.buffer = this.buffer.slice(this.buffer.length - partialMatch);
+          } else {
+            results.push({ type: "text", content: this.buffer });
+            this.buffer = "";
+          }
+          break;
+        }
+      }
+    }
+    return results;
+  }
+
+  /** Check if the end of str is a partial match for "<think>" */
+  _partialStartTag(str) {
+    const tag = "<think>";
+    for (let len = Math.min(tag.length - 1, str.length); len >= 1; len--) {
+      if (str.endsWith(tag.slice(0, len))) {
+        return len;
+      }
+    }
+    return 0;
+  }
+
+  /** Check if the end of str is a partial match for "</think>" */
+  _partialEndTag(str) {
+    const tag = "</think>";
+    for (let len = Math.min(tag.length - 1, str.length); len >= 1; len--) {
+      if (str.endsWith(tag.slice(0, len))) {
+        return len;
+      }
+    }
+    return 0;
+  }
+
+  /** Flush any remaining buffered content. */
+  flush() {
+    if (!this.buffer) return [];
+    const type = this.insideThink ? "thinking" : "text";
+    const result = [{ type, content: this.buffer }];
+    this.buffer = "";
+    return result;
+  }
+}
+
 const lmStudioProvider = {
   name: "lm-studio",
 
@@ -78,9 +205,11 @@ const lmStudioProvider = {
       }
 
       const data = await response.json();
-      const text = data.choices?.[0]?.message?.content || "";
+      const rawText = data.choices?.[0]?.message?.content || "";
+      const { thinking, text } = extractThinkTags(rawText);
       return {
         text,
+        thinking,
         usage: {
           inputTokens: data.usage?.prompt_tokens ?? 0,
           outputTokens: data.usage?.completion_tokens ?? 0,
@@ -191,6 +320,7 @@ const lmStudioProvider = {
       const decoder = new TextDecoder();
       let buffer = "";
       let usage = null;
+      const thinkParser = new ThinkTagParser();
 
       while (true) {
         const { done, value } = await reader.read();
@@ -219,11 +349,29 @@ const lmStudioProvider = {
 
             const content = json.choices?.[0]?.delta?.content || "";
             if (content) {
-              yield content;
+              // Parse <think> tags from the streamed content
+              const parts = thinkParser.feed(content);
+              for (const part of parts) {
+                if (part.type === "thinking") {
+                  yield { type: "thinking", content: part.content };
+                } else {
+                  yield part.content;
+                }
+              }
             }
           } catch {
             // skip malformed JSON lines
           }
+        }
+      }
+
+      // Flush any remaining buffered content from the think parser
+      const remaining = thinkParser.flush();
+      for (const part of remaining) {
+        if (part.type === "thinking") {
+          yield { type: "thinking", content: part.content };
+        } else {
+          yield part.content;
         }
       }
 

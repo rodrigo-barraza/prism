@@ -41,6 +41,7 @@ router.get("/requests", async (req, res, next) => {
       page = 1,
       limit = 50,
       project,
+      username,
       provider,
       model,
       endpoint,
@@ -53,6 +54,7 @@ router.get("/requests", async (req, res, next) => {
 
     const filter = {};
     if (project) filter.project = project;
+    if (username) filter.username = username;
     if (provider) filter.provider = provider;
     if (model) filter.model = model;
     if (endpoint) filter.endpoint = endpoint;
@@ -211,6 +213,56 @@ router.get("/stats/projects", async (req, res, next) => {
     );
   } catch (error) {
     logger.error(`Admin /stats/projects error: ${error.message}`);
+    next(error);
+  }
+});
+
+// ============================================================
+// GET /admin/stats/users — per-user breakdown
+// ============================================================
+router.get("/stats/users", async (req, res, next) => {
+  try {
+    const db = getDb();
+    if (!db) return res.status(503).json({ error: "Database not available" });
+
+    const pipeline = [
+      {
+        $group: {
+          _id: "$username",
+          totalRequests: { $sum: 1 },
+          totalTokens: {
+            $sum: {
+              $add: [
+                { $ifNull: ["$inputTokens", 0] },
+                { $ifNull: ["$outputTokens", 0] },
+              ],
+            },
+          },
+          totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
+          avgLatency: { $avg: { $ifNull: ["$totalTime", 0] } },
+          lastRequest: { $max: "$timestamp" },
+        },
+      },
+      { $sort: { totalRequests: -1 } },
+    ];
+
+    const results = await db
+      .collection(REQUESTS_COL)
+      .aggregate(pipeline)
+      .toArray();
+
+    res.json(
+      results.map((r) => ({
+        username: r._id || "unknown",
+        totalRequests: r.totalRequests,
+        totalTokens: r.totalTokens,
+        totalCost: r.totalCost,
+        avgLatency: r.avgLatency,
+        lastRequest: r.lastRequest,
+      })),
+    );
+  } catch (error) {
+    logger.error(`Admin /stats/users error: ${error.message}`);
     next(error);
   }
 });
@@ -378,6 +430,7 @@ router.get("/conversations", async (req, res, next) => {
       page = 1,
       limit = 50,
       project,
+      username,
       search,
       sort = "updatedAt",
       order = "desc",
@@ -385,6 +438,7 @@ router.get("/conversations", async (req, res, next) => {
 
     const filter = {};
     if (project) filter.project = project;
+    if (username) filter.username = username;
     if (search) filter.title = { $regex: search, $options: "i" };
 
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
@@ -398,6 +452,7 @@ router.get("/conversations", async (req, res, next) => {
         .project({
           id: 1,
           project: 1,
+          username: 1,
           title: 1,
           createdAt: 1,
           updatedAt: 1,
@@ -458,6 +513,7 @@ router.get("/live", async (req, res, next) => {
         .project({
           id: 1,
           project: 1,
+          username: 1,
           title: 1,
           updatedAt: 1,
           messages: 1,
@@ -490,6 +546,7 @@ router.get("/live", async (req, res, next) => {
       return {
         id: c.id,
         project: c.project,
+        username: c.username,
         title: c.title,
         lastActivity: c.updatedAt,
         messageCount: msgs.length,

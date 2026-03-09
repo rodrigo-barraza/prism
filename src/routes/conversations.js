@@ -61,10 +61,11 @@ router.get('/', async (req, res, next) => {
         }
 
         const project = req.project || 'default';
+        const username = req.username || 'default';
         const conversations = await client
             .db(MONGO_DB_NAME)
             .collection(COLLECTION)
-            .find({ project })
+            .find({ project, username })
             .sort({ updatedAt: -1 })
             .toArray();
 
@@ -87,10 +88,11 @@ router.get('/:id', async (req, res, next) => {
         }
 
         const project = req.project || 'default';
+        const username = req.username || 'default';
         const conversation = await client
             .db(MONGO_DB_NAME)
             .collection(COLLECTION)
-            .findOne({ id: req.params.id, project });
+            .findOne({ id: req.params.id, project, username });
 
         if (!conversation) {
             return res.status(404).json({ error: 'Conversation not found' });
@@ -116,6 +118,7 @@ router.post('/', async (req, res, next) => {
         }
 
         const project = req.project || 'default';
+        const username = req.username || 'default';
         const { id, title, messages, systemPrompt, settings, isGenerating } = req.body;
 
         // Extract base64 files to MinIO (if available)
@@ -128,6 +131,7 @@ router.post('/', async (req, res, next) => {
             $set: {
                 id: conversationId,
                 project,
+                username,
                 title: title || 'New Conversation',
                 messages: processedMessages || [],
                 systemPrompt: systemPrompt || '',
@@ -143,13 +147,13 @@ router.post('/', async (req, res, next) => {
         await client
             .db(MONGO_DB_NAME)
             .collection(COLLECTION)
-            .updateOne({ id: conversationId, project }, updateDoc, { upsert: true });
+            .updateOne({ id: conversationId, project, username }, updateDoc, { upsert: true });
 
         // Fetch the updated/created doc
         const conversation = await client
             .db(MONGO_DB_NAME)
             .collection(COLLECTION)
-            .findOne({ id: conversationId, project });
+            .findOne({ id: conversationId, project, username });
 
         res.json(conversation);
     } catch (error) {
@@ -170,10 +174,11 @@ router.delete('/:id', async (req, res, next) => {
         }
 
         const project = req.project || 'default';
+        const username = req.username || 'default';
         const result = await client
             .db(MONGO_DB_NAME)
             .collection(COLLECTION)
-            .deleteOne({ id: req.params.id, project });
+            .deleteOne({ id: req.params.id, project, username });
 
         if (result.deletedCount === 0) {
             return res.status(404).json({ error: 'Conversation not found' });

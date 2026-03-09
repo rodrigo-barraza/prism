@@ -59,4 +59,32 @@ describe('Auth Middleware', () => {
 
     expect(res.body).toHaveProperty('text');
   });
+
+  it('attaches x-username header value to req.username', async () => {
+    const res = await request(app)
+      .post('/text-to-text')
+      .set('x-api-secret', TEST_SECRET)
+      .set('x-project', 'my-project')
+      .set('x-username', 'rodrigo')
+      .send({
+        provider: 'openai',
+        messages: [{ role: 'user', content: 'hi' }],
+      })
+      .expect(200);
+
+    expect(res.body).toHaveProperty('text');
+  });
+
+  it("defaults x-username to 'unknown' when header is absent", async () => {
+    const res = await request(app)
+      .post('/text-to-text')
+      .set('x-api-secret', TEST_SECRET)
+      .send({
+        provider: 'openai',
+        messages: [{ role: 'user', content: 'hi' }],
+      })
+      .expect(200);
+
+    expect(res.body).toHaveProperty('text');
+  });
 });

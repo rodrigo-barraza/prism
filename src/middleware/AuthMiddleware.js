@@ -3,7 +3,7 @@ import logger from '../utils/logger.js';
 
 /**
  * Express middleware that validates the x-api-secret header
- * and attaches the x-project header to the request.
+ * and attaches the x-project and x-username headers to the request.
  */
 export function authMiddleware(req, res, next) {
   const secret = req.headers['x-api-secret'] || req.query.secret;
@@ -19,8 +19,9 @@ export function authMiddleware(req, res, next) {
     });
   }
 
-  // Attach project identifier for downstream logging / tracking
+  // Attach project + username identifiers for downstream logging / tracking
   req.project = req.headers['x-project'] || 'unknown';
+  req.username = req.headers['x-username'] || 'unknown';
 
   next();
 }

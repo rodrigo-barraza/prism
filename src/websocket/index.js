@@ -33,10 +33,12 @@ export function setupWebSocket(wss) {
 
         const project =
             req.headers['x-project'] || url.searchParams.get('project') || 'unknown';
-        logger.info(`WebSocket connection on ${pathname} (project: ${project})`);
+        const username =
+            req.headers['x-username'] || url.searchParams.get('username') || 'unknown';
+        logger.info(`WebSocket connection on ${pathname} (project: ${project}, user: ${username})`);
 
         if (pathname === '/text-to-text/stream') {
-            handleTextToTextStream(ws, project);
+            handleTextToTextStream(ws, project, username);
         } else if (pathname === '/text-to-speech/stream') {
             handleTextToSpeechStream(ws);
         } else {
@@ -56,7 +58,7 @@ export function setupWebSocket(wss) {
  * Client sends: { provider, model?, messages, options? }
  * Server sends: { type: "chunk", content } | { type: "done", usage?, estimatedCost? } | { type: "error", message }
  */
-function handleTextToTextStream(ws, project) {
+function handleTextToTextStream(ws, project, username) {
     ws.on('message', async (rawData) => {
         const requestStart = performance.now();
         const requestId = crypto.randomUUID();
@@ -254,6 +256,7 @@ function handleTextToTextStream(ws, project) {
                     requestId,
                     endpoint: 'text-to-text/stream',
                     project,
+                    username,
                     provider: providerName,
                     model: resolvedModel,
                     success: true,
@@ -298,6 +301,7 @@ function handleTextToTextStream(ws, project) {
                 requestId,
                 endpoint: 'text-to-text/stream',
                 project,
+                username,
                 provider: providerName,
                 model: resolvedModel,
                 success: false,
