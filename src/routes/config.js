@@ -83,6 +83,16 @@ function enrichModelsWithArenaScores(modelsMap) {
 }
 
 /**
+ * Format a byte count into a human-readable size string.
+ */
+function formatBytes(bytes) {
+  if (!bytes) return null;
+  if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(1)} GB`;
+  if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MB`;
+  return `${(bytes / 1024).toFixed(0)} KB`;
+}
+
+/**
  * Fetch LM Studio models and convert them to the config model format.
  * Returns an array of model option objects for the 'lm-studio' provider.
  */
@@ -116,6 +126,21 @@ async function getLmStudioModelOptions() {
         }
         if (m.max_context_length) {
           entry.contextLength = m.max_context_length;
+        }
+        if (m.size_bytes) {
+          entry.size = formatBytes(m.size_bytes);
+        }
+        if (m.params_string) {
+          entry.params = m.params_string;
+        }
+        if (m.quantization?.name) {
+          entry.quantization = m.quantization.name;
+        }
+        if (m.architecture) {
+          entry.architecture = m.architecture;
+        }
+        if (m.loaded_instances?.length > 0) {
+          entry.loaded = true;
         }
         return entry;
       });
