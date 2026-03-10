@@ -135,7 +135,7 @@ router.post('/', async (req, res, next) => {
                 title: title || 'New Conversation',
                 messages: processedMessages || [],
                 systemPrompt: systemPrompt || '',
-                ...(settings ? { settings } : {}),
+                ...(settings ? { settings: { ...settings, systemPrompt: systemPrompt || '' } } : { settings: { systemPrompt: systemPrompt || '' } }),
                 ...(isGenerating !== undefined ? { isGenerating } : {}),
                 updatedAt: now,
             },
