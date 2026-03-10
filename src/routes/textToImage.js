@@ -2,6 +2,7 @@ import express from 'express';
 import { getProvider } from '../providers/index.js';
 import { ProviderError } from '../utils/errors.js';
 import RequestLogger from '../services/RequestLogger.js';
+import FileService from '../services/FileService.js';
 import logger from '../utils/logger.js';
 import crypto from 'crypto';
 
@@ -10,7 +11,7 @@ const router = express.Router();
 /**
  * POST /text-to-image
  * Body: { provider, model?, prompt, images? }
- * Response: { imageData (base64), mimeType, text?, provider }
+ * Response: { imageData (base64), mimeType, text?, provider, minioRef? }
  */
 router.post('/', async (req, res, next) => {
   const requestId = crypto.randomUUID();
@@ -51,6 +52,21 @@ router.post('/', async (req, res, next) => {
         `total: ${totalSec.toFixed(2)}s`,
     );
 
+    // Store generated image in MinIO (fire-and-forget)
+    let minioRef = null;
+    if (result.imageData) {
+      try {
+        const mimeType = result.mimeType || 'image/png';
+        const dataUrl = `data:${mimeType};base64,${result.imageData}`;
+        const project = req.project || 'default';
+        const username = req.username || 'default';
+        const { ref } = await FileService.uploadFile(dataUrl, 'generations', project, username);
+        minioRef = ref;
+      } catch (uploadErr) {
+        logger.error(`[text-to-image] MinIO upload failed: ${uploadErr.message}`);
+      }
+    }
+
     // Fire-and-forget DB log
     RequestLogger.log({
       requestId,
@@ -70,6 +86,7 @@ router.post('/', async (req, res, next) => {
       mimeType: result.mimeType || 'image/png',
       text: result.text || null,
       provider: providerName,
+      minioRef,
     });
   } catch (error) {
     const totalSec = (performance.now() - requestStart) / 1000;

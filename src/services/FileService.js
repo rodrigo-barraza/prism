@@ -42,10 +42,12 @@ const FileService = {
    * Upload a file from a base64 data URL.
    * @param {string} dataUrl - e.g. "data:image/png;base64,iVBOR..."
    * @param {"uploads"|"generations"} [category="uploads"] - folder to store in
+   * @param {string} [project] - project name for path organization
+   * @param {string} [username] - username for path organization
    * @returns {Promise<{ ref: string, size: number, contentType: string }>}
-   *   ref is either `minio://<category>/<key>` or the original dataUrl.
+   *   ref is either `minio://...` or the original dataUrl.
    */
-  async uploadFile(dataUrl, category = "uploads") {
+  async uploadFile(dataUrl, category = "uploads", project = null, username = null) {
     // If MinIO is not available, return the data URL as-is (MongoDB inline)
     if (!MinioWrapper.isAvailable()) {
       const size = Math.round((dataUrl.length * 3) / 4); // rough base64 → bytes
@@ -63,7 +65,15 @@ const FileService = {
     const base64Data = match[2];
     const buffer = Buffer.from(base64Data, "base64");
     const ext = MIME_TO_EXT[contentType] || "bin";
-    const key = `${category}/${crypto.randomUUID()}.${ext}`;
+
+    // Build path: projects/{project}/{username}/{category}/{uuid}.{ext}
+    // Falls back to flat {category}/{uuid}.{ext} when project/username not provided
+    let key;
+    if (project && username) {
+      key = `projects/${project}/${username}/${category}/${crypto.randomUUID()}.${ext}`;
+    } else {
+      key = `${category}/${crypto.randomUUID()}.${ext}`;
+    }
 
     await MinioWrapper.upload(key, buffer, contentType);
     logger.info(

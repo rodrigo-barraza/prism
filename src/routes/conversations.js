@@ -14,7 +14,7 @@ const COLLECTION = 'conversations';
  * @param {Array} messages
  * @returns {Promise<Array>} messages with refs replacing inline data
  */
-async function extractFiles(messages) {
+async function extractFiles(messages, project = null, username = null) {
     if (!messages || !FileService.isExternalStorage()) return messages;
 
     const processed = [];
@@ -31,7 +31,7 @@ async function extractFiles(messages) {
                 // Upload base64 data URL to MinIO
                 if (img.startsWith('data:')) {
                     try {
-                        const { ref } = await FileService.uploadFile(img, category);
+                        const { ref } = await FileService.uploadFile(img, category, project, username);
                         newImages.push(ref);
                     } catch (err) {
                         logger.error(`Failed to upload file: ${err.message}`);
@@ -122,7 +122,7 @@ router.post('/', async (req, res, next) => {
         const { id, title, messages, systemPrompt, settings, isGenerating } = req.body;
 
         // Extract base64 files to MinIO (if available)
-        const processedMessages = await extractFiles(messages);
+        const processedMessages = await extractFiles(messages, project, username);
 
         const conversationId = id || crypto.randomUUID();
         const now = new Date().toISOString();
