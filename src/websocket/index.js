@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { getProvider } from '../providers/index.js';
 import { GATEWAY_SECRET } from '../../secrets.js';
 import { TYPES, getDefaultModels, getPricing, getModelByName } from '../config.js';
+import { calculateTextCost } from '../utils/CostCalculator.js';
 import logger from '../utils/logger.js';
 import RequestLogger from '../services/RequestLogger.js';
 
@@ -229,13 +230,7 @@ function handleTextToTextStream(ws, project, username) {
             // Log token usage + cost
             if (usage) {
                 const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[resolvedModel];
-                let estimatedCost = null;
-                if (pricing) {
-                    estimatedCost = parseFloat((
-                        (usage.inputTokens / 1_000_000) * pricing.inputPerMillion +
-                        (usage.outputTokens / 1_000_000) * pricing.outputPerMillion
-                    ).toFixed(8));
-                }
+                const estimatedCost = calculateTextCost(usage, pricing);
                 const tokensPerSec =
                     generationSec && generationSec > 0
                         ? (usage.outputTokens / generationSec).toFixed(1)

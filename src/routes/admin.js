@@ -445,11 +445,11 @@ router.get("/conversations", async (req, res, next) => {
         const lim = parseInt(limit, 10);
         const sortDir = order === "asc" ? 1 : -1;
 
-        const [docs, total] = await Promise.all([
-            db
-                .collection(CONVERSATIONS_COL)
-                .find(filter)
-                .project({
+        const pipeline = [
+            ...(Object.keys(filter).length ? [{ $match: filter }] : []),
+            { $sort: { [sort]: sortDir } },
+            {
+                $project: {
                     id: 1,
                     project: 1,
                     username: 1,
@@ -458,13 +458,27 @@ router.get("/conversations", async (req, res, next) => {
                     updatedAt: 1,
                     modalities: 1,
                     providers: 1,
-                    totalCost: 1,
                     messageCount: { $size: { $ifNull: ["$messages", []] } },
-                })
-                .sort({ [sort]: sortDir })
-                .skip(skip)
-                .limit(lim)
-                .toArray(),
+                    totalCost: {
+                        $ifNull: [
+                            "$totalCost",
+                            {
+                                $reduce: {
+                                    input: { $ifNull: ["$messages", []] },
+                                    initialValue: 0,
+                                    in: { $add: ["$$value", { $ifNull: ["$$this.estimatedCost", 0] }] },
+                                },
+                            },
+                        ],
+                    },
+                },
+            },
+            { $skip: skip },
+            { $limit: lim },
+        ];
+
+        const [docs, total] = await Promise.all([
+            db.collection(CONVERSATIONS_COL).aggregate(pipeline).toArray(),
             db.collection(CONVERSATIONS_COL).countDocuments(filter),
         ]);
 
