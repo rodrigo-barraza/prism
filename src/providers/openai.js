@@ -36,6 +36,8 @@ function getDataUrlMimeType(dataUrl) {
  */
 function prepareOpenAIMessages(messages) {
     return messages.map((m) => {
+        const base = { role: m.role };
+        if (m.name) base.name = m.name;
         if (m.images && m.images.length > 0) {
             const content = [];
             for (const dataUrl of m.images) {
@@ -61,9 +63,9 @@ function prepareOpenAIMessages(messages) {
             if (m.content) {
                 content.push({ type: "text", text: m.content });
             }
-            return { role: m.role, content };
+            return { ...base, content };
         }
-        return { role: m.role, content: m.content };
+        return { ...base, content: m.content };
     });
 }
 
@@ -74,6 +76,8 @@ function prepareOpenAIMessages(messages) {
 function prepareResponsesInput(messages) {
     return messages.map((m) => {
         const role = m.role === "system" ? "developer" : m.role;
+        const base = { role };
+        if (m.name) base.name = m.name;
         if (m.images && m.images.length > 0) {
             const content = [];
             for (const dataUrl of m.images) {
@@ -99,9 +103,9 @@ function prepareResponsesInput(messages) {
             if (m.content) {
                 content.push({ type: "input_text", text: m.content });
             }
-            return { role, content };
+            return { ...base, content };
         }
-        return { role, content: m.content };
+        return { ...base, content: m.content };
     });
 }
 
@@ -210,20 +214,46 @@ const openaiProvider = {
             if (options.frequencyPenalty !== undefined) payload.frequency_penalty = options.frequencyPenalty;
             if (options.presencePenalty !== undefined) payload.presence_penalty = options.presencePenalty;
             if (options.stopSequences !== undefined) payload.stop = options.stopSequences;
-            if (options.maxTokens) payload.max_tokens = options.maxTokens;
+            if (options.maxTokens) payload.max_completion_tokens = options.maxTokens;
         }
         if (options.webSearch) {
             payload.tools = [{ type: 'web_search_preview' }];
         }
 
-        const response = await getClient().chat.completions.create(payload);
-        return {
-            text: response.choices[0].message.content,
-            usage: {
-                inputTokens: response.usage?.prompt_tokens ?? 0,
-                outputTokens: response.usage?.completion_tokens ?? 0,
-            },
-        };
+        try {
+            const response = await getClient().chat.completions.create(payload);
+            return {
+                text: response.choices[0].message.content,
+                usage: {
+                    inputTokens: response.usage?.prompt_tokens ?? 0,
+                    outputTokens: response.usage?.completion_tokens ?? 0,
+                },
+            };
+        } catch (error) {
+            // Retry once after stripping unsupported parameters (e.g. gpt-5-nano rejects temperature)
+            if (error.status === 400 && error.message?.includes('Unsupported')) {
+                const unsupportedParams = ['temperature', 'top_p', 'frequency_penalty', 'presence_penalty', 'max_completion_tokens'];
+                let stripped = false;
+                for (const param of unsupportedParams) {
+                    if (error.message.includes(`'${param}'`) && payload[param] !== undefined) {
+                        logger.provider('OpenAI', `Stripping unsupported param '${param}' for ${model} and retrying`);
+                        delete payload[param];
+                        stripped = true;
+                    }
+                }
+                if (stripped) {
+                    const response = await getClient().chat.completions.create(payload);
+                    return {
+                        text: response.choices[0].message.content,
+                        usage: {
+                            inputTokens: response.usage?.prompt_tokens ?? 0,
+                            outputTokens: response.usage?.completion_tokens ?? 0,
+                        },
+                    };
+                }
+            }
+            throw error;
+        }
     },
 
     async *generateTextStream(
@@ -337,7 +367,7 @@ const openaiProvider = {
             if (options.frequencyPenalty !== undefined) payload.frequency_penalty = options.frequencyPenalty;
             if (options.presencePenalty !== undefined) payload.presence_penalty = options.presencePenalty;
             if (options.stopSequences !== undefined) payload.stop = options.stopSequences;
-            if (options.maxTokens) payload.max_tokens = options.maxTokens;
+            if (options.maxTokens) payload.max_completion_tokens = options.maxTokens;
         }
         if (options.webSearch) {
             payload.tools = [{ type: 'web_search_preview' }];
@@ -397,12 +427,21 @@ const openaiProvider = {
                 // Use the edit endpoint when input images are provided
                 // Take the last image in conversation as the one to edit
                 const lastImage = images[images.length - 1];
-                const base64Match = lastImage.match(/^data:([^;]+);base64,(.+)$/);
-                if (!base64Match) {
-                    throw new Error('Invalid image data URL format');
+                let imageBuffer, mimeType;
+
+                if (typeof lastImage === 'object' && lastImage.imageData) {
+                    // Object format: { imageData: base64, mimeType }
+                    imageBuffer = Buffer.from(lastImage.imageData, 'base64');
+                    mimeType = lastImage.mimeType || 'image/png';
+                } else {
+                    // Legacy data URL format: data:image/png;base64,...
+                    const base64Match = lastImage.match(/^data:([^;]+);base64,(.+)$/);
+                    if (!base64Match) {
+                        throw new Error('Invalid image data format');
+                    }
+                    imageBuffer = Buffer.from(base64Match[2], 'base64');
+                    mimeType = base64Match[1];
                 }
-                const imageBuffer = Buffer.from(base64Match[2], 'base64');
-                const mimeType = base64Match[1];
                 const ext = mimeType.split('/')[1] || 'png';
                 const imageFile = await toFile(imageBuffer, `input.${ext}`, { type: mimeType });
 
@@ -463,7 +502,7 @@ const openaiProvider = {
             const response = await getClient().chat.completions.create({
                 model,
                 messages,
-                max_tokens: 1000,
+                max_completion_tokens: 1000,
             });
             return { text: response.choices[0].message.content };
         } catch (error) {

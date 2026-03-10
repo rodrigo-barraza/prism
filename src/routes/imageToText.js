@@ -1,6 +1,9 @@
 import express from 'express';
 import { getProvider } from '../providers/index.js';
 import { ProviderError } from '../utils/errors.js';
+import RequestLogger from '../services/RequestLogger.js';
+import logger from '../utils/logger.js';
+import crypto from 'crypto';
 
 const router = express.Router();
 
@@ -10,8 +13,15 @@ const router = express.Router();
  * Response: { text, provider }
  */
 router.post('/', async (req, res, next) => {
+  const requestId = crypto.randomUUID();
+  const requestStart = performance.now();
+  let providerName = null;
+  let resolvedModel = null;
+
   try {
-    const { provider: providerName, model, image, prompt } = req.body;
+    const { provider: pName, model, image, prompt } = req.body;
+    providerName = pName;
+    resolvedModel = model || null;
 
     if (!providerName) {
       throw new ProviderError(
@@ -38,11 +48,43 @@ router.post('/', async (req, res, next) => {
     }
 
     const result = await provider.captionImage(image, prompt, model);
+    const totalSec = (performance.now() - requestStart) / 1000;
+
+    logger.info(
+      `[image-to-text] ${providerName} model=${resolvedModel} — ` +
+        `total: ${totalSec.toFixed(2)}s`,
+    );
+
+    // Fire-and-forget DB log
+    RequestLogger.log({
+      requestId,
+      endpoint: 'image-to-text',
+      project: req.project,
+      username: req.username,
+      provider: providerName,
+      model: resolvedModel,
+      success: true,
+      outputCharacters: result.text ? result.text.length : 0,
+      totalTime: totalSec,
+    });
+
     res.json({
       text: result.text,
       provider: providerName,
     });
   } catch (error) {
+    const totalSec = (performance.now() - requestStart) / 1000;
+    RequestLogger.log({
+      requestId,
+      endpoint: 'image-to-text',
+      project: req.project,
+      username: req.username,
+      provider: providerName,
+      model: resolvedModel,
+      success: false,
+      errorMessage: error.message,
+      totalTime: totalSec,
+    });
     next(error);
   }
 });

@@ -13,7 +13,8 @@ function getBaseUrl() {
  */
 function prepareLMStudioMessages(messages) {
   return messages.map((m) => {
-    const { name: _name, id: _id, ...rest } = m;
+    const base = { role: m.role };
+    if (m.name) base.name = m.name;
     if (m.images && m.images.length > 0) {
       const content = [];
       for (const dataUrl of m.images) {
@@ -22,9 +23,9 @@ function prepareLMStudioMessages(messages) {
       if (m.content) {
         content.push({ type: "text", text: m.content });
       }
-      return { role: rest.role, content };
+      return { ...base, content };
     }
-    return { role: rest.role, content: rest.content };
+    return { ...base, content: m.content };
   });
 }
 
