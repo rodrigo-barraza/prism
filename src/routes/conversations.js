@@ -94,6 +94,19 @@ function extractProviders(messages, settings) {
 }
 
 /**
+ * Compute total estimated cost across all messages.
+ * @param {Array} messages
+ * @returns {number}
+ */
+function computeTotalCost(messages) {
+    let total = 0;
+    for (const m of messages || []) {
+        if (m.estimatedCost) total += m.estimatedCost;
+    }
+    return total;
+}
+
+/**
  * GET /conversations
  * List all conversations for the given project.
  */
@@ -183,6 +196,7 @@ router.post('/', async (req, res, next) => {
                 ...(isGenerating !== undefined ? { isGenerating } : {}),
                 modalities: computeModalities(processedMessages),
                 providers: extractProviders(processedMessages, settings),
+                totalCost: computeTotalCost(processedMessages),
                 updatedAt: now,
             },
             $setOnInsert: {
