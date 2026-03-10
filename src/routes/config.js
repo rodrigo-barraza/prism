@@ -1,4 +1,4 @@
-import express from 'express';
+import express from "express";
 import {
   PROVIDERS,
   PROVIDER_LIST,
@@ -7,10 +7,10 @@ import {
   DEFAULT_VOICES,
   getModelOptions,
   getDefaultModels,
-} from '../config.js';
-import { getProvider } from '../providers/index.js';
-import { ARENA_SCORES } from '../arrays.js';
-import logger from '../utils/logger.js';
+} from "../config.js";
+import { getProvider } from "../providers/index.js";
+import { ARENA_SCORES } from "../arrays.js";
+import logger from "../utils/logger.js";
 
 const router = express.Router();
 
@@ -28,11 +28,11 @@ function lookupArenaScores(modelName) {
 
   // Strip path prefix (e.g. "google/gemma-3-12b" → "gemma-3-12b")
   // and quantization suffix (e.g. "qwen3-32b@q4_k_m" → "qwen3-32b")
-  const stripped = key.includes('/') ? key.split('/').pop() : key;
-  const cleaned = stripped.includes('@') ? stripped.split('@')[0] : stripped;
+  const stripped = key.includes("/") ? key.split("/").pop() : key;
+  const cleaned = stripped.includes("@") ? stripped.split("@")[0] : stripped;
 
   for (const [category, scores] of Object.entries(ARENA_SCORES)) {
-    if (!scores || typeof scores !== 'object') continue;
+    if (!scores || typeof scores !== "object") continue;
 
     let bestMatch = null;
     let bestLen = 0;
@@ -48,8 +48,10 @@ function lookupArenaScores(modelName) {
 
       // Check both directions of startsWith/includes using cleaned key
       const matched =
-        cleaned.startsWith(an) || an.startsWith(cleaned) ||
-        key.includes(an) || an.includes(cleaned);
+        cleaned.startsWith(an) ||
+        an.startsWith(cleaned) ||
+        key.includes(an) ||
+        an.includes(cleaned);
 
       if (matched && an.length > bestLen) {
         bestMatch = score;
@@ -98,12 +100,12 @@ function formatBytes(bytes) {
  */
 async function getLmStudioModelOptions() {
   try {
-    const provider = getProvider('lm-studio');
+    const provider = getProvider("lm-studio");
     const { models } = await provider.listModels();
     if (!models || !Array.isArray(models)) return [];
 
     return models
-      .filter((m) => m.type === 'llm')
+      .filter((m) => m.type === "llm")
       .map((m) => {
         // Build label with quantization suffix to disambiguate
         let label = m.display_name || m.key;
@@ -154,7 +156,7 @@ async function getLmStudioModelOptions() {
  * GET /config
  * Returns the full catalog of providers, models, voices, and capabilities.
  */
-router.get('/', async (_req, res) => {
+router.get("/", async (_req, res) => {
   // Get static model options
   const textToTextModels = getModelOptions(TYPES.TEXT, TYPES.TEXT);
   const textToImageModels = getModelOptions(TYPES.TEXT, TYPES.IMAGE);
@@ -163,7 +165,7 @@ router.get('/', async (_req, res) => {
   try {
     const lmModels = await getLmStudioModelOptions();
     if (lmModels.length > 0) {
-      const staticLmModels = textToTextModels['lm-studio'] || [];
+      const staticLmModels = textToTextModels["lm-studio"] || [];
       const staticKeys = new Set(staticLmModels.map((m) => m.name));
       // Add dynamically discovered models that aren't already in the static list
       for (const m of lmModels) {
@@ -171,7 +173,7 @@ router.get('/', async (_req, res) => {
           staticLmModels.push(m);
         }
       }
-      textToTextModels['lm-studio'] = staticLmModels;
+      textToTextModels["lm-studio"] = staticLmModels;
     }
   } catch {
     // Ignore — use static models only

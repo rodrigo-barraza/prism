@@ -10,13 +10,13 @@
  * @returns {number|null} Cost in USD, or null if pricing is unavailable.
  */
 export function calculateTextCost(usage, pricing) {
-    if (!pricing || !usage) return null;
-    return parseFloat(
-        (
-            (usage.inputTokens / 1_000_000) * (pricing.inputPerMillion || 0) +
-            (usage.outputTokens / 1_000_000) * (pricing.outputPerMillion || 0)
-        ).toFixed(8),
-    );
+  if (!pricing || !usage) return null;
+  return parseFloat(
+    (
+      (usage.inputTokens / 1_000_000) * (pricing.inputPerMillion || 0) +
+      (usage.outputTokens / 1_000_000) * (pricing.outputPerMillion || 0)
+    ).toFixed(8),
+  );
 }
 
 /**
@@ -28,27 +28,27 @@ export function calculateTextCost(usage, pricing) {
  * @returns {number|null} Cost in USD, or null if pricing is unavailable.
  */
 export function calculateAudioCost(usage, pricing) {
-    if (!pricing || !usage) return null;
+  if (!pricing || !usage) return null;
 
-    // Strategy 1: per-minute pricing
-    if (pricing.perMinute && usage.durationSeconds) {
-        return parseFloat(
-            ((usage.durationSeconds / 60) * pricing.perMinute).toFixed(8),
-        );
-    }
+  // Strategy 1: per-minute pricing
+  if (pricing.perMinute && usage.durationSeconds) {
+    return parseFloat(
+      ((usage.durationSeconds / 60) * pricing.perMinute).toFixed(8),
+    );
+  }
 
-    // Strategy 2: token-based pricing
-    if (pricing.audioInputPerMillion && usage.inputTokens) {
-        return parseFloat(
-            (
-                (usage.inputTokens / 1_000_000) * pricing.audioInputPerMillion +
-                ((usage.outputTokens || 0) / 1_000_000) *
-                (pricing.outputPerMillion || 0)
-            ).toFixed(8),
-        );
-    }
+  // Strategy 2: token-based pricing
+  if (pricing.audioInputPerMillion && usage.inputTokens) {
+    return parseFloat(
+      (
+        (usage.inputTokens / 1_000_000) * pricing.audioInputPerMillion +
+        ((usage.outputTokens || 0) / 1_000_000) *
+          (pricing.outputPerMillion || 0)
+      ).toFixed(8),
+    );
+  }
 
-    return null;
+  return null;
 }
 
 /**
@@ -64,29 +64,34 @@ export function calculateAudioCost(usage, pricing) {
  * @param {number} [outputImageTokens=258] - Estimated output image tokens (provider-specific)
  * @returns {number|null} Cost in USD, or null if pricing is unavailable.
  */
-export function calculateImageCost(prompt, pricing, inputImages = 0, outputImageTokens = 258) {
-    if (!pricing || !prompt) return null;
+export function calculateImageCost(
+  prompt,
+  pricing,
+  inputImages = 0,
+  outputImageTokens = 258,
+) {
+  if (!pricing || !prompt) return null;
 
-    const estimatedInputTokens = Math.ceil(prompt.length / 4);
+  const estimatedInputTokens = Math.ceil(prompt.length / 4);
 
-    let cost = 0;
+  let cost = 0;
 
-    // Input text cost
-    if (pricing.inputPerMillion) {
-        cost += (estimatedInputTokens / 1_000_000) * pricing.inputPerMillion;
-    }
+  // Input text cost
+  if (pricing.inputPerMillion) {
+    cost += (estimatedInputTokens / 1_000_000) * pricing.inputPerMillion;
+  }
 
-    // Input image cost (for edit requests)
-    if (inputImages > 0 && pricing.imageInputPerMillion) {
-        cost += (inputImages * 258 / 1_000_000) * pricing.imageInputPerMillion;
-    }
+  // Input image cost (for edit requests)
+  if (inputImages > 0 && pricing.imageInputPerMillion) {
+    cost += ((inputImages * 258) / 1_000_000) * pricing.imageInputPerMillion;
+  }
 
-    // Output image cost
-    if (pricing.imageOutputPerMillion) {
-        cost += (outputImageTokens / 1_000_000) * pricing.imageOutputPerMillion;
-    } else if (pricing.outputPerMillion) {
-        cost += (outputImageTokens / 1_000_000) * pricing.outputPerMillion;
-    }
+  // Output image cost
+  if (pricing.imageOutputPerMillion) {
+    cost += (outputImageTokens / 1_000_000) * pricing.imageOutputPerMillion;
+  } else if (pricing.outputPerMillion) {
+    cost += (outputImageTokens / 1_000_000) * pricing.outputPerMillion;
+  }
 
-    return cost > 0 ? parseFloat(cost.toFixed(8)) : null;
+  return cost > 0 ? parseFloat(cost.toFixed(8)) : null;
 }

@@ -1,35 +1,35 @@
-import WebSocket from 'ws';
-import { ProviderError } from '../utils/errors.js';
-import logger from '../utils/logger.js';
-import { ELEVENLABS_API_KEY } from '../../secrets.js';
-import { TYPES, DEFAULT_VOICES, getDefaultModels } from '../config.js';
+import WebSocket from "ws";
+import { ProviderError } from "../utils/errors.js";
+import logger from "../utils/logger.js";
+import { ELEVENLABS_API_KEY } from "../../secrets.js";
+import { TYPES, DEFAULT_VOICES, getDefaultModels } from "../config.js";
 
 function getApiKey() {
   if (!ELEVENLABS_API_KEY) {
-    throw new ProviderError('elevenlabs', 'ELEVENLABS_API_KEY is not set', 401);
+    throw new ProviderError("elevenlabs", "ELEVENLABS_API_KEY is not set", 401);
   }
   return ELEVENLABS_API_KEY;
 }
 
 const elevenlabsProvider = {
-  name: 'elevenlabs',
+  name: "elevenlabs",
 
   async generateSpeech(
     text,
     voiceId = DEFAULT_VOICES.elevenlabs,
     options = {},
   ) {
-    logger.provider('ElevenLabs', `generateSpeech voiceId=${voiceId}`);
+    logger.provider("ElevenLabs", `generateSpeech voiceId=${voiceId}`);
     try {
       const apiKey = getApiKey();
       const response = await fetch(
         `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`,
         {
-          method: 'POST',
+          method: "POST",
           headers: {
-            Accept: 'audio/mpeg',
-            'Content-Type': 'application/json',
-            'xi-api-key': apiKey,
+            Accept: "audio/mpeg",
+            "Content-Type": "application/json",
+            "xi-api-key": apiKey,
           },
           body: JSON.stringify({
             text,
@@ -51,10 +51,10 @@ const elevenlabsProvider = {
         );
       }
 
-      return { stream: response.body, contentType: 'audio/mpeg' };
+      return { stream: response.body, contentType: "audio/mpeg" };
     } catch (error) {
       if (error instanceof ProviderError) throw error;
-      throw new ProviderError('elevenlabs', error.message, 500, error);
+      throw new ProviderError("elevenlabs", error.message, 500, error);
     }
   },
 
@@ -70,26 +70,26 @@ const elevenlabsProvider = {
     voiceId = DEFAULT_VOICES.elevenlabs,
     options = {},
   ) {
-    logger.provider('ElevenLabs', `generateSpeechStream voiceId=${voiceId}`);
+    logger.provider("ElevenLabs", `generateSpeechStream voiceId=${voiceId}`);
     const apiKey = getApiKey();
     const modelId =
       options.modelId || getDefaultModels(TYPES.TEXT, TYPES.AUDIO).elevenlabs;
     const wsUrl = `wss://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream-input?model_id=${modelId}`;
 
     const ws = new WebSocket(wsUrl, {
-      headers: { 'xi-api-key': apiKey },
+      headers: { "xi-api-key": apiKey },
     });
 
     // Wait for connection
     await new Promise((resolve, reject) => {
-      ws.on('open', resolve);
-      ws.on('error', reject);
+      ws.on("open", resolve);
+      ws.on("error", reject);
     });
 
     // Send initial config
     ws.send(
       JSON.stringify({
-        text: ' ',
+        text: " ",
         voice_settings: {
           stability: options.stability || 0.5,
           similarity_boost: options.similarityBoost || 0.8,
@@ -104,7 +104,7 @@ const elevenlabsProvider = {
     let ended = false;
     let error = null;
 
-    ws.on('message', (data) => {
+    ws.on("message", (data) => {
       const response = JSON.parse(data);
       messageQueue.push(response);
       if (resolveMessage) {
@@ -114,12 +114,12 @@ const elevenlabsProvider = {
       }
     });
 
-    ws.on('close', () => {
+    ws.on("close", () => {
       ended = true;
       if (resolveMessage) resolveMessage();
     });
 
-    ws.on('error', (err) => {
+    ws.on("error", (err) => {
       error = err;
       if (resolveMessage) resolveMessage();
     });
@@ -127,7 +127,7 @@ const elevenlabsProvider = {
     // Send text in background
     (async () => {
       try {
-        let buffer = '';
+        let buffer = "";
         for await (const chunk of textStream) {
           buffer += chunk;
           let match;
@@ -155,10 +155,10 @@ const elevenlabsProvider = {
 
         // Send EOS
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ text: '' }));
+          ws.send(JSON.stringify({ text: "" }));
         }
       } catch (err) {
-        logger.error('Error sending to ElevenLabs WS:', err);
+        logger.error("Error sending to ElevenLabs WS:", err);
         ws.close();
       }
     })();
@@ -169,14 +169,14 @@ const elevenlabsProvider = {
         if (messageQueue.length > 0) {
           const msg = messageQueue.shift();
           if (msg.audio) {
-            yield Buffer.from(msg.audio, 'base64');
+            yield Buffer.from(msg.audio, "base64");
           }
           if (msg.isFinal) {
             break;
           }
         } else {
           if (error)
-            throw new ProviderError('elevenlabs', error.message, 500, error);
+            throw new ProviderError("elevenlabs", error.message, 500, error);
           if (ended) break;
           await new Promise((r) => (resolveMessage = r));
         }

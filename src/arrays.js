@@ -195,7 +195,7 @@ export const ARENA_SCORES = {
     "gpt-4-1106-preview": 1313,
     "hunyuan-standard-2025-02-10": 1311,
     "gemini-1.5-flash-002": 1310,
-    "mercury": 1308,
+    mercury: 1308,
     "grok-2-mini-2024-08-13": 1308,
     "deepseek-v2.5": 1307,
     "olmo-3-32b-think": 1306,
@@ -452,7 +452,7 @@ export const ARENA_SCORES = {
     "qwen-image": 1058,
     "ideogram-v3-quality": 1050,
     "p-image": 1041,
-    "photon": 1037,
+    photon: 1037,
     "flux-2-klein-4b": 1021,
     "recraft-v3": 1021,
     "flux-1.1-pro": 1016,
@@ -464,7 +464,7 @@ export const ARENA_SCORES = {
     "dall-e-3": 969,
     "flux-1-kontext-dev": 942,
     "stable-diffusion-v35-large": 939,
-    "bagel": 899,
+    bagel: 899,
   },
 
   // ── Image Edit Arena ────────────────────────────────────────
@@ -507,7 +507,7 @@ export const ARENA_SCORES = {
     "gpt-image-1": 1144,
     "gpt-image-1-mini": 1125,
     "gemini-2.0-flash-preview-image-generation": 1086,
-    "bagel": 1031,
+    bagel: 1031,
     "step1x-edit": 1003,
   },
 

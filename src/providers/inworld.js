@@ -1,14 +1,14 @@
-import { Readable } from 'stream';
-import { ProviderError } from '../utils/errors.js';
-import logger from '../utils/logger.js';
-import { INWORLD_BASIC } from '../../secrets.js';
-import { DEFAULT_VOICES, getDefaultModels, TYPES } from '../config.js';
+import { Readable } from "stream";
+import { ProviderError } from "../utils/errors.js";
+import logger from "../utils/logger.js";
+import { INWORLD_BASIC } from "../../secrets.js";
+import { DEFAULT_VOICES, getDefaultModels, TYPES } from "../config.js";
 
-const INWORLD_TTS_URL = 'https://api.inworld.ai/tts/v1/voice:stream';
+const INWORLD_TTS_URL = "https://api.inworld.ai/tts/v1/voice:stream";
 
 function getApiKey() {
   if (!INWORLD_BASIC) {
-    throw new ProviderError('inworld', 'INWORLD_BASIC is not set', 401);
+    throw new ProviderError("inworld", "INWORLD_BASIC is not set", 401);
   }
   return INWORLD_BASIC;
 }
@@ -21,7 +21,7 @@ function getApiKey() {
 async function* parseNdjsonStream(body) {
   const reader = body.getReader();
   const decoder = new TextDecoder();
-  let buffer = '';
+  let buffer = "";
 
   try {
     while (true) {
@@ -29,8 +29,8 @@ async function* parseNdjsonStream(body) {
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
 
       for (const line of lines) {
         if (!line.trim()) continue;
@@ -50,7 +50,7 @@ async function* parseNdjsonStream(body) {
 }
 
 const inworldProvider = {
-  name: 'inworld',
+  name: "inworld",
 
   /**
    * Generate speech via Inworld TTS (MP3).
@@ -62,7 +62,7 @@ const inworldProvider = {
    * @returns {{ stream: Readable, contentType: string }}
    */
   async generateSpeech(text, voice = DEFAULT_VOICES.inworld, options = {}) {
-    logger.provider('Inworld', `generateSpeech voice=${voice}`);
+    logger.provider("Inworld", `generateSpeech voice=${voice}`);
 
     try {
       const apiKey = getApiKey();
@@ -70,16 +70,16 @@ const inworldProvider = {
         options.model || getDefaultModels(TYPES.TEXT, TYPES.AUDIO).inworld;
 
       const response = await fetch(INWORLD_TTS_URL, {
-        method: 'POST',
+        method: "POST",
         headers: {
           Authorization: `Basic ${apiKey}`,
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           text,
           voice_id: voice,
           audio_config: {
-            audio_encoding: 'MP3',
+            audio_encoding: "MP3",
             sample_rate_hertz: 24000,
           },
           temperature: options.temperature ?? 1.1,
@@ -98,16 +98,16 @@ const inworldProvider = {
       async function* audioChunks() {
         for await (const result of parseNdjsonStream(response.body)) {
           if (result.audioContent) {
-            yield Buffer.from(result.audioContent, 'base64');
+            yield Buffer.from(result.audioContent, "base64");
           }
         }
       }
 
       const stream = Readable.from(audioChunks());
-      return { stream, contentType: 'audio/mpeg' };
+      return { stream, contentType: "audio/mpeg" };
     } catch (error) {
       if (error instanceof ProviderError) throw error;
-      throw new ProviderError('inworld', error.message, 500, error);
+      throw new ProviderError("inworld", error.message, 500, error);
     }
   },
 
@@ -126,7 +126,7 @@ const inworldProvider = {
     voice = DEFAULT_VOICES.inworld,
     options = {},
   ) {
-    logger.provider('Inworld', `generateSpeechStream voice=${voice}`);
+    logger.provider("Inworld", `generateSpeechStream voice=${voice}`);
 
     const apiKey = getApiKey();
     const model =
@@ -134,7 +134,7 @@ const inworldProvider = {
 
     // Accumulate all text from the async iterator first, since
     // Inworld's API is request-level streaming (not input-level).
-    let fullText = '';
+    let fullText = "";
     for await (const chunk of textStream) {
       fullText += chunk;
     }
@@ -147,21 +147,21 @@ const inworldProvider = {
 
     try {
       const response = await fetch(INWORLD_TTS_URL, {
-        method: 'POST',
+        method: "POST",
         headers: {
           Authorization: `Basic ${apiKey}`,
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           text: fullText,
           voice_id: voice,
           audio_config: {
-            audio_encoding: 'LINEAR16',
+            audio_encoding: "LINEAR16",
             sample_rate_hertz: 24000,
           },
           temperature: options.temperature ?? 1.1,
           model_id: model,
-          timestampType: 'WORD',
+          timestampType: "WORD",
         }),
         signal: controller.signal,
       });
@@ -175,13 +175,13 @@ const inworldProvider = {
 
       for await (const result of parseNdjsonStream(response.body)) {
         if (result.audioContent) {
-          yield Buffer.from(result.audioContent, 'base64');
+          yield Buffer.from(result.audioContent, "base64");
         }
       }
     } catch (error) {
-      if (error.name === 'AbortError') return;
+      if (error.name === "AbortError") return;
       if (error instanceof ProviderError) throw error;
-      throw new ProviderError('inworld', error.message, 500, error);
+      throw new ProviderError("inworld", error.message, 500, error);
     } finally {
       controller.abort();
     }

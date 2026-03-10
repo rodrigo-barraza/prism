@@ -1,5 +1,5 @@
-import { MongoClient } from 'mongodb';
-import logger from '../utils/logger.js';
+import { MongoClient } from "mongodb";
+import logger from "../utils/logger.js";
 
 const clients = new Map();
 

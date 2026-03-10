@@ -1,7 +1,7 @@
 export class ProviderError extends Error {
   constructor(provider, message, statusCode = 500, originalError = null) {
     super(message);
-    this.name = 'ProviderError';
+    this.name = "ProviderError";
     this.provider = provider;
     this.statusCode = statusCode;
     this.originalError = originalError;
@@ -18,7 +18,7 @@ export class ProviderError extends Error {
 }
 
 export function errorHandler(err, _req, res, _next) {
-  console.error(`[ERROR] ${err.provider || 'Server'}:`, err.message);
+  console.error(`[ERROR] ${err.provider || "Server"}:`, err.message);
 
   if (err instanceof ProviderError) {
     return res.status(err.statusCode).json(err.toJSON());
@@ -26,7 +26,7 @@ export function errorHandler(err, _req, res, _next) {
 
   return res.status(500).json({
     error: true,
-    message: err.message || 'Internal server error',
+    message: err.message || "Internal server error",
     statusCode: 500,
   });
 }

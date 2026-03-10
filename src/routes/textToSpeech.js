@@ -1,6 +1,6 @@
-import express from 'express';
-import { getProvider } from '../providers/index.js';
-import { ProviderError } from '../utils/errors.js';
+import express from "express";
+import { getProvider } from "../providers/index.js";
+import { ProviderError } from "../utils/errors.js";
 
 const router = express.Router();
 
@@ -9,7 +9,7 @@ const router = express.Router();
  * Body: { provider, text, voice?, instructions?, model?, options? }
  * Response: binary audio stream with content-type header
  */
-router.post('/', async (req, res, next) => {
+router.post("/", async (req, res, next) => {
   try {
     const {
       provider: providerName,
@@ -22,13 +22,13 @@ router.post('/', async (req, res, next) => {
 
     if (!providerName) {
       throw new ProviderError(
-        'server',
-        'Missing required field: provider',
+        "server",
+        "Missing required field: provider",
         400,
       );
     }
     if (!text) {
-      throw new ProviderError('server', 'Missing required field: text', 400);
+      throw new ProviderError("server", "Missing required field: text", 400);
     }
 
     const provider = getProvider(providerName);
@@ -43,8 +43,8 @@ router.post('/', async (req, res, next) => {
     const options = { instructions, model, ...extraOptions };
     const result = await provider.generateSpeech(text, voice, options);
 
-    res.setHeader('Content-Type', result.contentType || 'audio/mpeg');
-    res.setHeader('Transfer-Encoding', 'chunked');
+    res.setHeader("Content-Type", result.contentType || "audio/mpeg");
+    res.setHeader("Transfer-Encoding", "chunked");
 
     if (result.stream.pipe) {
       result.stream.pipe(res);

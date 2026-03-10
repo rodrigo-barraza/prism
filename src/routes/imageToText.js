@@ -1,18 +1,20 @@
-import express from 'express';
-import { getProvider } from '../providers/index.js';
-import { ProviderError } from '../utils/errors.js';
-import RequestLogger from '../services/RequestLogger.js';
-import logger from '../utils/logger.js';
-import crypto from 'crypto';
+import express from "express";
+import crypto from "crypto";
+import { getProvider } from "../providers/index.js";
+import { ProviderError } from "../utils/errors.js";
+import { TYPES, getDefaultModels, getPricing } from "../config.js";
+import { calculateTextCost } from "../utils/CostCalculator.js";
+import RequestLogger from "../services/RequestLogger.js";
+import logger from "../utils/logger.js";
 
 const router = express.Router();
 
 /**
  * POST /image-to-text
  * Body: { provider, model?, image (URL or base64), prompt? }
- * Response: { text, provider }
+ * Response: { text, provider, model, usage, estimatedCost }
  */
-router.post('/', async (req, res, next) => {
+router.post("/", async (req, res, next) => {
   const requestId = crypto.randomUUID();
   const requestStart = performance.now();
   let providerName = null;
@@ -21,19 +23,18 @@ router.post('/', async (req, res, next) => {
   try {
     const { provider: pName, model, image, prompt } = req.body;
     providerName = pName;
-    resolvedModel = model || null;
 
     if (!providerName) {
       throw new ProviderError(
-        'server',
-        'Missing required field: provider',
+        "server",
+        "Missing required field: provider",
         400,
       );
     }
     if (!image) {
       throw new ProviderError(
-        'server',
-        'Missing required field: image (URL or base64)',
+        "server",
+        "Missing required field: image (URL or base64)",
         400,
       );
     }
@@ -47,23 +48,39 @@ router.post('/', async (req, res, next) => {
       );
     }
 
-    const result = await provider.captionImage(image, prompt, model);
+    resolvedModel =
+      model || getDefaultModels(TYPES.IMAGE, TYPES.TEXT)[providerName] || null;
+
+    const result = await provider.captionImage(
+      image,
+      prompt,
+      resolvedModel || model,
+    );
     const totalSec = (performance.now() - requestStart) / 1000;
+
+    const usage = result.usage || { inputTokens: 0, outputTokens: 0 };
+    const pricing = getPricing(TYPES.IMAGE, TYPES.TEXT)[resolvedModel];
+    const estimatedCost = calculateTextCost(usage, pricing);
 
     logger.info(
       `[image-to-text] ${providerName} model=${resolvedModel} — ` +
-        `total: ${totalSec.toFixed(2)}s`,
+        `in: ${usage.inputTokens} tokens, out: ${usage.outputTokens} tokens, ` +
+        `total: ${totalSec.toFixed(2)}s` +
+        (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
     );
 
     // Fire-and-forget DB log
     RequestLogger.log({
       requestId,
-      endpoint: 'image-to-text',
+      endpoint: "image-to-text",
       project: req.project,
       username: req.username,
       provider: providerName,
       model: resolvedModel,
       success: true,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      estimatedCost,
       outputCharacters: result.text ? result.text.length : 0,
       totalTime: parseFloat(totalSec.toFixed(3)),
     });
@@ -71,12 +88,15 @@ router.post('/', async (req, res, next) => {
     res.json({
       text: result.text,
       provider: providerName,
+      model: resolvedModel,
+      usage,
+      estimatedCost,
     });
   } catch (error) {
     const totalSec = (performance.now() - requestStart) / 1000;
     RequestLogger.log({
       requestId,
-      endpoint: 'image-to-text',
+      endpoint: "image-to-text",
       project: req.project,
       username: req.username,
       provider: providerName,

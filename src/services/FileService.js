@@ -47,7 +47,12 @@ const FileService = {
    * @returns {Promise<{ ref: string, size: number, contentType: string }>}
    *   ref is either `minio://...` or the original dataUrl.
    */
-  async uploadFile(dataUrl, category = "uploads", project = null, username = null) {
+  async uploadFile(
+    dataUrl,
+    category = "uploads",
+    project = null,
+    username = null,
+  ) {
     // If MinIO is not available, return the data URL as-is (MongoDB inline)
     if (!MinioWrapper.isAvailable()) {
       const size = Math.round((dataUrl.length * 3) / 4); // rough base64 → bytes
@@ -100,7 +105,8 @@ const FileService = {
       const stream = await MinioWrapper.get(key);
       return {
         stream,
-        contentType: stat.metaData?.["content-type"] || "application/octet-stream",
+        contentType:
+          stat.metaData?.["content-type"] || "application/octet-stream",
       };
     } catch (error) {
       logger.error(`FileService: failed to get ${key}: ${error.message}`);

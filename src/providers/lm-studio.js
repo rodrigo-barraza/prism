@@ -87,7 +87,10 @@ class ThinkTagParser {
           const partialMatch = this._partialEndTag(this.buffer);
           if (partialMatch > 0) {
             // Emit everything except the potential partial tag
-            const safe = this.buffer.slice(0, this.buffer.length - partialMatch);
+            const safe = this.buffer.slice(
+              0,
+              this.buffer.length - partialMatch,
+            );
             if (safe) {
               results.push({ type: "thinking", content: safe });
             }
@@ -113,7 +116,10 @@ class ThinkTagParser {
           // No opening tag — check for partial <think> at end
           const partialMatch = this._partialStartTag(this.buffer);
           if (partialMatch > 0) {
-            const safe = this.buffer.slice(0, this.buffer.length - partialMatch);
+            const safe = this.buffer.slice(
+              0,
+              this.buffer.length - partialMatch,
+            );
             if (safe) {
               results.push({ type: "text", content: safe });
             }
@@ -170,7 +176,10 @@ const lmStudioProvider = {
     options = {},
   ) {
     const baseUrl = getBaseUrl();
-    logger.provider("LM Studio", `generateText model=${model} baseUrl=${baseUrl}`);
+    logger.provider(
+      "LM Studio",
+      `generateText model=${model} baseUrl=${baseUrl}`,
+    );
     try {
       const prepared = prepareLMStudioMessages(messages);
 
@@ -230,7 +239,10 @@ const lmStudioProvider = {
     options = {},
   ) {
     const baseUrl = getBaseUrl();
-    logger.provider("LM Studio", `generateTextStream model=${model} baseUrl=${baseUrl}`);
+    logger.provider(
+      "LM Studio",
+      `generateTextStream model=${model} baseUrl=${baseUrl}`,
+    );
     try {
       // Auto-load the model if not currently loaded
       try {
@@ -254,8 +266,13 @@ const lmStudioProvider = {
           let loadDone = false;
           let loadError = null;
           const loadPromise = this.loadModel(model)
-            .then(() => { loadDone = true; })
-            .catch((err) => { loadDone = true; loadError = err; });
+            .then(() => {
+              loadDone = true;
+            })
+            .catch((err) => {
+              loadDone = true;
+              loadError = err;
+            });
 
           const startTime = Date.now();
           const EXPECTED_LOAD_MS = 15_000; // soft guess for the progress curve
@@ -267,7 +284,10 @@ const lmStudioProvider = {
 
             const elapsed = Date.now() - startTime;
             // Asymptotic curve: ramps quickly at first, caps at 95%
-            const pct = Math.min(95, Math.round((elapsed / (elapsed + EXPECTED_LOAD_MS)) * 100));
+            const pct = Math.min(
+              95,
+              Math.round((elapsed / (elapsed + EXPECTED_LOAD_MS)) * 100),
+            );
             if (pct > lastPct) {
               lastPct = pct;
               yield { type: "status", message: `Loading model… ${pct}%` };
@@ -280,7 +300,9 @@ const lmStudioProvider = {
           yield { type: "status", message: "Loading model… 100%" };
         }
       } catch (loadCheckErr) {
-        logger.warn(`Could not check/load model before streaming: ${loadCheckErr.message}`);
+        logger.warn(
+          `Could not check/load model before streaming: ${loadCheckErr.message}`,
+        );
       }
 
       const prepared = prepareLMStudioMessages(messages);
@@ -425,7 +447,11 @@ const lmStudioProvider = {
 
       const data = await response.json();
       const text = data.choices?.[0]?.message?.content || "";
-      return { text };
+      const usage = {
+        inputTokens: data.usage?.prompt_tokens || 0,
+        outputTokens: data.usage?.completion_tokens || 0,
+      };
+      return { text, usage };
     } catch (error) {
       if (error instanceof ProviderError) throw error;
       throw new ProviderError("lm-studio", error.message, 500, error);
