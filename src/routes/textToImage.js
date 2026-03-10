@@ -99,6 +99,10 @@ router.post("/", async (req, res, next) => {
             }
         }
 
+        // Estimate token counts for tracking
+        const estimatedInputTokens = Math.ceil(prompt.length / 4) +
+            (images || []).length * 258;
+
         // Fire-and-forget DB log
         RequestLogger.log({
             requestId,
@@ -108,6 +112,8 @@ router.post("/", async (req, res, next) => {
             provider: providerName,
             model: resolvedModel,
             success: true,
+            inputTokens: estimatedInputTokens,
+            outputTokens: outputImageTokens,
             inputCharacters: prompt.length,
             outputCharacters: result.text ? result.text.length : 0,
             estimatedCost,
