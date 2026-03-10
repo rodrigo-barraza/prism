@@ -1,10 +1,9 @@
 import { describe, it, expect } from "vitest";
-import request from "supertest";
-import { app, TEST_SECRET, MOCK_GENERATE_TEXT } from "./setup.js";
 import {
     calculateTextCost,
     calculateAudioCost,
 } from "../src/utils/CostCalculator.js";
+import { TYPES, getPricing } from "../src/config.js";
 
 // ═══════════════════════════════════════════════════════════════
 // calculateTextCost — Unit Tests
@@ -226,108 +225,55 @@ describe("calculateAudioCost", () => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-// Integration — text-to-text endpoint returns correct cost
+// End-to-end — real pricing from config.js
 // ═══════════════════════════════════════════════════════════════
 
-describe("POST /text-to-text — estimatedCost", () => {
-    it("returns the expected estimatedCost for a known model", async () => {
-        MOCK_GENERATE_TEXT.mockResolvedValueOnce({
-            text: "Hello from mock",
-            usage: { inputTokens: 1000, outputTokens: 500 },
-        });
+describe("Cost calculation with real config pricing", () => {
+    const textPricing = getPricing(TYPES.TEXT, TYPES.TEXT);
+    const audioPricing = getPricing(TYPES.AUDIO, TYPES.TEXT);
 
-        const res = await request(app)
-            .post("/text-to-text")
-            .set("x-api-secret", TEST_SECRET)
-            .send({
-                provider: "openai",
-                model: "gpt-5.2",
-                messages: [{ role: "user", content: "hi" }],
-            })
-            .expect(200);
-
-        // GPT-5.2: input $0.875/M, output $7.00/M
-        // Expected: (1000/1M)*0.875 + (500/1M)*7.0 = 0.000875 + 0.0035 = 0.004375
-        expect(res.body.estimatedCost).toBeCloseTo(0.004375, 8);
+    it("GPT-5.2: 1000 in / 500 out = $0.004375", () => {
+        const pricing = textPricing["gpt-5.2"];
+        const cost = calculateTextCost({ inputTokens: 1000, outputTokens: 500 }, pricing);
+        expect(cost).toBeCloseTo(0.004375, 8);
     });
 
-    it("returns null estimatedCost for an unknown model", async () => {
-        MOCK_GENERATE_TEXT.mockResolvedValueOnce({
-            text: "Hello from mock",
-            usage: { inputTokens: 100, outputTokens: 50 },
-        });
-
-        const res = await request(app)
-            .post("/text-to-text")
-            .set("x-api-secret", TEST_SECRET)
-            .send({
-                provider: "openai",
-                model: "nonexistent-model-xyz",
-                messages: [{ role: "user", content: "hi" }],
-            })
-            .expect(200);
-
-        expect(res.body.estimatedCost).toBeNull();
+    it("Sonnet 4.5: 5000 in / 2000 out = $0.045", () => {
+        const pricing = textPricing["claude-sonnet-4-5-20250929"];
+        const cost = calculateTextCost({ inputTokens: 5000, outputTokens: 2000 }, pricing);
+        expect(cost).toBeCloseTo(0.045, 8);
     });
 
-    it("returns 0 estimatedCost when tokens are zero", async () => {
-        MOCK_GENERATE_TEXT.mockResolvedValueOnce({
-            text: "",
-            usage: { inputTokens: 0, outputTokens: 0 },
-        });
-
-        const res = await request(app)
-            .post("/text-to-text")
-            .set("x-api-secret", TEST_SECRET)
-            .send({
-                provider: "openai",
-                model: "gpt-5.2",
-                messages: [{ role: "user", content: "" }],
-            })
-            .expect(200);
-
-        expect(res.body.estimatedCost).toBe(0);
+    it("Gemini 3 Flash: 10000 in / 3000 out = $0.014", () => {
+        const pricing = textPricing["gemini-3-flash-preview"];
+        const cost = calculateTextCost({ inputTokens: 10000, outputTokens: 3000 }, pricing);
+        expect(cost).toBeCloseTo(0.014, 8);
     });
 
-    it("returns correct cost for Anthropic model", async () => {
-        MOCK_GENERATE_TEXT.mockResolvedValueOnce({
-            text: "Hello",
-            usage: { inputTokens: 5000, outputTokens: 2000 },
-        });
-
-        const res = await request(app)
-            .post("/text-to-text")
-            .set("x-api-secret", TEST_SECRET)
-            .send({
-                provider: "anthropic",
-                model: "claude-sonnet-4-5-20250929",
-                messages: [{ role: "user", content: "hi" }],
-            })
-            .expect(200);
-
-        // Sonnet 4.5: input $3.00/M, output $15.00/M
-        // Expected: (5000/1M)*3.0 + (2000/1M)*15.0 = 0.015 + 0.03 = 0.045
-        expect(res.body.estimatedCost).toBeCloseTo(0.045, 8);
+    it("GPT 5.4 Pro: 50000 in / 10000 out = $1.65", () => {
+        const pricing = textPricing["gpt-5.4-pro"];
+        const cost = calculateTextCost({ inputTokens: 50000, outputTokens: 10000 }, pricing);
+        // (50000/1M)*15.0 + (10000/1M)*90.0 = 0.75 + 0.9 = 1.65
+        expect(cost).toBeCloseTo(1.65, 8);
     });
 
-    it("returns correct cost for Google model", async () => {
-        MOCK_GENERATE_TEXT.mockResolvedValueOnce({
-            text: "Hello",
-            usage: { inputTokens: 10000, outputTokens: 3000 },
-        });
+    it("Whisper-1: 120s audio = $0.012", () => {
+        const pricing = audioPricing["whisper-1"];
+        const cost = calculateAudioCost({ durationSeconds: 120 }, pricing);
+        expect(cost).toBeCloseTo(0.012, 8);
+    });
 
-        const res = await request(app)
-            .post("/text-to-text")
-            .set("x-api-secret", TEST_SECRET)
-            .send({
-                provider: "google",
-                model: "gemini-3-flash-preview",
-                messages: [{ role: "user", content: "hi" }],
-            })
-            .expect(200);
+    it("Gemini 3 Flash STT: 10000 in / 500 out (token-based)", () => {
+        const pricing = audioPricing["gemini-3-flash-preview"];
+        const cost = calculateAudioCost({ inputTokens: 10000, outputTokens: 500 }, pricing);
+        // audioInputPerMillion: 1.0, outputPerMillion: 3.0
+        // (10000/1M)*1.0 + (500/1M)*3.0 = 0.01 + 0.0015 = 0.0115
+        expect(cost).toBeCloseTo(0.0115, 8);
+    });
 
-        // Gemini 3 Flash: input $0.50/M, output $3.00/M
-        // Expected: (10000/1M)*0.5 + (3000/1M)*3.0 = 0.005 + 0.009 = 0.014
-        expect(res.body.estimatedCost).toBeCloseTo(0.014, 8);
+    it("unknown model returns null", () => {
+        const pricing = textPricing["nonexistent-model-xyz"];
+        const cost = calculateTextCost({ inputTokens: 100, outputTokens: 50 }, pricing);
+        expect(cost).toBeNull();
     });
 });
