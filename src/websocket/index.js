@@ -7,7 +7,7 @@ import {
     getPricing,
     getModelByName,
 } from "../config.js";
-import { calculateTextCost } from "../utils/CostCalculator.js";
+import { calculateTextCost, calculateImageCost } from "../utils/CostCalculator.js";
 import logger from "../utils/logger.js";
 import RequestLogger from "../services/RequestLogger.js";
 import ConversationService from "../services/ConversationService.js";
@@ -148,6 +148,14 @@ function handleTextToTextStream(ws, project, username) {
                     );
                     const totalSec = (performance.now() - requestStart2) / 1000;
 
+                    // Calculate cost for image API models
+                    const imgPricing = getPricing(TYPES.TEXT, TYPES.IMAGE)[resolvedModel]
+                        || modelDef?.pricing;
+                    const outputImgTokens = providerName === "openai" ? 1056 : 258;
+                    const estimatedCost = calculateImageCost(
+                        prompt, imgPricing, allImages.length, outputImgTokens,
+                    );
+
                     if (ws.readyState === ws.OPEN) {
                         if (result.text) {
                             ws.send(JSON.stringify({ type: "chunk", content: result.text }));
@@ -163,7 +171,7 @@ function handleTextToTextStream(ws, project, username) {
                             JSON.stringify({
                                 type: "done",
                                 usage: result.usage || null,
-                                estimatedCost: null,
+                                estimatedCost,
                                 totalTime: totalSec,
                             }),
                         );
@@ -306,8 +314,30 @@ function handleTextToTextStream(ws, project, username) {
 
             // Log token usage + cost
             if (usage) {
-                const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[resolvedModel];
-                const estimatedCost = calculateTextCost(usage, pricing);
+                // When images were streamed (e.g. Gemini Flash Image), account
+                // for image output tokens at the higher imageOutputPerMillion rate.
+                const imageCount = streamedImages.length;
+                let estimatedCost;
+                if (imageCount > 0) {
+                    const imgPricing = getPricing(TYPES.TEXT, TYPES.IMAGE)[resolvedModel]
+                        || modelDef?.pricing;
+                    if (imgPricing?.imageOutputPerMillion) {
+                        // Split output tokens: image tokens (258 per image) at image rate,
+                        // remainder at text rate.
+                        const imageTokens = imageCount * 258;
+                        const textOutputTokens = Math.max(0, usage.outputTokens - imageTokens);
+                        const inputCost = (usage.inputTokens / 1_000_000) * (imgPricing.inputPerMillion || 0);
+                        const textOutCost = (textOutputTokens / 1_000_000) * (imgPricing.outputPerMillion || 0);
+                        const imageOutCost = (imageTokens / 1_000_000) * imgPricing.imageOutputPerMillion;
+                        estimatedCost = parseFloat((inputCost + textOutCost + imageOutCost).toFixed(8));
+                    } else {
+                        const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[resolvedModel];
+                        estimatedCost = calculateTextCost(usage, pricing);
+                    }
+                } else {
+                    const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[resolvedModel];
+                    estimatedCost = calculateTextCost(usage, pricing);
+                }
                 const tokensPerSec =
                     generationSec && generationSec > 0
                         ? (usage.outputTokens / generationSec).toFixed(1)
