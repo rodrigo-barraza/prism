@@ -84,14 +84,16 @@ router.post("/", async (req, res, next) => {
     const pricing = getPricing(TYPES.AUDIO, TYPES.TEXT)[resolvedModel];
     if (pricing && result.usage) {
       if (pricing.perMinute && result.usage.durationSeconds) {
-        estimatedCost =
-          (result.usage.durationSeconds / 60) * pricing.perMinute;
+        estimatedCost = parseFloat(
+          ((result.usage.durationSeconds / 60) * pricing.perMinute).toFixed(8)
+        );
       } else if (pricing.audioInputPerMillion && result.usage.inputTokens) {
-        estimatedCost =
+        estimatedCost = parseFloat((
           (result.usage.inputTokens / 1_000_000) *
             pricing.audioInputPerMillion +
           ((result.usage.outputTokens || 0) / 1_000_000) *
-            (pricing.outputPerMillion || 0);
+            (pricing.outputPerMillion || 0)
+        ).toFixed(8));
       }
     }
 
@@ -114,7 +116,7 @@ router.post("/", async (req, res, next) => {
       outputTokens: result.usage?.outputTokens || 0,
       estimatedCost,
       outputCharacters: result.text ? result.text.length : 0,
-      totalTime: totalSec,
+      totalTime: parseFloat(totalSec.toFixed(3)),
     });
 
     res.json({

@@ -78,7 +78,7 @@ router.post('/', async (req, res, next) => {
       success: true,
       inputCharacters: prompt.length,
       outputCharacters: result.text ? result.text.length : 0,
-      totalTime: totalSec,
+      totalTime: parseFloat(totalSec.toFixed(3)),
     });
 
     res.json({
@@ -99,7 +99,7 @@ router.post('/', async (req, res, next) => {
       model: resolvedModel,
       success: false,
       errorMessage: error.message,
-      totalTime: totalSec,
+      totalTime: parseFloat(totalSec.toFixed(3)),
     });
     next(error);
   }

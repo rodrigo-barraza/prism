@@ -456,6 +456,8 @@ router.get("/conversations", async (req, res, next) => {
           title: 1,
           createdAt: 1,
           updatedAt: 1,
+          modalities: 1,
+          providers: 1,
           messageCount: { $size: { $ifNull: ["$messages", []] } },
         })
         .sort({ [sort]: sortDir })
@@ -517,6 +519,8 @@ router.get("/live", async (req, res, next) => {
           title: 1,
           updatedAt: 1,
           messages: 1,
+          modalities: 1,
+          providers: 1,
           isGenerating: 1,
         })
         .sort({ updatedAt: -1 })
@@ -553,6 +557,8 @@ router.get("/live", async (req, res, next) => {
         lastMessage: lastMessageText,
         lastMessageRole: lastMsg?.role || null,
         isGenerating: c.isGenerating || false,
+        modalities: c.modalities || null,
+        providers: c.providers || [],
       };
     });
 

@@ -64,9 +64,10 @@ router.post('/', async (req, res, next) => {
         const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[resolvedModel];
         let estimatedCost = null;
         if (pricing) {
-            estimatedCost =
+            estimatedCost = parseFloat((
                 (usage.inputTokens / 1_000_000) * pricing.inputPerMillion +
-                (usage.outputTokens / 1_000_000) * pricing.outputPerMillion;
+                (usage.outputTokens / 1_000_000) * pricing.outputPerMillion
+            ).toFixed(8));
         }
         const tokensPerSec =
             generationSec > 0
@@ -110,9 +111,9 @@ router.post('/', async (req, res, next) => {
                 0,
             ),
             outputCharacters: result.text ? result.text.length : 0,
-            timeToGeneration: timeToGenerationSec,
-            generationTime: generationSec,
-            totalTime: totalSec,
+            timeToGeneration: parseFloat(timeToGenerationSec.toFixed(3)),
+            generationTime: parseFloat(generationSec.toFixed(3)),
+            totalTime: parseFloat(totalSec.toFixed(3)),
         });
 
         res.json({

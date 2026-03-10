@@ -231,9 +231,10 @@ function handleTextToTextStream(ws, project, username) {
                 const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[resolvedModel];
                 let estimatedCost = null;
                 if (pricing) {
-                    estimatedCost =
+                    estimatedCost = parseFloat((
                         (usage.inputTokens / 1_000_000) * pricing.inputPerMillion +
-                        (usage.outputTokens / 1_000_000) * pricing.outputPerMillion;
+                        (usage.outputTokens / 1_000_000) * pricing.outputPerMillion
+                    ).toFixed(8));
                 }
                 const tokensPerSec =
                     generationSec && generationSec > 0
@@ -273,9 +274,9 @@ function handleTextToTextStream(ws, project, username) {
                         0,
                     ),
                     outputCharacters,
-                    timeToGeneration: timeToGenerationSec,
-                    generationTime: generationSec,
-                    totalTime: totalSec,
+                    timeToGeneration: timeToGenerationSec !== null ? parseFloat(timeToGenerationSec.toFixed(3)) : null,
+                    generationTime: generationSec !== null ? parseFloat(generationSec.toFixed(3)) : null,
+                    totalTime: parseFloat(totalSec.toFixed(3)),
                 });
 
                 if (ws.readyState === ws.OPEN) {
@@ -285,9 +286,9 @@ function handleTextToTextStream(ws, project, username) {
                             usage,
                             estimatedCost,
                             tokensPerSec: parseFloat(tokensPerSec) || null,
-                            timeToGeneration: timeToGenerationSec,
-                            generationTime: generationSec,
-                            totalTime: totalSec,
+                            timeToGeneration: timeToGenerationSec !== null ? parseFloat(timeToGenerationSec.toFixed(3)) : null,
+                            generationTime: generationSec !== null ? parseFloat(generationSec.toFixed(3)) : null,
+                            totalTime: parseFloat(totalSec.toFixed(3)),
                         }),
                     );
                 }

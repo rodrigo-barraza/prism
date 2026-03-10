@@ -50,6 +50,50 @@ async function extractFiles(messages, project = null, username = null) {
 }
 
 /**
+ * Compute input/output modalities from messages for lightweight querying.
+ * @param {Array} messages
+ * @returns {Object} modalities flags
+ */
+function computeModalities(messages) {
+    const mod = { textIn: false, textOut: false, imageIn: false, imageOut: false, audioIn: false, audioOut: false, docIn: false };
+    for (const m of messages || []) {
+        const isUser = m.role === 'user';
+        const isAssistant = m.role === 'assistant';
+        if (m.content && (isUser || isAssistant)) {
+            if (isUser) mod.textIn = true;
+            if (isAssistant) mod.textOut = true;
+        }
+        if (m.images?.length > 0 || m.image) {
+            if (isUser) mod.imageIn = true;
+            if (isAssistant) mod.imageOut = true;
+        }
+        if (m.audio) {
+            if (isUser) mod.audioIn = true;
+            if (isAssistant) mod.audioOut = true;
+        }
+        if (m.documents?.length > 0 || m.images?.some(ref => typeof ref === 'string' && (ref.endsWith('.pdf') || ref.endsWith('.txt')))) {
+            mod.docIn = true;
+        }
+    }
+    return mod;
+}
+
+/**
+ * Extract unique providers from messages (assistant .provider field) and settings.
+ * @param {Array} messages
+ * @param {Object} settings
+ * @returns {string[]} unique provider names
+ */
+function extractProviders(messages, settings) {
+    const providers = new Set();
+    for (const m of messages || []) {
+        if (m.provider) providers.add(m.provider.toLowerCase());
+    }
+    if (settings?.provider) providers.add(settings.provider.toLowerCase());
+    return [...providers];
+}
+
+/**
  * GET /conversations
  * List all conversations for the given project.
  */
@@ -137,6 +181,8 @@ router.post('/', async (req, res, next) => {
                 systemPrompt: systemPrompt || '',
                 ...(settings ? { settings: { ...settings, systemPrompt: systemPrompt || '' } } : { settings: { systemPrompt: systemPrompt || '' } }),
                 ...(isGenerating !== undefined ? { isGenerating } : {}),
+                modalities: computeModalities(processedMessages),
+                providers: extractProviders(processedMessages, settings),
                 updatedAt: now,
             },
             $setOnInsert: {
