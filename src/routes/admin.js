@@ -384,7 +384,7 @@ router.get("/stats/costs", async (req, res, next) => {
         const matchStage = Object.keys(match).length ? [{ $match: match }] : [];
 
         // Run all aggregations in parallel
-        const [totals, byProject, byProvider, byModel, byEndpoint, byProjectProvider] =
+        const [totals, byProject, byProvider, byModel, byEndpoint, byProjectProvider, byProjectEndpoint, byProjectModel] =
             await Promise.all([
                 // Totals
                 db
@@ -492,6 +492,42 @@ router.get("/stats/costs", async (req, res, next) => {
                         { $sort: { totalCost: -1 } },
                     ])
                     .toArray(),
+
+                // By project + endpoint (for nested modality breakdown)
+                db
+                    .collection(REQUESTS_COL)
+                    .aggregate([
+                        ...matchStage,
+                        {
+                            $group: {
+                                _id: { project: "$project", endpoint: "$endpoint" },
+                                totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
+                                totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
+                                totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
+                                totalRequests: { $sum: 1 },
+                            },
+                        },
+                        { $sort: { totalCost: -1 } },
+                    ])
+                    .toArray(),
+
+                // By project + model (for nested model breakdown)
+                db
+                    .collection(REQUESTS_COL)
+                    .aggregate([
+                        ...matchStage,
+                        {
+                            $group: {
+                                _id: { project: "$project", model: "$model", provider: "$provider" },
+                                totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
+                                totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
+                                totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
+                                totalRequests: { $sum: 1 },
+                            },
+                        },
+                        { $sort: { totalCost: -1 } },
+                    ])
+                    .toArray(),
             ]);
 
         // Nest provider breakdown under each project
@@ -500,6 +536,35 @@ router.get("/stats/costs", async (req, res, next) => {
             const proj = row._id.project || "unknown";
             if (!providersByProject[proj]) providersByProject[proj] = [];
             providersByProject[proj].push({
+                provider: row._id.provider || "unknown",
+                totalCost: row.totalCost,
+                totalInputTokens: row.totalInputTokens,
+                totalOutputTokens: row.totalOutputTokens,
+                totalRequests: row.totalRequests,
+            });
+        }
+
+        // Nest endpoint breakdown under each project
+        const endpointsByProject = {};
+        for (const row of byProjectEndpoint) {
+            const proj = row._id.project || "unknown";
+            if (!endpointsByProject[proj]) endpointsByProject[proj] = [];
+            endpointsByProject[proj].push({
+                endpoint: row._id.endpoint || "unknown",
+                totalCost: row.totalCost,
+                totalInputTokens: row.totalInputTokens,
+                totalOutputTokens: row.totalOutputTokens,
+                totalRequests: row.totalRequests,
+            });
+        }
+
+        // Nest model breakdown under each project
+        const modelsByProject = {};
+        for (const row of byProjectModel) {
+            const proj = row._id.project || "unknown";
+            if (!modelsByProject[proj]) modelsByProject[proj] = [];
+            modelsByProject[proj].push({
+                model: row._id.model || "unknown",
                 provider: row._id.provider || "unknown",
                 totalCost: row.totalCost,
                 totalInputTokens: row.totalInputTokens,
@@ -529,6 +594,8 @@ router.get("/stats/costs", async (req, res, next) => {
                 totalOutputTokens: r.totalOutputTokens,
                 totalRequests: r.totalRequests,
                 byProvider: providersByProject[r._id || "unknown"] || [],
+                byEndpoint: endpointsByProject[r._id || "unknown"] || [],
+                byModel: modelsByProject[r._id || "unknown"] || [],
             })),
             byProvider: byProvider.map((r) => ({
                 provider: r._id || "unknown",
