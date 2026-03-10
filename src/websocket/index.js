@@ -357,7 +357,7 @@ function handleTextToTextStream(ws, project, username) {
                 // Fire-and-forget DB log
                 RequestLogger.log({
                     requestId,
-                    endpoint: "text-to-text/stream",
+                    endpoint: "text-to-text",
                     project,
                     username,
                     provider: providerName,
@@ -450,7 +450,7 @@ function handleTextToTextStream(ws, project, username) {
             const totalSec = (performance.now() - requestStart) / 1000;
             RequestLogger.log({
                 requestId,
-                endpoint: "text-to-text/stream",
+                endpoint: "text-to-text",
                 project,
                 username,
                 provider: providerName,
