@@ -176,7 +176,7 @@ const ollamaProvider = {
                     presence_penalty:
                         options.presencePenalty !== undefined ? options.presencePenalty : undefined,
                     stop: options.stopSequences !== undefined ? options.stopSequences : undefined,
-                    max_tokens: options.maxTokens || -1,
+                    ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
                     stream: false,
                 }),
             });
@@ -228,7 +228,7 @@ const ollamaProvider = {
                     presence_penalty:
                         options.presencePenalty !== undefined ? options.presencePenalty : undefined,
                     stop: options.stopSequences !== undefined ? options.stopSequences : undefined,
-                    max_tokens: options.maxTokens || -1,
+                    ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
                     stream: true,
                     stream_options: { include_usage: true },
                 }),
@@ -330,7 +330,6 @@ const ollamaProvider = {
                     messages,
                     model,
                     temperature: 0.7,
-                    max_tokens: -1,
                     stream: false,
                 }),
             });
