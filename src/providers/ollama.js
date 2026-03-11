@@ -213,6 +213,29 @@ const ollamaProvider = {
         const baseUrl = getBaseUrl();
         logger.provider("Ollama", `generateTextStream model=${model} baseUrl=${baseUrl}`);
         try {
+            // Single-model enforcement: unload any other loaded models
+            try {
+                const psRes = await fetch(`${baseUrl}/api/ps`);
+                if (psRes.ok) {
+                    const psData = await psRes.json();
+                    const running = psData.models || [];
+                    for (const m of running) {
+                        const runningName = m.model || m.name;
+                        if (runningName && runningName !== model) {
+                            yield { type: "status", message: `Unloading ${runningName}…` };
+                            logger.info(`Ollama: unloading ${runningName} before loading ${model}`);
+                            await fetch(`${baseUrl}/api/generate`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ model: runningName, keep_alive: 0 }),
+                            });
+                        }
+                    }
+                }
+            } catch (unloadErr) {
+                logger.warn(`Ollama: could not check/unload models: ${unloadErr.message}`);
+            }
+
             const prepared = prepareOllamaMessages(messages);
 
             const response = await fetch(`${baseUrl}/v1/chat/completions`, {
