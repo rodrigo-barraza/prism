@@ -29,11 +29,15 @@ router.post("/", async (req, res, next) => {
             provider: pName,
             model,
             image,
+            images: rawImages,
             prompt,
             conversationId,
             userMessage,
         } = req.body;
         providerName = pName;
+
+        // Normalize: accept both singular `image` and array `images`
+        const images = rawImages || (image ? [image] : []);
 
         if (!providerName) {
             throw new ProviderError(
@@ -42,10 +46,10 @@ router.post("/", async (req, res, next) => {
                 400,
             );
         }
-        if (!image) {
+        if (images.length === 0) {
             throw new ProviderError(
                 "server",
-                "Missing required field: image (URL or base64)",
+                "Missing required field: image or images",
                 400,
             );
         }
@@ -63,7 +67,7 @@ router.post("/", async (req, res, next) => {
             model || getDefaultModels(TYPES.IMAGE, TYPES.TEXT)[providerName] || null;
 
         const result = await provider.captionImage(
-            image,
+            images,
             prompt,
             resolvedModel || model,
         );

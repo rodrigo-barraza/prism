@@ -193,25 +193,27 @@ const ollamaProvider = {
     // ── Image Captioning ──────────────────────
 
     async captionImage(
-        imageUrlOrBase64,
+        images,
         prompt = "Describe this image.",
         model = getDefaultModels(TYPES.IMAGE, TYPES.TEXT)["ollama"],
     ) {
         const baseUrl = getBaseUrl();
         logger.provider("Ollama", `captionImage model=${model} baseUrl=${baseUrl}`);
         try {
-            // Extract raw base64 from data URL
-            let imageBase64 = imageUrlOrBase64;
-            if (imageBase64.startsWith("data:")) {
-                imageBase64 = imageBase64.split(",")[1];
-            }
+            // Extract raw base64 from data URLs
+            const imageBase64List = images.map((img) => {
+                if (img.startsWith("data:")) {
+                    return img.split(",")[1];
+                }
+                return img;
+            });
 
             const response = await fetch(`${baseUrl}/api/chat`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     model,
-                    messages: [{ role: "user", content: prompt, images: [imageBase64] }],
+                    messages: [{ role: "user", content: prompt, images: imageBase64List }],
                     stream: false,
                 }),
             });
