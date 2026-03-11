@@ -179,10 +179,19 @@ const ollamaProvider = {
 
                         // Final chunk has done: true with usage stats
                         if (json.done) {
+                            const evalDurationSec = json.eval_duration
+                                ? json.eval_duration / 1_000_000_000
+                                : null;
                             usage = {
                                 inputTokens: json.prompt_eval_count ?? 0,
                                 outputTokens: json.eval_count ?? 0,
                             };
+                            // Ollama reports precise eval_duration — use it for tok/s
+                            if (evalDurationSec && evalDurationSec > 0 && usage.outputTokens > 0) {
+                                usage.tokensPerSec = parseFloat(
+                                    (usage.outputTokens / evalDurationSec).toFixed(1),
+                                );
+                            }
                         }
                     } catch {
                         // skip malformed JSON lines

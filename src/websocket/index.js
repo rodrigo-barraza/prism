@@ -338,8 +338,9 @@ function handleTextToTextStream(ws, project, username) {
                     const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[resolvedModel];
                     estimatedCost = calculateTextCost(usage, pricing);
                 }
-                const tokensPerSec =
-                    generationSec && generationSec > 0
+                const tokensPerSec = usage.tokensPerSec
+                    ? usage.tokensPerSec.toFixed(1)
+                    : generationSec && generationSec > 0
                         ? (usage.outputTokens / generationSec).toFixed(1)
                         : "N/A";
                 logger.info(
