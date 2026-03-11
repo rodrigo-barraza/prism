@@ -398,6 +398,7 @@ router.get("/stats/costs", async (req, res, next) => {
                                 totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
                                 totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
                                 totalRequests: { $sum: 1 },
+                                avgTokensPerSec: { $avg: { $ifNull: ["$tokensPerSec", null] } },
                             },
                         },
                     ])
@@ -415,6 +416,7 @@ router.get("/stats/costs", async (req, res, next) => {
                                 totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
                                 totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
                                 totalRequests: { $sum: 1 },
+                                avgTokensPerSec: { $avg: { $ifNull: ["$tokensPerSec", null] } },
                             },
                         },
                         { $sort: { totalCost: -1 } },
@@ -433,6 +435,7 @@ router.get("/stats/costs", async (req, res, next) => {
                                 totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
                                 totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
                                 totalRequests: { $sum: 1 },
+                                avgTokensPerSec: { $avg: { $ifNull: ["$tokensPerSec", null] } },
                             },
                         },
                         { $sort: { totalCost: -1 } },
@@ -451,6 +454,7 @@ router.get("/stats/costs", async (req, res, next) => {
                                 totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
                                 totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
                                 totalRequests: { $sum: 1 },
+                                avgTokensPerSec: { $avg: { $ifNull: ["$tokensPerSec", null] } },
                             },
                         },
                         { $sort: { totalCost: -1 } },
@@ -469,6 +473,7 @@ router.get("/stats/costs", async (req, res, next) => {
                                 totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
                                 totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
                                 totalRequests: { $sum: 1 },
+                                avgTokensPerSec: { $avg: { $ifNull: ["$tokensPerSec", null] } },
                             },
                         },
                         { $sort: { totalCost: -1 } },
@@ -487,6 +492,7 @@ router.get("/stats/costs", async (req, res, next) => {
                                 totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
                                 totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
                                 totalRequests: { $sum: 1 },
+                                avgTokensPerSec: { $avg: { $ifNull: ["$tokensPerSec", null] } },
                             },
                         },
                         { $sort: { totalCost: -1 } },
@@ -505,6 +511,7 @@ router.get("/stats/costs", async (req, res, next) => {
                                 totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
                                 totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
                                 totalRequests: { $sum: 1 },
+                                avgTokensPerSec: { $avg: { $ifNull: ["$tokensPerSec", null] } },
                             },
                         },
                         { $sort: { totalCost: -1 } },
@@ -523,6 +530,7 @@ router.get("/stats/costs", async (req, res, next) => {
                                 totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
                                 totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
                                 totalRequests: { $sum: 1 },
+                                avgTokensPerSec: { $avg: { $ifNull: ["$tokensPerSec", null] } },
                             },
                         },
                         { $sort: { totalCost: -1 } },
@@ -541,6 +549,7 @@ router.get("/stats/costs", async (req, res, next) => {
                 totalInputTokens: row.totalInputTokens,
                 totalOutputTokens: row.totalOutputTokens,
                 totalRequests: row.totalRequests,
+                avgTokensPerSec: row.avgTokensPerSec,
             });
         }
 
@@ -555,6 +564,7 @@ router.get("/stats/costs", async (req, res, next) => {
                 totalInputTokens: row.totalInputTokens,
                 totalOutputTokens: row.totalOutputTokens,
                 totalRequests: row.totalRequests,
+                avgTokensPerSec: row.avgTokensPerSec,
             });
         }
 
@@ -570,6 +580,7 @@ router.get("/stats/costs", async (req, res, next) => {
                 totalInputTokens: row.totalInputTokens,
                 totalOutputTokens: row.totalOutputTokens,
                 totalRequests: row.totalRequests,
+                avgTokensPerSec: row.avgTokensPerSec,
             });
         }
 
@@ -586,6 +597,7 @@ router.get("/stats/costs", async (req, res, next) => {
                 totalInputTokens: t.totalInputTokens,
                 totalOutputTokens: t.totalOutputTokens,
                 totalRequests: t.totalRequests,
+                avgTokensPerSec: t.avgTokensPerSec,
             },
             byProject: byProject.map((r) => ({
                 project: r._id || "unknown",
@@ -593,6 +605,7 @@ router.get("/stats/costs", async (req, res, next) => {
                 totalInputTokens: r.totalInputTokens,
                 totalOutputTokens: r.totalOutputTokens,
                 totalRequests: r.totalRequests,
+                avgTokensPerSec: r.avgTokensPerSec,
                 byProvider: providersByProject[r._id || "unknown"] || [],
                 byEndpoint: endpointsByProject[r._id || "unknown"] || [],
                 byModel: modelsByProject[r._id || "unknown"] || [],
@@ -611,6 +624,7 @@ router.get("/stats/costs", async (req, res, next) => {
                 totalInputTokens: r.totalInputTokens,
                 totalOutputTokens: r.totalOutputTokens,
                 totalRequests: r.totalRequests,
+                avgTokensPerSec: r.avgTokensPerSec,
             })),
             byEndpoint: byEndpoint.map((r) => ({
                 endpoint: r._id || "unknown",
@@ -618,6 +632,7 @@ router.get("/stats/costs", async (req, res, next) => {
                 totalInputTokens: r.totalInputTokens,
                 totalOutputTokens: r.totalOutputTokens,
                 totalRequests: r.totalRequests,
+                avgTokensPerSec: r.avgTokensPerSec,
             })),
         });
     } catch (error) {
