@@ -47,16 +47,7 @@ const ollamaProvider = {
                 messages: prepared,
                 stream: false,
                 ...(options.thinkingEnabled ? { think: true } : {}),
-                options: {},
             };
-            if (options.temperature !== undefined) body.options.temperature = options.temperature;
-            if (options.topP !== undefined) body.options.top_p = options.topP;
-            if (options.frequencyPenalty !== undefined)
-                body.options.frequency_penalty = options.frequencyPenalty;
-            if (options.presencePenalty !== undefined)
-                body.options.presence_penalty = options.presencePenalty;
-            if (options.stopSequences !== undefined) body.options.stop = options.stopSequences;
-            if (options.maxTokens) body.options.num_predict = options.maxTokens;
 
             const response = await fetch(`${baseUrl}/api/chat`, {
                 method: "POST",
@@ -124,16 +115,7 @@ const ollamaProvider = {
                 messages: prepared,
                 stream: true,
                 ...(options.thinkingEnabled ? { think: true } : {}),
-                options: {},
             };
-            if (options.temperature !== undefined) body.options.temperature = options.temperature;
-            if (options.topP !== undefined) body.options.top_p = options.topP;
-            if (options.frequencyPenalty !== undefined)
-                body.options.frequency_penalty = options.frequencyPenalty;
-            if (options.presencePenalty !== undefined)
-                body.options.presence_penalty = options.presencePenalty;
-            if (options.stopSequences !== undefined) body.options.stop = options.stopSequences;
-            if (options.maxTokens) body.options.num_predict = options.maxTokens;
 
             const response = await fetch(`${baseUrl}/api/chat`, {
                 method: "POST",
