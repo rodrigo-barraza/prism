@@ -10,6 +10,7 @@ const PROVIDERS = {
     ELEVENLABS: "elevenlabs",
     INWORLD: "inworld",
     LM_STUDIO: "lm-studio",
+    OLLAMA: "ollama",
 };
 
 const PROVIDER_LIST = Object.values(PROVIDERS);

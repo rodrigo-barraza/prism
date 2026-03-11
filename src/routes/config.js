@@ -18,6 +18,7 @@ import {
     ELEVENLABS_API_KEY,
     INWORLD_BASIC,
     LM_STUDIO_BASE_URL,
+    OLLAMA_BASE_URL,
 } from "../../secrets.js";
 
 const router = express.Router();
@@ -30,6 +31,7 @@ const PROVIDER_SECRETS = {
     [PROVIDERS.ELEVENLABS]: ELEVENLABS_API_KEY,
     [PROVIDERS.INWORLD]: INWORLD_BASIC,
     [PROVIDERS.LM_STUDIO]: LM_STUDIO_BASE_URL,
+    [PROVIDERS.OLLAMA]: OLLAMA_BASE_URL,
 };
 
 const AVAILABLE_PROVIDERS = new Set(
@@ -199,6 +201,47 @@ async function getLmStudioModelOptions() {
 }
 
 /**
+ * Fetch Ollama models and convert them to the config model format.
+ * Returns an array of model option objects for the 'ollama' provider.
+ */
+async function getOllamaModelOptions() {
+    try {
+        const provider = getProvider("ollama");
+        const { models } = await provider.listModels();
+        if (!models || !Array.isArray(models)) return [];
+
+        return models.map((m) => {
+            // Ollama returns { name, model, size, details: { family, parameter_size, ... } }
+            const name = m.model || m.name;
+            const label = m.name || name;
+            const details = m.details || {};
+
+            const entry = {
+                name,
+                label,
+                inputTypes: [TYPES.TEXT],
+                outputTypes: [TYPES.TEXT],
+                streaming: true,
+                defaultTemperature: 0.7,
+                pricing: { inputPerMillion: 0, outputPerMillion: 0 },
+            };
+            if (details.parameter_size) {
+                entry.params = details.parameter_size;
+            }
+            if (details.family) {
+                entry.architecture = details.family;
+            }
+            if (m.size) {
+                entry.size = formatBytes(m.size);
+            }
+            return entry;
+        });
+    } catch (err) {
+        logger.warn(`Could not fetch Ollama models for config: ${err.message}`);
+        return [];
+    }
+}
+/**
  * GET /config
  * Returns the full catalog of providers, models, voices, and capabilities.
  */
@@ -220,6 +263,25 @@ router.get("/", async (_req, res) => {
                     }
                 }
                 textToTextModels["lm-studio"] = staticLmModels;
+            }
+        } catch {
+            // Ignore — use static models only
+        }
+    }
+
+    // Merge dynamic Ollama models into ollama provider (only if configured)
+    if (AVAILABLE_PROVIDERS.has(PROVIDERS.OLLAMA)) {
+        try {
+            const ollamaModels = await getOllamaModelOptions();
+            if (ollamaModels.length > 0) {
+                const staticOllamaModels = textToTextModels["ollama"] || [];
+                const staticKeys = new Set(staticOllamaModels.map((m) => m.name));
+                for (const m of ollamaModels) {
+                    if (!staticKeys.has(m.name)) {
+                        staticOllamaModels.push(m);
+                    }
+                }
+                textToTextModels["ollama"] = staticOllamaModels;
             }
         } catch {
             // Ignore — use static models only
