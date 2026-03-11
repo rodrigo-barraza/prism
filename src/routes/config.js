@@ -215,6 +215,13 @@ async function getOllamaModelOptions() {
             const name = m.model || m.name;
             const label = m.name || name;
             const details = m.details || {};
+            const nameLower = name.toLowerCase();
+
+            // Detect thinking-capable models by name/family
+            const THINKING_PATTERNS = ["qwen3", "deepseek-r1", "deepseek-v3", "gpt-oss"];
+            const supportsThinking = THINKING_PATTERNS.some(
+                (p) => nameLower.includes(p),
+            );
 
             const entry = {
                 name,
@@ -225,6 +232,10 @@ async function getOllamaModelOptions() {
                 defaultTemperature: 0.7,
                 pricing: { inputPerMillion: 0, outputPerMillion: 0 },
             };
+            if (supportsThinking) {
+                entry.thinking = true;
+                entry.tools = ["Thinking"];
+            }
             if (details.parameter_size) {
                 entry.params = details.parameter_size;
             }

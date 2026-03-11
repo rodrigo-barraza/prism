@@ -46,7 +46,7 @@ const ollamaProvider = {
                 model,
                 messages: prepared,
                 stream: false,
-                think: true,
+                ...(options.thinkingEnabled ? { think: true } : {}),
                 options: {},
             };
             if (options.temperature !== undefined) body.options.temperature = options.temperature;
@@ -123,7 +123,7 @@ const ollamaProvider = {
                 model,
                 messages: prepared,
                 stream: true,
-                think: true,
+                ...(options.thinkingEnabled ? { think: true } : {}),
                 options: {},
             };
             if (options.temperature !== undefined) body.options.temperature = options.temperature;
