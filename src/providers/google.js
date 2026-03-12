@@ -478,6 +478,65 @@ const googleProvider = {
             throw new ProviderError("google", error.message, 500, error);
         }
     },
+
+    async generateEmbedding(content, model, options = {}) {
+        model = model || getDefaultModels(TYPES.TEXT, TYPES.EMBEDDING)?.google || "gemini-embedding-2-preview";
+        logger.provider("Google", `generateEmbedding model=${model}`);
+        try {
+            const params = { model };
+            const config = {};
+
+            // Build the contents for the embedding request
+            if (typeof content === "string") {
+                // Simple text-only input — SDK accepts a plain string
+                params.contents = content;
+            } else if (Array.isArray(content)) {
+                // Multimodal: wrap all parts in a single Content object.
+                // The SDK maps each top-level array item to a separate batch request,
+                // so we must bundle parts into one Content to get a single embedding.
+                params.contents = { role: "user", parts: content };
+            } else {
+                params.contents = content;
+            }
+
+            if (options.taskType) {
+                config.taskType = options.taskType;
+            }
+            if (options.dimensions) {
+                config.outputDimensionality = options.dimensions;
+            }
+
+            if (Object.keys(config).length > 0) {
+                params.config = config;
+            }
+
+            logger.info(`[embedContent] params keys: ${Object.keys(params).join(", ")}, contents type: ${typeof params.contents}, isArray: ${Array.isArray(params.contents)}`);
+            if (Array.isArray(params.contents)) {
+                logger.info(`[embedContent] parts count: ${params.contents.length}, part keys: ${params.contents.map((p) => Object.keys(p).join("+")).join(", ")}`);
+            }
+
+            const response = await getClient().models.embedContent(params);
+
+            // embedContent returns { embeddings: [{ values: [...] }] } for batch/multimodal,
+            // or { embedding: { values: [...] } } for single text
+            let values;
+            if (response.embedding?.values) {
+                values = response.embedding.values;
+            } else if (response.embeddings?.[0]?.values) {
+                values = response.embeddings[0].values;
+            } else {
+                throw new Error("No embedding data in response");
+            }
+
+            return {
+                embedding: values,
+                dimensions: values.length,
+            };
+        } catch (error) {
+            logger.error(`[embedContent] Error: ${error.message}`);
+            throw new ProviderError("google", error.message, error.status || 500, error);
+        }
+    },
 };
 
 export default googleProvider;

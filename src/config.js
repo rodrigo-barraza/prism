@@ -711,6 +711,33 @@ const MODELS = {
         inputTypes: [TYPES.TEXT],
         outputTypes: [TYPES.EMBEDDING],
     },
+    GEMINI_EMBEDDING_2: {
+        name: "gemini-embedding-2-preview",
+        label: "Gemini Embedding 2",
+        provider: PROVIDERS.GOOGLE,
+        default: true,
+        pricing: { inputPerMillion: 0.2 },
+        maxInputTokens: 8_192,
+        dimensions: 3072,
+        inputTypes: [
+            TYPES.TEXT,
+            TYPES.IMAGE,
+            TYPES.AUDIO,
+            TYPES.VIDEO,
+            TYPES.PDF,
+        ],
+        outputTypes: [TYPES.EMBEDDING],
+    },
+    GEMINI_EMBEDDING_001: {
+        name: "gemini-embedding-001",
+        label: "Gemini Embedding",
+        provider: PROVIDERS.GOOGLE,
+        pricing: { inputPerMillion: 0.2 },
+        maxInputTokens: 2_048,
+        dimensions: 3072,
+        inputTypes: [TYPES.TEXT],
+        outputTypes: [TYPES.EMBEDDING],
+    },
 
     // ----- Speech-to-Text (Audio → Text) -----
     GPT_4O_TRANSCRIBE: {
