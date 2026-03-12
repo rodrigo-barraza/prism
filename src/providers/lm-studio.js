@@ -411,6 +411,7 @@ const lmStudioProvider = {
         images,
         prompt = "Describe this image.",
         model = getDefaultModels(TYPES.IMAGE, TYPES.TEXT)["lm-studio"],
+        systemPrompt,
     ) {
         const baseUrl = getBaseUrl();
         logger.provider(
@@ -422,12 +423,11 @@ const lmStudioProvider = {
                 { type: "text", text: prompt },
                 ...images.map((img) => ({ type: "image_url", image_url: { url: img } })),
             ];
-            const messages = [
-                {
-                    role: "user",
-                    content,
-                },
-            ];
+            const messages = [];
+            if (systemPrompt) {
+                messages.push({ role: "system", content: systemPrompt });
+            }
+            messages.push({ role: "user", content });
 
             const response = await fetch(`${baseUrl}/v1/chat/completions`, {
                 method: "POST",

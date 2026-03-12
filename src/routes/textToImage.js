@@ -31,6 +31,7 @@ router.post("/", async (req, res, next) => {
             model,
             prompt,
             images,
+            systemPrompt,
             conversationId,
             userMessage,
         } = req.body;
@@ -57,7 +58,7 @@ router.post("/", async (req, res, next) => {
             );
         }
 
-        const result = await provider.generateImage(prompt, images || [], model);
+        const result = await provider.generateImage(prompt, images || [], model, systemPrompt);
         const totalSec = (performance.now() - requestStart) / 1000;
 
         // Calculate estimated cost

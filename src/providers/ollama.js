@@ -196,6 +196,7 @@ const ollamaProvider = {
         images,
         prompt = "Describe this image.",
         model = getDefaultModels(TYPES.IMAGE, TYPES.TEXT)["ollama"],
+        systemPrompt,
     ) {
         const baseUrl = getBaseUrl();
         logger.provider("Ollama", `captionImage model=${model} baseUrl=${baseUrl}`);
@@ -208,12 +209,18 @@ const ollamaProvider = {
                 return img;
             });
 
+            const messages = [];
+            if (systemPrompt) {
+                messages.push({ role: "system", content: systemPrompt });
+            }
+            messages.push({ role: "user", content: prompt, images: imageBase64List });
+
             const response = await fetch(`${baseUrl}/api/chat`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     model,
-                    messages: [{ role: "user", content: prompt, images: imageBase64List }],
+                    messages,
                     stream: false,
                 }),
             });

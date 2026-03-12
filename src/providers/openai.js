@@ -555,6 +555,7 @@ const openaiProvider = {
         images,
         prompt = "What's in this image?",
         model = getDefaultModels(TYPES.TEXT, TYPES.TEXT).openai,
+        systemPrompt,
     ) {
         logger.provider("OpenAI", `captionImage model=${model}`);
         try {
@@ -562,12 +563,11 @@ const openaiProvider = {
                 { type: "text", text: prompt },
                 ...images.map((img) => ({ type: "image_url", image_url: { url: img } })),
             ];
-            const messages = [
-                {
-                    role: "user",
-                    content,
-                },
-            ];
+            const messages = [];
+            if (systemPrompt) {
+                messages.push({ role: "system", content: systemPrompt });
+            }
+            messages.push({ role: "user", content });
             const response = await getClient().chat.completions.create({
                 model,
                 messages,

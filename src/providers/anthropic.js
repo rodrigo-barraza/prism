@@ -291,6 +291,7 @@ const anthropicProvider = {
         images,
         prompt = "Describe this image.",
         model = getDefaultModels(TYPES.TEXT, TYPES.TEXT).anthropic,
+        systemPrompt,
     ) {
         logger.provider("Anthropic", `captionImage model=${model}`);
         try {
@@ -329,11 +330,16 @@ const anthropicProvider = {
 
             contentBlocks.push({ type: "text", text: prompt });
 
-            const response = await getClient().messages.create({
+            const payload = {
                 model,
                 messages: [{ role: "user", content: contentBlocks }],
                 max_tokens: 1000,
-            });
+            };
+            if (systemPrompt) {
+                payload.system = systemPrompt;
+            }
+
+            const response = await getClient().messages.create(payload);
 
             const { text } = extractResponseContent(response.content);
             return {

@@ -31,6 +31,7 @@ router.post("/", async (req, res, next) => {
             image,
             images: rawImages,
             prompt,
+            systemPrompt,
             conversationId,
             userMessage,
         } = req.body;
@@ -70,6 +71,7 @@ router.post("/", async (req, res, next) => {
             images,
             prompt,
             resolvedModel || model,
+            systemPrompt,
         );
         const totalSec = (performance.now() - requestStart) / 1000;
 

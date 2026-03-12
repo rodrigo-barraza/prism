@@ -259,6 +259,7 @@ const googleProvider = {
         images,
         prompt = "Describe this image.",
         model = getDefaultModels(TYPES.IMAGE, TYPES.TEXT).google,
+        systemPrompt,
     ) {
         logger.provider("Google", `captionImage model=${model}`);
         try {
@@ -297,9 +298,15 @@ const googleProvider = {
                 },
             ];
 
+            const config = {};
+            if (systemPrompt) {
+                config.systemInstruction = systemPrompt;
+            }
+
             const response = await getClient().models.generateContent({
                 model,
                 contents,
+                config: Object.keys(config).length > 0 ? config : undefined,
             });
             const usage = {
                 inputTokens: response.usageMetadata?.promptTokenCount || 0,
@@ -315,6 +322,7 @@ const googleProvider = {
         prompt,
         images = [],
         model = MODELS.GEMINI_3_PRO_IMAGE.name,
+        systemPrompt,
     ) {
         logger.provider("Google", `generateImage model=${model}`);
         try {
@@ -322,6 +330,10 @@ const googleProvider = {
                 responseModalities: ["IMAGE"],
                 imageConfig: { imageSize: "1K" },
             };
+
+            if (systemPrompt) {
+                config.systemInstruction = systemPrompt;
+            }
 
             const parts = [{ text: prompt }];
             if (images.length) {

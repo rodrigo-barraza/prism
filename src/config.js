@@ -632,6 +632,7 @@ const MODELS = {
         inputTypes: [TYPES.TEXT, TYPES.IMAGE],
         outputTypes: [TYPES.TEXT, TYPES.IMAGE],
         imageAPI: true,
+        supportsSystemPrompt: false,
         tools: ["Image Generation"],
     },
     GEMINI_3_PRO_IMAGE: {
@@ -808,6 +809,10 @@ function getModelOptions(inputType, outputType) {
             if (m.reasoningSummary) entry.reasoningSummary = true;
             if (m.responsesAPI) entry.responsesAPI = true;
             if (m.size) entry.size = m.size;
+            // System prompt support: true for chat models, false for image-only/TTS/embedding APIs
+            entry.supportsSystemPrompt = m.supportsSystemPrompt !== undefined
+                ? m.supportsSystemPrompt
+                : m.outputTypes.includes(TYPES.TEXT);
             (opts[m.provider] ??= []).push(entry);
         }
     }
