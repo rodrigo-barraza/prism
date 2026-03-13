@@ -25,7 +25,6 @@ import textToTextRouter from "./routes/textToText.js";
 import textToImageRouter from "./routes/textToImage.js";
 import imageToTextRouter from "./routes/imageToText.js";
 import textToSpeechRouter from "./routes/textToSpeech.js";
-import textToEmbeddingRouter from "./routes/textToEmbedding.js";
 import modalityToEmbeddingRouter from "./routes/modalityToEmbedding.js";
 import audioToTextRouter from "./routes/audioToText.js";
 import configRouter from "./routes/config.js";
@@ -48,13 +47,12 @@ const ENDPOINTS = {
         "/text-to-image",
         "/image-to-text",
         "/text-to-speech",
-        "/text-to-embedding",
         "/modality-to-embedding",
         "/audio-to-text",
         "/conversations",
         "/files",
     ],
-    websocket: ["/text-to-text/stream", "/text-to-speech/stream"],
+    websocket: ["/text-to-text/stream"],
     admin: ["/admin", "/admin/lm-studio"],
 };
 
@@ -80,7 +78,6 @@ app.use("/text-to-text", textToTextRouter);
 app.use("/text-to-image", textToImageRouter);
 app.use("/image-to-text", imageToTextRouter);
 app.use("/text-to-speech", textToSpeechRouter);
-app.use("/text-to-embedding", textToEmbeddingRouter);
 app.use("/modality-to-embedding", modalityToEmbeddingRouter);
 app.use("/audio-to-text", audioToTextRouter);
 app.use("/conversations", conversationsRouter);

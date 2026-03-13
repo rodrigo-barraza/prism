@@ -136,8 +136,6 @@ const { default: imageToTextRouter } =
     await import('../src/routes/imageToText.js');
 const { default: textToSpeechRouter } =
     await import('../src/routes/textToSpeech.js');
-const { default: textToEmbeddingRouter } =
-    await import('../src/routes/textToEmbedding.js');
 const { default: modalityToEmbeddingRouter } =
     await import('../src/routes/modalityToEmbedding.js');
 const { default: configRouter } = await import('../src/routes/config.js');
@@ -158,10 +156,9 @@ app.get('/', (_req, res) => {
                 '/text-to-image',
                 '/image-to-text',
                 '/text-to-speech',
-                '/text-to-embedding',
                 '/modality-to-embedding',
             ],
-            websocket: ['/text-to-text/stream', '/text-to-speech/stream'],
+            websocket: ['/text-to-text/stream'],
         },
     });
 });
@@ -172,7 +169,6 @@ app.use('/text-to-text', textToTextRouter);
 app.use('/text-to-image', textToImageRouter);
 app.use('/image-to-text', imageToTextRouter);
 app.use('/text-to-speech', textToSpeechRouter);
-app.use('/text-to-embedding', textToEmbeddingRouter);
 app.use('/modality-to-embedding', modalityToEmbeddingRouter);
 app.use(errorHandler);
 

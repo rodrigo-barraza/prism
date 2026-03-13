@@ -488,7 +488,7 @@ const googleProvider = {
 
             // Build the contents for the embedding request
             if (typeof content === "string") {
-                // Simple text-only input — SDK accepts a plain string
+                // Simple text-only input
                 params.contents = content;
             } else if (Array.isArray(content)) {
                 // Multimodal: wrap all parts in a single Content object.
@@ -510,11 +510,6 @@ const googleProvider = {
                 params.config = config;
             }
 
-            logger.info(`[embedContent] params keys: ${Object.keys(params).join(", ")}, contents type: ${typeof params.contents}, isArray: ${Array.isArray(params.contents)}`);
-            if (Array.isArray(params.contents)) {
-                logger.info(`[embedContent] parts count: ${params.contents.length}, part keys: ${params.contents.map((p) => Object.keys(p).join("+")).join(", ")}`);
-            }
-
             const response = await getClient().models.embedContent(params);
 
             // embedContent returns { embeddings: [{ values: [...] }] } for batch/multimodal,
@@ -533,7 +528,6 @@ const googleProvider = {
                 dimensions: values.length,
             };
         } catch (error) {
-            logger.error(`[embedContent] Error: ${error.message}`);
             throw new ProviderError("google", error.message, error.status || 500, error);
         }
     },

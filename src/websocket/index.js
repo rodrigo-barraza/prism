@@ -16,7 +16,6 @@ import ConversationService from "../services/ConversationService.js";
  * Set up WebSocket handlers on the HTTP server.
  * Routes:
  *   /text-to-text/stream     — Streaming text generation
- *   /text-to-speech/stream   — Streaming TTS (ElevenLabs only)
  */
 export function setupWebSocket(wss) {
     wss.on("connection", (ws, req) => {
@@ -50,8 +49,6 @@ export function setupWebSocket(wss) {
 
         if (pathname === "/text-to-text/stream") {
             handleTextToTextStream(ws, project, username);
-        } else if (pathname === "/text-to-speech/stream") {
-            handleTextToSpeechStream(ws);
         } else {
             ws.send(
                 JSON.stringify({
@@ -465,122 +462,5 @@ function handleTextToTextStream(ws, project, username) {
                 ws.send(JSON.stringify({ type: "error", message: error.message }));
             }
         }
-    });
-}
-
-/**
- * Handle streaming text-to-speech.
- * Client sends text chunks as strings. First message must be JSON config:
- *   { provider, voiceId?, options? }
- * Subsequent messages are text strings to be converted to speech.
- * Server sends binary audio frames back.
- * Client sends "__END__" to signal end of text stream.
- */
-function handleTextToSpeechStream(ws) {
-    let configured = false;
-    let providerName = null;
-    let voiceId = null;
-    let options = {};
-    const textQueue = [];
-    let resolveText = null;
-    let textEnded = false;
-
-    async function* textIterator() {
-        while (true) {
-            if (textQueue.length > 0) {
-                const text = textQueue.shift();
-                if (text === null) return; // End signal
-                yield text;
-            } else {
-                if (textEnded) return;
-                await new Promise((r) => (resolveText = r));
-            }
-        }
-    }
-
-    function pushText(text) {
-        textQueue.push(text);
-        if (resolveText) {
-            const resolve = resolveText;
-            resolveText = null;
-            resolve();
-        }
-    }
-
-    ws.on("message", async (rawData) => {
-        const message = rawData.toString();
-
-        if (!configured) {
-            // First message is config
-            try {
-                const config = JSON.parse(message);
-                providerName = config.provider || "elevenlabs";
-                voiceId = config.voiceId || config.voice;
-                options = config.options || {};
-                configured = true;
-
-                const provider = getProvider(providerName);
-                if (!provider.generateSpeechStream) {
-                    ws.send(
-                        JSON.stringify({
-                            type: "error",
-                            message: `Provider "${providerName}" does not support streaming TTS`,
-                        }),
-                    );
-                    ws.close();
-                    return;
-                }
-
-                // Start streaming in background
-                (async () => {
-                    try {
-                        const audioStream = provider.generateSpeechStream(
-                            textIterator(),
-                            voiceId,
-                            options,
-                        );
-                        for await (const audioChunk of audioStream) {
-                            if (ws.readyState === ws.OPEN) {
-                                ws.send(audioChunk); // Binary audio frame
-                            }
-                        }
-                        if (ws.readyState === ws.OPEN) {
-                            ws.send(JSON.stringify({ type: "done" }));
-                        }
-                    } catch (error) {
-                        logger.error(`TTS stream error (${providerName}):`, error.message);
-                        if (ws.readyState === ws.OPEN) {
-                            ws.send(
-                                JSON.stringify({ type: "error", message: error.message }),
-                            );
-                        }
-                    }
-                })();
-
-                ws.send(JSON.stringify({ type: "ready" }));
-            } catch {
-                ws.send(
-                    JSON.stringify({
-                        type: "error",
-                        message:
-                            "First message must be JSON config: { provider, voiceId?, options? }",
-                    }),
-                );
-            }
-            return;
-        }
-
-        // Subsequent messages are text chunks
-        if (message === "__END__") {
-            textEnded = true;
-            pushText(null); // Signal end
-        } else {
-            pushText(message);
-        }
-    });
-
-    ws.on("close", () => {
-        textEnded = true;
-        pushText(null);
     });
 }
