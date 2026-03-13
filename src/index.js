@@ -22,7 +22,7 @@ import MinioWrapper from "./wrappers/MinioWrapper.js";
 
 // Routes
 import chatRouter from "./routes/chat.js";
-import voiceRouter from "./routes/voice.js";
+import audioRouter from "./routes/audio.js";
 import embedRouter from "./routes/embed.js";
 import configRouter from "./routes/config.js";
 import conversationsRouter from "./routes/conversations.js";
@@ -41,12 +41,12 @@ const ENDPOINTS = {
     rest: [
         "/config",
         "/chat",
-        "/voice",
+        "/audio",
         "/embed",
         "/conversations",
         "/files",
     ],
-    websocket: ["/ws/chat", "/ws/voice"],
+    websocket: ["/ws/chat", "/ws/audio"],
     admin: ["/admin", "/admin/lm-studio"],
 };
 
@@ -69,7 +69,7 @@ app.use(authMiddleware);
 // REST routes
 app.use("/config", configRouter);
 app.use("/chat", chatRouter);
-app.use("/voice", voiceRouter);
+app.use("/audio", audioRouter);
 app.use("/embed", embedRouter);
 app.use("/conversations", conversationsRouter);
 app.use("/files", filesRouter);

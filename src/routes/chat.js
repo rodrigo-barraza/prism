@@ -20,6 +20,109 @@ import FileService from "../services/FileService.js";
 const router = express.Router();
 
 // ============================================================
+// Image reference resolution — converts refs for providers & storage
+// ============================================================
+
+/**
+ * Resolve image references in messages for both provider use and storage.
+ *
+ * Returns a deep copy of messages where all images are base64 data URLs
+ * (ready for providers). The ORIGINAL messages array is mutated in-place
+ * so that images are stored as minio:// refs (for conversation storage).
+ *
+ * Handles:
+ *  - data:... base64  → upload to MinIO (original gets minio ref), provider gets data URL
+ *  - minio://...       → download from MinIO (original unchanged), provider gets data URL
+ *  - http(s)://...     → fetch (original unchanged), provider gets data URL
+ */
+async function resolveImageRefs(messages, project, username) {
+  // Deep copy for the provider — images will be data URLs
+  const providerMessages = messages.map((m) => ({ ...m }));
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+    if (!msg.images || msg.images.length === 0) continue;
+
+    const providerImages = [];
+    const storageImages = [];
+
+    await Promise.all(
+      msg.images.map(async (ref, j) => {
+        // Already a base64 data URL — upload to MinIO for storage, keep data URL for provider
+        if (ref.startsWith("data:")) {
+          providerImages[j] = ref;
+          try {
+            const { ref: minioRef } = await FileService.uploadFile(
+              ref, "uploads", project, username,
+            );
+            storageImages[j] = minioRef;
+          } catch (err) {
+            logger.error(`[chat] Failed to upload image to MinIO: ${err.message}`);
+            storageImages[j] = ref; // Fallback: keep inline
+          }
+          return;
+        }
+
+        // MinIO reference — download for provider, keep ref for storage
+        if (FileService.isMinioRef(ref)) {
+          storageImages[j] = ref;
+          try {
+            const key = FileService.extractKey(ref);
+            const file = await FileService.getFile(key);
+            if (!file) {
+              logger.warn(`[chat] Could not resolve MinIO ref: ${ref}`);
+              providerImages[j] = ref;
+              return;
+            }
+            const chunks = [];
+            for await (const chunk of file.stream) {
+              chunks.push(chunk);
+            }
+            const buffer = Buffer.concat(chunks);
+            const base64 = buffer.toString("base64");
+            providerImages[j] = `data:${file.contentType};base64,${base64}`;
+          } catch (err) {
+            logger.error(`[chat] Failed to resolve MinIO ref ${ref}: ${err.message}`);
+            providerImages[j] = ref;
+          }
+          return;
+        }
+
+        // HTTP(S) URL — fetch for provider, keep URL for storage
+        if (ref.startsWith("http://") || ref.startsWith("https://")) {
+          storageImages[j] = ref;
+          try {
+            const response = await fetch(ref);
+            if (!response.ok) {
+              logger.warn(`[chat] Failed to fetch image URL (${response.status}): ${ref}`);
+              providerImages[j] = ref;
+              return;
+            }
+            const contentType = response.headers.get("content-type") || "image/png";
+            const arrayBuffer = await response.arrayBuffer();
+            const base64 = Buffer.from(arrayBuffer).toString("base64");
+            providerImages[j] = `data:${contentType};base64,${base64}`;
+          } catch (err) {
+            logger.error(`[chat] Failed to fetch image URL ${ref}: ${err.message}`);
+            providerImages[j] = ref;
+          }
+          return;
+        }
+
+        // Unknown — pass through
+        providerImages[j] = ref;
+        storageImages[j] = ref;
+      }),
+    );
+
+    providerMessages[i].images = providerImages;
+    messages[i].images = storageImages; // Mutate original for storage
+  }
+
+  return providerMessages;
+}
+
+// ============================================================
 // Shared core logic — used by both REST (SSE) and WebSocket
 // ============================================================
 
@@ -72,6 +175,11 @@ export async function handleChat(params, emit) {
       );
     }
 
+    // ── Resolve image refs ─────────────────────────────────────
+    // providerMessages has data URLs (for API calls)
+    // messages is mutated to have minio refs (for conversation storage)
+    const providerMessages = await resolveImageRefs(messages, project, username);
+
     const provider = getProvider(providerName);
 
     // ── Resolve model and determine dispatch path ───────────────
@@ -89,7 +197,7 @@ export async function handleChat(params, emit) {
         providerName,
         resolvedModel,
         modelDef,
-        messages,
+        messages: providerMessages,
         options,
         conversationId,
         userMessage,
@@ -118,7 +226,7 @@ export async function handleChat(params, emit) {
         providerName,
         resolvedModel,
         modelDef,
-        messages,
+        messages: providerMessages,
         options,
         conversationId,
         userMessage,
@@ -133,7 +241,7 @@ export async function handleChat(params, emit) {
         provider,
         providerName,
         resolvedModel,
-        messages,
+        messages: providerMessages,
         options,
         conversationId,
         userMessage,

@@ -129,7 +129,7 @@ const { authMiddleware } = await import('../src/middleware/AuthMiddleware.js');
 const { listProviders } = await import('../src/providers/index.js');
 
 const { default: chatRouter } = await import('../src/routes/chat.js');
-const { default: voiceRouter } = await import('../src/routes/voice.js');
+const { default: audioRouter } = await import('../src/routes/audio.js');
 const { default: embedRouter } = await import('../src/routes/embed.js');
 const { default: configRouter } = await import('../src/routes/config.js');
 
@@ -146,10 +146,10 @@ app.get('/', (_req, res) => {
             rest: [
                 '/config',
                 '/chat',
-                '/voice',
+                '/audio',
                 '/embed',
             ],
-            websocket: ['/ws/chat', '/ws/voice'],
+            websocket: ['/ws/chat', '/ws/audio'],
         },
     });
 });
@@ -157,7 +157,7 @@ app.get('/', (_req, res) => {
 app.use(authMiddleware);
 app.use('/config', configRouter);
 app.use('/chat', chatRouter);
-app.use('/voice', voiceRouter);
+app.use('/audio', audioRouter);
 app.use('/embed', embedRouter);
 app.use(errorHandler);
 

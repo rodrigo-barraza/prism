@@ -29,6 +29,16 @@ const TYPES = {
 };
 
 // ============================================================
+// MODEL TYPES — Endpoint-based model category
+// ============================================================
+
+const MODEL_TYPES = {
+    CONVERSATION: "conversation",
+    AUDIO: "audio",
+    EMBED: "embed",
+};
+
+// ============================================================
 // UNIFIED MODEL CATALOG
 // ============================================================
 // Every model lives here with all its metadata.
@@ -40,6 +50,7 @@ const MODELS = {
         name: "gpt-5.2",
         label: "GPT 5.2",
         provider: PROVIDERS.OPENAI,
+        modelType: MODEL_TYPES.CONVERSATION,
         defaultTemperature: 1.0,
         arena: {
             text: 1479,
@@ -70,6 +81,7 @@ const MODELS = {
         name: "gpt-5-mini",
         label: "GPT 5 Mini",
         provider: PROVIDERS.OPENAI,
+        modelType: MODEL_TYPES.CONVERSATION,
         defaultTemperature: 1.0,
         pricing: {
             inputPerMillion: 0.125,
@@ -90,6 +102,7 @@ const MODELS = {
         name: "gpt-5-nano",
         label: "GPT 5 Nano",
         provider: PROVIDERS.OPENAI,
+        modelType: MODEL_TYPES.CONVERSATION,
         defaultTemperature: 1.0,
         pricing: {
             inputPerMillion: 0.025,
@@ -111,6 +124,7 @@ const MODELS = {
         name: "gpt-4.1-mini",
         label: "GPT 4.1 Mini",
         provider: PROVIDERS.OPENAI,
+        modelType: MODEL_TYPES.CONVERSATION,
         listed: false,
         pricing: {
             inputPerMillion: 0.4,
@@ -127,6 +141,7 @@ const MODELS = {
         name: "gpt-4.1-nano",
         label: "GPT 4.1 Nano",
         provider: PROVIDERS.OPENAI,
+        modelType: MODEL_TYPES.CONVERSATION,
         listed: false,
         pricing: {
             inputPerMillion: 0.1,
@@ -143,6 +158,7 @@ const MODELS = {
         name: "gpt-4o",
         label: "GPT 4o",
         provider: PROVIDERS.OPENAI,
+        modelType: MODEL_TYPES.CONVERSATION,
         listed: false,
         pricing: {
             inputPerMillion: 2.5,
@@ -159,6 +175,7 @@ const MODELS = {
         name: "gpt-4",
         label: "GPT 4",
         provider: PROVIDERS.OPENAI,
+        modelType: MODEL_TYPES.CONVERSATION,
         listed: false,
         pricing: { inputPerMillion: 30.0, outputPerMillion: 60.0 },
         maxInputTokens: 8_192,
@@ -171,6 +188,7 @@ const MODELS = {
         name: "gpt-5.3-chat-latest",
         label: "GPT 5.3 Chat",
         provider: PROVIDERS.OPENAI,
+        modelType: MODEL_TYPES.CONVERSATION,
         defaultTemperature: 1.0,
         pricing: {
             inputPerMillion: 0.875,
@@ -191,6 +209,7 @@ const MODELS = {
         name: "gpt-5.3-codex",
         label: "GPT 5.3 Codex",
         provider: PROVIDERS.OPENAI,
+        modelType: MODEL_TYPES.CONVERSATION,
         defaultTemperature: 1.0,
         pricing: {
             inputPerMillion: 0.875,
@@ -211,6 +230,7 @@ const MODELS = {
         name: "gpt-5.4",
         label: "GPT 5.4",
         provider: PROVIDERS.OPENAI,
+        modelType: MODEL_TYPES.CONVERSATION,
         default: true,
         defaultTemperature: 1.0,
         arena: { text: 1479 },
@@ -244,6 +264,7 @@ const MODELS = {
         name: "gpt-5.4-pro",
         label: "GPT 5.4 Pro",
         provider: PROVIDERS.OPENAI,
+        modelType: MODEL_TYPES.CONVERSATION,
         defaultTemperature: 1.0,
         pricing: {
             inputPerMillion: 15.0,
@@ -275,6 +296,7 @@ const MODELS = {
         name: "claude-haiku-4-5-20251001",
         label: "Haiku 4.5",
         provider: PROVIDERS.ANTHROPIC,
+        modelType: MODEL_TYPES.CONVERSATION,
         defaultTemperature: 1.0,
         arena: { document: 1426 },
         pricing: { inputPerMillion: 1.0, outputPerMillion: 5.0 },
@@ -293,6 +315,7 @@ const MODELS = {
         name: "claude-sonnet-4-5-20250929",
         label: "Sonnet 4.5",
         provider: PROVIDERS.ANTHROPIC,
+        modelType: MODEL_TYPES.CONVERSATION,
         default: true,
         defaultTemperature: 1.0,
         arena: { document: 1450 },
@@ -319,6 +342,7 @@ const MODELS = {
         name: "claude-sonnet-4-6",
         label: "Sonnet 4.6",
         provider: PROVIDERS.ANTHROPIC,
+        modelType: MODEL_TYPES.CONVERSATION,
         defaultTemperature: 1.0,
         arena: { code: 1523, search: 1203 },
         pricing: { inputPerMillion: 3.0, outputPerMillion: 15.0 },
@@ -344,6 +368,7 @@ const MODELS = {
         name: "claude-opus-4-5-20251101",
         label: "Opus 4.5",
         provider: PROVIDERS.ANTHROPIC,
+        modelType: MODEL_TYPES.CONVERSATION,
         defaultTemperature: 1.0,
         arena: { text: 1470, code: 1475, document: 1474 },
         pricing: { inputPerMillion: 5.0, outputPerMillion: 25.0 },
@@ -369,6 +394,7 @@ const MODELS = {
         name: "claude-opus-4-6",
         label: "Opus 4.6",
         provider: PROVIDERS.ANTHROPIC,
+        modelType: MODEL_TYPES.CONVERSATION,
         defaultTemperature: 1.0,
         arena: { text: 1504, code: 1555, document: 1525, search: 1255 },
         pricing: { inputPerMillion: 5.0, outputPerMillion: 25.0 },
@@ -396,6 +422,7 @@ const MODELS = {
         name: "gemini-3-flash-preview",
         label: "Gemini 3 Flash",
         provider: PROVIDERS.GOOGLE,
+        modelType: MODEL_TYPES.CONVERSATION,
         default: true,
         defaultTemperature: 1.0,
         arena: {
@@ -431,6 +458,7 @@ const MODELS = {
         name: "gemini-3-pro-preview",
         label: "Gemini 3 Pro",
         provider: PROVIDERS.GOOGLE,
+        modelType: MODEL_TYPES.CONVERSATION,
         defaultTemperature: 1.0,
         arena: {
             text: 1485,
@@ -465,6 +493,7 @@ const MODELS = {
         name: "gemini-3.1-pro-preview",
         label: "Gemini 3.1 Pro",
         provider: PROVIDERS.GOOGLE,
+        modelType: MODEL_TYPES.CONVERSATION,
         defaultTemperature: 1.0,
         arena: { text: 1500, code: 1461, vision: 1278, document: 1462 },
         pricing: {
@@ -495,6 +524,7 @@ const MODELS = {
         name: "qwen/qwen3-vl-8b",
         label: "Qwen3 VL 8B",
         provider: PROVIDERS.LM_STUDIO,
+        modelType: MODEL_TYPES.CONVERSATION,
         default: true,
         defaultTemperature: 0.7,
         size: "5.6 GB",
@@ -510,6 +540,7 @@ const MODELS = {
         name: "josiefied-qwen3-8b-abliterated-v1",
         label: "Josiefied Qwen3 8B",
         provider: PROVIDERS.LM_STUDIO,
+        modelType: MODEL_TYPES.CONVERSATION,
         defaultTemperature: 0.7,
         size: "5.5 GB",
         maxInputTokens: 32_768,
@@ -526,6 +557,7 @@ const MODELS = {
         name: "gpt-4o-mini-tts",
         label: "GPT 4o Mini TTS",
         provider: PROVIDERS.OPENAI,
+        modelType: MODEL_TYPES.AUDIO,
         default: true,
         pricing: {
             inputPerMillion: 0.6,
@@ -540,6 +572,7 @@ const MODELS = {
         name: "gemini-2.0-flash-lite-preview-tts",
         label: "Gemini 2.0 Flash Lite TTS",
         provider: PROVIDERS.GOOGLE,
+        modelType: MODEL_TYPES.AUDIO,
         pricing: { inputPerMillion: 0.075, audioOutputPerMillion: 0.3 },
         inputTypes: [TYPES.TEXT],
         outputTypes: [TYPES.AUDIO],
@@ -549,6 +582,7 @@ const MODELS = {
         name: "gemini-2.5-flash-lite-preview-tts",
         label: "Gemini 2.5 Flash Lite TTS",
         provider: PROVIDERS.GOOGLE,
+        modelType: MODEL_TYPES.AUDIO,
         pricing: { inputPerMillion: 0.3, audioOutputPerMillion: 2.5 },
         inputTypes: [TYPES.TEXT],
         outputTypes: [TYPES.AUDIO],
@@ -558,6 +592,7 @@ const MODELS = {
         name: "gemini-2.5-flash-preview-tts",
         label: "Gemini 2.5 Flash TTS",
         provider: PROVIDERS.GOOGLE,
+        modelType: MODEL_TYPES.AUDIO,
         pricing: { inputPerMillion: 0.5, audioOutputPerMillion: 10.0 },
         inputTypes: [TYPES.TEXT],
         outputTypes: [TYPES.AUDIO],
@@ -567,6 +602,7 @@ const MODELS = {
         name: "gemini-2.5-pro-preview-tts",
         label: "Gemini 2.5 Pro TTS",
         provider: PROVIDERS.GOOGLE,
+        modelType: MODEL_TYPES.AUDIO,
         default: true,
         pricing: { inputPerMillion: 1.0, audioOutputPerMillion: 20.0 },
         inputTypes: [TYPES.TEXT],
@@ -577,6 +613,7 @@ const MODELS = {
         name: "espeak-ng",
         label: "eSpeak NG",
         provider: PROVIDERS.GOOGLE,
+        modelType: MODEL_TYPES.AUDIO,
         listed: false,
         inputTypes: [TYPES.TEXT],
         outputTypes: [TYPES.AUDIO],
@@ -586,6 +623,7 @@ const MODELS = {
         name: "eleven_turbo_v2",
         label: "Eleven Turbo v2",
         provider: PROVIDERS.ELEVENLABS,
+        modelType: MODEL_TYPES.AUDIO,
         default: true,
         pricing: { perCharacter: 0.00005 },
         inputTypes: [TYPES.TEXT],
@@ -596,6 +634,7 @@ const MODELS = {
         name: "inworld-tts-1.5-max",
         label: "Inworld TTS 1.5 Max",
         provider: PROVIDERS.INWORLD,
+        modelType: MODEL_TYPES.AUDIO,
         default: true,
         pricing: { perCharacter: 0.00001, perMinute: 0.01 },
         inputTypes: [TYPES.TEXT],
@@ -606,6 +645,7 @@ const MODELS = {
         name: "inworld-tts-1.5-mini",
         label: "Inworld TTS 1.5 Mini",
         provider: PROVIDERS.INWORLD,
+        modelType: MODEL_TYPES.AUDIO,
         pricing: { perCharacter: 0.000005, perMinute: 0.005 },
         inputTypes: [TYPES.TEXT],
         outputTypes: [TYPES.AUDIO],
@@ -617,6 +657,7 @@ const MODELS = {
         name: "gpt-image-1.5",
         label: "GPT Image 1.5",
         provider: PROVIDERS.OPENAI,
+        modelType: MODEL_TYPES.CONVERSATION,
         defaultTemperature: 1.0,
         arena: { image: 1307, imageEdit: 1348 },
         pricing: {
@@ -639,6 +680,7 @@ const MODELS = {
         name: "gemini-3-pro-image-preview",
         label: "Gemini 3 Pro Image",
         provider: PROVIDERS.GOOGLE,
+        modelType: MODEL_TYPES.CONVERSATION,
         default: true,
         defaultTemperature: 1.0,
         arena: { image: 1233, imageEdit: 1391 },
@@ -661,6 +703,7 @@ const MODELS = {
         name: "gemini-3.1-flash-image-preview",
         label: "Gemini 3.1 Flash Image",
         provider: PROVIDERS.GOOGLE,
+        modelType: MODEL_TYPES.CONVERSATION,
         defaultTemperature: 1.0,
         arena: { image: 1268, imageEdit: 1388 },
         pricing: {
@@ -684,6 +727,7 @@ const MODELS = {
         name: "text-embedding-3-small",
         label: "Embedding 3 Small",
         provider: PROVIDERS.OPENAI,
+        modelType: MODEL_TYPES.EMBED,
         default: true,
         pricing: { inputPerMillion: 0.02 },
         maxInputTokens: 8_191,
@@ -695,6 +739,7 @@ const MODELS = {
         name: "text-embedding-3-large",
         label: "Embedding 3 Large",
         provider: PROVIDERS.OPENAI,
+        modelType: MODEL_TYPES.EMBED,
         pricing: { inputPerMillion: 0.13 },
         maxInputTokens: 8_191,
         dimensions: 3072,
@@ -705,6 +750,7 @@ const MODELS = {
         name: "text-embedding-ada-002",
         label: "Ada 002 (Legacy)",
         provider: PROVIDERS.OPENAI,
+        modelType: MODEL_TYPES.EMBED,
         pricing: { inputPerMillion: 0.1 },
         maxInputTokens: 8_191,
         dimensions: 1536,
@@ -715,6 +761,7 @@ const MODELS = {
         name: "gemini-embedding-2-preview",
         label: "Gemini Embedding 2",
         provider: PROVIDERS.GOOGLE,
+        modelType: MODEL_TYPES.EMBED,
         default: true,
         pricing: { inputPerMillion: 0.2 },
         maxInputTokens: 8_192,
@@ -732,6 +779,7 @@ const MODELS = {
         name: "gemini-embedding-001",
         label: "Gemini Embedding",
         provider: PROVIDERS.GOOGLE,
+        modelType: MODEL_TYPES.EMBED,
         pricing: { inputPerMillion: 0.2 },
         maxInputTokens: 2_048,
         dimensions: 3072,
@@ -744,6 +792,7 @@ const MODELS = {
         name: "gpt-4o-transcribe",
         label: "GPT-4o Transcribe",
         provider: PROVIDERS.OPENAI,
+        modelType: MODEL_TYPES.CONVERSATION,
         default: true,
         pricing: {
             audioInputPerMillion: 2.5,
@@ -757,6 +806,7 @@ const MODELS = {
         name: "gpt-4o-mini-transcribe",
         label: "GPT-4o Mini Transcribe",
         provider: PROVIDERS.OPENAI,
+        modelType: MODEL_TYPES.CONVERSATION,
         pricing: {
             audioInputPerMillion: 1.25,
             outputPerMillion: 5.0,
@@ -769,6 +819,7 @@ const MODELS = {
         name: "whisper-1",
         label: "Whisper V2",
         provider: PROVIDERS.OPENAI,
+        modelType: MODEL_TYPES.CONVERSATION,
         pricing: { perMinute: 0.006 },
         inputTypes: [TYPES.AUDIO],
         outputTypes: [TYPES.TEXT],
@@ -777,6 +828,7 @@ const MODELS = {
         name: "gemini-3-flash-preview",
         label: "Gemini 3 Flash",
         provider: PROVIDERS.GOOGLE,
+        modelType: MODEL_TYPES.CONVERSATION,
         default: true,
         pricing: { audioInputPerMillion: 1.0, outputPerMillion: 3.0 },
         inputTypes: [TYPES.AUDIO],
@@ -786,6 +838,7 @@ const MODELS = {
         name: "gemini-3-pro-preview",
         label: "Gemini 3 Pro",
         provider: PROVIDERS.GOOGLE,
+        modelType: MODEL_TYPES.CONVERSATION,
         pricing: { audioInputPerMillion: 4.0, outputPerMillion: 12.0 },
         inputTypes: [TYPES.AUDIO],
         outputTypes: [TYPES.TEXT],
@@ -836,6 +889,7 @@ function getModelOptions(inputType, outputType) {
             if (m.reasoningSummary) entry.reasoningSummary = true;
             if (m.responsesAPI) entry.responsesAPI = true;
             if (m.size) entry.size = m.size;
+            if (m.modelType) entry.modelType = m.modelType;
             // System prompt support: true for chat models, false for image-only/TTS/embedding APIs
             entry.supportsSystemPrompt = m.supportsSystemPrompt !== undefined
                 ? m.supportsSystemPrompt
@@ -1095,6 +1149,7 @@ export {
 
     // Types
     TYPES,
+    MODEL_TYPES,
 
     // Models
     MODELS,

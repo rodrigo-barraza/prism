@@ -21,7 +21,7 @@ describe('GET / (Health Check)', () => {
 
     expect(restEndpoints).toContain('/config');
     expect(restEndpoints).toContain('/chat');
-    expect(restEndpoints).toContain('/voice');
+    expect(restEndpoints).toContain('/audio');
     expect(restEndpoints).toContain('/embed');
   });
 
@@ -30,7 +30,7 @@ describe('GET / (Health Check)', () => {
     const wsEndpoints = res.body.endpoints.websocket;
 
     expect(wsEndpoints).toContain('/ws/chat');
-    expect(wsEndpoints).toContain('/ws/voice');
+    expect(wsEndpoints).toContain('/ws/audio');
   });
 
   it('lists all registered providers', async () => {

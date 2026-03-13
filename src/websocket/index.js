@@ -1,13 +1,13 @@
 import { GATEWAY_SECRET } from "../../secrets.js";
 import { handleChat } from "../routes/chat.js";
-import { handleVoice } from "../routes/voice.js";
+import { handleVoice } from "../routes/audio.js";
 import logger from "../utils/logger.js";
 
 /**
  * Set up WebSocket handlers on the HTTP server.
  * Routes:
  *   /ws/chat   — Streaming chat (text, images, code, thinking, etc.)
- *   /ws/voice  — Streaming TTS (binary audio frames)
+ *   /ws/audio  — Streaming TTS (binary audio frames)
  */
 export function setupWebSocket(wss) {
   wss.on("connection", (ws, req) => {
@@ -41,7 +41,7 @@ export function setupWebSocket(wss) {
 
     if (pathname === "/ws/chat") {
       handleWsChat(ws, project, username);
-    } else if (pathname === "/ws/voice") {
+    } else if (pathname === "/ws/audio") {
       handleWsVoice(ws, project, username);
     } else {
       ws.send(

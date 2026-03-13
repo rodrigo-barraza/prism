@@ -14,7 +14,7 @@ const router = express.Router();
 // ============================================================
 
 /**
- * Handle a voice (TTS) request.
+ * Handle an audio (TTS) request.
  *
  * @param {Object}   params              Request parameters
  * @param {string}   params.provider     Provider name (required)
@@ -96,13 +96,13 @@ export async function handleVoice(params, emitBinary, emitJSON) {
     }
 
     logger.info(
-      `[voice] ${providerName} model=${model || "default"} — ` +
+      `[audio] ${providerName} model=${model || "default"} — ` +
       `total: ${totalSec.toFixed(2)}s`,
     );
 
     RequestLogger.log({
       requestId,
-      endpoint: "voice",
+      endpoint: "audio",
       project,
       username,
       provider: providerName,
@@ -162,7 +162,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
     const totalSec = (performance.now() - requestStart) / 1000;
     RequestLogger.log({
       requestId,
-      endpoint: "voice",
+      endpoint: "audio",
       project,
       username,
       provider: providerName,
@@ -181,7 +181,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
 // ============================================================
 
 /**
- * POST /voice
+ * POST /audio
  * Body: { provider, text, voice?, instructions?, model?, options?, conversationId?, userMessage? }
  * Response: binary audio stream with content-type header
  */
