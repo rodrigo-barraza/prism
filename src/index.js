@@ -21,12 +21,9 @@ import MongoWrapper from "./wrappers/MongoWrapper.js";
 import MinioWrapper from "./wrappers/MinioWrapper.js";
 
 // Routes
-import textToTextRouter from "./routes/textToText.js";
-import textToImageRouter from "./routes/textToImage.js";
-import imageToTextRouter from "./routes/imageToText.js";
-import textToSpeechRouter from "./routes/textToSpeech.js";
-import modalityToEmbeddingRouter from "./routes/modalityToEmbedding.js";
-import audioToTextRouter from "./routes/audioToText.js";
+import chatRouter from "./routes/chat.js";
+import voiceRouter from "./routes/voice.js";
+import embedRouter from "./routes/embed.js";
 import configRouter from "./routes/config.js";
 import conversationsRouter from "./routes/conversations.js";
 import filesRouter from "./routes/files.js";
@@ -43,16 +40,13 @@ app.use(express.json({ limit: "50mb" }));
 const ENDPOINTS = {
     rest: [
         "/config",
-        "/text-to-text",
-        "/text-to-image",
-        "/image-to-text",
-        "/text-to-speech",
-        "/modality-to-embedding",
-        "/audio-to-text",
+        "/chat",
+        "/voice",
+        "/embed",
         "/conversations",
         "/files",
     ],
-    websocket: ["/text-to-text/stream"],
+    websocket: ["/ws/chat", "/ws/voice"],
     admin: ["/admin", "/admin/lm-studio"],
 };
 
@@ -74,12 +68,9 @@ app.use(authMiddleware);
 
 // REST routes
 app.use("/config", configRouter);
-app.use("/text-to-text", textToTextRouter);
-app.use("/text-to-image", textToImageRouter);
-app.use("/image-to-text", imageToTextRouter);
-app.use("/text-to-speech", textToSpeechRouter);
-app.use("/modality-to-embedding", modalityToEmbeddingRouter);
-app.use("/audio-to-text", audioToTextRouter);
+app.use("/chat", chatRouter);
+app.use("/voice", voiceRouter);
+app.use("/embed", embedRouter);
 app.use("/conversations", conversationsRouter);
 app.use("/files", filesRouter);
 

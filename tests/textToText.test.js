@@ -15,7 +15,7 @@ describe('POST /text-to-text', () => {
 
   it('returns 400 when provider is missing', async () => {
     const res = await request(app)
-      .post('/text-to-text')
+      .post('/chat?stream=false')
       .set('x-api-secret', TEST_SECRET)
       .send({ messages: [{ role: 'user', content: 'hi' }] })
       .expect(400);
@@ -26,7 +26,7 @@ describe('POST /text-to-text', () => {
 
   it('returns 400 when messages is missing', async () => {
     const res = await request(app)
-      .post('/text-to-text')
+      .post('/chat?stream=false')
       .set('x-api-secret', TEST_SECRET)
       .send({ provider: 'openai' })
       .expect(400);
@@ -37,7 +37,7 @@ describe('POST /text-to-text', () => {
 
   it('returns 400 when messages is not an array', async () => {
     const res = await request(app)
-      .post('/text-to-text')
+      .post('/chat?stream=false')
       .set('x-api-secret', TEST_SECRET)
       .send({ provider: 'openai', messages: 'not an array' })
       .expect(400);
@@ -50,7 +50,7 @@ describe('POST /text-to-text', () => {
 
   it('returns 200 with correct response shape (minimal params)', async () => {
     const res = await request(app)
-      .post('/text-to-text')
+      .post('/chat?stream=false')
       .set('x-api-secret', TEST_SECRET)
       .send({
         provider: 'openai',
@@ -71,7 +71,7 @@ describe('POST /text-to-text', () => {
 
   it('uses the default model when model is omitted', async () => {
     await request(app)
-      .post('/text-to-text')
+      .post('/chat?stream=false')
       .set('x-api-secret', TEST_SECRET)
       .send({
         provider: 'openai',
@@ -88,7 +88,7 @@ describe('POST /text-to-text', () => {
 
   it('uses custom model when provided', async () => {
     await request(app)
-      .post('/text-to-text')
+      .post('/chat?stream=false')
       .set('x-api-secret', TEST_SECRET)
       .send({
         provider: 'openai',
@@ -106,7 +106,7 @@ describe('POST /text-to-text', () => {
 
   it('passes options through to the provider', async () => {
     await request(app)
-      .post('/text-to-text')
+      .post('/chat?stream=false')
       .set('x-api-secret', TEST_SECRET)
       .send({
         provider: 'openai',
@@ -122,7 +122,7 @@ describe('POST /text-to-text', () => {
 
   it('defaults options to empty object when omitted', async () => {
     await request(app)
-      .post('/text-to-text')
+      .post('/chat?stream=false')
       .set('x-api-secret', TEST_SECRET)
       .send({
         provider: 'openai',
@@ -138,7 +138,7 @@ describe('POST /text-to-text', () => {
 
   it('handles multiple messages in the array', async () => {
     await request(app)
-      .post('/text-to-text')
+      .post('/chat?stream=false')
       .set('x-api-secret', TEST_SECRET)
       .send({
         provider: 'openai',
@@ -159,7 +159,7 @@ describe('POST /text-to-text', () => {
 
   it('works with anthropic provider', async () => {
     const res = await request(app)
-      .post('/text-to-text')
+      .post('/chat?stream=false')
       .set('x-api-secret', TEST_SECRET)
       .send({
         provider: 'anthropic',
@@ -172,7 +172,7 @@ describe('POST /text-to-text', () => {
 
   it('works with google provider', async () => {
     const res = await request(app)
-      .post('/text-to-text')
+      .post('/chat?stream=false')
       .set('x-api-secret', TEST_SECRET)
       .send({
         provider: 'google',
@@ -185,7 +185,7 @@ describe('POST /text-to-text', () => {
 
   it('works with openai-compatible provider', async () => {
     const res = await request(app)
-      .post('/text-to-text')
+      .post('/chat?stream=false')
       .set('x-api-secret', TEST_SECRET)
       .send({
         provider: 'openai-compatible',
@@ -202,7 +202,7 @@ describe('POST /text-to-text', () => {
     MOCK_GENERATE_TEXT.mockRejectedValueOnce(new Error('API down'));
 
     const res = await request(app)
-      .post('/text-to-text')
+      .post('/chat?stream=false')
       .set('x-api-secret', TEST_SECRET)
       .send({
         provider: 'openai',
@@ -216,7 +216,7 @@ describe('POST /text-to-text', () => {
 
   it('returns error for unsupported provider that does not support text generation', async () => {
     const res = await request(app)
-      .post('/text-to-text')
+      .post('/chat?stream=false')
       .set('x-api-secret', TEST_SECRET)
       .send({
         provider: 'elevenlabs',
@@ -230,7 +230,7 @@ describe('POST /text-to-text', () => {
 
   it('returns error for unknown provider', async () => {
     const res = await request(app)
-      .post('/text-to-text')
+      .post('/chat?stream=false')
       .set('x-api-secret', TEST_SECRET)
       .send({
         provider: 'nonexistent',

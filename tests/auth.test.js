@@ -35,7 +35,7 @@ describe('Auth Middleware', () => {
     // and the RequestLogger.log call will receive the project value.
     // For now, just verify the request succeeds with the project header.
     const res = await request(app)
-      .post('/text-to-text')
+      .post('/chat?stream=false')
       .set('x-api-secret', TEST_SECRET)
       .set('x-project', 'my-project')
       .send({
@@ -49,7 +49,7 @@ describe('Auth Middleware', () => {
 
   it("defaults x-project to 'unknown' when header is absent", async () => {
     const res = await request(app)
-      .post('/text-to-text')
+      .post('/chat?stream=false')
       .set('x-api-secret', TEST_SECRET)
       .send({
         provider: 'openai',
@@ -62,7 +62,7 @@ describe('Auth Middleware', () => {
 
   it('attaches x-username header value to req.username', async () => {
     const res = await request(app)
-      .post('/text-to-text')
+      .post('/chat?stream=false')
       .set('x-api-secret', TEST_SECRET)
       .set('x-project', 'my-project')
       .set('x-username', 'rodrigo')
@@ -77,7 +77,7 @@ describe('Auth Middleware', () => {
 
   it("defaults x-username to 'unknown' when header is absent", async () => {
     const res = await request(app)
-      .post('/text-to-text')
+      .post('/chat?stream=false')
       .set('x-api-secret', TEST_SECRET)
       .send({
         provider: 'openai',

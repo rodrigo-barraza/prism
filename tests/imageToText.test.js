@@ -15,7 +15,7 @@ describe('POST /image-to-text', () => {
 
     it('returns 400 when provider is missing', async () => {
         const res = await request(app)
-            .post('/image-to-text')
+            .post('/chat?stream=false')
             .set('x-api-secret', TEST_SECRET)
             .send({ image: 'https://example.com/cat.jpg' })
             .expect(400);
@@ -26,7 +26,7 @@ describe('POST /image-to-text', () => {
 
     it('returns 400 when image is missing', async () => {
         const res = await request(app)
-            .post('/image-to-text')
+            .post('/chat?stream=false')
             .set('x-api-secret', TEST_SECRET)
             .send({ provider: 'google' })
             .expect(400);
@@ -39,7 +39,7 @@ describe('POST /image-to-text', () => {
 
     it('returns 200 with correct response shape (minimal params)', async () => {
         const res = await request(app)
-            .post('/image-to-text')
+            .post('/chat?stream=false')
             .set('x-api-secret', TEST_SECRET)
             .send({
                 provider: 'google',
@@ -59,7 +59,7 @@ describe('POST /image-to-text', () => {
 
     it('includes estimatedCost in the response', async () => {
         const res = await request(app)
-            .post('/image-to-text')
+            .post('/chat?stream=false')
             .set('x-api-secret', TEST_SECRET)
             .send({
                 provider: 'google',
@@ -75,7 +75,7 @@ describe('POST /image-to-text', () => {
 
     it('passes prompt to the provider when provided', async () => {
         await request(app)
-            .post('/image-to-text')
+            .post('/chat?stream=false')
             .set('x-api-secret', TEST_SECRET)
             .send({
                 provider: 'google',
@@ -91,7 +91,7 @@ describe('POST /image-to-text', () => {
 
     it('passes undefined prompt when omitted', async () => {
         await request(app)
-            .post('/image-to-text')
+            .post('/chat?stream=false')
             .set('x-api-secret', TEST_SECRET)
             .send({
                 provider: 'google',
@@ -107,7 +107,7 @@ describe('POST /image-to-text', () => {
 
     it('passes model to the provider when provided', async () => {
         await request(app)
-            .post('/image-to-text')
+            .post('/chat?stream=false')
             .set('x-api-secret', TEST_SECRET)
             .send({
                 provider: 'openai',
@@ -122,7 +122,7 @@ describe('POST /image-to-text', () => {
 
     it('uses default model when model is omitted', async () => {
         const res = await request(app)
-            .post('/image-to-text')
+            .post('/chat?stream=false')
             .set('x-api-secret', TEST_SECRET)
             .send({
                 provider: 'google',
@@ -138,7 +138,7 @@ describe('POST /image-to-text', () => {
 
     it('accepts base64 image data', async () => {
         await request(app)
-            .post('/image-to-text')
+            .post('/chat?stream=false')
             .set('x-api-secret', TEST_SECRET)
             .send({
                 provider: 'google',
@@ -154,7 +154,7 @@ describe('POST /image-to-text', () => {
 
     it('works with openai provider', async () => {
         const res = await request(app)
-            .post('/image-to-text')
+            .post('/chat?stream=false')
             .set('x-api-secret', TEST_SECRET)
             .send({
                 provider: 'openai',
@@ -169,7 +169,7 @@ describe('POST /image-to-text', () => {
 
     it('returns 400 for provider that does not support image captioning', async () => {
         const res = await request(app)
-            .post('/image-to-text')
+            .post('/chat?stream=false')
             .set('x-api-secret', TEST_SECRET)
             .send({
                 provider: 'elevenlabs',
@@ -185,7 +185,7 @@ describe('POST /image-to-text', () => {
         MOCK_CAPTION_IMAGE.mockRejectedValueOnce(new Error('Vision failed'));
 
         const res = await request(app)
-            .post('/image-to-text')
+            .post('/chat?stream=false')
             .set('x-api-secret', TEST_SECRET)
             .send({
                 provider: 'google',

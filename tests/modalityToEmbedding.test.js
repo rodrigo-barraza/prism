@@ -15,7 +15,7 @@ describe("POST /modality-to-embedding", () => {
 
     it("returns 400 when provider is missing", async () => {
         const res = await request(app)
-            .post("/modality-to-embedding")
+            .post("/embed")
             .set("x-api-secret", TEST_SECRET)
             .send({ text: "Hello" })
             .expect(400);
@@ -26,7 +26,7 @@ describe("POST /modality-to-embedding", () => {
 
     it("returns 400 when no content inputs provided", async () => {
         const res = await request(app)
-            .post("/modality-to-embedding")
+            .post("/embed")
             .set("x-api-secret", TEST_SECRET)
             .send({ provider: "google" })
             .expect(400);
@@ -39,7 +39,7 @@ describe("POST /modality-to-embedding", () => {
 
     it("returns 200 with text-only input", async () => {
         const res = await request(app)
-            .post("/modality-to-embedding")
+            .post("/embed")
             .set("x-api-secret", TEST_SECRET)
             .send({ provider: "google", text: "What is the meaning of life?" })
             .expect(200);
@@ -52,7 +52,7 @@ describe("POST /modality-to-embedding", () => {
 
     it("returns 200 with image input", async () => {
         const res = await request(app)
-            .post("/modality-to-embedding")
+            .post("/embed")
             .set("x-api-secret", TEST_SECRET)
             .send({
                 provider: "google",
@@ -66,7 +66,7 @@ describe("POST /modality-to-embedding", () => {
 
     it("returns 200 with text + image multimodal input", async () => {
         const res = await request(app)
-            .post("/modality-to-embedding")
+            .post("/embed")
             .set("x-api-secret", TEST_SECRET)
             .send({
                 provider: "google",
@@ -85,7 +85,7 @@ describe("POST /modality-to-embedding", () => {
 
     it("passes taskType and dimensions via options", async () => {
         await request(app)
-            .post("/modality-to-embedding")
+            .post("/embed")
             .set("x-api-secret", TEST_SECRET)
             .send({
                 provider: "google",
@@ -102,7 +102,7 @@ describe("POST /modality-to-embedding", () => {
 
     it("passes model to the provider when provided", async () => {
         await request(app)
-            .post("/modality-to-embedding")
+            .post("/embed")
             .set("x-api-secret", TEST_SECRET)
             .send({
                 provider: "google",
@@ -119,7 +119,7 @@ describe("POST /modality-to-embedding", () => {
 
     it("returns 400 for provider that does not support embeddings", async () => {
         const res = await request(app)
-            .post("/modality-to-embedding")
+            .post("/embed")
             .set("x-api-secret", TEST_SECRET)
             .send({ provider: "elevenlabs", text: "Hello" })
             .expect(400);
@@ -134,7 +134,7 @@ describe("POST /modality-to-embedding", () => {
         );
 
         const res = await request(app)
-            .post("/modality-to-embedding")
+            .post("/embed")
             .set("x-api-secret", TEST_SECRET)
             .send({ provider: "google", text: "Hello" })
             .expect(500);
@@ -144,7 +144,7 @@ describe("POST /modality-to-embedding", () => {
 
     it("returns error for unknown provider", async () => {
         const res = await request(app)
-            .post("/modality-to-embedding")
+            .post("/embed")
             .set("x-api-secret", TEST_SECRET)
             .send({ provider: "nonexistent", text: "Hello" })
             .expect(500);

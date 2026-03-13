@@ -128,16 +128,9 @@ const { errorHandler } = await import('../src/utils/errors.js');
 const { authMiddleware } = await import('../src/middleware/AuthMiddleware.js');
 const { listProviders } = await import('../src/providers/index.js');
 
-const { default: textToTextRouter } =
-    await import('../src/routes/textToText.js');
-const { default: textToImageRouter } =
-    await import('../src/routes/textToImage.js');
-const { default: imageToTextRouter } =
-    await import('../src/routes/imageToText.js');
-const { default: textToSpeechRouter } =
-    await import('../src/routes/textToSpeech.js');
-const { default: modalityToEmbeddingRouter } =
-    await import('../src/routes/modalityToEmbedding.js');
+const { default: chatRouter } = await import('../src/routes/chat.js');
+const { default: voiceRouter } = await import('../src/routes/voice.js');
+const { default: embedRouter } = await import('../src/routes/embed.js');
 const { default: configRouter } = await import('../src/routes/config.js');
 
 export const app = express();
@@ -152,25 +145,22 @@ app.get('/', (_req, res) => {
         endpoints: {
             rest: [
                 '/config',
-                '/text-to-text',
-                '/text-to-image',
-                '/image-to-text',
-                '/text-to-speech',
-                '/modality-to-embedding',
+                '/chat',
+                '/voice',
+                '/embed',
             ],
-            websocket: ['/text-to-text/stream'],
+            websocket: ['/ws/chat', '/ws/voice'],
         },
     });
 });
 
 app.use(authMiddleware);
 app.use('/config', configRouter);
-app.use('/text-to-text', textToTextRouter);
-app.use('/text-to-image', textToImageRouter);
-app.use('/image-to-text', imageToTextRouter);
-app.use('/text-to-speech', textToSpeechRouter);
-app.use('/modality-to-embedding', modalityToEmbeddingRouter);
+app.use('/chat', chatRouter);
+app.use('/voice', voiceRouter);
+app.use('/embed', embedRouter);
 app.use(errorHandler);
 
 // ── Helpers ───────────────────────────────────────────────────────────
 export const TEST_SECRET = 'test-secret';
+

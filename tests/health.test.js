@@ -20,18 +20,17 @@ describe('GET / (Health Check)', () => {
     const restEndpoints = res.body.endpoints.rest;
 
     expect(restEndpoints).toContain('/config');
-    expect(restEndpoints).toContain('/text-to-text');
-    expect(restEndpoints).toContain('/text-to-image');
-    expect(restEndpoints).toContain('/image-to-text');
-    expect(restEndpoints).toContain('/text-to-speech');
-    expect(restEndpoints).toContain('/modality-to-embedding');
+    expect(restEndpoints).toContain('/chat');
+    expect(restEndpoints).toContain('/voice');
+    expect(restEndpoints).toContain('/embed');
   });
 
   it('includes all expected WebSocket endpoints', async () => {
     const res = await request(app).get('/').expect(200);
     const wsEndpoints = res.body.endpoints.websocket;
 
-    expect(wsEndpoints).toContain('/text-to-text/stream');
+    expect(wsEndpoints).toContain('/ws/chat');
+    expect(wsEndpoints).toContain('/ws/voice');
   });
 
   it('lists all registered providers', async () => {
