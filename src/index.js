@@ -27,6 +27,8 @@ import embedRouter from "./routes/embed.js";
 import configRouter from "./routes/config.js";
 import conversationsRouter from "./routes/conversations.js";
 import filesRouter from "./routes/files.js";
+import memoryRouter from "./routes/memory.js";
+import MemoryService from "./services/MemoryService.js";
 import adminRouter from "./routes/admin.js";
 
 const app = express();
@@ -44,6 +46,7 @@ const ENDPOINTS = {
         "/audio",
         "/embed",
         "/conversations",
+        "/memory",
         "/files",
     ],
     websocket: ["/ws/chat", "/ws/audio"],
@@ -73,6 +76,7 @@ app.use("/audio", audioRouter);
 app.use("/embed", embedRouter);
 app.use("/conversations", conversationsRouter);
 app.use("/files", filesRouter);
+app.use("/memory", memoryRouter);
 
 // Error handler (must be last)
 app.use(errorHandler);
@@ -84,6 +88,7 @@ setupWebSocket(wss);
 // Start
 (async () => {
     await MongoWrapper.createClient(MONGO_DB_NAME, MONGO_URI);
+    await MemoryService.ensureIndexes();
 
     // Initialize MinIO if all secrets are configured
     if (

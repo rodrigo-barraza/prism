@@ -441,7 +441,43 @@ const openaiProvider = {
             payload.tools = [{ type: "web_search_preview" }];
         }
 
-        const stream = await getClient().chat.completions.create(payload);
+        let stream;
+        try {
+            stream = await getClient().chat.completions.create(payload);
+        } catch (error) {
+            // Retry once after stripping unsupported parameters (e.g. gpt-5-nano rejects temperature)
+            if (error.status === 400 && error.message?.includes("Unsupported")) {
+                const unsupportedParams = [
+                    "temperature",
+                    "top_p",
+                    "frequency_penalty",
+                    "presence_penalty",
+                    "max_completion_tokens",
+                ];
+                let stripped = false;
+                for (const param of unsupportedParams) {
+                    if (
+                        error.message.includes(`'${param}'`) &&
+                        payload[param] !== undefined
+                    ) {
+                        logger.provider(
+                            "OpenAI",
+                            `Stripping unsupported param '${param}' for ${model} and retrying (stream)`,
+                        );
+                        delete payload[param];
+                        stripped = true;
+                    }
+                }
+                if (stripped) {
+                    stream = await getClient().chat.completions.create(payload);
+                } else {
+                    throw error;
+                }
+            } else {
+                throw error;
+            }
+        }
+
         let usage = null;
         for await (const chunk of stream) {
             if (chunk.usage) {
