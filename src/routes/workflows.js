@@ -1,9 +1,16 @@
 import { Router } from "express";
 import logger from "../utils/logger.js";
-import { getDb } from "../wrappers/MongoWrapper.js";
+import MongoWrapper from "../wrappers/MongoWrapper.js";
+import { MONGO_DB_NAME } from "../../secrets.js";
 
 const router = Router();
 const WORKFLOWS_COL = "workflows";
+
+function getDb() {
+    const client = MongoWrapper.getClient(MONGO_DB_NAME);
+    if (!client) return null;
+    return client.db(MONGO_DB_NAME);
+}
 
 /**
  * POST /workflows
