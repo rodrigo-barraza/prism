@@ -431,16 +431,29 @@ async function handleStreamingText(ctx) {
     }
     // Image chunks from multimodal models
     if (chunk && typeof chunk === "object" && chunk.type === "image") {
+      let minioRef = null;
+      if (chunk.data) {
+        // Upload to MinIO (same pattern as handleImageAPIModel)
+        try {
+          const mimeType = chunk.mimeType || "image/png";
+          const dataUrl = `data:${mimeType};base64,${chunk.data}`;
+          const { ref } = await FileService.uploadFile(
+            dataUrl, "generations", project, username,
+          );
+          minioRef = ref;
+        } catch (uploadErr) {
+          logger.error(`[chat/stream] MinIO upload failed: ${uploadErr.message}`);
+        }
+        streamedImages.push(
+          minioRef || `data:${chunk.mimeType || "image/png"};base64,${chunk.data}`,
+        );
+      }
       emit({
         type: "image",
         data: chunk.data,
         mimeType: chunk.mimeType,
+        minioRef,
       });
-      if (chunk.data) {
-        streamedImages.push(
-          `data:${chunk.mimeType || "image/png"};base64,${chunk.data}`,
-        );
-      }
       continue;
     }
     // Code execution chunks
