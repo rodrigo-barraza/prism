@@ -218,4 +218,98 @@ router.post("/", async (req, res, next) => {
   }
 });
 
+
+
+// ============================================================
+// REST endpoint — audio transcription (speech-to-text)
+// ============================================================
+
+/**
+ * POST /audio/transcribe
+ * Body: { provider, audio (base64 string or data URL), model?, language?, prompt? }
+ * Response: { text, usage? }
+ */
+router.post("/transcribe", async (req, res, next) => {
+  const requestId = crypto.randomUUID();
+  const requestStart = performance.now();
+  const {
+    provider: providerName,
+    audio,
+    model,
+    language,
+    prompt: transcriptionPrompt,
+  } = req.body;
+
+  try {
+    if (!providerName) {
+      throw new ProviderError("server", "Missing required field: provider", 400);
+    }
+    if (!audio) {
+      throw new ProviderError("server", "Missing required field: audio", 400);
+    }
+
+    const provider = getProvider(providerName);
+    if (!provider.transcribeAudio) {
+      throw new ProviderError(
+        providerName,
+        `Provider "${providerName}" does not support audio transcription`,
+        400,
+      );
+    }
+
+    // Parse audio — accept either data URL or raw base64
+    let audioBuffer;
+    let mimeType = "audio/mpeg";
+    const dataUrlMatch = audio.match(/^data:([^;]+);base64,(.+)$/);
+    if (dataUrlMatch) {
+      mimeType = dataUrlMatch[1];
+      audioBuffer = Buffer.from(dataUrlMatch[2], "base64");
+    } else {
+      audioBuffer = Buffer.from(audio, "base64");
+    }
+
+    const options = {};
+    if (language) options.language = language;
+    if (transcriptionPrompt) options.prompt = transcriptionPrompt;
+
+    const result = await provider.transcribeAudio(audioBuffer, mimeType, model, options);
+    const totalSec = (performance.now() - requestStart) / 1000;
+
+    logger.info(
+      `[audio/transcribe] ${providerName} model=${model || "default"} — ` +
+      `total: ${totalSec.toFixed(2)}s`,
+    );
+
+    RequestLogger.log({
+      requestId,
+      endpoint: "audio/transcribe",
+      project: req.project,
+      username: req.username,
+      provider: providerName,
+      model: model || null,
+      success: true,
+      totalTime: parseFloat(totalSec.toFixed(3)),
+    });
+
+    res.json({
+      text: result.text,
+      usage: result.usage || {},
+    });
+  } catch (error) {
+    const totalSec = (performance.now() - requestStart) / 1000;
+    RequestLogger.log({
+      requestId,
+      endpoint: "audio/transcribe",
+      project: req.project,
+      username: req.username,
+      provider: providerName,
+      model: model || null,
+      success: false,
+      errorMessage: error.message,
+      totalTime: totalSec,
+    });
+    next(error);
+  }
+});
+
 export default router;
