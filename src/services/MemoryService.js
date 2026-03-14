@@ -5,8 +5,8 @@ import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 
 const COLLECTION = "memories";
-const EMBEDDING_PROVIDER = "openai";
-const EMBEDDING_MODEL = "text-embedding-3-small";
+const EMBEDDING_PROVIDER = "google";
+const EMBEDDING_MODEL = "gemini-embedding-2-preview";
 const EXTRACTION_PROVIDER = "openai";
 const EXTRACTION_MODEL = "gpt-4.1-nano";
 
