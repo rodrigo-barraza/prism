@@ -7,7 +7,7 @@ import logger from "../utils/logger.js";
  * Set up WebSocket handlers on the HTTP server.
  * Routes:
  *   /ws/chat   — Streaming chat (text, images, code, thinking, etc.)
- *   /ws/audio  — Streaming TTS (binary audio frames)
+ *   /ws/text-to-audio  — Streaming TTS (binary audio frames)
  */
 export function setupWebSocket(wss) {
   wss.on("connection", (ws, req) => {
@@ -41,7 +41,7 @@ export function setupWebSocket(wss) {
 
     if (pathname === "/ws/chat") {
       handleWsChat(ws, project, username);
-    } else if (pathname === "/ws/audio") {
+    } else if (pathname === "/ws/text-to-audio") {
       handleWsVoice(ws, project, username);
     } else {
       ws.send(

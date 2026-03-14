@@ -30,7 +30,7 @@ describe('GET / (Health Check)', () => {
     const wsEndpoints = res.body.endpoints.websocket;
 
     expect(wsEndpoints).toContain('/ws/chat');
-    expect(wsEndpoints).toContain('/ws/audio');
+    expect(wsEndpoints).toContain('/ws/text-to-audio');
   });
 
   it('lists all registered providers', async () => {

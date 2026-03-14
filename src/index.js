@@ -44,14 +44,15 @@ const ENDPOINTS = {
     rest: [
         "/config",
         "/chat",
-        "/audio",
+        "/text-to-audio",
+        "/audio-to-text",
         "/embed",
         "/conversations",
         "/memory",
         "/files",
         "/workflows",
     ],
-    websocket: ["/ws/chat", "/ws/audio"],
+    websocket: ["/ws/chat", "/ws/text-to-audio"],
     admin: ["/admin", "/admin/lm-studio"],
 };
 
@@ -74,7 +75,8 @@ app.use(authMiddleware);
 // REST routes
 app.use("/config", configRouter);
 app.use("/chat", chatRouter);
-app.use("/audio", audioRouter);
+app.use("/text-to-audio", audioRouter);
+app.use("/audio-to-text", audioRouter);
 app.use("/embed", embedRouter);
 app.use("/conversations", conversationsRouter);
 app.use("/files", filesRouter);

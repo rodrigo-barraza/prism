@@ -102,7 +102,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
 
     RequestLogger.log({
       requestId,
-      endpoint: "audio",
+      endpoint: "text-to-audio",
       project,
       username,
       provider: providerName,
@@ -162,7 +162,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
     const totalSec = (performance.now() - requestStart) / 1000;
     RequestLogger.log({
       requestId,
-      endpoint: "audio",
+      endpoint: "text-to-audio",
       project,
       username,
       provider: providerName,
@@ -181,7 +181,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
 // ============================================================
 
 /**
- * POST /audio
+ * POST /text-to-audio
  * Body: { provider, text, voice?, instructions?, model?, options?, conversationId?, userMessage? }
  * Response: binary audio stream with content-type header
  */
@@ -225,11 +225,11 @@ router.post("/", async (req, res, next) => {
 // ============================================================
 
 /**
- * POST /audio/transcribe
+ * POST /audio-to-text
  * Body: { provider, audio (base64 string or data URL), model?, language?, prompt? }
  * Response: { text, usage? }
  */
-router.post("/transcribe", async (req, res, next) => {
+router.post("/", async (req, res, next) => {
   const requestId = crypto.randomUUID();
   const requestStart = performance.now();
   const {
@@ -282,7 +282,7 @@ router.post("/transcribe", async (req, res, next) => {
 
     RequestLogger.log({
       requestId,
-      endpoint: "audio/transcribe",
+      endpoint: "audio-to-text",
       project: req.project,
       username: req.username,
       provider: providerName,
@@ -299,7 +299,7 @@ router.post("/transcribe", async (req, res, next) => {
     const totalSec = (performance.now() - requestStart) / 1000;
     RequestLogger.log({
       requestId,
-      endpoint: "audio/transcribe",
+      endpoint: "audio-to-text",
       project: req.project,
       username: req.username,
       provider: providerName,

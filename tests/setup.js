@@ -149,7 +149,7 @@ app.get('/', (_req, res) => {
                 '/audio',
                 '/embed',
             ],
-            websocket: ['/ws/chat', '/ws/audio'],
+            websocket: ['/ws/chat', '/ws/text-to-audio'],
         },
     });
 });
