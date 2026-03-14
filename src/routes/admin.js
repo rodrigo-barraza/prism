@@ -996,4 +996,94 @@ router.post("/lm-studio/unload", async (req, res, next) => {
     }
 });
 
+// ============================================================
+// Workflows — admin read-only views (POST lives at /workflows)
+// ============================================================
+const WORKFLOWS_COL = "workflows";
+
+/**
+ * GET /admin/workflows — paginated workflow list
+ */
+router.get("/workflows", async (req, res, next) => {
+    try {
+        const db = getDb();
+        if (!db) return res.status(503).json({ error: "Database not available" });
+
+        const {
+            page = 1,
+            limit = 50,
+            guildId,
+            userId,
+            userName,
+            sort = "createdAt",
+            order = "desc",
+        } = req.query;
+
+        const filter = {};
+        if (guildId) filter.guildId = guildId;
+        if (userId) filter.userId = userId;
+        if (userName) filter.userName = { $regex: userName, $options: "i" };
+
+        const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
+        const lim = parseInt(limit, 10);
+        const sortDir = order === "asc" ? 1 : -1;
+
+        const [docs, total] = await Promise.all([
+            db
+                .collection(WORKFLOWS_COL)
+                .find(filter)
+                .project({
+                    _id: 1,
+                    messageId: 1,
+                    guildId: 1,
+                    guildName: 1,
+                    channelId: 1,
+                    channelName: 1,
+                    userId: 1,
+                    userName: 1,
+                    userContent: 1,
+                    stepCount: 1,
+                    totalDuration: 1,
+                    createdAt: 1,
+                })
+                .sort({ [sort]: sortDir })
+                .skip(skip)
+                .limit(lim)
+                .toArray(),
+            db.collection(WORKFLOWS_COL).countDocuments(filter),
+        ]);
+
+        res.json({ data: docs, total, page: parseInt(page, 10), limit: lim });
+    } catch (error) {
+        logger.error(`Admin GET /workflows error: ${error.message}`);
+        next(error);
+    }
+});
+
+/**
+ * GET /admin/workflows/:id — full workflow detail
+ */
+router.get("/workflows/:id", async (req, res, next) => {
+    try {
+        const db = getDb();
+        if (!db) return res.status(503).json({ error: "Database not available" });
+
+        const { ObjectId } = await import("mongodb");
+        let objectId;
+        try {
+            objectId = new ObjectId(req.params.id);
+        } catch {
+            return res.status(400).json({ error: "Invalid workflow ID" });
+        }
+
+        const doc = await db.collection(WORKFLOWS_COL).findOne({ _id: objectId });
+        if (!doc) return res.status(404).json({ error: "Workflow not found" });
+
+        res.json(doc);
+    } catch (error) {
+        logger.error(`Admin GET /workflows/:id error: ${error.message}`);
+        next(error);
+    }
+});
+
 export default router;

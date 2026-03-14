@@ -30,6 +30,7 @@ import filesRouter from "./routes/files.js";
 import memoryRouter from "./routes/memory.js";
 import MemoryService from "./services/MemoryService.js";
 import adminRouter from "./routes/admin.js";
+import workflowsRouter from "./routes/workflows.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -48,6 +49,7 @@ const ENDPOINTS = {
         "/conversations",
         "/memory",
         "/files",
+        "/workflows",
     ],
     websocket: ["/ws/chat", "/ws/audio"],
     admin: ["/admin", "/admin/lm-studio"],
@@ -77,6 +79,7 @@ app.use("/embed", embedRouter);
 app.use("/conversations", conversationsRouter);
 app.use("/files", filesRouter);
 app.use("/memory", memoryRouter);
+app.use("/workflows", workflowsRouter);
 
 // Error handler (must be last)
 app.use(errorHandler);
