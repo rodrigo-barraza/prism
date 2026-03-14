@@ -7,8 +7,8 @@ import logger from "../utils/logger.js";
 const COLLECTION = "memories";
 const EMBEDDING_PROVIDER = "google";
 const EMBEDDING_MODEL = "gemini-embedding-2-preview";
-const EXTRACTION_PROVIDER = "openai";
-const EXTRACTION_MODEL = "gpt-4.1-nano";
+const EXTRACTION_PROVIDER = "anthropic";
+const EXTRACTION_MODEL = "claude-haiku-4-5-20251001";
 
 /**
  * Compute cosine similarity between two vectors.
