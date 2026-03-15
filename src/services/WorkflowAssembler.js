@@ -291,9 +291,6 @@ function assembleGraph(steps) {
         sourceModality: "text",
         targetModality: "text",
       });
-      // Add text input port on the model for the chain connection
-      const modelNode = allNodes.find((n) => n.id === modelId);
-      if (modelNode) modelNode.inputTypes.push("text");
     }
 
     // Track last non-utility model for chains
