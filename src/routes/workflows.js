@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import logger from "../utils/logger.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import FileService from "../services/FileService.js";
+import { assembleGraph } from "../services/WorkflowAssembler.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 
 const router = Router();
@@ -274,17 +275,11 @@ router.get("/:id", async (req, res, next) => {
  * POST /workflows
  * Save a new workflow document.
  *
- * Node structure notes:
- * - Conversation nodes (nodeType: "input", modality: "conversation") derive
- *   their input ports from the connected model node's rawInputTypes.
- *   When Retina connects conversation → model, it sets the conversation's
- *   supportedModalities from rawInputTypes and rebuilds inputTypes using
- *   buildConversationPorts(messages, supportedModalities).
- * - Lupos pre-computes these fields when saving auto-generated workflows,
- *   using compound port IDs like "0.text", "1.text", "1.image".
- * - Model nodes should include rawInputTypes listing accepted modalities
- *   (e.g. ["text", "image"]) so the conversation node can show the right
- *   input ports in the admin read-only view.
+ * Accepts two payload formats:
+ * 1. Raw steps (from Lupos/bots): { steps, messageId, ... }
+ *    → Prism assembles the visual graph using WorkflowAssembler
+ * 2. Pre-built graph (from Retina editor): { nodes, connections, ... }
+ *    → Passes through unchanged
  */
 router.post("/", async (req, res, next) => {
     try {
@@ -293,17 +288,31 @@ router.post("/", async (req, res, next) => {
 
         const project = req.headers["x-project"] || null;
         const username = req.headers["x-username"] || null;
-        const processedNodes = await extractWorkflowFiles(req.body.nodes, project, username);
-        const processedResults = await extractNodeResultFiles(req.body.nodeResults, project, username);
+
+        let { nodes, connections, nodeResults, nodeStatuses } = req.body;
+
+        // If the payload has steps but no pre-built nodes, assemble the graph
+        if (Array.isArray(req.body.steps) && req.body.steps.length > 0 && !Array.isArray(nodes)) {
+            const graph = assembleGraph(req.body.steps);
+            nodes = graph.nodes;
+            connections = graph.connections;
+            nodeResults = graph.nodeResults;
+            nodeStatuses = graph.nodeStatuses;
+        }
+
+        const processedNodes = await extractWorkflowFiles(nodes, project, username);
+        const processedResults = await extractNodeResultFiles(nodeResults, project, username);
 
         const now = new Date().toISOString();
         const workflow = {
             ...req.body,
-            nodes: processedNodes || req.body.nodes,
-            nodeResults: processedResults || req.body.nodeResults,
+            nodes: processedNodes || nodes,
+            connections: connections || req.body.connections,
+            nodeResults: processedResults || nodeResults,
+            nodeStatuses: nodeStatuses || req.body.nodeStatuses,
             source: req.body.source || "retina",
-            nodeCount: Array.isArray(req.body.nodes) ? req.body.nodes.length : 0,
-            connectionCount: Array.isArray(req.body.connections) ? req.body.connections.length : 0,
+            nodeCount: Array.isArray(processedNodes || nodes) ? (processedNodes || nodes).length : 0,
+            connectionCount: Array.isArray(connections) ? connections.length : 0,
             createdAt: now,
             updatedAt: now,
         };
