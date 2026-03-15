@@ -273,6 +273,18 @@ router.get("/:id", async (req, res, next) => {
 /**
  * POST /workflows
  * Save a new workflow document.
+ *
+ * Node structure notes:
+ * - Conversation nodes (nodeType: "input", modality: "conversation") derive
+ *   their input ports from the connected model node's rawInputTypes.
+ *   When Retina connects conversation → model, it sets the conversation's
+ *   supportedModalities from rawInputTypes and rebuilds inputTypes using
+ *   buildConversationPorts(messages, supportedModalities).
+ * - Lupos pre-computes these fields when saving auto-generated workflows,
+ *   using compound port IDs like "0.text", "1.text", "1.image".
+ * - Model nodes should include rawInputTypes listing accepted modalities
+ *   (e.g. ["text", "image"]) so the conversation node can show the right
+ *   input ports in the admin read-only view.
  */
 router.post("/", async (req, res, next) => {
     try {
