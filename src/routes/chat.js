@@ -41,85 +41,104 @@ async function resolveImageRefs(messages, project, username) {
 
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
-    if (!msg.images || msg.images.length === 0) continue;
 
-    const providerImages = [];
-    const storageImages = [];
+    // ── Resolve images array ──
+    if (msg.images && msg.images.length > 0) {
+      const providerImages = [];
+      const storageImages = [];
 
-    await Promise.all(
-      msg.images.map(async (ref, j) => {
-        // Already a base64 data URL — upload to MinIO for storage, keep data URL for provider
-        if (ref.startsWith("data:")) {
-          providerImages[j] = ref;
-          try {
-            const { ref: minioRef } = await FileService.uploadFile(
-              ref, "uploads", project, username,
-            );
-            storageImages[j] = minioRef;
-          } catch (err) {
-            logger.error(`[chat] Failed to upload image to MinIO: ${err.message}`);
-            storageImages[j] = ref; // Fallback: keep inline
-          }
-          return;
-        }
+      await Promise.all(
+        msg.images.map(async (ref, j) => {
+          const resolved = await resolveMediaRef(ref, project, username);
+          providerImages[j] = resolved.providerRef;
+          storageImages[j] = resolved.storageRef;
+        }),
+      );
 
-        // MinIO reference — download for provider, keep ref for storage
-        if (FileService.isMinioRef(ref)) {
-          storageImages[j] = ref;
-          try {
-            const key = FileService.extractKey(ref);
-            const file = await FileService.getFile(key);
-            if (!file) {
-              logger.warn(`[chat] Could not resolve MinIO ref: ${ref}`);
-              providerImages[j] = ref;
-              return;
-            }
-            const chunks = [];
-            for await (const chunk of file.stream) {
-              chunks.push(chunk);
-            }
-            const buffer = Buffer.concat(chunks);
-            const base64 = buffer.toString("base64");
-            providerImages[j] = `data:${file.contentType};base64,${base64}`;
-          } catch (err) {
-            logger.error(`[chat] Failed to resolve MinIO ref ${ref}: ${err.message}`);
-            providerImages[j] = ref;
-          }
-          return;
-        }
+      providerMessages[i].images = providerImages;
+      messages[i].images = storageImages;
+    }
 
-        // HTTP(S) URL — fetch for provider, keep URL for storage
-        if (ref.startsWith("http://") || ref.startsWith("https://")) {
-          storageImages[j] = ref;
-          try {
-            const response = await fetch(ref);
-            if (!response.ok) {
-              logger.warn(`[chat] Failed to fetch image URL (${response.status}): ${ref}`);
-              providerImages[j] = ref;
-              return;
-            }
-            const contentType = response.headers.get("content-type") || "image/png";
-            const arrayBuffer = await response.arrayBuffer();
-            const base64 = Buffer.from(arrayBuffer).toString("base64");
-            providerImages[j] = `data:${contentType};base64,${base64}`;
-          } catch (err) {
-            logger.error(`[chat] Failed to fetch image URL ${ref}: ${err.message}`);
-            providerImages[j] = ref;
-          }
-          return;
-        }
-
-        // Unknown — pass through
-        providerImages[j] = ref;
-        storageImages[j] = ref;
-      }),
-    );
-
-    providerMessages[i].images = providerImages;
-    messages[i].images = storageImages; // Mutate original for storage
+    // ── Resolve single media fields: audio, video, pdf ──
+    for (const field of ["audio", "video", "pdf"]) {
+      if (msg[field]) {
+        const resolved = await resolveMediaRef(msg[field], project, username);
+        providerMessages[i][field] = resolved.providerRef;
+        messages[i][field] = resolved.storageRef;
+      }
+    }
   }
 
   return providerMessages;
+}
+
+/**
+ * Resolve a single media reference for both provider and storage use.
+ * @returns {{ providerRef: string, storageRef: string }}
+ */
+async function resolveMediaRef(ref, project, username) {
+  // Already a base64 data URL — upload to MinIO for storage, keep data URL for provider
+  if (ref.startsWith("data:")) {
+    let storageRef = ref;
+    try {
+      const { ref: minioRef } = await FileService.uploadFile(
+        ref, "uploads", project, username,
+      );
+      storageRef = minioRef;
+    } catch (err) {
+      logger.error(`[chat] Failed to upload media to MinIO: ${err.message}`);
+    }
+    return { providerRef: ref, storageRef };
+  }
+
+  // MinIO reference — download for provider, keep ref for storage
+  if (FileService.isMinioRef(ref)) {
+    try {
+      const key = FileService.extractKey(ref);
+      const file = await FileService.getFile(key);
+      if (!file) {
+        logger.warn(`[chat] Could not resolve MinIO ref: ${ref}`);
+        return { providerRef: ref, storageRef: ref };
+      }
+      const chunks = [];
+      for await (const chunk of file.stream) {
+        chunks.push(chunk);
+      }
+      const buffer = Buffer.concat(chunks);
+      const base64 = buffer.toString("base64");
+      return {
+        providerRef: `data:${file.contentType};base64,${base64}`,
+        storageRef: ref,
+      };
+    } catch (err) {
+      logger.error(`[chat] Failed to resolve MinIO ref ${ref}: ${err.message}`);
+      return { providerRef: ref, storageRef: ref };
+    }
+  }
+
+  // HTTP(S) URL — fetch for provider, keep URL for storage
+  if (ref.startsWith("http://") || ref.startsWith("https://")) {
+    try {
+      const response = await fetch(ref);
+      if (!response.ok) {
+        logger.warn(`[chat] Failed to fetch media URL (${response.status}): ${ref}`);
+        return { providerRef: ref, storageRef: ref };
+      }
+      const contentType = response.headers.get("content-type") || "application/octet-stream";
+      const arrayBuffer = await response.arrayBuffer();
+      const base64 = Buffer.from(arrayBuffer).toString("base64");
+      return {
+        providerRef: `data:${contentType};base64,${base64}`,
+        storageRef: ref,
+      };
+    } catch (err) {
+      logger.error(`[chat] Failed to fetch media URL ${ref}: ${err.message}`);
+      return { providerRef: ref, storageRef: ref };
+    }
+  }
+
+  // Unknown — pass through
+  return { providerRef: ref, storageRef: ref };
 }
 
 // ============================================================

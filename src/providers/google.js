@@ -64,6 +64,19 @@ function convertMessages(messages) {
                 }
             }
         }
+        // Add audio, video, PDF as inline data (user messages only)
+        if (item.role !== "assistant") {
+            for (const field of ["audio", "video", "pdf"]) {
+                if (item[field]) {
+                    const match = item[field].match(/^data:([\w-]+\/[\w.+-]+);base64,(.+)$/);
+                    if (match) {
+                        parts.push({
+                            inlineData: { mimeType: match[1], data: match[2] },
+                        });
+                    }
+                }
+            }
+        }
         if (item.content) {
             parts.push({ text: item.content });
         }
