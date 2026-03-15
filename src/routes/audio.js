@@ -150,6 +150,11 @@ export async function handleVoice(params, emitBinary, emitJSON) {
         totalTime: parseFloat(totalSec.toFixed(3)),
       });
 
+      // Stamp model onto conversationMeta so conversation settings include it
+      if (conversationMeta && model) {
+        conversationMeta.settings = { ...conversationMeta.settings, model };
+      }
+
       ConversationService.appendMessages(
         conversationId, project, username, messagesToAppend, conversationMeta,
       ).catch((err) =>

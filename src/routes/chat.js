@@ -407,6 +407,11 @@ async function handleImageAPIModel(ctx) {
       estimatedCost,
     });
 
+    // Stamp resolvedModel onto conversationMeta so conversation settings include the model
+    if (conversationMeta) {
+      conversationMeta.settings = { ...conversationMeta.settings, model: resolvedModel };
+    }
+
     ConversationService.appendMessages(
       conversationId, project, username, messagesToAppend, conversationMeta,
     ).catch((err) =>
@@ -633,6 +638,11 @@ async function handleStreamingText(ctx) {
         estimatedCost,
       });
 
+      // Stamp resolvedModel onto conversationMeta so conversation settings include the model
+      if (conversationMeta) {
+        conversationMeta.settings = { ...conversationMeta.settings, model: resolvedModel };
+      }
+
       ConversationService.appendMessages(
         conversationId, project, username, messagesToAppend, conversationMeta,
       ).catch((err) =>
@@ -749,6 +759,11 @@ async function handleNonStreamingText(ctx) {
       totalTime: parseFloat(totalSec.toFixed(3)),
       estimatedCost,
     });
+
+    // Stamp resolvedModel onto conversationMeta so conversation settings include the model
+    if (conversationMeta) {
+      conversationMeta.settings = { ...conversationMeta.settings, model: resolvedModel };
+    }
 
     ConversationService.appendMessages(
       conversationId, project, username, messagesToAppend, conversationMeta,

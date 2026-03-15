@@ -15,6 +15,17 @@ const VIEWER_X_OFFSET = MODEL_X_OFFSET + 350;
 // ============================================================
 
 /**
+ * Check if a step is an internal utility/decision step (not user-facing output).
+ * These steps are shown in the graph but don't get viewers or chain connections,
+ * keeping the graph clean and focused on meaningful output.
+ */
+function isUtilityStep(step) {
+  const label = step.label || "";
+  // 🧠 prefix = internal decision steps (Emoji React, Image Detection, Fetch Count, etc.)
+  return label.startsWith("🧠");
+}
+
+/**
  * Build compound port IDs for a conversation input node.
  * Format: "{messageIndex}.{modality}" e.g. "0.text", "1.text", "1.image"
  */
@@ -75,8 +86,13 @@ function resolveModelModalities(step) {
  *   1. Text Input nodes (system prompt + user message)
  *   2. Conversation Input node (groups messages with compound ports)
  *   3. Model node (AI model with config-derived modality ports)
+ *
+ * Non-utility steps additionally produce:
  *   4. Output Viewer node (displays the model's text/image output)
- *   5. Chain connections (previous model → this model for multi-step pipelines)
+ *   5. Chain connections (previous output model → this model)
+ *
+ * Utility steps (🧠 prefix) are shown in the graph but without viewers
+ * or chain connections, keeping the visualization focused on output.
  *
  * @param {Array} steps - Raw step data from the client
  * @returns {{ nodes, connections, nodeResults, nodeStatuses }}
@@ -91,11 +107,15 @@ function assembleGraph(steps) {
   const nodeResults = {};
   const nodeStatuses = {};
 
+  // Track the last non-utility model ID for chain connections
+  let prevOutputModelId = null;
+
   steps.forEach((step, i) => {
     const baseX = 80 + i * STEP_WIDTH;
     const baseY = 80;
     const stepPrefix = `s${i}`;
     let inputY = baseY;
+    const utility = isUtilityStep(step);
 
     const modalities = resolveModelModalities(step);
 
@@ -216,56 +236,57 @@ function assembleGraph(steps) {
     if (step.outputImageRef) result.image = step.outputImageRef;
     nodeResults[modelId] = result;
 
-    // ── 5. Output Viewer ──
-    const viewerId = `${stepPrefix}_viewer`;
-    const viewerResult = {};
-    if (step.output) viewerResult.text = step.output;
-    if (step.outputImageRef) viewerResult.image = step.outputImageRef;
+    // ── 5. Output Viewer (non-utility steps only) ──
+    if (!utility) {
+      const viewerId = `${stepPrefix}_viewer`;
+      const viewerResult = {};
+      if (step.output) viewerResult.text = step.output;
+      if (step.outputImageRef) viewerResult.image = step.outputImageRef;
 
-    allNodes.push({
-      id: viewerId,
-      nodeType: "viewer",
-      modality: null,
-      content: viewerResult.text || viewerResult.image || null,
-      contentType: viewerResult.image ? "image" : viewerResult.text ? "text" : null,
-      receivedOutputs: viewerResult,
-      inputTypes: ["text", "image", "audio"],
-      outputTypes: ["text", "image", "audio"],
-      position: {
-        x: baseX + VIEWER_X_OFFSET,
-        y: baseY + 100,
-      },
-    });
-
-    // Connect model outputs to viewer
-    if (step.output) {
-      allConnections.push({
-        id: `${stepPrefix}_model_to_viewer_text`,
-        sourceNodeId: modelId,
-        targetNodeId: viewerId,
-        sourceModality: "text",
-        targetModality: "text",
+      allNodes.push({
+        id: viewerId,
+        nodeType: "viewer",
+        modality: null,
+        content: viewerResult.text || viewerResult.image || null,
+        contentType: viewerResult.image ? "image" : viewerResult.text ? "text" : null,
+        receivedOutputs: viewerResult,
+        inputTypes: ["text", "image", "audio"],
+        outputTypes: ["text", "image", "audio"],
+        position: {
+          x: baseX + VIEWER_X_OFFSET,
+          y: baseY + 100,
+        },
       });
-    }
-    if (step.outputImageRef) {
-      allConnections.push({
-        id: `${stepPrefix}_model_to_viewer_image`,
-        sourceNodeId: modelId,
-        targetNodeId: viewerId,
-        sourceModality: "image",
-        targetModality: "image",
-      });
+
+      // Connect model outputs to viewer
+      if (step.output) {
+        allConnections.push({
+          id: `${stepPrefix}_model_to_viewer_text`,
+          sourceNodeId: modelId,
+          targetNodeId: viewerId,
+          sourceModality: "text",
+          targetModality: "text",
+        });
+      }
+      if (step.outputImageRef) {
+        allConnections.push({
+          id: `${stepPrefix}_model_to_viewer_image`,
+          sourceNodeId: modelId,
+          targetNodeId: viewerId,
+          sourceModality: "image",
+          targetModality: "image",
+        });
+      }
+
+      nodeStatuses[viewerId] = "done";
+      nodeResults[viewerId] = viewerResult;
     }
 
-    nodeStatuses[viewerId] = "done";
-    nodeResults[viewerId] = viewerResult;
-
-    // ── 6. Chain from previous model → this model ──
-    if (i > 0) {
-      const prevModelId = `s${i - 1}_model`;
+    // ── 6. Chain from previous output model → this model (non-utility only) ──
+    if (!utility && prevOutputModelId) {
       allConnections.push({
-        id: `chain_${i - 1}_to_${i}`,
-        sourceNodeId: prevModelId,
+        id: `chain_${prevOutputModelId}_to_${modelId}`,
+        sourceNodeId: prevOutputModelId,
         targetNodeId: modelId,
         sourceModality: "text",
         targetModality: "text",
@@ -273,6 +294,11 @@ function assembleGraph(steps) {
       // Add text input port on the model for the chain connection
       const modelNode = allNodes.find((n) => n.id === modelId);
       if (modelNode) modelNode.inputTypes.push("text");
+    }
+
+    // Track last non-utility model for chains
+    if (!utility) {
+      prevOutputModelId = modelId;
     }
   });
 
