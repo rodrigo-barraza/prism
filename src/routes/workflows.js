@@ -218,22 +218,19 @@ function getBaseUrl(req) {
 
 /**
  * Compute list-display metadata from workflow nodes.
- * Single source of truth for providers, modalities, and totalCost.
+ * Single source of truth for providers and modalities.
+ * Cost is computed separately from linked conversations (PATCH endpoint).
  */
 function computeWorkflowMeta(nodes) {
     const providers = [...new Set(
         (nodes || []).filter((n) => !n.nodeType && n.provider).map((n) => n.provider)
     )];
     const modalities = {};
-    let totalCost = 0;
     for (const n of nodes || []) {
         for (const t of n.inputTypes || []) modalities[`${t}In`] = true;
         for (const t of n.outputTypes || []) modalities[`${t}Out`] = true;
-        for (const m of n.messages || []) {
-            totalCost += m.estimatedCost || 0;
-        }
     }
-    return { providers, modalities, totalCost };
+    return { providers, modalities };
 }
 
 /**
@@ -424,6 +421,22 @@ router.patch("/:id/conversations", async (req, res, next) => {
         });
 
         if (result.matchedCount === 0) return res.status(404).json({ error: "Workflow not found" });
+
+        // Recompute totalCost from all linked conversations
+        // Conversations are the source of truth for cost (they track estimatedCost per message)
+        const workflow = await db.collection(WORKFLOWS_COL).findOne(filter);
+        const allConvIds = workflow?.conversationIds || [];
+        if (allConvIds.length > 0) {
+            const conversations = await db.collection("conversations")
+                .find({ id: { $in: allConvIds } })
+                .project({ totalCost: 1 })
+                .toArray();
+            const totalCost = conversations.reduce((sum, c) => sum + (c.totalCost || 0), 0);
+            await db.collection(WORKFLOWS_COL).updateOne(filter, {
+                $set: { totalCost },
+            });
+        }
+
         res.json({ success: true });
     } catch (error) {
         logger.error(`PATCH /workflows/:id/conversations error: ${error.message}`);
