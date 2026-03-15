@@ -165,6 +165,7 @@ export async function handleChat(params, emit) {
     options = {},
     conversationId,
     userMessage,
+    conversationMeta,
     project = "unknown",
     username = "unknown",
   } = params;
@@ -214,6 +215,7 @@ export async function handleChat(params, emit) {
         options,
         conversationId,
         userMessage,
+        conversationMeta,
         project,
         username,
         requestId,
@@ -243,6 +245,7 @@ export async function handleChat(params, emit) {
         options,
         conversationId,
         userMessage,
+        conversationMeta,
         project,
         username,
         requestId,
@@ -258,6 +261,7 @@ export async function handleChat(params, emit) {
         options,
         conversationId,
         userMessage,
+        conversationMeta,
         project,
         username,
         requestId,
@@ -290,7 +294,7 @@ export async function handleChat(params, emit) {
 async function handleImageAPIModel(ctx) {
   const {
     provider, providerName, resolvedModel, modelDef, messages, options,
-    conversationId, userMessage, project, username,
+    conversationId, userMessage, conversationMeta, project, username,
     requestId, requestStart, emit,
   } = ctx;
 
@@ -403,7 +407,7 @@ async function handleImageAPIModel(ctx) {
     });
 
     ConversationService.appendMessages(
-      conversationId, project, username, messagesToAppend,
+      conversationId, project, username, messagesToAppend, conversationMeta,
     ).catch((err) =>
       logger.error(
         `Failed to append messages to conversation ${conversationId}: ${err.message}`,
@@ -419,7 +423,7 @@ async function handleImageAPIModel(ctx) {
 async function handleStreamingText(ctx) {
   const {
     provider, providerName, resolvedModel, modelDef, messages, options,
-    conversationId, userMessage, project, username,
+    conversationId, userMessage, conversationMeta, project, username,
     requestId, requestStart, emit,
   } = ctx;
 
@@ -628,7 +632,7 @@ async function handleStreamingText(ctx) {
       });
 
       ConversationService.appendMessages(
-        conversationId, project, username, messagesToAppend,
+        conversationId, project, username, messagesToAppend, conversationMeta,
       ).catch((err) =>
         logger.error(
           `Failed to append messages to conversation ${conversationId}: ${err.message}`,
@@ -647,7 +651,7 @@ async function handleStreamingText(ctx) {
 async function handleNonStreamingText(ctx) {
   const {
     provider, providerName, resolvedModel, messages, options,
-    conversationId, userMessage, project, username,
+    conversationId, userMessage, conversationMeta, project, username,
     requestId, requestStart, emit,
   } = ctx;
 
@@ -744,7 +748,7 @@ async function handleNonStreamingText(ctx) {
     });
 
     ConversationService.appendMessages(
-      conversationId, project, username, messagesToAppend,
+      conversationId, project, username, messagesToAppend, conversationMeta,
     ).catch((err) =>
       logger.error(
         `Failed to append messages to conversation ${conversationId}: ${err.message}`,

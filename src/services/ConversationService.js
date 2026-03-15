@@ -1,4 +1,3 @@
-import crypto from "crypto";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import FileService from "./FileService.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
@@ -153,78 +152,48 @@ export function computeTotalCost(messages) {
  */
 const ConversationService = {
     /**
-     * Start (create) a conversation shell.
-     * If a conversation with this ID already exists, returns it unchanged.
-     *
-     * @param {object} params
-     * @param {string} [params.id] - Optional conversation ID (auto-generated if omitted)
-     * @param {string} params.project
-     * @param {string} params.username
-     * @param {string} [params.title]
-     * @param {string} [params.systemPrompt]
-     * @param {object} [params.settings]
-     * @returns {Promise<object>} The conversation document
-     */
-    async startConversation({
-        id,
-        project,
-        username,
-        title,
-        systemPrompt,
-        settings,
-    }) {
-        const client = MongoWrapper.getClient(MONGO_DB_NAME);
-        if (!client) throw new Error("Database not available");
-
-        const conversationId = id || crypto.randomUUID();
-        const now = new Date().toISOString();
-
-        await client
-            .db(MONGO_DB_NAME)
-            .collection(COLLECTION)
-            .updateOne(
-                { id: conversationId, project, username },
-                {
-                    $setOnInsert: {
-                        id: conversationId,
-                        project,
-                        username,
-                        title: title || "New Conversation",
-                        messages: [],
-                        systemPrompt: systemPrompt || "",
-                        settings: {
-                            ...(settings || {}),
-                            systemPrompt: systemPrompt || "",
-                        },
-                        modalities: computeModalities([]),
-                        providers: extractProviders([], settings),
-                        totalCost: 0,
-                        createdAt: now,
-                        updatedAt: now,
-                    },
-                },
-                { upsert: true },
-            );
-
-        return client
-            .db(MONGO_DB_NAME)
-            .collection(COLLECTION)
-            .findOne({ id: conversationId, project, username });
-    },
-
-    /**
-     * Append messages to an existing conversation.
+     * Append messages to a conversation, auto-creating it if it doesn't exist.
      * Handles file extraction (MinIO upload) and recomputes derived fields.
+     * Optionally applies conversation metadata (title, systemPrompt, settings).
      *
      * @param {string} conversationId
      * @param {string} project
      * @param {string} username
      * @param {Array} newMessages - Messages to append
+     * @param {object} [conversationMeta] - Optional metadata to set on the conversation
+     * @param {string} [conversationMeta.title]
+     * @param {string} [conversationMeta.systemPrompt]
+     * @param {object} [conversationMeta.settings]
      * @returns {Promise<object>} The updated conversation document
      */
-    async appendMessages(conversationId, project, username, newMessages) {
+    async appendMessages(conversationId, project, username, newMessages, conversationMeta = null) {
         const client = MongoWrapper.getClient(MONGO_DB_NAME);
         if (!client) throw new Error("Database not available");
+
+        const db = client.db(MONGO_DB_NAME);
+        const col = db.collection(COLLECTION);
+
+        // Auto-create conversation if it doesn't exist
+        const existing = await col.findOne({ id: conversationId, project, username });
+        if (!existing) {
+            const now = new Date().toISOString();
+            const metaSettings = conversationMeta?.settings || {};
+            const metaSysPrompt = conversationMeta?.systemPrompt || "";
+            await col.insertOne({
+                id: conversationId,
+                project,
+                username,
+                title: conversationMeta?.title || "New Conversation",
+                messages: [],
+                systemPrompt: metaSysPrompt,
+                settings: { ...metaSettings, systemPrompt: metaSysPrompt },
+                modalities: computeModalities([]),
+                providers: extractProviders([], metaSettings),
+                totalCost: 0,
+                createdAt: now,
+                updatedAt: now,
+            });
+        }
 
         // Extract files (upload base64 data to MinIO)
         const processedMessages = await extractFiles(
@@ -235,90 +204,57 @@ const ConversationService = {
 
         const now = new Date().toISOString();
 
-        // Push new messages and update timestamp
-        await client
-            .db(MONGO_DB_NAME)
-            .collection(COLLECTION)
-            .updateOne(
-                { id: conversationId, project, username },
-                {
-                    $push: { messages: { $each: processedMessages } },
-                    $set: { updatedAt: now },
-                },
-            );
+        // Build $set — always update timestamp
+        const setFields = { updatedAt: now };
+
+        // Apply conversationMeta if provided (title, settings, systemPrompt)
+        if (conversationMeta) {
+            if (conversationMeta.title !== undefined) {
+                setFields.title = conversationMeta.title;
+            }
+            if (conversationMeta.systemPrompt !== undefined) {
+                setFields.systemPrompt = conversationMeta.systemPrompt;
+            }
+            if (conversationMeta.settings !== undefined) {
+                setFields.settings = {
+                    ...conversationMeta.settings,
+                    systemPrompt: conversationMeta.systemPrompt || "",
+                };
+            }
+        }
+
+        // Push new messages and apply updates
+        await col.updateOne(
+            { id: conversationId, project, username },
+            {
+                $push: { messages: { $each: processedMessages } },
+                $set: setFields,
+            },
+        );
 
         // Fetch the updated doc to recompute derived fields
-        const conversation = await client
-            .db(MONGO_DB_NAME)
-            .collection(COLLECTION)
-            .findOne({ id: conversationId, project, username });
+        const conversation = await col.findOne({ id: conversationId, project, username });
 
         if (!conversation) {
             throw new Error(`Conversation not found: ${conversationId}`);
         }
 
         // Recompute derived fields from full message list
-        await client
-            .db(MONGO_DB_NAME)
-            .collection(COLLECTION)
-            .updateOne(
-                { id: conversationId, project, username },
-                {
-                    $set: {
-                        modalities: computeModalities(conversation.messages),
-                        providers: extractProviders(
-                            conversation.messages,
-                            conversation.settings,
-                        ),
-                        totalCost: computeTotalCost(conversation.messages),
-                    },
+        await col.updateOne(
+            { id: conversationId, project, username },
+            {
+                $set: {
+                    modalities: computeModalities(conversation.messages),
+                    providers: extractProviders(
+                        conversation.messages,
+                        conversation.settings,
+                    ),
+                    totalCost: computeTotalCost(conversation.messages),
                 },
-            );
+            },
+        );
 
-        return client
-            .db(MONGO_DB_NAME)
-            .collection(COLLECTION)
-            .findOne({ id: conversationId, project, username });
-    },
-
-    /**
-     * Finalize a conversation — update metadata without re-sending messages.
-     *
-     * @param {string} conversationId
-     * @param {string} project
-     * @param {string} username
-     * @param {object} updates - { title?, systemPrompt?, settings?, isGenerating? }
-     * @returns {Promise<object>} The updated conversation document
-     */
-    async finalizeConversation(conversationId, project, username, updates) {
-        const client = MongoWrapper.getClient(MONGO_DB_NAME);
-        if (!client) throw new Error("Database not available");
-
-        const setFields = { updatedAt: new Date().toISOString() };
-        if (updates.title !== undefined) setFields.title = updates.title;
-        if (updates.systemPrompt !== undefined)
-            setFields.systemPrompt = updates.systemPrompt;
-        if (updates.settings !== undefined) {
-            setFields.settings = {
-                ...updates.settings,
-                systemPrompt: updates.systemPrompt || "",
-            };
-        }
-        if (updates.isGenerating !== undefined)
-            setFields.isGenerating = updates.isGenerating;
-
-        await client
-            .db(MONGO_DB_NAME)
-            .collection(COLLECTION)
-            .updateOne(
-                { id: conversationId, project, username },
-                { $set: setFields },
-            );
-
-        return client
-            .db(MONGO_DB_NAME)
-            .collection(COLLECTION)
-            .findOne({ id: conversationId, project, username });
+        return col.findOne({ id: conversationId, project, username });
     },
 };
 
