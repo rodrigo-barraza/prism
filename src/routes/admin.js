@@ -1104,4 +1104,197 @@ router.get("/workflows/:id", async (req, res, next) => {
     }
 });
 
+// ============================================================
+// GET /admin/media — extract media from all conversations
+// ============================================================
+router.get("/media", async (req, res, next) => {
+    try {
+        const db = getDb();
+        if (!db) return res.status(503).json({ error: "Database not available" });
+
+        const { page = 1, limit = 100, type, origin } = req.query;
+        const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
+        const lim = parseInt(limit, 10);
+
+        // Use aggregation to unwind messages and extract media in one query
+        const pipeline = [
+            { $unwind: "$messages" },
+            {
+                $project: {
+                    convId: "$id",
+                    convTitle: "$title",
+                    project: 1,
+                    username: 1,
+                    role: "$messages.role",
+                    images: { $ifNull: ["$messages.images", []] },
+                    audio: "$messages.audio",
+                    timestamp: { $ifNull: ["$messages.timestamp", "$updatedAt"] },
+                    model: "$messages.model",
+                },
+            },
+            // Expand images array into individual items
+            {
+                $facet: {
+                    imageItems: [
+                        { $unwind: "$images" },
+                        {
+                            $project: {
+                                url: "$images",
+                                mediaType: "image",
+                                convId: 1,
+                                convTitle: 1,
+                                project: 1,
+                                username: 1,
+                                role: 1,
+                                timestamp: 1,
+                                model: 1,
+                            },
+                        },
+                    ],
+                    audioItems: [
+                        { $match: { audio: { $ne: null, $exists: true } } },
+                        {
+                            $project: {
+                                url: "$audio",
+                                mediaType: "audio",
+                                convId: 1,
+                                convTitle: 1,
+                                project: 1,
+                                username: 1,
+                                role: 1,
+                                timestamp: 1,
+                                model: 1,
+                            },
+                        },
+                    ],
+                },
+            },
+            // Merge both streams
+            {
+                $project: {
+                    allMedia: { $concatArrays: ["$imageItems", "$audioItems"] },
+                },
+            },
+            { $unwind: "$allMedia" },
+            { $replaceRoot: { newRoot: "$allMedia" } },
+            { $sort: { timestamp: -1 } },
+        ];
+
+        // Apply filters
+        if (type) {
+            pipeline.push({ $match: { mediaType: type } });
+        }
+        if (origin === "user") {
+            pipeline.push({ $match: { role: "user" } });
+        } else if (origin === "ai") {
+            pipeline.push({ $match: { role: "assistant" } });
+        }
+
+        // Count total before pagination
+        const countPipeline = [...pipeline, { $count: "total" }];
+        const [countResult] = await db.collection(CONVERSATIONS_COL).aggregate(countPipeline).toArray();
+        const total = countResult?.total || 0;
+
+        // Apply pagination
+        pipeline.push({ $skip: skip }, { $limit: lim });
+
+        const items = await db.collection(CONVERSATIONS_COL).aggregate(pipeline).toArray();
+
+        // Categorize origin
+        const data = items.map((item) => ({
+            url: item.url,
+            mediaType: item.mediaType,
+            origin: item.role === "assistant" ? "ai" : "user",
+            convId: item.convId,
+            convTitle: item.convTitle || "Untitled",
+            project: item.project,
+            username: item.username,
+            model: item.model,
+            timestamp: item.timestamp,
+        }));
+
+        res.json({ data, total, page: parseInt(page, 10), limit: lim });
+    } catch (error) {
+        logger.error(`Admin /media error: ${error.message}`);
+        next(error);
+    }
+});
+
+// ============================================================
+// GET /admin/text — extract text content from conversations
+// ============================================================
+router.get("/text", async (req, res, next) => {
+    try {
+        const db = getDb();
+        if (!db) return res.status(503).json({ error: "Database not available" });
+
+        const { page = 1, limit = 50, origin, search } = req.query;
+        const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
+        const lim = parseInt(limit, 10);
+
+        const pipeline = [
+            { $unwind: "$messages" },
+            {
+                $match: {
+                    "messages.content": { $exists: true, $nin: [null, ""] },
+                },
+            },
+            {
+                $project: {
+                    convId: "$id",
+                    convTitle: "$title",
+                    project: 1,
+                    username: 1,
+                    role: "$messages.role",
+                    content: "$messages.content",
+                    timestamp: { $ifNull: ["$messages.timestamp", "$updatedAt"] },
+                    model: "$messages.model",
+                    estimatedCost: "$messages.estimatedCost",
+                    images: { $size: { $ifNull: ["$messages.images", []] } },
+                },
+            },
+            { $sort: { timestamp: -1 } },
+        ];
+
+        // Filters
+        if (origin === "user") {
+            pipeline.push({ $match: { role: "user" } });
+        } else if (origin === "ai") {
+            pipeline.push({ $match: { role: "assistant" } });
+        }
+        if (search) {
+            pipeline.push({
+                $match: { content: { $regex: search, $options: "i" } },
+            });
+        }
+
+        const countPipeline = [...pipeline, { $count: "total" }];
+        const [countResult] = await db.collection(CONVERSATIONS_COL).aggregate(countPipeline).toArray();
+        const total = countResult?.total || 0;
+
+        pipeline.push({ $skip: skip }, { $limit: lim });
+
+        const items = await db.collection(CONVERSATIONS_COL).aggregate(pipeline).toArray();
+
+        const data = items.map((item) => ({
+            content: item.content,
+            origin: item.role === "assistant" ? "ai" : "user",
+            role: item.role,
+            convId: item.convId,
+            convTitle: item.convTitle || "Untitled",
+            project: item.project,
+            username: item.username,
+            model: item.model,
+            estimatedCost: item.estimatedCost,
+            hasImages: item.images > 0,
+            timestamp: item.timestamp,
+        }));
+
+        res.json({ data, total, page: parseInt(page, 10), limit: lim });
+    } catch (error) {
+        logger.error(`Admin /text error: ${error.message}`);
+        next(error);
+    }
+});
+
 export default router;
