@@ -69,6 +69,9 @@ app.get("/", (_req, res) => {
 // Admin routes (own auth via x-admin-secret)
 app.use("/admin", adminRouter);
 
+// Public routes (no auth required)
+app.use("/files", filesRouter);
+
 // Auth gate — everything below requires a valid x-api-secret header
 app.use(authMiddleware);
 
@@ -79,7 +82,6 @@ app.use("/text-to-audio", audioRouter);
 app.use("/audio-to-text", audioRouter);
 app.use("/embed", embedRouter);
 app.use("/conversations", conversationsRouter);
-app.use("/files", filesRouter);
 app.use("/memory", memoryRouter);
 app.use("/workflows", workflowsRouter);
 

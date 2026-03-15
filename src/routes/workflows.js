@@ -73,12 +73,146 @@ async function extractWorkflowFiles(nodes, project = null, username = null) {
             updated.messages = newMessages;
         }
 
-        // 3. nodeResults may hold data URLs from prior executions
-        // We intentionally skip them — results are regenerated on re-run.
+        // 3. Viewer nodes store receivedOutputs — same { modality: data } shape
+        if (updated.receivedOutputs && typeof updated.receivedOutputs === "object") {
+            const newReceived = {};
+            for (const [mod, data] of Object.entries(updated.receivedOutputs)) {
+                newReceived[mod] = await uploadIfDataUrl(data, "uploads", project, username);
+            }
+            updated.receivedOutputs = newReceived;
+        }
 
         processed.push(updated);
     }
     return processed;
+}
+
+/**
+ * Walk nodeResults and upload any base64 data URLs to MinIO.
+ * Shape: { [nodeId]: { [modality]: dataUrl | messagesArray } }
+ */
+async function extractNodeResultFiles(nodeResults, project = null, username = null) {
+    if (!nodeResults || typeof nodeResults !== "object" || !FileService.isExternalStorage()) return nodeResults;
+
+    const processed = {};
+    for (const [nodeId, outputs] of Object.entries(nodeResults)) {
+        if (!outputs || typeof outputs !== "object") {
+            processed[nodeId] = outputs;
+            continue;
+        }
+        const newOutputs = {};
+        for (const [mod, data] of Object.entries(outputs)) {
+            // conversation modality is an array of message objects with nested media
+            if (mod === "conversation" && Array.isArray(data)) {
+                const msgs = [];
+                for (const msg of data) {
+                    const m = { ...msg };
+                    for (const field of MEDIA_FIELDS) {
+                        const val = m[field];
+                        if (Array.isArray(val)) {
+                            const arr = [];
+                            for (const item of val) {
+                                arr.push(await uploadIfDataUrl(item, "uploads", project, username));
+                            }
+                            m[field] = arr;
+                        } else if (typeof val === "string" && val.startsWith("data:")) {
+                            m[field] = await uploadIfDataUrl(val, "uploads", project, username);
+                        }
+                    }
+                    msgs.push(m);
+                }
+                newOutputs[mod] = msgs;
+            } else {
+                newOutputs[mod] = await uploadIfDataUrl(data, "uploads", project, username);
+            }
+        }
+        processed[nodeId] = newOutputs;
+    }
+    return processed;
+}
+
+/**
+ * Convert a minio:// ref to an HTTP /files/ URL.
+ * Non-minio strings (data URLs, http URLs, etc.) pass through unchanged.
+ */
+function resolveMinioRef(value, baseUrl) {
+    if (typeof value === "string" && value.startsWith("minio://")) {
+        const key = value.replace("minio://", "");
+        return `${baseUrl}/files/${key}`;
+    }
+    return value;
+}
+
+/**
+ * Walk a workflow document and replace all minio:// refs with HTTP /files/ URLs
+ * so the frontend receives browser-renderable URLs directly.
+ */
+function resolveWorkflowFileRefs(workflow, baseUrl) {
+    // Resolve nodes
+    if (Array.isArray(workflow.nodes)) {
+        for (const node of workflow.nodes) {
+            // Node-level content (asset input nodes)
+            if (typeof node.content === "string") {
+                node.content = resolveMinioRef(node.content, baseUrl);
+            }
+
+            // Messages array (conversation / model nodes)
+            if (Array.isArray(node.messages)) {
+                for (const msg of node.messages) {
+                    for (const field of MEDIA_FIELDS) {
+                        const val = msg[field];
+                        if (Array.isArray(val)) {
+                            msg[field] = val.map((item) => resolveMinioRef(item, baseUrl));
+                        } else if (typeof val === "string") {
+                            msg[field] = resolveMinioRef(val, baseUrl);
+                        }
+                    }
+                }
+            }
+
+            // Viewer receivedOutputs
+            if (node.receivedOutputs && typeof node.receivedOutputs === "object") {
+                for (const [mod, data] of Object.entries(node.receivedOutputs)) {
+                    node.receivedOutputs[mod] = resolveMinioRef(data, baseUrl);
+                }
+            }
+        }
+    }
+
+    // Resolve nodeResults: { [nodeId]: { [modality]: value | messagesArray } }
+    if (workflow.nodeResults && typeof workflow.nodeResults === "object") {
+        for (const outputs of Object.values(workflow.nodeResults)) {
+            if (!outputs || typeof outputs !== "object") continue;
+            for (const [mod, data] of Object.entries(outputs)) {
+                // conversation modality is an array of message objects with nested media
+                if (mod === "conversation" && Array.isArray(data)) {
+                    for (const msg of data) {
+                        for (const field of MEDIA_FIELDS) {
+                            const val = msg[field];
+                            if (Array.isArray(val)) {
+                                msg[field] = val.map((item) => resolveMinioRef(item, baseUrl));
+                            } else if (typeof val === "string") {
+                                msg[field] = resolveMinioRef(val, baseUrl);
+                            }
+                        }
+                    }
+                } else {
+                    outputs[mod] = resolveMinioRef(data, baseUrl);
+                }
+            }
+        }
+    }
+
+    return workflow;
+}
+
+/**
+ * Build the external base URL from the request (handles proxies, HTTPS, etc.).
+ */
+function getBaseUrl(req) {
+    const proto = req.headers["x-forwarded-proto"] || req.protocol || "http";
+    const host = req.headers["x-forwarded-host"] || req.get("host");
+    return `${proto}://${host}`;
 }
 
 /**
@@ -126,6 +260,9 @@ router.get("/:id", async (req, res, next) => {
         const workflow = await db.collection(WORKFLOWS_COL).findOne(filter);
         if (!workflow) return res.status(404).json({ error: "Workflow not found" });
 
+        const baseUrl = getBaseUrl(req);
+        resolveWorkflowFileRefs(workflow, baseUrl);
+
         res.json(workflow);
     } catch (error) {
         logger.error(`GET /workflows/:id error: ${error.message}`);
@@ -145,11 +282,13 @@ router.post("/", async (req, res, next) => {
         const project = req.headers["x-project"] || null;
         const username = req.headers["x-username"] || null;
         const processedNodes = await extractWorkflowFiles(req.body.nodes, project, username);
+        const processedResults = await extractNodeResultFiles(req.body.nodeResults, project, username);
 
         const now = new Date().toISOString();
         const workflow = {
             ...req.body,
             nodes: processedNodes || req.body.nodes,
+            nodeResults: processedResults || req.body.nodeResults,
             source: req.body.source || "retina",
             nodeCount: Array.isArray(req.body.nodes) ? req.body.nodes.length : 0,
             connectionCount: Array.isArray(req.body.connections) ? req.body.connections.length : 0,
@@ -187,6 +326,9 @@ router.put("/:id", async (req, res, next) => {
         if (Array.isArray(body.nodes)) {
             body.nodes = await extractWorkflowFiles(body.nodes, project, username);
             body.nodeCount = body.nodes.length;
+        }
+        if (body.nodeResults && typeof body.nodeResults === "object") {
+            body.nodeResults = await extractNodeResultFiles(body.nodeResults, project, username);
         }
         if (Array.isArray(body.connections)) body.connectionCount = body.connections.length;
         const update = {
