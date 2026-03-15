@@ -43,6 +43,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
     options: extraOptions,
     conversationId,
     userMessage,
+    conversationMeta,
     project = "unknown",
     username = "unknown",
   } = params;
@@ -107,6 +108,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
       username,
       provider: providerName,
       model: model || null,
+      conversationId: conversationId || null,
       success: true,
       inputCharacters: text.length,
       totalTime: parseFloat(totalSec.toFixed(3)),
@@ -149,7 +151,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
       });
 
       ConversationService.appendMessages(
-        conversationId, project, username, messagesToAppend,
+        conversationId, project, username, messagesToAppend, conversationMeta,
       ).catch((err) =>
         logger.error(
           `Failed to append messages to conversation ${conversationId}: ${err.message}`,
@@ -287,6 +289,7 @@ router.post("/", async (req, res, next) => {
       username: req.username,
       provider: providerName,
       model: model || null,
+      conversationId: null,
       success: true,
       totalTime: parseFloat(totalSec.toFixed(3)),
     });

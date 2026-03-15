@@ -164,6 +164,7 @@ const ConversationService = {
      * @param {string} [conversationMeta.title]
      * @param {string} [conversationMeta.systemPrompt]
      * @param {object} [conversationMeta.settings]
+     * @param {string} [conversationMeta.workflowId] - Link this conversation to a workflow
      * @returns {Promise<object>} The updated conversation document
      */
     async appendMessages(conversationId, project, username, newMessages, conversationMeta = null) {
@@ -190,6 +191,7 @@ const ConversationService = {
                 modalities: computeModalities([]),
                 providers: extractProviders([], metaSettings),
                 totalCost: 0,
+                ...(conversationMeta?.workflowId ? { workflowId: conversationMeta.workflowId } : {}),
                 createdAt: now,
                 updatedAt: now,
             });
@@ -220,6 +222,9 @@ const ConversationService = {
                     ...conversationMeta.settings,
                     systemPrompt: conversationMeta.systemPrompt || "",
                 };
+            }
+            if (conversationMeta.workflowId !== undefined) {
+                setFields.workflowId = conversationMeta.workflowId;
             }
         }
 

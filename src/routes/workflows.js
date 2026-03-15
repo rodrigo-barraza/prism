@@ -350,6 +350,41 @@ router.put("/:id", async (req, res, next) => {
 });
 
 /**
+ * PATCH /workflows/:id/conversations
+ * Append conversation IDs generated during workflow execution.
+ * Body: { conversationIds: string[] }
+ */
+router.patch("/:id/conversations", async (req, res, next) => {
+    try {
+        const db = getDb();
+        if (!db) return res.status(503).json({ error: "Database not available" });
+
+        let filter;
+        try {
+            filter = { _id: new ObjectId(req.params.id) };
+        } catch {
+            filter = { workflowId: req.params.id };
+        }
+
+        const { conversationIds } = req.body;
+        if (!Array.isArray(conversationIds) || conversationIds.length === 0) {
+            return res.status(400).json({ error: "conversationIds array required" });
+        }
+
+        const result = await db.collection(WORKFLOWS_COL).updateOne(filter, {
+            $push: { conversationIds: { $each: conversationIds } },
+            $set: { updatedAt: new Date().toISOString() },
+        });
+
+        if (result.matchedCount === 0) return res.status(404).json({ error: "Workflow not found" });
+        res.json({ success: true });
+    } catch (error) {
+        logger.error(`PATCH /workflows/:id/conversations error: ${error.message}`);
+        next(error);
+    }
+});
+
+/**
  * DELETE /workflows/:id
  * Delete a workflow by ID.
  */
