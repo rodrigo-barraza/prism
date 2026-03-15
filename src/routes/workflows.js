@@ -324,6 +324,17 @@ router.post("/", async (req, res, next) => {
 
         const meta = computeWorkflowMeta(finalNodes);
 
+        // Compute totalCost from linked conversations (source of truth for cost)
+        let totalCost = 0;
+        const convIds = req.body.conversationIds;
+        if (Array.isArray(convIds) && convIds.length > 0) {
+            const conversations = await db.collection("conversations")
+                .find({ id: { $in: convIds } })
+                .project({ totalCost: 1 })
+                .toArray();
+            totalCost = conversations.reduce((sum, c) => sum + (c.totalCost || 0), 0);
+        }
+
         const workflow = {
             ...req.body,
             nodes: finalNodes,
@@ -333,6 +344,7 @@ router.post("/", async (req, res, next) => {
             nodeCount: Array.isArray(finalNodes) ? finalNodes.length : 0,
             edgeCount: Array.isArray(edges) ? edges.length : 0,
             ...meta,
+            totalCost,
             createdAt: now,
             updatedAt: now,
         };
