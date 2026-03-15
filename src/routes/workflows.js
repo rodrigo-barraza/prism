@@ -78,6 +78,8 @@ router.post("/", async (req, res, next) => {
         const workflow = {
             ...req.body,
             source: req.body.source || "retina",
+            nodeCount: Array.isArray(req.body.nodes) ? req.body.nodes.length : 0,
+            connectionCount: Array.isArray(req.body.connections) ? req.body.connections.length : 0,
             createdAt: now,
             updatedAt: now,
         };
@@ -106,9 +108,12 @@ router.put("/:id", async (req, res, next) => {
             filter = { workflowId: req.params.id };
         }
 
+        const body = { ...req.body };
+        if (Array.isArray(body.nodes)) body.nodeCount = body.nodes.length;
+        if (Array.isArray(body.connections)) body.connectionCount = body.connections.length;
         const update = {
             $set: {
-                ...req.body,
+                ...body,
                 updatedAt: new Date().toISOString(),
             },
         };
