@@ -289,7 +289,7 @@ router.post("/", async (req, res, next) => {
         const project = req.headers["x-project"] || null;
         const username = req.headers["x-username"] || null;
 
-        let { nodes, connections, nodeResults, nodeStatuses } = req.body;
+        let { nodes, connections, nodeResults } = req.body;
 
         // If the payload has steps but no pre-built nodes, assemble the graph
         if (Array.isArray(req.body.steps) && req.body.steps.length > 0 && !Array.isArray(nodes)) {
@@ -297,7 +297,6 @@ router.post("/", async (req, res, next) => {
             nodes = graph.nodes;
             connections = graph.connections;
             nodeResults = graph.nodeResults;
-            nodeStatuses = graph.nodeStatuses;
         }
 
         const processedNodes = await extractWorkflowFiles(nodes, project, username);
@@ -309,7 +308,6 @@ router.post("/", async (req, res, next) => {
             nodes: processedNodes || nodes,
             connections: connections || req.body.connections,
             nodeResults: processedResults || nodeResults,
-            nodeStatuses: nodeStatuses || req.body.nodeStatuses,
             source: req.body.source || "retina",
             nodeCount: Array.isArray(processedNodes || nodes) ? (processedNodes || nodes).length : 0,
             connectionCount: Array.isArray(connections) ? connections.length : 0,

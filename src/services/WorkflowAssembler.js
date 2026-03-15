@@ -95,17 +95,17 @@ function resolveModelModalities(step) {
  * or chain connections, keeping the visualization focused on output.
  *
  * @param {Array} steps - Raw step data from the client
- * @returns {{ nodes, connections, nodeResults, nodeStatuses }}
+ * @returns {{ nodes, connections, nodeResults }}
  */
 function assembleGraph(steps) {
   if (!Array.isArray(steps) || steps.length === 0) {
-    return { nodes: [], connections: [], nodeResults: {}, nodeStatuses: {} };
+    return { nodes: [], connections: [], nodeResults: {} };
   }
 
   const allNodes = [];
   const allConnections = [];
   const nodeResults = {};
-  const nodeStatuses = {};
+
 
   // Track the last non-utility model ID for chain connections
   let prevOutputModelId = null;
@@ -229,8 +229,7 @@ function assembleGraph(steps) {
       targetModality: "conversation",
     });
 
-    // Mark model node as done with results
-    nodeStatuses[modelId] = "done";
+    // Store model results
     const result = {};
     if (step.output) result.text = step.output;
     if (step.outputImageRef) result.image = step.outputImageRef;
@@ -278,7 +277,7 @@ function assembleGraph(steps) {
         });
       }
 
-      nodeStatuses[viewerId] = "done";
+
       nodeResults[viewerId] = viewerResult;
     }
 
@@ -302,7 +301,7 @@ function assembleGraph(steps) {
     }
   });
 
-  return { nodes: allNodes, connections: allConnections, nodeResults, nodeStatuses };
+  return { nodes: allNodes, connections: allConnections, nodeResults };
 }
 
 export { assembleGraph };
