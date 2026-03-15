@@ -42,29 +42,23 @@ async function resolveImageRefs(messages, project, username) {
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
 
-    // ── Resolve images array ──
-    if (msg.images && msg.images.length > 0) {
-      const providerImages = [];
-      const storageImages = [];
+    // ── Resolve media array fields: images, audio, video, pdf ──
+    for (const field of ["images", "audio", "video", "pdf"]) {
+      const arr = msg[field];
+      if (arr && Array.isArray(arr) && arr.length > 0) {
+        const providerArr = [];
+        const storageArr = [];
 
-      await Promise.all(
-        msg.images.map(async (ref, j) => {
-          const resolved = await resolveMediaRef(ref, project, username);
-          providerImages[j] = resolved.providerRef;
-          storageImages[j] = resolved.storageRef;
-        }),
-      );
+        await Promise.all(
+          arr.map(async (ref, j) => {
+            const resolved = await resolveMediaRef(ref, project, username);
+            providerArr[j] = resolved.providerRef;
+            storageArr[j] = resolved.storageRef;
+          }),
+        );
 
-      providerMessages[i].images = providerImages;
-      messages[i].images = storageImages;
-    }
-
-    // ── Resolve single media fields: audio, video, pdf ──
-    for (const field of ["audio", "video", "pdf"]) {
-      if (msg[field]) {
-        const resolved = await resolveMediaRef(msg[field], project, username);
-        providerMessages[i][field] = resolved.providerRef;
-        messages[i][field] = resolved.storageRef;
+        providerMessages[i][field] = providerArr;
+        messages[i][field] = storageArr;
       }
     }
   }
@@ -831,6 +825,7 @@ router.post("/", async (req, res, next) => {
       text: text || null,
       thinking: thinking || null,
       images: images.length > 0 ? images : undefined,
+      messages: req.body.messages,
       provider: doneEvent.provider || req.body.provider,
       model: doneEvent.model || req.body.model,
       usage: doneEvent.usage || null,

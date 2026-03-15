@@ -52,27 +52,20 @@ function addWavHeader(buffer, sampleRate = 24000, numChannels = 1) {
 function convertMessages(messages) {
     return messages.map((item) => {
         const parts = [];
-        // Only include images for user messages — model-generated images
+        // Only include media for user messages — model-generated media
         // require a thought_signature when sent back, so we skip them.
-        if (item.role !== "assistant" && item.images && item.images.length > 0) {
-            for (const img of item.images) {
-                const match = img.match(/^data:([\w-]+\/[\w.+-]+);base64,(.+)$/);
-                if (match) {
-                    parts.push({
-                        inlineData: { mimeType: match[1], data: match[2] },
-                    });
-                }
-            }
-        }
-        // Add audio, video, PDF as inline data (user messages only)
         if (item.role !== "assistant") {
-            for (const field of ["audio", "video", "pdf"]) {
-                if (item[field]) {
-                    const match = item[field].match(/^data:([\w-]+\/[\w.+-]+);base64,(.+)$/);
-                    if (match) {
-                        parts.push({
-                            inlineData: { mimeType: match[1], data: match[2] },
-                        });
+            // All media fields are arrays of data URLs
+            for (const field of ["images", "audio", "video", "pdf"]) {
+                const arr = item[field];
+                if (arr && Array.isArray(arr)) {
+                    for (const dataUrl of arr) {
+                        const match = dataUrl.match(/^data:([\w-]+\/[\w.+-]+);base64,(.+)$/);
+                        if (match) {
+                            parts.push({
+                                inlineData: { mimeType: match[1], data: match[2] },
+                            });
+                        }
                     }
                 }
             }
