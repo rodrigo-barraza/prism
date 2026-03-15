@@ -217,6 +217,26 @@ function getBaseUrl(req) {
 }
 
 /**
+ * Compute list-display metadata from workflow nodes.
+ * Single source of truth for providers, modalities, and totalCost.
+ */
+function computeWorkflowMeta(nodes) {
+    const providers = [...new Set(
+        (nodes || []).filter((n) => !n.nodeType && n.provider).map((n) => n.provider)
+    )];
+    const modalities = {};
+    let totalCost = 0;
+    for (const n of nodes || []) {
+        for (const t of n.inputTypes || []) modalities[`${t}In`] = true;
+        for (const t of n.outputTypes || []) modalities[`${t}Out`] = true;
+        for (const m of n.messages || []) {
+            totalCost += m.estimatedCost || 0;
+        }
+    }
+    return { providers, modalities, totalCost };
+}
+
+/**
  * GET /workflows
  * List all saved workflows (metadata only).
  */
@@ -305,15 +325,7 @@ router.post("/", async (req, res, next) => {
         const now = new Date().toISOString();
         const finalNodes = processedNodes || nodes;
 
-        // Compute metadata for list display
-        const providers = [...new Set(
-            (finalNodes || []).filter((n) => !n.nodeType && n.provider).map((n) => n.provider)
-        )];
-        const modalities = {};
-        for (const n of finalNodes || []) {
-            for (const t of n.inputTypes || []) modalities[`${t}In`] = true;
-            for (const t of n.outputTypes || []) modalities[`${t}Out`] = true;
-        }
+        const meta = computeWorkflowMeta(finalNodes);
 
         const workflow = {
             ...req.body,
@@ -323,8 +335,7 @@ router.post("/", async (req, res, next) => {
             source: req.body.source || "retina",
             nodeCount: Array.isArray(finalNodes) ? finalNodes.length : 0,
             edgeCount: Array.isArray(edges) ? edges.length : 0,
-            providers,
-            modalities,
+            ...meta,
             createdAt: now,
             updatedAt: now,
         };
@@ -361,15 +372,7 @@ router.put("/:id", async (req, res, next) => {
             body.nodeCount = body.nodes.length;
 
             // Recompute metadata
-            body.providers = [...new Set(
-                body.nodes.filter((n) => !n.nodeType && n.provider).map((n) => n.provider)
-            )];
-            const modalities = {};
-            for (const n of body.nodes) {
-                for (const t of n.inputTypes || []) modalities[`${t}In`] = true;
-                for (const t of n.outputTypes || []) modalities[`${t}Out`] = true;
-            }
-            body.modalities = modalities;
+            Object.assign(body, computeWorkflowMeta(body.nodes));
         }
         if (body.nodeResults && typeof body.nodeResults === "object") {
             body.nodeResults = await extractNodeResultFiles(body.nodeResults, project, username);
