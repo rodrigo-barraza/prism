@@ -16,7 +16,7 @@ const VIEWER_X_OFFSET = MODEL_X_OFFSET + 350;
 
 /**
  * Check if a step is an internal utility/decision step (not user-facing output).
- * These steps are shown in the graph but don't get viewers or chain connections,
+ * These steps are shown in the graph but don't get viewers or chain edges,
  * keeping the graph clean and focused on meaningful output.
  */
 function isUtilityStep(step) {
@@ -90,25 +90,25 @@ function resolveModelModalities(step) {
  *
  * Non-utility steps additionally produce:
  *   4. Output Viewer node (displays the model's text/image output)
- *   5. Chain connections (previous output model → this model)
+ *   5. Chain edges (previous output model → this model)
  *
  * Utility steps (🧠 prefix) are shown in the graph but without viewers
- * or chain connections, keeping the visualization focused on output.
+ * or chain edges, keeping the visualization focused on output.
  *
  * @param {Array} steps - Raw step data from the client
- * @returns {{ nodes, connections, nodeResults }}
+ * @returns {{ nodes, edges, nodeResults }}
  */
 function assembleGraph(steps) {
   if (!Array.isArray(steps) || steps.length === 0) {
-    return { nodes: [], connections: [], nodeResults: {} };
+    return { nodes: [], edges: [], nodeResults: {} };
   }
 
   const allNodes = [];
-  const allConnections = [];
+  const allEdges = [];
   const nodeResults = {};
 
 
-  // Track the last non-utility model ID for chain connections
+  // Track the last non-utility model ID for chain edges
   let prevOutputModelId = null;
 
   steps.forEach((step, i) => {
@@ -184,7 +184,7 @@ function assembleGraph(steps) {
     const userIdx = step.systemPrompt ? 1 : 0;
 
     if (step.systemPrompt) {
-      allConnections.push({
+      allEdges.push({
         id: `${stepPrefix}_sys_to_conv`,
         sourceNodeId: sysId,
         targetNodeId: convId,
@@ -193,7 +193,7 @@ function assembleGraph(steps) {
       });
     }
     if (step.input) {
-      allConnections.push({
+      allEdges.push({
         id: `${stepPrefix}_user_to_conv`,
         sourceNodeId: userMsgId,
         targetNodeId: convId,
@@ -223,7 +223,7 @@ function assembleGraph(steps) {
     });
 
     // Wire conversation → model
-    allConnections.push({
+    allEdges.push({
       id: `${stepPrefix}_conv_to_model`,
       sourceNodeId: convId,
       targetNodeId: modelId,
@@ -261,7 +261,7 @@ function assembleGraph(steps) {
 
       // Connect model outputs to viewer
       if (step.output) {
-        allConnections.push({
+        allEdges.push({
           id: `${stepPrefix}_model_to_viewer_text`,
           sourceNodeId: modelId,
           targetNodeId: viewerId,
@@ -270,7 +270,7 @@ function assembleGraph(steps) {
         });
       }
       if (step.outputImageRef) {
-        allConnections.push({
+        allEdges.push({
           id: `${stepPrefix}_model_to_viewer_image`,
           sourceNodeId: modelId,
           targetNodeId: viewerId,
@@ -282,9 +282,9 @@ function assembleGraph(steps) {
       nodeResults[viewerId] = viewerResult;
     }
 
-    // ── 6. Chain from previous output model → this model (non-utility only) ──
+    // ── 6. Chain edge from previous output model → this model (non-utility only) ──
     if (!utility && prevOutputModelId) {
-      allConnections.push({
+      allEdges.push({
         id: `chain_${prevOutputModelId}_to_${modelId}`,
         sourceNodeId: prevOutputModelId,
         targetNodeId: modelId,
@@ -299,7 +299,7 @@ function assembleGraph(steps) {
     }
   });
 
-  return { nodes: allNodes, connections: allConnections, nodeResults };
+  return { nodes: allNodes, edges: allEdges, nodeResults };
 }
 
 export { assembleGraph };

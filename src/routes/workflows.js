@@ -232,7 +232,7 @@ router.get("/", async (req, res, next) => {
             .collection(WORKFLOWS_COL)
             .find(query)
             .sort({ updatedAt: -1 })
-            .project({ nodes: 0, connections: 0, nodeResults: 0, nodeStatuses: 0 })
+            .project({ nodes: 0, edges: 0, nodeResults: 0, nodeStatuses: 0 })
             .toArray();
 
         res.json(workflows);
@@ -278,7 +278,7 @@ router.get("/:id", async (req, res, next) => {
  * Accepts two payload formats:
  * 1. Raw steps (from Lupos/bots): { steps, messageId, ... }
  *    → Prism assembles the visual graph using WorkflowAssembler
- * 2. Pre-built graph (from Retina editor): { nodes, connections, ... }
+ * 2. Pre-built graph (from Retina editor): { nodes, edges, ... }
  *    → Passes through unchanged
  */
 router.post("/", async (req, res, next) => {
@@ -289,13 +289,13 @@ router.post("/", async (req, res, next) => {
         const project = req.headers["x-project"] || null;
         const username = req.headers["x-username"] || null;
 
-        let { nodes, connections, nodeResults } = req.body;
+        let { nodes, edges, nodeResults } = req.body;
 
         // If the payload has steps but no pre-built nodes, assemble the graph
         if (Array.isArray(req.body.steps) && req.body.steps.length > 0 && !Array.isArray(nodes)) {
             const graph = assembleGraph(req.body.steps);
             nodes = graph.nodes;
-            connections = graph.connections;
+            edges = graph.edges;
             nodeResults = graph.nodeResults;
         }
 
@@ -306,11 +306,11 @@ router.post("/", async (req, res, next) => {
         const workflow = {
             ...req.body,
             nodes: processedNodes || nodes,
-            connections: connections || req.body.connections,
+            edges: edges || req.body.edges,
             nodeResults: processedResults || nodeResults,
             source: req.body.source || "retina",
             nodeCount: Array.isArray(processedNodes || nodes) ? (processedNodes || nodes).length : 0,
-            connectionCount: Array.isArray(connections) ? connections.length : 0,
+            edgeCount: Array.isArray(edges) ? edges.length : 0,
             createdAt: now,
             updatedAt: now,
         };
@@ -349,7 +349,7 @@ router.put("/:id", async (req, res, next) => {
         if (body.nodeResults && typeof body.nodeResults === "object") {
             body.nodeResults = await extractNodeResultFiles(body.nodeResults, project, username);
         }
-        if (Array.isArray(body.connections)) body.connectionCount = body.connections.length;
+        if (Array.isArray(body.edges)) body.edgeCount = body.edges.length;
         const update = {
             $set: {
                 ...body,
