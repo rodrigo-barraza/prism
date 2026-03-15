@@ -55,6 +55,7 @@ function resolveModelModalities(step) {
 
   if (configModel) {
     return {
+      label: configModel.label || null,
       inputTypes: configModel.inputTypes || ["text"],
       outputTypes: configModel.outputTypes || ["text"],
       rawInputTypes: configModel.inputTypes || ["text"],
@@ -172,6 +173,7 @@ function assembleGraph(steps) {
       modality: "conversation",
       messages,
       supportedModalities,
+      customName: step.label || undefined,
       inputTypes: convInputTypes,
       outputTypes: ["conversation"],
       position: { x: baseX + CONV_X_OFFSET, y: baseY + 100 },
@@ -206,7 +208,7 @@ function assembleGraph(steps) {
       id: modelId,
       modelName: step.model || "unknown",
       provider: step.type?.toLowerCase() || "unknown",
-      displayName: step.label || step.model || "Step",
+      displayName: modalities.label || step.model || "Step",
       modelType: modalities.modelType,
       inputTypes: ["conversation"],
       rawInputTypes: modalities.rawInputTypes,
