@@ -237,8 +237,8 @@ function assembleGraph(steps) {
     if (step.outputImageRef) result.image = step.outputImageRef;
     nodeResults[modelId] = result;
 
-    // ── 5. Output Viewer (non-utility steps only) ──
-    if (!utility) {
+    // ── 5. Output Viewer ──
+    {
       const viewerId = `${stepPrefix}_viewer`;
       const viewerResult = {};
       if (step.output) viewerResult.text = step.output;
@@ -278,7 +278,6 @@ function assembleGraph(steps) {
           targetModality: "image",
         });
       }
-
 
       nodeResults[viewerId] = viewerResult;
     }
