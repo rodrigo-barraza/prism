@@ -175,7 +175,16 @@ router.get("/stats/projects", async (req, res, next) => {
         const db = getDb();
         if (!db) return res.status(503).json({ error: "Database not available" });
 
+        const { from, to } = req.query;
+        const match = {};
+        if (from || to) {
+            match.timestamp = {};
+            if (from) match.timestamp.$gte = from;
+            if (to) match.timestamp.$lte = to;
+        }
+
         const pipeline = [
+            ...(Object.keys(match).length ? [{ $match: match }] : []),
             {
                 $group: {
                     _id: "$project",
@@ -275,7 +284,16 @@ router.get("/stats/models", async (req, res, next) => {
         const db = getDb();
         if (!db) return res.status(503).json({ error: "Database not available" });
 
+        const { from, to } = req.query;
+        const match = {};
+        if (from || to) {
+            match.timestamp = {};
+            if (from) match.timestamp.$gte = from;
+            if (to) match.timestamp.$lte = to;
+        }
+
         const pipeline = [
+            ...(Object.keys(match).length ? [{ $match: match }] : []),
             {
                 $group: {
                     _id: { model: "$model", provider: "$provider" },
