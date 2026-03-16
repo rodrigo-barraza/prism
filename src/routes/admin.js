@@ -1112,17 +1112,21 @@ router.get("/media", async (req, res, next) => {
         const db = getDb();
         if (!db) return res.status(503).json({ error: "Database not available" });
 
-        const { page = 1, limit = 100, type, origin, search, project } = req.query;
+        const { page = 1, limit = 100, type, origin, search, project, username } = req.query;
         const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
         const lim = parseInt(limit, 10);
 
-        // Get distinct projects for filter dropdown
-        const projects = await db.collection(CONVERSATIONS_COL).distinct("project");
+        // Get distinct projects and usernames for filter dropdowns
+        const [projects, usernames] = await Promise.all([
+            db.collection(CONVERSATIONS_COL).distinct("project"),
+            db.collection(CONVERSATIONS_COL).distinct("username"),
+        ]);
 
         // Use aggregation to unwind messages and extract media in one query
         const preMatch = {};
         if (search) preMatch.title = { $regex: search, $options: "i" };
         if (project) preMatch.project = project;
+        if (username) preMatch.username = username;
 
         const pipeline = [
             ...(Object.keys(preMatch).length ? [{ $match: preMatch }] : []),
@@ -1221,7 +1225,7 @@ router.get("/media", async (req, res, next) => {
             timestamp: item.timestamp,
         }));
 
-        res.json({ data, total, page: parseInt(page, 10), limit: lim, projects: projects.filter(Boolean).sort() });
+        res.json({ data, total, page: parseInt(page, 10), limit: lim, projects: projects.filter(Boolean).sort(), usernames: usernames.filter(Boolean).sort() });
     } catch (error) {
         logger.error(`Admin /media error: ${error.message}`);
         next(error);
