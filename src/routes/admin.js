@@ -1,4 +1,5 @@
 import express from "express";
+import { ObjectId } from "mongodb";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME, ADMIN_SECRET } from "../../secrets.js";
 import { getProvider } from "../providers/index.js";
@@ -8,6 +9,7 @@ import os from "os";
 const router = express.Router();
 const REQUESTS_COL = "requests";
 const CONVERSATIONS_COL = "conversations";
+const WORKFLOWS_COL = "workflows";
 
 // ── Admin auth middleware ────────────────────────────────────
 function adminAuth(req, res, next) {
@@ -103,6 +105,70 @@ router.get("/requests/:id", async (req, res, next) => {
         res.json(doc);
     } catch (error) {
         logger.error(`Admin /requests/:id error: ${error.message}`);
+        next(error);
+    }
+});
+
+// ============================================================
+// GET /admin/requests/:id/associations — conversations & workflows
+// ============================================================
+router.get("/requests/:id/associations", async (req, res, next) => {
+    try {
+        const db = getDb();
+        if (!db) return res.status(503).json({ error: "Database not available" });
+
+        const request = await db
+            .collection(REQUESTS_COL)
+            .findOne({ requestId: req.params.id });
+        if (!request) return res.status(404).json({ error: "Request not found" });
+
+        let conversations = [];
+        let workflows = [];
+
+        if (request.conversationId) {
+            // Find conversations matching this conversationId
+            conversations = await db
+                .collection(CONVERSATIONS_COL)
+                .find({ id: request.conversationId })
+                .project({ id: 1, title: 1, project: 1, workflowId: 1 })
+                .toArray();
+
+            // Find workflows that contain this conversationId in their conversationIds array,
+            // or are linked via the conversation's workflowId
+            const workflowIds = conversations
+                .map((c) => c.workflowId)
+                .filter(Boolean);
+
+            const workflowFilter = {
+                $or: [
+                    { conversationIds: request.conversationId },
+                    ...(workflowIds.length > 0
+                        ? [{ _id: { $in: workflowIds.map((id) => {
+                            try { return new ObjectId(id); } catch { return id; }
+                        }) } }]
+                        : []),
+                ],
+            };
+
+            workflows = await db
+                .collection(WORKFLOWS_COL)
+                .find(workflowFilter)
+                .project({ _id: 1, name: 1, nodeCount: 1, edgeCount: 1, source: 1 })
+                .toArray();
+
+            // Normalize _id to string id
+            workflows = workflows.map((w) => ({
+                id: w._id.toString(),
+                name: w.name || "Untitled Workflow",
+                nodeCount: w.nodeCount || 0,
+                edgeCount: w.edgeCount || 0,
+                source: w.source || "retina",
+            }));
+        }
+
+        res.json({ conversations, workflows });
+    } catch (error) {
+        logger.error(`Admin /requests/:id/associations error: ${error.message}`);
         next(error);
     }
 });
@@ -205,10 +271,31 @@ router.get("/stats/projects", async (req, res, next) => {
             { $sort: { totalRequests: -1 } },
         ];
 
-        const results = await db
-            .collection(REQUESTS_COL)
-            .aggregate(pipeline)
-            .toArray();
+        // Count workflows per project via conversationIds → conversations.project
+        const workflowPipeline = [
+            { $match: { conversationIds: { $exists: true, $ne: [] } } },
+            { $lookup: {
+                from: CONVERSATIONS_COL,
+                localField: "conversationIds",
+                foreignField: "id",
+                as: "_convs",
+                pipeline: [{ $project: { project: 1 } }],
+            }},
+            { $unwind: "$_convs" },
+            { $group: { _id: "$_convs.project", workflowIds: { $addToSet: "$_id" } } },
+            { $project: { _id: 1, workflowCount: { $size: "$workflowIds" } } },
+        ];
+
+        const [results, workflowCounts] = await Promise.all([
+            db.collection(REQUESTS_COL).aggregate(pipeline).toArray(),
+            db.collection(WORKFLOWS_COL).aggregate(workflowPipeline).toArray(),
+        ]);
+
+        // Build a project → workflowCount map
+        const wfMap = {};
+        for (const wc of workflowCounts) {
+            wfMap[wc._id || "unknown"] = wc.workflowCount;
+        }
 
         res.json(
             results.map((r) => ({
@@ -218,6 +305,7 @@ router.get("/stats/projects", async (req, res, next) => {
                 totalCost: r.totalCost,
                 avgLatency: r.avgLatency,
                 lastRequest: r.lastRequest,
+                workflowCount: wfMap[r._id || "unknown"] || 0,
             })),
         );
     } catch (error) {
@@ -1017,7 +1105,7 @@ router.post("/lm-studio/unload", async (req, res, next) => {
 // ============================================================
 // Workflows — admin read-only views (POST lives at /workflows)
 // ============================================================
-const WORKFLOWS_COL = "workflows";
+
 
 /**
  * GET /admin/workflows — paginated workflow list

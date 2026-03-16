@@ -227,8 +227,13 @@ function computeWorkflowMeta(nodes) {
     )];
     const modalities = {};
     for (const n of nodes || []) {
-        for (const t of n.inputTypes || []) modalities[`${t}In`] = true;
-        for (const t of n.outputTypes || []) modalities[`${t}Out`] = true;
+        // Only include boundary nodes: input assets define workflow inputs,
+        // viewer nodes define workflow outputs
+        if (n.nodeType === "input") {
+            for (const t of n.outputTypes || []) modalities[`${t}In`] = true;
+        } else if (n.nodeType === "viewer") {
+            for (const t of n.inputTypes || []) modalities[`${t}Out`] = true;
+        }
     }
     return { providers, modalities };
 }
