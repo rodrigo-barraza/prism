@@ -1112,12 +1112,20 @@ router.get("/media", async (req, res, next) => {
         const db = getDb();
         if (!db) return res.status(503).json({ error: "Database not available" });
 
-        const { page = 1, limit = 100, type, origin } = req.query;
+        const { page = 1, limit = 100, type, origin, search, project } = req.query;
         const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
         const lim = parseInt(limit, 10);
 
+        // Get distinct projects for filter dropdown
+        const projects = await db.collection(CONVERSATIONS_COL).distinct("project");
+
         // Use aggregation to unwind messages and extract media in one query
+        const preMatch = {};
+        if (search) preMatch.title = { $regex: search, $options: "i" };
+        if (project) preMatch.project = project;
+
         const pipeline = [
+            ...(Object.keys(preMatch).length ? [{ $match: preMatch }] : []),
             { $unwind: "$messages" },
             {
                 $project: {
@@ -1213,7 +1221,7 @@ router.get("/media", async (req, res, next) => {
             timestamp: item.timestamp,
         }));
 
-        res.json({ data, total, page: parseInt(page, 10), limit: lim });
+        res.json({ data, total, page: parseInt(page, 10), limit: lim, projects: projects.filter(Boolean).sort() });
     } catch (error) {
         logger.error(`Admin /media error: ${error.message}`);
         next(error);
