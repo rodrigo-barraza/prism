@@ -1,5 +1,4 @@
 import express from "express";
-import { ObjectId } from "mongodb";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME, ADMIN_SECRET } from "../../secrets.js";
 import { getProvider } from "../providers/index.js";
@@ -130,29 +129,13 @@ router.get("/requests/:id/associations", async (req, res, next) => {
             conversations = await db
                 .collection(CONVERSATIONS_COL)
                 .find({ id: request.conversationId })
-                .project({ id: 1, title: 1, project: 1, workflowId: 1 })
+                .project({ id: 1, title: 1, project: 1 })
                 .toArray();
 
-            // Find workflows that contain this conversationId in their conversationIds array,
-            // or are linked via the conversation's workflowId
-            const workflowIds = conversations
-                .map((c) => c.workflowId)
-                .filter(Boolean);
-
-            const workflowFilter = {
-                $or: [
-                    { conversationIds: request.conversationId },
-                    ...(workflowIds.length > 0
-                        ? [{ _id: { $in: workflowIds.map((id) => {
-                            try { return new ObjectId(id); } catch { return id; }
-                        }) } }]
-                        : []),
-                ],
-            };
-
+            // Find workflows that contain this conversationId
             workflows = await db
                 .collection(WORKFLOWS_COL)
-                .find(workflowFilter)
+                .find({ conversationIds: request.conversationId })
                 .project({ _id: 1, name: 1, nodeCount: 1, edgeCount: 1, source: 1 })
                 .toArray();
 
