@@ -1052,6 +1052,7 @@ router.get("/workflows", async (req, res, next) => {
                 .find(filter)
                 .project({
                     _id: 1,
+                    name: 1,
                     messageId: 1,
                     guildId: 1,
                     guildName: 1,
@@ -1062,7 +1063,12 @@ router.get("/workflows", async (req, res, next) => {
                     userContent: 1,
                     stepCount: 1,
                     totalDuration: 1,
+                    totalCost: 1,
+                    modalities: 1,
+                    providers: 1,
+                    source: 1,
                     createdAt: 1,
+                    updatedAt: 1,
                 })
                 .sort({ [sort]: sortDir })
                 .skip(skip)
@@ -1240,11 +1246,15 @@ router.get("/text", async (req, res, next) => {
         const db = getDb();
         if (!db) return res.status(503).json({ error: "Database not available" });
 
-        const { page = 1, limit = 50, origin, search } = req.query;
+        const { page = 1, limit = 50, origin, search, project } = req.query;
         const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
         const lim = parseInt(limit, 10);
 
+        const preMatch = {};
+        if (project) preMatch.project = project;
+
         const pipeline = [
+            ...(Object.keys(preMatch).length ? [{ $match: preMatch }] : []),
             { $unwind: "$messages" },
             {
                 $match: {
