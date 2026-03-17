@@ -35,14 +35,16 @@ export function setupWebSocket(wss) {
       req.headers["x-username"] ||
       url.searchParams.get("username") ||
       "unknown";
+    const clientIp =
+      req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress;
     logger.info(
       `WebSocket connection on ${pathname} (project: ${project}, user: ${username})`,
     );
 
     if (pathname === "/ws/chat") {
-      handleWsChat(ws, project, username);
+      handleWsChat(ws, project, username, clientIp);
     } else if (pathname === "/ws/text-to-audio") {
-      handleWsVoice(ws, project, username);
+      handleWsVoice(ws, project, username, clientIp);
     } else {
       ws.send(
         JSON.stringify({
@@ -58,7 +60,7 @@ export function setupWebSocket(wss) {
 /**
  * WebSocket chat handler — delegates to shared handleChat() from chat.js.
  */
-function handleWsChat(ws, project, username) {
+function handleWsChat(ws, project, username, clientIp) {
   ws.on("message", async (rawData) => {
     let data;
     try {
@@ -69,7 +71,7 @@ function handleWsChat(ws, project, username) {
     }
 
     await handleChat(
-      { ...data, project, username },
+      { ...data, project, username, clientIp },
       (event) => {
         if (ws.readyState === ws.OPEN) {
           ws.send(JSON.stringify(event));
@@ -83,7 +85,7 @@ function handleWsChat(ws, project, username) {
  * WebSocket voice handler — delegates to shared handleVoice() from voice.js.
  * Sends binary audio frames for audio data, JSON for control events.
  */
-function handleWsVoice(ws, project, username) {
+function handleWsVoice(ws, project, username, clientIp) {
   ws.on("message", async (rawData) => {
     let data;
     try {
@@ -95,7 +97,7 @@ function handleWsVoice(ws, project, username) {
 
     try {
       await handleVoice(
-        { ...data, project, username },
+        { ...data, project, username, clientIp },
         (chunk) => {
           if (ws.readyState === ws.OPEN) {
             ws.send(chunk); // Binary audio frame

@@ -138,7 +138,7 @@ router.post("/", async (req, res, next) => {
     }
 
     logger.request(
-      req.project, req.username,
+      req.project, req.username, req.clientIp,
       `[embed] ${providerName} model=${resolvedModel} — ` +
       `dims: ${result.dimensions}, total: ${totalSec.toFixed(2)}s` +
       (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
@@ -149,6 +149,7 @@ router.post("/", async (req, res, next) => {
       endpoint: "embed",
       project: req.project,
       username: req.username,
+      clientIp: req.clientIp,
       provider: providerName,
       model: resolvedModel,
       success: true,
@@ -169,6 +170,7 @@ router.post("/", async (req, res, next) => {
       endpoint: "embed",
       project: req.project,
       username: req.username,
+      clientIp: req.clientIp,
       provider: providerName,
       model: resolvedModel,
       success: false,

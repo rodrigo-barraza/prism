@@ -6,8 +6,10 @@ import { WebSocketServer } from "ws";
 import { errorHandler } from "./utils/errors.js";
 import logger from "./utils/logger.js";
 import { listProviders } from "./providers/index.js";
+import { TYPES } from "./config.js";
 import { setupWebSocket } from "./websocket/index.js";
 import { authMiddleware } from "./middleware/AuthMiddleware.js";
+import { requestLoggerMiddleware } from "./middleware/RequestLoggerMiddleware.js";
 import {
     PORT,
     MONGO_URI,
@@ -38,6 +40,7 @@ const server = http.createServer(app);
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: "50mb" }));
+app.use(requestLoggerMiddleware);
 
 // Endpoint registry (single source of truth for health check + startup logs)
 const ENDPOINTS = {
@@ -119,6 +122,7 @@ setupWebSocket(wss);
     server.listen(PORT, () => {
         logger.success(`Prism the AI Gateway is running on port ${PORT}`);
         logger.info("Available providers:", listProviders().join(", "));
+        logger.info("Available modalities:", Object.values(TYPES).join(", "));
         ENDPOINTS.rest.forEach((ep) =>
             logger.info(`  REST  →  http://localhost:${PORT}${ep}`),
         );

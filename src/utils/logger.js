@@ -44,9 +44,23 @@ const logger = {
       ...args,
     );
   },
-  request(project, username, message, ...args) {
+  request(project, username, clientIp, message, ...args) {
+    // Build identity tag: [project/username], [project], [username], or nothing
+    let identityTag = "";
+    const hasProject = project && project !== "unknown";
+    const hasUser = username && username !== "unknown";
+    if (hasProject && hasUser) {
+      identityTag = ` ${COLORS.cyan}[${project}/${username}]${COLORS.reset}`;
+    } else if (hasProject) {
+      identityTag = ` ${COLORS.cyan}[${project}]${COLORS.reset}`;
+    } else if (hasUser) {
+      identityTag = ` ${COLORS.cyan}[${username}]${COLORS.reset}`;
+    }
+
+    const ipTag = clientIp ? ` ${COLORS.gray}(${clientIp})${COLORS.reset}` : "";
+
     console.log(
-      `${COLORS.gray}[${timestamp()}]${COLORS.reset} ${COLORS.green}✓${COLORS.reset} ${COLORS.cyan}[${project}/${username}]${COLORS.reset} ${message}`,
+      `${COLORS.gray}[${timestamp()}]${COLORS.reset} ${COLORS.green}✓${COLORS.reset}${identityTag}${ipTag} ${message}`,
       ...args,
     );
   },

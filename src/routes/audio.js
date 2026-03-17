@@ -46,6 +46,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
     conversationMeta,
     project = "unknown",
     username = "unknown",
+    clientIp = null,
   } = params;
 
   try {
@@ -97,7 +98,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
     }
 
     logger.request(
-      project, username,
+      project, username, clientIp,
       `[audio] ${providerName} model=${model || "default"} — ` +
       `total: ${totalSec.toFixed(2)}s`,
     );
@@ -107,6 +108,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
       endpoint: "text-to-audio",
       project,
       username,
+      clientIp,
       provider: providerName,
       model: model || null,
       conversationId: conversationId || null,
@@ -173,6 +175,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
       endpoint: "text-to-audio",
       project,
       username,
+      clientIp,
       provider: providerName,
       model: model || null,
       success: false,
@@ -202,6 +205,7 @@ router.post("/", async (req, res, next) => {
         ...req.body,
         project: req.project,
         username: req.username,
+        clientIp: req.clientIp,
       },
       (chunk) => {
         // Set headers on first chunk
@@ -284,7 +288,7 @@ router.post("/", async (req, res, next) => {
     const totalSec = (performance.now() - requestStart) / 1000;
 
     logger.request(
-      req.project, req.username,
+      req.project, req.username, req.clientIp,
       `[audio/transcribe] ${providerName} model=${model || "default"} — ` +
       `total: ${totalSec.toFixed(2)}s`,
     );
@@ -294,6 +298,7 @@ router.post("/", async (req, res, next) => {
       endpoint: "audio-to-text",
       project: req.project,
       username: req.username,
+      clientIp: req.clientIp,
       provider: providerName,
       model: model || null,
       conversationId: null,
@@ -312,6 +317,7 @@ router.post("/", async (req, res, next) => {
       endpoint: "audio-to-text",
       project: req.project,
       username: req.username,
+      clientIp: req.clientIp,
       provider: providerName,
       model: model || null,
       success: false,

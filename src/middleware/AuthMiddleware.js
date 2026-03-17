@@ -19,9 +19,10 @@ export function authMiddleware(req, res, next) {
     });
   }
 
-  // Attach project + username identifiers for downstream logging / tracking
+  // Attach project + username + client IP for downstream logging / tracking
   req.project = req.headers["x-project"] || "unknown";
   req.username = req.headers["x-username"] || "unknown";
+  req.clientIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.ip;
 
   next();
 }

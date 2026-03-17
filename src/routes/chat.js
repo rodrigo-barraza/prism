@@ -168,6 +168,7 @@ export async function handleChat(params, emit) {
     conversationMeta,
     project = "unknown",
     username = "unknown",
+    clientIp = null,
   } = params;
 
   let resolvedModel = null;
@@ -218,6 +219,7 @@ export async function handleChat(params, emit) {
         conversationMeta,
         project,
         username,
+        clientIp,
         requestId,
         requestStart,
         emit,
@@ -248,6 +250,7 @@ export async function handleChat(params, emit) {
         conversationMeta,
         project,
         username,
+        clientIp,
         requestId,
         requestStart,
         emit,
@@ -264,6 +267,7 @@ export async function handleChat(params, emit) {
         conversationMeta,
         project,
         username,
+        clientIp,
         requestId,
         requestStart,
         emit,
@@ -276,6 +280,7 @@ export async function handleChat(params, emit) {
       endpoint: "chat",
       project,
       username,
+      clientIp,
       provider: providerName,
       model: resolvedModel,
       success: false,
@@ -294,7 +299,7 @@ export async function handleChat(params, emit) {
 async function handleImageAPIModel(ctx) {
   const {
     provider, providerName, resolvedModel, modelDef, messages, options,
-    conversationId, userMessage, conversationMeta, project, username,
+    conversationId, userMessage, conversationMeta, project, username, clientIp,
     requestId, requestStart, emit,
   } = ctx;
 
@@ -326,7 +331,7 @@ async function handleImageAPIModel(ctx) {
   );
 
   logger.request(
-    project, username,
+    project, username, clientIp,
     `[chat/image-api] ${providerName} ${resolvedModel} — ` +
     `total: ${totalSec.toFixed(2)}s` +
     (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
@@ -356,6 +361,7 @@ async function handleImageAPIModel(ctx) {
     endpoint: "chat",
     project,
     username,
+    clientIp,
     provider: providerName,
     model: resolvedModel,
     conversationId: conversationId || null,
@@ -430,7 +436,7 @@ async function handleImageAPIModel(ctx) {
 async function handleStreamingText(ctx) {
   const {
     provider, providerName, resolvedModel, modelDef, messages, options,
-    conversationId, userMessage, conversationMeta, project, username,
+    conversationId, userMessage, conversationMeta, project, username, clientIp,
     requestId, requestStart, emit,
   } = ctx;
 
@@ -559,7 +565,7 @@ async function handleStreamingText(ctx) {
         : "N/A";
 
     logger.request(
-      project, username,
+      project, username, clientIp,
       `[chat] ${providerName} ${resolvedModel} — ` +
       `in: ${usage.inputTokens} tokens, out: ${usage.outputTokens} tokens, ` +
       `speed: ${tokensPerSec} tok/s, ` +
@@ -574,6 +580,7 @@ async function handleStreamingText(ctx) {
       endpoint: "chat",
       project,
       username,
+      clientIp,
       provider: providerName,
       model: resolvedModel,
       conversationId: conversationId || null,
@@ -665,7 +672,7 @@ async function handleStreamingText(ctx) {
 async function handleNonStreamingText(ctx) {
   const {
     provider, providerName, resolvedModel, messages, options,
-    conversationId, userMessage, conversationMeta, project, username,
+    conversationId, userMessage, conversationMeta, project, username, clientIp,
     requestId, requestStart, emit,
   } = ctx;
 
@@ -685,7 +692,7 @@ async function handleNonStreamingText(ctx) {
       : "N/A";
 
   logger.request(
-    project, username,
+    project, username, clientIp,
     `[chat] ${providerName} ${resolvedModel} — ` +
     `in: ${usage.inputTokens} tokens, out: ${usage.outputTokens} tokens, ` +
     `speed: ${tokensPerSec} tok/s, ` +
@@ -700,6 +707,7 @@ async function handleNonStreamingText(ctx) {
     endpoint: "chat",
     project,
     username,
+    clientIp,
     provider: providerName,
     model: resolvedModel,
     conversationId: conversationId || null,
@@ -805,6 +813,7 @@ router.post("/", async (req, res, next) => {
         ...req.body,
         project: req.project,
         username: req.username,
+        clientIp: req.clientIp,
       },
       (event) => {
         res.write(`data: ${JSON.stringify(event)}\n\n`);
@@ -819,6 +828,7 @@ router.post("/", async (req, res, next) => {
         ...req.body,
         project: req.project,
         username: req.username,
+        clientIp: req.clientIp,
       },
       (event) => events.push(event),
     );
