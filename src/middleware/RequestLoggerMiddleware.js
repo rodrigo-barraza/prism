@@ -22,8 +22,17 @@ export function requestLoggerMiddleware(req, res, next) {
   const start = performance.now();
 
   // Resolve identity + IP early (before authMiddleware for admin/files routes)
-  const project = req.project || req.headers["x-project"] || null;
-  const username = req.username || req.headers["x-username"] || null;
+  // Fall back to headers, then to path-based extraction for /files/projects/{project}/{username}/
+  let project = req.project || req.headers["x-project"] || null;
+  let username = req.username || req.headers["x-username"] || null;
+  if (!project && req.originalUrl.startsWith("/files/projects/")) {
+    const segments = req.originalUrl.split("/");
+    // /files/projects/{project}/{username}/...
+    if (segments.length >= 5) {
+      project = segments[3] || null;
+      username = segments[4]?.split("?")[0] || null;
+    }
+  }
   const clientIp = req.clientIp || req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.ip;
 
   // Log on response finish
