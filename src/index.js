@@ -33,6 +33,9 @@ import memoryRouter from "./routes/memory.js";
 import MemoryService from "./services/MemoryService.js";
 import adminRouter from "./routes/admin.js";
 import workflowsRouter from "./routes/workflows.js";
+import mediaRouter from "./routes/media.js";
+import textRouter from "./routes/text.js";
+import lmStudioRouter from "./routes/lm-studio.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -54,6 +57,9 @@ const ENDPOINTS = {
         "/memory",
         "/files",
         "/workflows",
+        "/media",
+        "/text",
+        "/lm-studio",
     ],
     websocket: ["/ws/chat", "/ws/text-to-audio"],
     admin: ["/admin", "/admin/lm-studio"],
@@ -87,6 +93,9 @@ app.use("/embed", embedRouter);
 app.use("/conversations", conversationsRouter);
 app.use("/memory", memoryRouter);
 app.use("/workflows", workflowsRouter);
+app.use("/media", mediaRouter);
+app.use("/text", textRouter);
+app.use("/lm-studio", lmStudioRouter);
 
 // Error handler (must be last)
 app.use(errorHandler);
@@ -122,7 +131,22 @@ setupWebSocket(wss);
     server.listen(PORT, () => {
         logger.success(`Prism the AI Gateway is running on port ${PORT}`);
         logger.info("Available providers:", listProviders().join(", "));
-        logger.info("Available modalities:", Object.values(TYPES).join(", "));
+        // Modality colors matching Retina's MODALITY_COLORS
+        const MODALITY_COLORS = {
+            text: [99, 102, 241],       // #6366f1 — indigo
+            image: [16, 185, 129],      // #10b981 — emerald
+            audio: [245, 158, 11],      // #f59e0b — amber
+            video: [244, 63, 94],       // #f43f5e — rose
+            pdf: [100, 116, 139],       // #64748b — slate
+            embedding: [6, 182, 212],   // #06b6d4 — cyan
+        };
+        const coloredModalities = Object.values(TYPES)
+            .map((t) => {
+                const [r, g, b] = MODALITY_COLORS[t] || [255, 255, 255];
+                return `\x1b[38;2;${r};${g};${b}m${t}\x1b[0m`;
+            })
+            .join(", ");
+        logger.info("Available modalities:", coloredModalities);
         ENDPOINTS.rest.forEach((ep) =>
             logger.info(`  REST  →  http://localhost:${PORT}${ep}`),
         );
