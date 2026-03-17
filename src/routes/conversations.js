@@ -63,6 +63,31 @@ router.get("/:id", async (req, res, next) => {
 });
 
 /**
+ * GET /conversations/:id/workflows
+ * Find workflows that include this conversation ID.
+ */
+router.get("/:id/workflows", async (req, res, next) => {
+    try {
+        const client = MongoWrapper.getClient(MONGO_DB_NAME);
+        if (!client) {
+            return res.status(503).json({ error: "Database not available" });
+        }
+
+        const workflows = await client
+            .db(MONGO_DB_NAME)
+            .collection("workflows")
+            .find({ conversationIds: req.params.id })
+            .project({ workflowName: 1, updatedAt: 1 })
+            .toArray();
+
+        res.json(workflows);
+    } catch (error) {
+        logger.error(`Error fetching conversation workflows: ${error.message}`);
+        next(error);
+    }
+});
+
+/**
  * PATCH /conversations/:id
  * Update specific fields of a conversation (messages, title, systemPrompt, settings).
  * Used for non-generation mutations (edit/delete messages, rename, etc.).
