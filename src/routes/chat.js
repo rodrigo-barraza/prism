@@ -325,7 +325,8 @@ async function handleImageAPIModel(ctx) {
     prompt, imgPricing, allImages.length, outputImgTokens,
   );
 
-  logger.info(
+  logger.request(
+    project, username,
     `[chat/image-api] ${providerName} ${resolvedModel} — ` +
     `total: ${totalSec.toFixed(2)}s` +
     (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
@@ -557,7 +558,8 @@ async function handleStreamingText(ctx) {
         ? (usage.outputTokens / generationSec).toFixed(1)
         : "N/A";
 
-    logger.info(
+    logger.request(
+      project, username,
       `[chat] ${providerName} ${resolvedModel} — ` +
       `in: ${usage.inputTokens} tokens, out: ${usage.outputTokens} tokens, ` +
       `speed: ${tokensPerSec} tok/s, ` +
@@ -682,7 +684,8 @@ async function handleNonStreamingText(ctx) {
       ? (usage.outputTokens / generationSec).toFixed(1)
       : "N/A";
 
-  logger.info(
+  logger.request(
+    project, username,
     `[chat] ${providerName} ${resolvedModel} — ` +
     `in: ${usage.inputTokens} tokens, out: ${usage.outputTokens} tokens, ` +
     `speed: ${tokensPerSec} tok/s, ` +

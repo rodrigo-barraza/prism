@@ -44,6 +44,12 @@ const logger = {
       ...args,
     );
   },
+  request(project, username, message, ...args) {
+    console.log(
+      `${COLORS.gray}[${timestamp()}]${COLORS.reset} ${COLORS.green}✓${COLORS.reset} ${COLORS.cyan}[${project}/${username}]${COLORS.reset} ${message}`,
+      ...args,
+    );
+  },
 };
 
 export default logger;

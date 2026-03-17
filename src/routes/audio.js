@@ -96,7 +96,8 @@ export async function handleVoice(params, emitBinary, emitJSON) {
       }
     }
 
-    logger.info(
+    logger.request(
+      project, username,
       `[audio] ${providerName} model=${model || "default"} — ` +
       `total: ${totalSec.toFixed(2)}s`,
     );
@@ -282,7 +283,8 @@ router.post("/", async (req, res, next) => {
     const result = await provider.transcribeAudio(audioBuffer, mimeType, model, options);
     const totalSec = (performance.now() - requestStart) / 1000;
 
-    logger.info(
+    logger.request(
+      req.project, req.username,
       `[audio/transcribe] ${providerName} model=${model || "default"} — ` +
       `total: ${totalSec.toFixed(2)}s`,
     );

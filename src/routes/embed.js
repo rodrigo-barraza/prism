@@ -137,7 +137,8 @@ router.post("/", async (req, res, next) => {
       estimatedCost = (approxTokens / 1_000_000) * pricing.inputPerMillion;
     }
 
-    logger.info(
+    logger.request(
+      req.project, req.username,
       `[embed] ${providerName} model=${resolvedModel} — ` +
       `dims: ${result.dimensions}, total: ${totalSec.toFixed(2)}s` +
       (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
