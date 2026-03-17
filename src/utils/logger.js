@@ -1,3 +1,5 @@
+import { getRequestContext } from "./RequestContext.js";
+
 const COLORS = {
   reset: "\x1b[0m",
   red: "\x1b[31m",
@@ -11,6 +13,27 @@ const COLORS = {
 
 function timestamp() {
   return new Date().toISOString();
+}
+
+/**
+ * Build identity + IP tags from provided values or AsyncLocalStorage context.
+ */
+function buildContextTags(project, username, clientIp) {
+  const hasProject = project && project !== "unknown";
+  const hasUser = username && username !== "unknown";
+
+  let identityTag = "";
+  if (hasProject && hasUser) {
+    identityTag = ` ${COLORS.cyan}[${project}/${username}]${COLORS.reset}`;
+  } else if (hasProject) {
+    identityTag = ` ${COLORS.cyan}[${project}]${COLORS.reset}`;
+  } else if (hasUser) {
+    identityTag = ` ${COLORS.cyan}[${username}]${COLORS.reset}`;
+  }
+
+  const ipTag = clientIp ? ` ${COLORS.gray}(${clientIp})${COLORS.reset}` : "";
+
+  return `${identityTag}${ipTag}`;
 }
 
 const logger = {
@@ -39,28 +62,17 @@ const logger = {
     );
   },
   provider(provider, action, ...args) {
+    const ctx = getRequestContext();
+    const tags = buildContextTags(ctx.project, ctx.username, ctx.clientIp);
     console.log(
-      `${COLORS.gray}[${timestamp()}]${COLORS.reset} ${COLORS.magenta}◆${COLORS.reset} ${COLORS.cyan}[${provider}]${COLORS.reset} ${action}`,
+      `${COLORS.gray}[${timestamp()}]${COLORS.reset} ${COLORS.magenta}◆${COLORS.reset}${tags} ${COLORS.cyan}[${provider}]${COLORS.reset} ${action}`,
       ...args,
     );
   },
   request(project, username, clientIp, message, ...args) {
-    // Build identity tag: [project/username], [project], [username], or nothing
-    let identityTag = "";
-    const hasProject = project && project !== "unknown";
-    const hasUser = username && username !== "unknown";
-    if (hasProject && hasUser) {
-      identityTag = ` ${COLORS.cyan}[${project}/${username}]${COLORS.reset}`;
-    } else if (hasProject) {
-      identityTag = ` ${COLORS.cyan}[${project}]${COLORS.reset}`;
-    } else if (hasUser) {
-      identityTag = ` ${COLORS.cyan}[${username}]${COLORS.reset}`;
-    }
-
-    const ipTag = clientIp ? ` ${COLORS.gray}(${clientIp})${COLORS.reset}` : "";
-
+    const tags = buildContextTags(project, username, clientIp);
     console.log(
-      `${COLORS.gray}[${timestamp()}]${COLORS.reset} ${COLORS.green}✓${COLORS.reset}${identityTag}${ipTag} ${message}`,
+      `${COLORS.gray}[${timestamp()}]${COLORS.reset} ${COLORS.green}✓${COLORS.reset}${tags} ${message}`,
       ...args,
     );
   },

@@ -1,5 +1,6 @@
 import { GATEWAY_SECRET } from "../../secrets.js";
 import logger from "../utils/logger.js";
+import { requestContext } from "../utils/RequestContext.js";
 
 /**
  * Express middleware that validates the x-api-secret header
@@ -23,6 +24,14 @@ export function authMiddleware(req, res, next) {
   req.project = req.headers["x-project"] || "unknown";
   req.username = req.headers["x-username"] || "unknown";
   req.clientIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.ip;
+
+  // Update AsyncLocalStorage context with auth-resolved values
+  const store = requestContext.getStore();
+  if (store) {
+    store.project = req.project;
+    store.username = req.username;
+    store.clientIp = req.clientIp;
+  }
 
   next();
 }
