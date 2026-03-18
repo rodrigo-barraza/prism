@@ -30,114 +30,6 @@ function prepareMessages(messages) {
     });
 }
 
-/**
- * Extract <think>…</think> blocks from a complete response string.
- */
-function extractThinkTags(raw) {
-    const thinkRegex = /<think>([\s\S]*?)<\/think>/gi;
-    const thinkParts = [];
-    let match;
-    while ((match = thinkRegex.exec(raw)) !== null) {
-        thinkParts.push(match[1].trim());
-    }
-    const text = raw.replace(thinkRegex, "").trim();
-    return {
-        thinking: thinkParts.length > 0 ? thinkParts.join("\n\n") : null,
-        text,
-    };
-}
-
-/**
- * Stateful parser for streaming <think> tag detection.
- * Handles tags that arrive split across chunk boundaries.
- */
-class ThinkTagParser {
-    constructor() {
-        this.insideThink = false;
-        this.buffer = "";
-    }
-
-    feed(chunk) {
-        this.buffer += chunk;
-        const results = [];
-
-        while (this.buffer.length > 0) {
-            if (this.insideThink) {
-                const closeIdx = this.buffer.indexOf("</think>");
-                if (closeIdx !== -1) {
-                    const thinkContent = this.buffer.slice(0, closeIdx);
-                    if (thinkContent) {
-                        results.push({ type: "thinking", content: thinkContent });
-                    }
-                    this.buffer = this.buffer.slice(closeIdx + "</think>".length);
-                    this.insideThink = false;
-                } else {
-                    const partialMatch = this._partialEndTag(this.buffer);
-                    if (partialMatch > 0) {
-                        const safe = this.buffer.slice(0, this.buffer.length - partialMatch);
-                        if (safe) {
-                            results.push({ type: "thinking", content: safe });
-                        }
-                        this.buffer = this.buffer.slice(this.buffer.length - partialMatch);
-                    } else {
-                        results.push({ type: "thinking", content: this.buffer });
-                        this.buffer = "";
-                    }
-                    break;
-                }
-            } else {
-                const openIdx = this.buffer.indexOf("<think>");
-                if (openIdx !== -1) {
-                    const textBefore = this.buffer.slice(0, openIdx);
-                    if (textBefore) {
-                        results.push({ type: "text", content: textBefore });
-                    }
-                    this.buffer = this.buffer.slice(openIdx + "<think>".length);
-                    this.insideThink = true;
-                } else {
-                    const partialMatch = this._partialStartTag(this.buffer);
-                    if (partialMatch > 0) {
-                        const safe = this.buffer.slice(0, this.buffer.length - partialMatch);
-                        if (safe) {
-                            results.push({ type: "text", content: safe });
-                        }
-                        this.buffer = this.buffer.slice(this.buffer.length - partialMatch);
-                    } else {
-                        results.push({ type: "text", content: this.buffer });
-                        this.buffer = "";
-                    }
-                    break;
-                }
-            }
-        }
-        return results;
-    }
-
-    _partialStartTag(str) {
-        const tag = "<think>";
-        for (let len = Math.min(tag.length - 1, str.length); len >= 1; len--) {
-            if (str.endsWith(tag.slice(0, len))) return len;
-        }
-        return 0;
-    }
-
-    _partialEndTag(str) {
-        const tag = "</think>";
-        for (let len = Math.min(tag.length - 1, str.length); len >= 1; len--) {
-            if (str.endsWith(tag.slice(0, len))) return len;
-        }
-        return 0;
-    }
-
-    flush() {
-        if (!this.buffer) return [];
-        const type = this.insideThink ? "thinking" : "text";
-        const result = [{ type, content: this.buffer }];
-        this.buffer = "";
-        return result;
-    }
-}
-
 // ── Provider ─────────────────────────────────────────────────
 
 const vllmProvider = {
@@ -175,8 +67,9 @@ const vllmProvider = {
             }
 
             const data = await response.json();
-            const rawText = data.choices?.[0]?.message?.content || "";
-            const { thinking, text } = extractThinkTags(rawText);
+            const message = data.choices?.[0]?.message;
+            const text = message?.content || "";
+            const thinking = message?.reasoning || message?.reasoning_content || null;
             return {
                 text,
                 thinking,
@@ -229,7 +122,6 @@ const vllmProvider = {
             const decoder = new TextDecoder();
             let buffer = "";
             let usage = null;
-            const thinkParser = new ThinkTagParser();
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -255,29 +147,19 @@ const vllmProvider = {
                             };
                         }
 
-                        const content = json.choices?.[0]?.delta?.content || "";
+                        const delta = json.choices?.[0]?.delta;
+                        const reasoning = delta?.reasoning || delta?.reasoning_content || "";
+                        if (reasoning) {
+                            yield { type: "thinking", content: reasoning };
+                        }
+
+                        const content = delta?.content || "";
                         if (content) {
-                            const parts = thinkParser.feed(content);
-                            for (const part of parts) {
-                                if (part.type === "thinking") {
-                                    yield { type: "thinking", content: part.content };
-                                } else {
-                                    yield part.content;
-                                }
-                            }
+                            yield content;
                         }
                     } catch {
                         // skip malformed JSON lines
                     }
-                }
-            }
-
-            const remaining = thinkParser.flush();
-            for (const part of remaining) {
-                if (part.type === "thinking") {
-                    yield { type: "thinking", content: part.content };
-                } else {
-                    yield part.content;
                 }
             }
 
