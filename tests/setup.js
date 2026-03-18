@@ -5,7 +5,7 @@
 import { vi } from 'vitest';
 
 // ── Mock secrets before anything imports them ──────────────────────────
-vi.mock('../src/secrets.js', () => ({
+vi.mock('../secrets.js', () => ({
     PORT: 0,
     GATEWAY_SECRET: 'test-secret',
     OPENAI_API_KEY: 'fake',
@@ -159,7 +159,7 @@ app.get('/', (_req, res) => {
 app.use(authMiddleware);
 app.use('/config', configRouter);
 app.use('/chat', chatRouter);
-app.use('/audio', audioRouter);
+app.use('/text-to-audio', audioRouter);
 app.use('/embed', embedRouter);
 app.use(errorHandler);
 

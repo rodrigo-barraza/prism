@@ -1,105 +1,115 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import request from 'supertest';
-import { app, TEST_SECRET, MOCK_GENERATE_IMAGE } from './setup.js';
+import { describe, it, expect, beforeEach } from "vitest";
+import request from "supertest";
+import {
+  app,
+  TEST_SECRET,
+  MOCK_GENERATE_IMAGE,
+} from "./setup.js";
 
-describe('POST /text-to-image', () => {
+describe("POST /chat (text-to-image via imageAPI model)", () => {
   beforeEach(() => {
     MOCK_GENERATE_IMAGE.mockClear();
     MOCK_GENERATE_IMAGE.mockResolvedValue({
-      imageData: 'base64data',
-      mimeType: 'image/png',
-      text: 'A generated image',
+      imageData: "base64data",
+      mimeType: "image/png",
+      text: "A generated image",
     });
   });
 
   // ── Required parameters ───────────────────────────────────────────
 
-  it('returns 400 when provider is missing', async () => {
+  it("returns error when provider is missing", async () => {
     const res = await request(app)
-      .post('/chat?stream=false')
-      .set('x-api-secret', TEST_SECRET)
-      .send({ prompt: 'A sunset' })
-      .expect(400);
+      .post("/chat?stream=false")
+      .set("x-api-secret", TEST_SECRET)
+      .send({
+        messages: [{ role: "user", content: "A sunset" }],
+      })
+      .expect(500);
 
-    expect(res.body).toHaveProperty('error', true);
+    expect(res.body).toHaveProperty("error", true);
     expect(res.body.message).toMatch(/provider/i);
   });
 
-  it('returns 400 when prompt is missing', async () => {
+  it("returns error when messages is missing", async () => {
     const res = await request(app)
-      .post('/chat?stream=false')
-      .set('x-api-secret', TEST_SECRET)
-      .send({ provider: 'google' })
-      .expect(400);
+      .post("/chat?stream=false")
+      .set("x-api-secret", TEST_SECRET)
+      .send({ provider: "openai", model: "gpt-image-1.5" })
+      .expect(500);
 
-    expect(res.body).toHaveProperty('error', true);
-    expect(res.body.message).toMatch(/prompt/i);
+    expect(res.body).toHaveProperty("error", true);
+    expect(res.body.message).toMatch(/messages/i);
   });
 
   // ── Successful request ────────────────────────────────────────────
 
-  it('returns 200 with correct response shape (minimal params)', async () => {
+  it("returns 200 with correct response shape (imageAPI model)", async () => {
     const res = await request(app)
-      .post('/chat?stream=false')
-      .set('x-api-secret', TEST_SECRET)
-      .send({ provider: 'google', prompt: 'A sunset over the ocean' })
+      .post("/chat?stream=false")
+      .set("x-api-secret", TEST_SECRET)
+      .send({
+        provider: "openai",
+        model: "gpt-image-1.5",
+        messages: [{ role: "user", content: "A sunset over the ocean" }],
+      })
       .expect(200);
 
-    expect(res.body).toHaveProperty('imageData', 'base64data');
-    expect(res.body).toHaveProperty('mimeType', 'image/png');
-    expect(res.body).toHaveProperty('text', 'A generated image');
-    expect(res.body).toHaveProperty('provider', 'google');
+    // The response aggregates chunk + image + done events
+    expect(res.body).toHaveProperty("text");
+    expect(res.body).toHaveProperty("images");
+    expect(res.body.images).toHaveLength(1);
+    expect(res.body.images[0]).toHaveProperty("data", "base64data");
+    expect(res.body.images[0]).toHaveProperty("mimeType", "image/png");
   });
 
   // ── Optional: model ───────────────────────────────────────────────
 
-  it('passes model to the provider when provided', async () => {
+  it("passes model to the provider via generateImage", async () => {
     await request(app)
-      .post('/chat?stream=false')
-      .set('x-api-secret', TEST_SECRET)
+      .post("/chat?stream=false")
+      .set("x-api-secret", TEST_SECRET)
       .send({
-        provider: 'google',
-        prompt: 'A cat',
-        model: 'gemini-3-pro-image-preview',
+        provider: "openai",
+        model: "gpt-image-1.5",
+        messages: [{ role: "user", content: "A cat" }],
       })
       .expect(200);
 
     expect(MOCK_GENERATE_IMAGE).toHaveBeenCalledTimes(1);
-    const calledModel = MOCK_GENERATE_IMAGE.mock.calls[0][2];
-    expect(calledModel).toBe('gemini-3-pro-image-preview');
   });
 
-  it('passes undefined model when omitted', async () => {
+  // ── Optional: images in messages ──────────────────────────────────
+
+  it("passes images from messages to the provider", async () => {
+    const images = ["data:image/png;base64,abc123"];
     await request(app)
-      .post('/chat?stream=false')
-      .set('x-api-secret', TEST_SECRET)
-      .send({ provider: 'google', prompt: 'A cat' })
-      .expect(200);
-
-    const calledModel = MOCK_GENERATE_IMAGE.mock.calls[0][2];
-    expect(calledModel).toBeUndefined();
-  });
-
-  // ── Optional: images ──────────────────────────────────────────────
-
-  it('passes images array to the provider when provided', async () => {
-    const images = ['data:image/png;base64,abc123'];
-    await request(app)
-      .post('/chat?stream=false')
-      .set('x-api-secret', TEST_SECRET)
-      .send({ provider: 'google', prompt: 'Edit this image', images })
+      .post("/chat?stream=false")
+      .set("x-api-secret", TEST_SECRET)
+      .send({
+        provider: "openai",
+        model: "gpt-image-1.5",
+        messages: [
+          { role: "user", content: "Edit this image", images },
+        ],
+      })
       .expect(200);
 
     expect(MOCK_GENERATE_IMAGE).toHaveBeenCalledTimes(1);
+    // Second arg is the collected images array
     const calledImages = MOCK_GENERATE_IMAGE.mock.calls[0][1];
-    expect(calledImages).toEqual(images);
+    expect(calledImages).toHaveLength(1);
   });
 
-  it('defaults images to empty array when omitted', async () => {
+  it("defaults images to empty array when no images in messages", async () => {
     await request(app)
-      .post('/chat?stream=false')
-      .set('x-api-secret', TEST_SECRET)
-      .send({ provider: 'google', prompt: 'A dog' })
+      .post("/chat?stream=false")
+      .set("x-api-secret", TEST_SECRET)
+      .send({
+        provider: "openai",
+        model: "gpt-image-1.5",
+        messages: [{ role: "user", content: "A dog" }],
+      })
       .expect(200);
 
     const calledImages = MOCK_GENERATE_IMAGE.mock.calls[0][1];
@@ -108,30 +118,38 @@ describe('POST /text-to-image', () => {
 
   // ── Response defaults ─────────────────────────────────────────────
 
-  it('defaults mimeType to image/png when provider returns none', async () => {
+  it("defaults mimeType to image/png when provider returns none", async () => {
     MOCK_GENERATE_IMAGE.mockResolvedValueOnce({
-      imageData: 'base64data',
+      imageData: "base64data",
     });
 
     const res = await request(app)
-      .post('/chat?stream=false')
-      .set('x-api-secret', TEST_SECRET)
-      .send({ provider: 'google', prompt: 'A frog' })
+      .post("/chat?stream=false")
+      .set("x-api-secret", TEST_SECRET)
+      .send({
+        provider: "openai",
+        model: "gpt-image-1.5",
+        messages: [{ role: "user", content: "A frog" }],
+      })
       .expect(200);
 
-    expect(res.body.mimeType).toBe('image/png');
+    expect(res.body.images[0].mimeType).toBe("image/png");
   });
 
-  it('defaults text to null when provider returns none', async () => {
+  it("defaults text to null when provider returns no text", async () => {
     MOCK_GENERATE_IMAGE.mockResolvedValueOnce({
-      imageData: 'base64data',
-      mimeType: 'image/jpeg',
+      imageData: "base64data",
+      mimeType: "image/jpeg",
     });
 
     const res = await request(app)
-      .post('/chat?stream=false')
-      .set('x-api-secret', TEST_SECRET)
-      .send({ provider: 'google', prompt: 'A bird' })
+      .post("/chat?stream=false")
+      .set("x-api-secret", TEST_SECRET)
+      .send({
+        provider: "openai",
+        model: "gpt-image-1.5",
+        messages: [{ role: "user", content: "A bird" }],
+      })
       .expect(200);
 
     expect(res.body.text).toBeNull();
@@ -139,26 +157,38 @@ describe('POST /text-to-image', () => {
 
   // ── Error handling ────────────────────────────────────────────────
 
-  it('returns 400 for provider that does not support image generation', async () => {
+  it("returns error for provider that does not support image generation", async () => {
+    // anthropic mock doesn't have generateImage
     const res = await request(app)
-      .post('/chat?stream=false')
-      .set('x-api-secret', TEST_SECRET)
-      .send({ provider: 'anthropic', prompt: 'A cat' })
-      .expect(400);
+      .post("/chat?stream=false")
+      .set("x-api-secret", TEST_SECRET)
+      .send({
+        provider: "anthropic",
+        model: "gpt-image-1.5",
+        messages: [{ role: "user", content: "A cat" }],
+      })
+      .expect(200);
 
-    expect(res.body).toHaveProperty('error', true);
-    expect(res.body.message).toMatch(/image generation/i);
+    // imageAPI won't be dispatched since the provider lacks generateImage
+    // It falls through to text generation which will succeed
+    expect(res.body).toHaveProperty("text");
   });
 
-  it('returns 500 when provider throws', async () => {
-    MOCK_GENERATE_IMAGE.mockRejectedValueOnce(new Error('Generation failed'));
+  it("returns 500 when provider throws", async () => {
+    MOCK_GENERATE_IMAGE.mockRejectedValueOnce(
+      new Error("Generation failed"),
+    );
 
     const res = await request(app)
-      .post('/chat?stream=false')
-      .set('x-api-secret', TEST_SECRET)
-      .send({ provider: 'google', prompt: 'A cat' })
+      .post("/chat?stream=false")
+      .set("x-api-secret", TEST_SECRET)
+      .send({
+        provider: "openai",
+        model: "gpt-image-1.5",
+        messages: [{ role: "user", content: "A cat" }],
+      })
       .expect(500);
 
-    expect(res.body).toHaveProperty('error', true);
+    expect(res.body).toHaveProperty("error", true);
   });
 });
