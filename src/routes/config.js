@@ -17,9 +17,10 @@ import {
     GOOGLE_API_KEY,
     ELEVENLABS_API_KEY,
     INWORLD_BASIC,
-    LM_STUDIO_BASE_URL,
+    LOCAL_LLM_BASE_URL,
     OLLAMA_BASE_URL,
 } from "../../secrets.js";
+import { getBackendType } from "../providers/lm-studio.js";
 
 const router = express.Router();
 
@@ -30,7 +31,7 @@ const PROVIDER_SECRETS = {
     [PROVIDERS.GOOGLE]: GOOGLE_API_KEY,
     [PROVIDERS.ELEVENLABS]: ELEVENLABS_API_KEY,
     [PROVIDERS.INWORLD]: INWORLD_BASIC,
-    [PROVIDERS.LM_STUDIO]: LM_STUDIO_BASE_URL,
+    [PROVIDERS.LM_STUDIO]: LOCAL_LLM_BASE_URL,
     [PROVIDERS.OLLAMA]: OLLAMA_BASE_URL,
 };
 
@@ -195,7 +196,7 @@ async function getLmStudioModelOptions() {
                 return entry;
             });
     } catch (err) {
-        logger.warn(`Could not fetch LM Studio models for config: ${err.message}`);
+        logger.warn(`Could not fetch local LLM models for config: ${err.message}`);
         return [];
     }
 }
@@ -314,6 +315,7 @@ router.get("/", async (_req, res) => {
     }
 
     res.json({
+        localLlmBackend: getBackendType(),
         providers: availableProviderMap,
         providerList: availableProviderList,
         availableProviders: availableProviderList,

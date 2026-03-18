@@ -29,8 +29,8 @@ export const ELEVENLABS_API_KEY = '';
 // Inworld (Base64-encoded apiKey:apiSecret)
 export const INWORLD_BASIC = '';
 
-// LM Studio (Local LLM Server)
-export const LM_STUDIO_BASE_URL = 'http://localhost:1234';
+// Local LLM Server (LM Studio or vLLM)
+export const LOCAL_LLM_BASE_URL = 'http://localhost:1234';
 
 // Ollama (Local LLM Server)
 export const OLLAMA_BASE_URL = 'http://localhost:11434';

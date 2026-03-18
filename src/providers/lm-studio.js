@@ -1,17 +1,102 @@
 import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
-import { LM_STUDIO_BASE_URL } from "../../secrets.js";
+import { LOCAL_LLM_BASE_URL } from "../../secrets.js";
 import { TYPES, getDefaultModels } from "../config.js";
 
+// ── Backend Detection ────────────────────────────────────────
+// Cached backend type: "lm-studio" | "vllm" | null (not yet detected)
+let _detectedBackend = null;
+
 function getBaseUrl() {
-    return LM_STUDIO_BASE_URL;
+    return LOCAL_LLM_BASE_URL;
+}
+
+/**
+ * Returns the detected backend type: "lm-studio" or "vllm".
+ * Falls back to "lm-studio" if detection hasn't run yet.
+ */
+export function getBackendType() {
+    return _detectedBackend || "lm-studio";
+}
+
+/**
+ * Returns a human-readable label for logging and display.
+ */
+export function getBackendLabel() {
+    return _detectedBackend === "vllm" ? "vLLM" : "LM Studio";
+}
+
+/**
+ * Probe the local LLM server to detect whether it's LM Studio or vLLM.
+ *
+ * Strategy: Try LM Studio's proprietary `/api/v1/models` endpoint first.
+ * If it returns a `models` array → LM Studio.
+ * Otherwise try OpenAI-standard `/v1/models` — if it returns `data` array → vLLM.
+ */
+export async function detectBackend() {
+    const baseUrl = getBaseUrl();
+    if (!baseUrl) return;
+
+    // Try LM Studio proprietary endpoint first
+    try {
+        const lmsController = new AbortController();
+        const lmsTimeout = setTimeout(() => lmsController.abort(), 3000);
+        const res = await fetch(`${baseUrl}/api/v1/models`, {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+            signal: lmsController.signal,
+        });
+        clearTimeout(lmsTimeout);
+        if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data.models)) {
+                _detectedBackend = "lm-studio";
+                logger.info(
+                    `Local LLM backend detected: \x1b[38;2;99;102;241mLM Studio\x1b[0m at ${baseUrl}`,
+                );
+                return;
+            }
+        }
+    } catch {
+        // Not LM Studio, try vLLM
+    }
+
+    // Try OpenAI-standard /v1/models (used by vLLM)
+    try {
+        const vllmController = new AbortController();
+        const vllmTimeout = setTimeout(() => vllmController.abort(), 3000);
+        const res = await fetch(`${baseUrl}/v1/models`, {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+            signal: vllmController.signal,
+        });
+        clearTimeout(vllmTimeout);
+        if (res.ok) {
+            const data = await res.json();
+            if (data.object === "list" && Array.isArray(data.data)) {
+                _detectedBackend = "vllm";
+                logger.info(
+                    `Local LLM backend detected: \x1b[38;2;16;185;129mvLLM\x1b[0m at ${baseUrl}`,
+                );
+                return;
+            }
+        }
+    } catch {
+        // Neither backend reachable
+    }
+
+    // Default fallback
+    _detectedBackend = "lm-studio";
+    logger.warn(
+        `Could not detect local LLM backend at ${baseUrl} — defaulting to LM Studio`,
+    );
 }
 
 /**
  * Convert messages with images to OpenAI-compatible multipart content format.
- * LM Studio uses the same format as OpenAI Chat Completions.
+ * Both LM Studio and vLLM use the same format as OpenAI Chat Completions.
  */
-function prepareLMStudioMessages(messages) {
+function prepareMessages(messages) {
     return messages.map((m) => {
         const base = { role: m.role };
         if (m.name) base.name = m.name;
@@ -176,12 +261,13 @@ const lmStudioProvider = {
         options = {},
     ) {
         const baseUrl = getBaseUrl();
+        const label = getBackendLabel();
         logger.provider(
-            "LM Studio",
+            label,
             `generateText model=${model} baseUrl=${baseUrl}`,
         );
         try {
-            const prepared = prepareLMStudioMessages(messages);
+            const prepared = prepareMessages(messages);
 
             const response = await fetch(`${baseUrl}/v1/chat/completions`, {
                 method: "POST",
@@ -239,73 +325,77 @@ const lmStudioProvider = {
         options = {},
     ) {
         const baseUrl = getBaseUrl();
+        const label = getBackendLabel();
+        const backend = getBackendType();
         logger.provider(
-            "LM Studio",
+            label,
             `generateTextStream model=${model} baseUrl=${baseUrl}`,
         );
         try {
-            // Auto-load the model if not currently loaded
-            try {
-                const { models } = await this.listModels();
-                const modelEntry = (models || []).find((m) => m.key === model);
-                const isLoaded = modelEntry?.loaded_instances?.length > 0;
-                if (!isLoaded) {
-                    // Unload any other loaded models first (single-model enforcement)
-                    for (const m of models || []) {
-                        for (const inst of m.loaded_instances || []) {
-                            yield { type: "status", message: "Unloading previous model…" };
-                            logger.info(`Auto-unloading ${inst.id} before loading ${model}`);
-                            await this.unloadModel(inst.id);
+            // Auto-load the model if not currently loaded (LM Studio only)
+            if (backend === "lm-studio") {
+                try {
+                    const { models } = await this.listModels();
+                    const modelEntry = (models || []).find((m) => m.key === model);
+                    const isLoaded = modelEntry?.loaded_instances?.length > 0;
+                    if (!isLoaded) {
+                        // Unload any other loaded models first (single-model enforcement)
+                        for (const m of models || []) {
+                            for (const inst of m.loaded_instances || []) {
+                                yield { type: "status", message: "Unloading previous model…" };
+                                logger.info(`Auto-unloading ${inst.id} before loading ${model}`);
+                                await this.unloadModel(inst.id);
+                            }
                         }
-                    }
 
-                    logger.info(`Auto-loading model ${model} for streaming`);
-                    yield { type: "status", message: "Loading model… 0%" };
+                        logger.info(`Auto-loading model ${model} for streaming`);
+                        yield { type: "status", message: "Loading model… 0%" };
 
-                    // Start load (non-blocking) and poll for progress
-                    let loadDone = false;
-                    let loadError = null;
-                    const loadPromise = this.loadModel(model)
-                        .then(() => {
-                            loadDone = true;
-                        })
-                        .catch((err) => {
-                            loadDone = true;
-                            loadError = err;
-                        });
+                        // Start load (non-blocking) and poll for progress
+                        let loadDone = false;
+                        let loadError = null;
+                        const loadPromise = this.loadModel(model)
+                            .then(() => {
+                                loadDone = true;
+                            })
+                            .catch((err) => {
+                                loadDone = true;
+                                loadError = err;
+                            });
 
-                    const startTime = Date.now();
-                    const EXPECTED_LOAD_MS = 15_000; // soft guess for the progress curve
-                    let lastPct = 0;
+                        const startTime = Date.now();
+                        const EXPECTED_LOAD_MS = 15_000; // soft guess for the progress curve
+                        let lastPct = 0;
 
-                    while (!loadDone) {
-                        await sleep(500);
-                        if (loadDone) break;
+                        while (!loadDone) {
+                            await sleep(500);
+                            if (loadDone) break;
 
-                        const elapsed = Date.now() - startTime;
-                        // Asymptotic curve: ramps quickly at first, caps at 95%
-                        const pct = Math.min(
-                            95,
-                            Math.round((elapsed / (elapsed + EXPECTED_LOAD_MS)) * 100),
-                        );
-                        if (pct > lastPct) {
-                            lastPct = pct;
-                            yield { type: "status", message: `Loading model… ${pct}%` };
+                            const elapsed = Date.now() - startTime;
+                            // Asymptotic curve: ramps quickly at first, caps at 95%
+                            const pct = Math.min(
+                                95,
+                                Math.round((elapsed / (elapsed + EXPECTED_LOAD_MS)) * 100),
+                            );
+                            if (pct > lastPct) {
+                                lastPct = pct;
+                                yield { type: "status", message: `Loading model… ${pct}%` };
+                            }
                         }
-                    }
 
-                    // Ensure promise is settled
-                    await loadPromise;
-                    if (loadError) throw loadError;
-                    yield { type: "status", message: "Loading model… 100%" };
+                        // Ensure promise is settled
+                        await loadPromise;
+                        if (loadError) throw loadError;
+                        yield { type: "status", message: "Loading model… 100%" };
+                    }
+                } catch (loadCheckErr) {
+                    logger.warn(
+                        `Could not check/load model before streaming: ${loadCheckErr.message}`,
+                    );
                 }
-            } catch (loadCheckErr) {
-                logger.warn(
-                    `Could not check/load model before streaming: ${loadCheckErr.message}`,
-                );
             }
 
-            const prepared = prepareLMStudioMessages(messages);
+            const prepared = prepareMessages(messages);
 
             const response = await fetch(`${baseUrl}/v1/chat/completions`, {
                 method: "POST",
@@ -414,8 +504,9 @@ const lmStudioProvider = {
         systemPrompt,
     ) {
         const baseUrl = getBaseUrl();
+        const label = getBackendLabel();
         logger.provider(
-            "LM Studio",
+            label,
             `captionImage model=${model} baseUrl=${baseUrl}`,
         );
         try {
@@ -459,16 +550,43 @@ const lmStudioProvider = {
         }
     },
 
-    // ── LM Studio Model Management (v1 API) ─────────────────────
+    // ── Model Management ─────────────────────────────────────
 
     /**
-     * List all models available in LM Studio (loaded + downloaded).
-     * GET /api/v1/models
+     * List all models available.
+     * - LM Studio: GET /api/v1/models → { models: [...] }
+     * - vLLM:      GET /v1/models     → { object: "list", data: [...] }
+     *
+     * Returns the LM Studio format { models: [...] } for backward compat.
      */
     async listModels() {
         const baseUrl = getBaseUrl();
-        logger.provider("LM Studio", "listModels");
+        const backend = getBackendType();
+        const label = getBackendLabel();
+        logger.provider(label, "listModels");
         try {
+            if (backend === "vllm") {
+                // vLLM uses standard OpenAI /v1/models
+                const response = await fetch(`${baseUrl}/v1/models`, {
+                    method: "GET",
+                    headers: { "Content-Type": "application/json" },
+                });
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`API error: ${response.status} ${errorText}`);
+                }
+                const data = await response.json();
+                // Normalize vLLM response to LM Studio format
+                const models = (data.data || []).map((m) => ({
+                    key: m.id,
+                    display_name: m.id,
+                    type: "llm",
+                    loaded_instances: [{ id: m.id }], // vLLM models are always loaded
+                }));
+                return { models };
+            }
+
+            // LM Studio proprietary /api/v1/models
             const response = await fetch(`${baseUrl}/api/v1/models`, {
                 method: "GET",
                 headers: { "Content-Type": "application/json" },
@@ -487,12 +605,23 @@ const lmStudioProvider = {
     },
 
     /**
-     * Load a model into LM Studio memory.
-     * POST /api/v1/models/load  { model }
+     * Load a model into memory (LM Studio only).
+     * Returns 501 for vLLM.
      */
     async loadModel(model) {
         const baseUrl = getBaseUrl();
-        logger.provider("LM Studio", `loadModel model=${model}`);
+        const backend = getBackendType();
+        const label = getBackendLabel();
+
+        if (backend === "vllm") {
+            throw new ProviderError(
+                "lm-studio",
+                "Model loading is not supported on vLLM — models are loaded at server startup",
+                501,
+            );
+        }
+
+        logger.provider(label, `loadModel model=${model}`);
         try {
             const response = await fetch(`${baseUrl}/api/v1/models/load`, {
                 method: "POST",
@@ -513,12 +642,23 @@ const lmStudioProvider = {
     },
 
     /**
-     * Unload a model from LM Studio memory.
-     * POST /api/v1/models/unload  { instance_id }
+     * Unload a model from memory (LM Studio only).
+     * Returns 501 for vLLM.
      */
     async unloadModel(instanceId) {
         const baseUrl = getBaseUrl();
-        logger.provider("LM Studio", `unloadModel instanceId=${instanceId}`);
+        const backend = getBackendType();
+        const label = getBackendLabel();
+
+        if (backend === "vllm") {
+            throw new ProviderError(
+                "lm-studio",
+                "Model unloading is not supported on vLLM — models are managed at server startup",
+                501,
+            );
+        }
+
+        logger.provider(label, `unloadModel instanceId=${instanceId}`);
         try {
             const response = await fetch(`${baseUrl}/api/v1/models/unload`, {
                 method: "POST",

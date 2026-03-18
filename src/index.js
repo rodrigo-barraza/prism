@@ -18,9 +18,11 @@ import {
     MINIO_ACCESS_KEY,
     MINIO_SECRET_KEY,
     MINIO_BUCKET_NAME,
+    LOCAL_LLM_BASE_URL,
 } from "../secrets.js";
 import MongoWrapper from "./wrappers/MongoWrapper.js";
 import MinioWrapper from "./wrappers/MinioWrapper.js";
+import { detectBackend } from "./providers/lm-studio.js";
 
 // Routes
 import chatRouter from "./routes/chat.js";
@@ -126,6 +128,11 @@ setupWebSocket(wss);
         logger.info(
             "MinIO not configured — files will be stored inline in MongoDB",
         );
+    }
+
+    // Detect local LLM backend (LM Studio vs vLLM) if configured
+    if (LOCAL_LLM_BASE_URL) {
+        await detectBackend();
     }
 
     server.listen(PORT, () => {

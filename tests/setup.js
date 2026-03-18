@@ -13,6 +13,8 @@ vi.mock('../src/secrets.js', () => ({
     GOOGLE_API_KEY: 'fake',
     ELEVENLABS_API_KEY: 'fake',
     INWORLD_BASIC: 'fake',
+    LOCAL_LLM_BASE_URL: 'http://localhost:1234',
+    OLLAMA_BASE_URL: 'http://localhost:11434',
     OPENAI_COMPATIBLE_BASE_URL: 'http://localhost:9999',
     MONGO_URI: 'mongodb://127.0.0.1:27017',
     MONGO_DB_NAME: 'prism-test',
