@@ -4,6 +4,7 @@ import googleProvider from "./google.js";
 import elevenlabsProvider from "./elevenlabs.js";
 import inworldProvider from "./inworld.js";
 import lmStudioProvider from "./lm-studio.js";
+import vllmProvider from "./vllm.js";
 import ollamaProvider from "./ollama.js";
 
 const providers = {
@@ -13,6 +14,7 @@ const providers = {
     elevenlabs: elevenlabsProvider,
     inworld: inworldProvider,
     "lm-studio": lmStudioProvider,
+    vllm: vllmProvider,
     ollama: ollamaProvider,
 };
 

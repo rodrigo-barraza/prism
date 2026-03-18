@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach } from "vitest";
 import request from "supertest";
 import {
   app,
-  TEST_SECRET,
   MOCK_GENERATE_TEXT_STREAM,
 } from "./setup.js";
 
@@ -21,7 +20,6 @@ describe("POST /chat (text-to-text)", () => {
   it("returns error when provider is missing", async () => {
     const res = await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({ messages: [{ role: "user", content: "hi" }] })
       .expect(500);
 
@@ -32,7 +30,6 @@ describe("POST /chat (text-to-text)", () => {
   it("returns error when messages is missing", async () => {
     const res = await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({ provider: "openai" })
       .expect(500);
 
@@ -43,7 +40,6 @@ describe("POST /chat (text-to-text)", () => {
   it("returns error when messages is not an array", async () => {
     const res = await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({ provider: "openai", messages: "not an array" })
       .expect(500);
 
@@ -56,7 +52,6 @@ describe("POST /chat (text-to-text)", () => {
   it("returns 200 with correct response shape (minimal params)", async () => {
     const res = await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "openai",
         messages: [{ role: "user", content: "Hello" }],
@@ -76,7 +71,6 @@ describe("POST /chat (text-to-text)", () => {
   it("uses the default model when model is omitted", async () => {
     await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "openai",
         messages: [{ role: "user", content: "hi" }],
@@ -93,7 +87,6 @@ describe("POST /chat (text-to-text)", () => {
   it("uses custom model when provided", async () => {
     await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "openai",
         model: "gpt-5.2",
@@ -111,7 +104,6 @@ describe("POST /chat (text-to-text)", () => {
   it("passes options through to the provider", async () => {
     await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "openai",
         messages: [{ role: "user", content: "hi" }],
@@ -127,7 +119,6 @@ describe("POST /chat (text-to-text)", () => {
   it("defaults options to empty object when omitted", async () => {
     await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "openai",
         messages: [{ role: "user", content: "hi" }],
@@ -143,7 +134,6 @@ describe("POST /chat (text-to-text)", () => {
   it("handles multiple messages in the array", async () => {
     await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "openai",
         messages: [
@@ -164,7 +154,6 @@ describe("POST /chat (text-to-text)", () => {
   it("works with anthropic provider", async () => {
     const res = await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "anthropic",
         messages: [{ role: "user", content: "hi" }],
@@ -177,7 +166,6 @@ describe("POST /chat (text-to-text)", () => {
   it("works with google provider", async () => {
     const res = await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "google",
         messages: [{ role: "user", content: "hi" }],
@@ -190,7 +178,6 @@ describe("POST /chat (text-to-text)", () => {
   it("works with openai-compatible provider", async () => {
     const res = await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "openai-compatible",
         messages: [{ role: "user", content: "hi" }],
@@ -209,7 +196,6 @@ describe("POST /chat (text-to-text)", () => {
 
     const res = await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "openai",
         messages: [{ role: "user", content: "hi" }],
@@ -223,7 +209,6 @@ describe("POST /chat (text-to-text)", () => {
   it("returns error for unsupported provider that does not support text generation", async () => {
     const res = await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "elevenlabs",
         messages: [{ role: "user", content: "hi" }],
@@ -237,7 +222,6 @@ describe("POST /chat (text-to-text)", () => {
   it("returns error for unknown provider", async () => {
     const res = await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "nonexistent",
         messages: [{ role: "user", content: "hi" }],

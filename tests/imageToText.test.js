@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach } from "vitest";
 import request from "supertest";
 import {
   app,
-  TEST_SECRET,
   MOCK_GENERATE_TEXT_STREAM,
 } from "./setup.js";
 
@@ -20,7 +19,6 @@ describe("POST /chat (image-to-text / vision)", () => {
   it("returns error when provider is missing", async () => {
     const res = await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         messages: [
           {
@@ -39,7 +37,6 @@ describe("POST /chat (image-to-text / vision)", () => {
   it("returns error when messages is missing", async () => {
     const res = await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({ provider: "google" })
       .expect(500);
 
@@ -52,7 +49,6 @@ describe("POST /chat (image-to-text / vision)", () => {
   it("returns 200 with correct response shape (image + prompt)", async () => {
     const res = await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "google",
         messages: [
@@ -77,7 +73,6 @@ describe("POST /chat (image-to-text / vision)", () => {
   it("includes estimatedCost in the response", async () => {
     const res = await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "google",
         messages: [
@@ -98,7 +93,6 @@ describe("POST /chat (image-to-text / vision)", () => {
   it("passes custom model to the provider when provided", async () => {
     await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "openai",
         model: "gpt-5-mini",
@@ -120,7 +114,6 @@ describe("POST /chat (image-to-text / vision)", () => {
   it("uses default model when model is omitted", async () => {
     const res = await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "google",
         messages: [
@@ -143,7 +136,6 @@ describe("POST /chat (image-to-text / vision)", () => {
   it("accepts base64 image data in messages", async () => {
     await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "google",
         messages: [
@@ -167,7 +159,6 @@ describe("POST /chat (image-to-text / vision)", () => {
   it("supports multiple images in a single message", async () => {
     await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "google",
         messages: [
@@ -191,7 +182,6 @@ describe("POST /chat (image-to-text / vision)", () => {
   it("works with openai provider", async () => {
     const res = await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "openai",
         messages: [
@@ -212,7 +202,6 @@ describe("POST /chat (image-to-text / vision)", () => {
   it("returns error for provider that does not support text generation", async () => {
     const res = await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "elevenlabs",
         messages: [
@@ -236,7 +225,6 @@ describe("POST /chat (image-to-text / vision)", () => {
 
     const res = await request(app)
       .post("/chat?stream=false")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "google",
         messages: [

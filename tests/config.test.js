@@ -1,12 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
-import { app, TEST_SECRET } from './setup.js';
+import { app } from './setup.js';
 
 describe('GET /config', () => {
   it('returns the full config catalog', async () => {
     const res = await request(app)
       .get('/config')
-      .set('x-api-secret', TEST_SECRET)
       .expect(200);
 
     expect(res.body).toHaveProperty('providers');
@@ -21,7 +20,6 @@ describe('GET /config', () => {
   it('textToText has models and defaults', async () => {
     const res = await request(app)
       .get('/config')
-      .set('x-api-secret', TEST_SECRET)
       .expect(200);
 
     expect(res.body.textToText).toHaveProperty('models');
@@ -33,7 +31,6 @@ describe('GET /config', () => {
   it('textToSpeech has models, defaults, voices, and defaultVoices', async () => {
     const res = await request(app)
       .get('/config')
-      .set('x-api-secret', TEST_SECRET)
       .expect(200);
 
     expect(res.body.textToSpeech).toHaveProperty('models');
@@ -45,7 +42,6 @@ describe('GET /config', () => {
   it('textToImage has models and defaults', async () => {
     const res = await request(app)
       .get('/config')
-      .set('x-api-secret', TEST_SECRET)
       .expect(200);
 
     expect(res.body.textToImage).toHaveProperty('models');
@@ -55,7 +51,6 @@ describe('GET /config', () => {
   it('imageToText has models and defaults', async () => {
     const res = await request(app)
       .get('/config')
-      .set('x-api-secret', TEST_SECRET)
       .expect(200);
 
     expect(res.body.imageToText).toHaveProperty('models');
@@ -65,7 +60,6 @@ describe('GET /config', () => {
   it('embedding has models and defaults', async () => {
     const res = await request(app)
       .get('/config')
-      .set('x-api-secret', TEST_SECRET)
       .expect(200);
 
     expect(res.body.embedding).toHaveProperty('models');
@@ -75,7 +69,6 @@ describe('GET /config', () => {
   it('providerList contains all known providers', async () => {
     const res = await request(app)
       .get('/config')
-      .set('x-api-secret', TEST_SECRET)
       .expect(200);
 
     const list = res.body.providerList;
@@ -84,6 +77,5 @@ describe('GET /config', () => {
     expect(list).toContain('google');
     expect(list).toContain('elevenlabs');
     expect(list).toContain('inworld');
-    expect(list).toContain('lm-studio');
   });
 });

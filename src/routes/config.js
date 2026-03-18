@@ -17,10 +17,10 @@ import {
     GOOGLE_API_KEY,
     ELEVENLABS_API_KEY,
     INWORLD_BASIC,
-    LOCAL_LLM_BASE_URL,
+    LM_STUDIO_BASE_URL,
+    VLLM_BASE_URL,
     OLLAMA_BASE_URL,
 } from "../../secrets.js";
-import { getBackendType, redetectIfNeeded } from "../providers/lm-studio.js";
 
 const router = express.Router();
 
@@ -31,7 +31,8 @@ const PROVIDER_SECRETS = {
     [PROVIDERS.GOOGLE]: GOOGLE_API_KEY,
     [PROVIDERS.ELEVENLABS]: ELEVENLABS_API_KEY,
     [PROVIDERS.INWORLD]: INWORLD_BASIC,
-    [PROVIDERS.LM_STUDIO]: LOCAL_LLM_BASE_URL,
+    [PROVIDERS.LM_STUDIO]: LM_STUDIO_BASE_URL,
+    [PROVIDERS.VLLM]: VLLM_BASE_URL,
     [PROVIDERS.OLLAMA]: OLLAMA_BASE_URL,
 };
 
@@ -196,7 +197,34 @@ async function getLmStudioModelOptions() {
                 return entry;
             });
     } catch (err) {
-        logger.warn(`Could not fetch local LLM models for config: ${err.message}`);
+        logger.warn(`Could not fetch LM Studio models for config: ${err.message}`);
+        return [];
+    }
+}
+
+/**
+ * Fetch vLLM models and convert them to the config model format.
+ * Returns an array of model option objects for the 'vllm' provider.
+ */
+async function getVllmModelOptions() {
+    try {
+        const provider = getProvider("vllm");
+        const { models } = await provider.listModels();
+        if (!models || !Array.isArray(models)) return [];
+
+        return models
+            .filter((m) => m.type === "llm")
+            .map((m) => ({
+                name: m.key,
+                label: m.display_name || m.key,
+                inputTypes: [TYPES.TEXT],
+                outputTypes: [TYPES.TEXT],
+                streaming: true,
+                defaultTemperature: 0.7,
+                pricing: { inputPerMillion: 0, outputPerMillion: 0 },
+            }));
+    } catch (err) {
+        logger.warn(`Could not fetch vLLM models for config: ${err.message}`);
         return [];
     }
 }
@@ -258,9 +286,6 @@ async function getOllamaModelOptions() {
  * Returns the full catalog of providers, models, voices, and capabilities.
  */
 router.get("/", async (_req, res) => {
-    // Re-probe local LLM backend if previous detection failed (e.g. vLLM started late)
-    await redetectIfNeeded();
-
     // Get static model options
     let textToTextModels = getModelOptions(TYPES.TEXT, TYPES.TEXT);
     let textToImageModels = getModelOptions(TYPES.TEXT, TYPES.IMAGE);
@@ -278,6 +303,25 @@ router.get("/", async (_req, res) => {
                     }
                 }
                 textToTextModels["lm-studio"] = staticLmModels;
+            }
+        } catch {
+            // Ignore — use static models only
+        }
+    }
+
+    // Merge dynamic vLLM models into vllm provider (only if configured)
+    if (AVAILABLE_PROVIDERS.has(PROVIDERS.VLLM)) {
+        try {
+            const vllmModels = await getVllmModelOptions();
+            if (vllmModels.length > 0) {
+                const staticVllmModels = textToTextModels["vllm"] || [];
+                const staticKeys = new Set(staticVllmModels.map((m) => m.name));
+                for (const m of vllmModels) {
+                    if (!staticKeys.has(m.name)) {
+                        staticVllmModels.push(m);
+                    }
+                }
+                textToTextModels["vllm"] = staticVllmModels;
             }
         } catch {
             // Ignore — use static models only
@@ -318,7 +362,6 @@ router.get("/", async (_req, res) => {
     }
 
     res.json({
-        localLlmBackend: getBackendType(),
         providers: availableProviderMap,
         providerList: availableProviderList,
         availableProviders: availableProviderList,

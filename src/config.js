@@ -10,6 +10,7 @@ const PROVIDERS = {
     ELEVENLABS: "elevenlabs",
     INWORLD: "inworld",
     LM_STUDIO: "lm-studio",
+    VLLM: "vllm",
     OLLAMA: "ollama",
 };
 

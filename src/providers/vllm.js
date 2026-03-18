@@ -1,10 +1,12 @@
 import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
-import { LM_STUDIO_BASE_URL } from "../../secrets.js";
+import { VLLM_BASE_URL } from "../../secrets.js";
 import { TYPES, getDefaultModels } from "../config.js";
 
+// ── Helpers ──────────────────────────────────────────────────
+
 function getBaseUrl() {
-    return LM_STUDIO_BASE_URL;
+    return VLLM_BASE_URL;
 }
 
 /**
@@ -28,15 +30,8 @@ function prepareMessages(messages) {
     });
 }
 
-/** Small helper — resolves after `ms` milliseconds. */
-function sleep(ms) {
-    return new Promise((r) => setTimeout(r, ms));
-}
-
 /**
  * Extract <think>…</think> blocks from a complete response string.
- * Returns { thinking, text } where thinking is the concatenated think content
- * and text is the remaining content with think tags removed.
  */
 function extractThinkTags(raw) {
     const thinkRegex = /<think>([\s\S]*?)<\/think>/gi;
@@ -55,10 +50,6 @@ function extractThinkTags(raw) {
 /**
  * Stateful parser for streaming <think> tag detection.
  * Handles tags that arrive split across chunk boundaries.
- *
- * feed(chunk) returns an array of items:
- *   - { type: "thinking", content: string }
- *   - { type: "text", content: string }
  */
 class ThinkTagParser {
     constructor() {
@@ -74,7 +65,6 @@ class ThinkTagParser {
             if (this.insideThink) {
                 const closeIdx = this.buffer.indexOf("</think>");
                 if (closeIdx !== -1) {
-                    // Found closing tag — emit thinking content up to it
                     const thinkContent = this.buffer.slice(0, closeIdx);
                     if (thinkContent) {
                         results.push({ type: "thinking", content: thinkContent });
@@ -82,20 +72,14 @@ class ThinkTagParser {
                     this.buffer = this.buffer.slice(closeIdx + "</think>".length);
                     this.insideThink = false;
                 } else {
-                    // No closing tag yet — check if buffer might end with a partial </think>
                     const partialMatch = this._partialEndTag(this.buffer);
                     if (partialMatch > 0) {
-                        // Emit everything except the potential partial tag
-                        const safe = this.buffer.slice(
-                            0,
-                            this.buffer.length - partialMatch,
-                        );
+                        const safe = this.buffer.slice(0, this.buffer.length - partialMatch);
                         if (safe) {
                             results.push({ type: "thinking", content: safe });
                         }
                         this.buffer = this.buffer.slice(this.buffer.length - partialMatch);
                     } else {
-                        // Emit all as thinking
                         results.push({ type: "thinking", content: this.buffer });
                         this.buffer = "";
                     }
@@ -104,7 +88,6 @@ class ThinkTagParser {
             } else {
                 const openIdx = this.buffer.indexOf("<think>");
                 if (openIdx !== -1) {
-                    // Found opening tag — emit text before it
                     const textBefore = this.buffer.slice(0, openIdx);
                     if (textBefore) {
                         results.push({ type: "text", content: textBefore });
@@ -112,13 +95,9 @@ class ThinkTagParser {
                     this.buffer = this.buffer.slice(openIdx + "<think>".length);
                     this.insideThink = true;
                 } else {
-                    // No opening tag — check for partial <think> at end
                     const partialMatch = this._partialStartTag(this.buffer);
                     if (partialMatch > 0) {
-                        const safe = this.buffer.slice(
-                            0,
-                            this.buffer.length - partialMatch,
-                        );
+                        const safe = this.buffer.slice(0, this.buffer.length - partialMatch);
                         if (safe) {
                             results.push({ type: "text", content: safe });
                         }
@@ -134,29 +113,22 @@ class ThinkTagParser {
         return results;
     }
 
-    /** Check if the end of str is a partial match for "<think>" */
     _partialStartTag(str) {
         const tag = "<think>";
         for (let len = Math.min(tag.length - 1, str.length); len >= 1; len--) {
-            if (str.endsWith(tag.slice(0, len))) {
-                return len;
-            }
+            if (str.endsWith(tag.slice(0, len))) return len;
         }
         return 0;
     }
 
-    /** Check if the end of str is a partial match for "</think>" */
     _partialEndTag(str) {
         const tag = "</think>";
         for (let len = Math.min(tag.length - 1, str.length); len >= 1; len--) {
-            if (str.endsWith(tag.slice(0, len))) {
-                return len;
-            }
+            if (str.endsWith(tag.slice(0, len))) return len;
         }
         return 0;
     }
 
-    /** Flush any remaining buffered content. */
     flush() {
         if (!this.buffer) return [];
         const type = this.insideThink ? "thinking" : "text";
@@ -166,19 +138,18 @@ class ThinkTagParser {
     }
 }
 
-const lmStudioProvider = {
-    name: "lm-studio",
+// ── Provider ─────────────────────────────────────────────────
+
+const vllmProvider = {
+    name: "vllm",
 
     async generateText(
         messages,
-        model = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["lm-studio"],
+        model = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["vllm"],
         options = {},
     ) {
         const baseUrl = getBaseUrl();
-        logger.provider(
-            "LM Studio",
-            `generateText model=${model} baseUrl=${baseUrl}`,
-        );
+        logger.provider("vLLM", `generateText model=${model} baseUrl=${baseUrl}`);
         try {
             const prepared = prepareMessages(messages);
 
@@ -188,21 +159,11 @@ const lmStudioProvider = {
                 body: JSON.stringify({
                     messages: prepared,
                     model,
-                    temperature:
-                        options.temperature !== undefined ? options.temperature : 0.7,
+                    temperature: options.temperature !== undefined ? options.temperature : 0.7,
                     top_p: options.topP !== undefined ? options.topP : undefined,
-                    frequency_penalty:
-                        options.frequencyPenalty !== undefined
-                            ? options.frequencyPenalty
-                            : undefined,
-                    presence_penalty:
-                        options.presencePenalty !== undefined
-                            ? options.presencePenalty
-                            : undefined,
-                    stop:
-                        options.stopSequences !== undefined
-                            ? options.stopSequences
-                            : undefined,
+                    frequency_penalty: options.frequencyPenalty !== undefined ? options.frequencyPenalty : undefined,
+                    presence_penalty: options.presencePenalty !== undefined ? options.presencePenalty : undefined,
+                    stop: options.stopSequences !== undefined ? options.stopSequences : undefined,
                     max_tokens: options.maxTokens || -1,
                     stream: false,
                 }),
@@ -226,7 +187,7 @@ const lmStudioProvider = {
             };
         } catch (error) {
             if (error instanceof ProviderError) throw error;
-            throw new ProviderError("lm-studio", error.message, 500, error);
+            throw new ProviderError("vllm", error.message, 500, error);
         }
     },
 
@@ -234,74 +195,12 @@ const lmStudioProvider = {
 
     async *generateTextStream(
         messages,
-        model = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["lm-studio"],
+        model = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["vllm"],
         options = {},
     ) {
         const baseUrl = getBaseUrl();
-        logger.provider(
-            "LM Studio",
-            `generateTextStream model=${model} baseUrl=${baseUrl}`,
-        );
+        logger.provider("vLLM", `generateTextStream model=${model} baseUrl=${baseUrl}`);
         try {
-            // Auto-load the model if not currently loaded
-            try {
-                const { models } = await this.listModels();
-                const modelEntry = (models || []).find((m) => m.key === model);
-                const isLoaded = modelEntry?.loaded_instances?.length > 0;
-                if (!isLoaded) {
-                    // Unload any other loaded models first (single-model enforcement)
-                    for (const m of models || []) {
-                        for (const inst of m.loaded_instances || []) {
-                            yield { type: "status", message: "Unloading previous model…" };
-                            logger.info(`Auto-unloading ${inst.id} before loading ${model}`);
-                            await this.unloadModel(inst.id);
-                        }
-                    }
-
-                    logger.info(`Auto-loading model ${model} for streaming`);
-                    yield { type: "status", message: "Loading model… 0%" };
-
-                    // Start load (non-blocking) and poll for progress
-                    let loadDone = false;
-                    let loadError = null;
-                    const loadPromise = this.loadModel(model)
-                        .then(() => {
-                            loadDone = true;
-                        })
-                        .catch((err) => {
-                            loadDone = true;
-                            loadError = err;
-                        });
-
-                    const startTime = Date.now();
-                    const EXPECTED_LOAD_MS = 15_000;
-                    let lastPct = 0;
-
-                    while (!loadDone) {
-                        await sleep(500);
-                        if (loadDone) break;
-
-                        const elapsed = Date.now() - startTime;
-                        const pct = Math.min(
-                            95,
-                            Math.round((elapsed / (elapsed + EXPECTED_LOAD_MS)) * 100),
-                        );
-                        if (pct > lastPct) {
-                            lastPct = pct;
-                            yield { type: "status", message: `Loading model… ${pct}%` };
-                        }
-                    }
-
-                    await loadPromise;
-                    if (loadError) throw loadError;
-                    yield { type: "status", message: "Loading model… 100%" };
-                }
-            } catch (loadCheckErr) {
-                logger.warn(
-                    `Could not check/load model before streaming: ${loadCheckErr.message}`,
-                );
-            }
-
             const prepared = prepareMessages(messages);
 
             const response = await fetch(`${baseUrl}/v1/chat/completions`, {
@@ -310,21 +209,11 @@ const lmStudioProvider = {
                 body: JSON.stringify({
                     messages: prepared,
                     model,
-                    temperature:
-                        options.temperature !== undefined ? options.temperature : 0.7,
+                    temperature: options.temperature !== undefined ? options.temperature : 0.7,
                     top_p: options.topP !== undefined ? options.topP : undefined,
-                    frequency_penalty:
-                        options.frequencyPenalty !== undefined
-                            ? options.frequencyPenalty
-                            : undefined,
-                    presence_penalty:
-                        options.presencePenalty !== undefined
-                            ? options.presencePenalty
-                            : undefined,
-                    stop:
-                        options.stopSequences !== undefined
-                            ? options.stopSequences
-                            : undefined,
+                    frequency_penalty: options.frequencyPenalty !== undefined ? options.frequencyPenalty : undefined,
+                    presence_penalty: options.presencePenalty !== undefined ? options.presencePenalty : undefined,
+                    stop: options.stopSequences !== undefined ? options.stopSequences : undefined,
                     max_tokens: options.maxTokens || -1,
                     stream: true,
                     stream_options: { include_usage: true },
@@ -348,18 +237,17 @@ const lmStudioProvider = {
 
                 buffer += decoder.decode(value, { stream: true });
                 const lines = buffer.split("\n");
-                buffer = lines.pop(); // keep incomplete line in buffer
+                buffer = lines.pop();
 
                 for (const line of lines) {
                     const trimmed = line.trim();
-                    if (!trimmed || trimmed.startsWith(":")) continue; // skip empty lines / comments
+                    if (!trimmed || trimmed.startsWith(":")) continue;
                     if (trimmed === "data: [DONE]") continue;
                     if (!trimmed.startsWith("data: ")) continue;
 
                     try {
                         const json = JSON.parse(trimmed.slice(6));
 
-                        // Extract usage if present (some servers send it on the last chunk)
                         if (json.usage) {
                             usage = {
                                 inputTokens: json.usage.prompt_tokens ?? 0,
@@ -369,7 +257,6 @@ const lmStudioProvider = {
 
                         const content = json.choices?.[0]?.delta?.content || "";
                         if (content) {
-                            // Parse <think> tags from the streamed content
                             const parts = thinkParser.feed(content);
                             for (const part of parts) {
                                 if (part.type === "thinking") {
@@ -385,7 +272,6 @@ const lmStudioProvider = {
                 }
             }
 
-            // Flush any remaining buffered content from the think parser
             const remaining = thinkParser.flush();
             for (const part of remaining) {
                 if (part.type === "thinking") {
@@ -400,21 +286,18 @@ const lmStudioProvider = {
             }
         } catch (error) {
             if (error instanceof ProviderError) throw error;
-            throw new ProviderError("lm-studio", error.message, 500, error);
+            throw new ProviderError("vllm", error.message, 500, error);
         }
     },
 
     async captionImage(
         images,
         prompt = "Describe this image.",
-        model = getDefaultModels(TYPES.IMAGE, TYPES.TEXT)["lm-studio"],
+        model = getDefaultModels(TYPES.IMAGE, TYPES.TEXT)["vllm"],
         systemPrompt,
     ) {
         const baseUrl = getBaseUrl();
-        logger.provider(
-            "LM Studio",
-            `captionImage model=${model} baseUrl=${baseUrl}`,
-        );
+        logger.provider("vLLM", `captionImage model=${model} baseUrl=${baseUrl}`);
         try {
             const content = [
                 { type: "text", text: prompt },
@@ -452,86 +335,42 @@ const lmStudioProvider = {
             return { text, usage };
         } catch (error) {
             if (error instanceof ProviderError) throw error;
-            throw new ProviderError("lm-studio", error.message, 500, error);
+            throw new ProviderError("vllm", error.message, 500, error);
         }
     },
 
-    // ── Model Management ─────────────────────────────────────
+    // ── Model Listing ────────────────────────────────────────
 
     /**
-     * List all models available in LM Studio.
-     * Uses the proprietary GET /api/v1/models endpoint.
+     * List all models available from the vLLM server.
+     * Uses the OpenAI-standard GET /v1/models endpoint.
+     * Returns { models: [...] } normalized format.
      */
     async listModels() {
         const baseUrl = getBaseUrl();
-        logger.provider("LM Studio", "listModels");
+        logger.provider("vLLM", "listModels");
         try {
-            const response = await fetch(`${baseUrl}/api/v1/models`, {
+            const response = await fetch(`${baseUrl}/v1/models`, {
                 method: "GET",
                 headers: { "Content-Type": "application/json" },
             });
-
             if (!response.ok) {
                 const errorText = await response.text();
                 throw new Error(`API error: ${response.status} ${errorText}`);
             }
-
-            return response.json();
+            const data = await response.json();
+            const models = (data.data || []).map((m) => ({
+                key: m.id,
+                display_name: m.id,
+                type: "llm",
+                loaded_instances: [{ id: m.id }], // vLLM models are always loaded
+            }));
+            return { models };
         } catch (error) {
             if (error instanceof ProviderError) throw error;
-            throw new ProviderError("lm-studio", error.message, 500, error);
-        }
-    },
-
-    /**
-     * Load a model into LM Studio memory.
-     */
-    async loadModel(model) {
-        const baseUrl = getBaseUrl();
-        logger.provider("LM Studio", `loadModel model=${model}`);
-        try {
-            const response = await fetch(`${baseUrl}/api/v1/models/load`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ model }),
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`API error: ${response.status} ${errorText}`);
-            }
-
-            return response.json();
-        } catch (error) {
-            if (error instanceof ProviderError) throw error;
-            throw new ProviderError("lm-studio", error.message, 500, error);
-        }
-    },
-
-    /**
-     * Unload a model from LM Studio memory.
-     */
-    async unloadModel(instanceId) {
-        const baseUrl = getBaseUrl();
-        logger.provider("LM Studio", `unloadModel instanceId=${instanceId}`);
-        try {
-            const response = await fetch(`${baseUrl}/api/v1/models/unload`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ instance_id: instanceId }),
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`API error: ${response.status} ${errorText}`);
-            }
-
-            return response.json();
-        } catch (error) {
-            if (error instanceof ProviderError) throw error;
-            throw new ProviderError("lm-studio", error.message, 500, error);
+            throw new ProviderError("vllm", error.message, 500, error);
         }
     },
 };
 
-export default lmStudioProvider;
+export default vllmProvider;

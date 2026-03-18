@@ -13,8 +13,9 @@ vi.mock('../secrets.js', () => ({
     GOOGLE_API_KEY: 'fake',
     ELEVENLABS_API_KEY: 'fake',
     INWORLD_BASIC: 'fake',
-    LOCAL_LLM_BASE_URL: 'http://localhost:1234',
-    OLLAMA_BASE_URL: 'http://localhost:11434',
+    LM_STUDIO_BASE_URL: '',
+    VLLM_BASE_URL: '',
+    OLLAMA_BASE_URL: '',
     OPENAI_COMPATIBLE_BASE_URL: 'http://localhost:9999',
     MONGO_URI: 'mongodb://127.0.0.1:27017',
     MONGO_DB_NAME: 'prism-test',
@@ -106,6 +107,7 @@ vi.mock('../src/providers/index.js', () => {
         elevenlabs: mockProviderTtsOnly,
         inworld: mockProviderTtsOnly,
         'openai-compatible': mockProviderTextOnly,
+        vllm: mockProviderTextOnly,
     };
 
     return {
@@ -163,6 +165,5 @@ app.use('/text-to-audio', audioRouter);
 app.use('/embed', embedRouter);
 app.use(errorHandler);
 
-// ── Helpers ───────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────
 export const TEST_SECRET = 'test-secret';
-

@@ -1,13 +1,12 @@
 import express from "express";
 import { getProvider } from "../providers/index.js";
-import { getBackendType } from "../providers/lm-studio.js";
 import logger from "../utils/logger.js";
 
 const router = express.Router();
 
 /**
  * GET /lm-studio/models
- * List all models available from the local LLM server (LM Studio or vLLM).
+ * List all models available from LM Studio.
  */
 router.get("/models", async (_req, res, next) => {
     try {
@@ -22,18 +21,11 @@ router.get("/models", async (_req, res, next) => {
 
 /**
  * POST /lm-studio/load
- * Load a model into the local LLM server (LM Studio only).
+ * Load a model into LM Studio.
  * Body: { model: "model-key" }
  */
 router.post("/load", async (req, res, next) => {
     try {
-        if (getBackendType() === "vllm") {
-            return res.status(501).json({
-                error: true,
-                message: "Model loading is not supported on vLLM — models are loaded at server startup",
-            });
-        }
-
         const { model } = req.body;
         if (!model) {
             return res
@@ -70,18 +62,11 @@ router.post("/load", async (req, res, next) => {
 
 /**
  * POST /lm-studio/unload
- * Unload a model from the local LLM server (LM Studio only).
+ * Unload a model from LM Studio memory.
  * Body: { instance_id: "model-instance-id" }
  */
 router.post("/unload", async (req, res, next) => {
     try {
-        if (getBackendType() === "vllm") {
-            return res.status(501).json({
-                error: true,
-                message: "Model unloading is not supported on vLLM — models are managed at server startup",
-            });
-        }
-
         const { instance_id } = req.body;
         if (!instance_id) {
             return res.status(400).json({

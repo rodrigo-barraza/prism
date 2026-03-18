@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import request from "supertest";
-import { app, TEST_SECRET, MOCK_GENERATE_SPEECH } from "./setup.js";
+import { app, MOCK_GENERATE_SPEECH } from "./setup.js";
 
 describe("POST /text-to-audio", () => {
   beforeEach(() => {
@@ -24,7 +24,6 @@ describe("POST /text-to-audio", () => {
   it("returns 400 when provider is missing", async () => {
     const res = await request(app)
       .post("/text-to-audio")
-      .set("x-api-secret", TEST_SECRET)
       .send({ text: "Hello world" })
       .expect(400);
 
@@ -35,7 +34,6 @@ describe("POST /text-to-audio", () => {
   it("returns 400 when text is missing", async () => {
     const res = await request(app)
       .post("/text-to-audio")
-      .set("x-api-secret", TEST_SECRET)
       .send({ provider: "openai" })
       .expect(400);
 
@@ -48,7 +46,6 @@ describe("POST /text-to-audio", () => {
   it("returns binary audio with correct Content-Type (minimal params)", async () => {
     const res = await request(app)
       .post("/text-to-audio")
-      .set("x-api-secret", TEST_SECRET)
       .send({ provider: "openai", text: "Hello world" })
       .expect(200);
 
@@ -62,7 +59,6 @@ describe("POST /text-to-audio", () => {
   it("passes voice parameter to the provider", async () => {
     await request(app)
       .post("/text-to-audio")
-      .set("x-api-secret", TEST_SECRET)
       .send({ provider: "openai", text: "Hello world", voice: "echo" })
       .expect(200);
 
@@ -74,7 +70,6 @@ describe("POST /text-to-audio", () => {
   it("passes undefined voice when omitted", async () => {
     await request(app)
       .post("/text-to-audio")
-      .set("x-api-secret", TEST_SECRET)
       .send({ provider: "openai", text: "Hello world" })
       .expect(200);
 
@@ -87,7 +82,6 @@ describe("POST /text-to-audio", () => {
   it("merges instructions into the options object", async () => {
     await request(app)
       .post("/text-to-audio")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "openai",
         text: "Hello",
@@ -104,7 +98,6 @@ describe("POST /text-to-audio", () => {
   it("merges model into the options object", async () => {
     await request(app)
       .post("/text-to-audio")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "openai",
         text: "Hello",
@@ -121,7 +114,6 @@ describe("POST /text-to-audio", () => {
   it("spreads extra options into final options", async () => {
     await request(app)
       .post("/text-to-audio")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "openai",
         text: "Hello",
@@ -137,7 +129,6 @@ describe("POST /text-to-audio", () => {
   it("combines instructions, model, and extra options", async () => {
     await request(app)
       .post("/text-to-audio")
-      .set("x-api-secret", TEST_SECRET)
       .send({
         provider: "openai",
         text: "Hello",
@@ -159,7 +150,6 @@ describe("POST /text-to-audio", () => {
   it("works with elevenlabs provider", async () => {
     await request(app)
       .post("/text-to-audio")
-      .set("x-api-secret", TEST_SECRET)
       .send({ provider: "elevenlabs", text: "Hello" })
       .expect(200);
 
@@ -169,7 +159,6 @@ describe("POST /text-to-audio", () => {
   it("works with google provider", async () => {
     await request(app)
       .post("/text-to-audio")
-      .set("x-api-secret", TEST_SECRET)
       .send({ provider: "google", text: "Hello" })
       .expect(200);
 
@@ -179,7 +168,6 @@ describe("POST /text-to-audio", () => {
   it("works with inworld provider", async () => {
     await request(app)
       .post("/text-to-audio")
-      .set("x-api-secret", TEST_SECRET)
       .send({ provider: "inworld", text: "Hello" })
       .expect(200);
 
@@ -191,7 +179,6 @@ describe("POST /text-to-audio", () => {
   it("returns 400 for provider that does not support TTS", async () => {
     const res = await request(app)
       .post("/text-to-audio")
-      .set("x-api-secret", TEST_SECRET)
       .send({ provider: "anthropic", text: "Hello" })
       .expect(400);
 
@@ -218,7 +205,6 @@ describe("POST /text-to-audio", () => {
 
     const res = await request(app)
       .post("/text-to-audio")
-      .set("x-api-secret", TEST_SECRET)
       .send({ provider: "openai", text: "Hello" })
       .expect(200);
 

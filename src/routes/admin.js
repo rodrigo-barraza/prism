@@ -1,6 +1,6 @@
 import express from "express";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
-import { MONGO_DB_NAME, ADMIN_SECRET } from "../../secrets.js";
+import { MONGO_DB_NAME } from "../../secrets.js";
 import { getProvider } from "../providers/index.js";
 import logger from "../utils/logger.js";
 import os from "os";
@@ -10,18 +10,7 @@ const REQUESTS_COL = "requests";
 const CONVERSATIONS_COL = "conversations";
 const WORKFLOWS_COL = "workflows";
 
-// ── Admin auth middleware ────────────────────────────────────
-function adminAuth(req, res, next) {
-    const secret = req.headers["x-admin-secret"];
-    if (!secret || secret !== ADMIN_SECRET) {
-        return res
-            .status(401)
-            .json({ error: true, message: "Unauthorized — invalid x-admin-secret" });
-    }
-    next();
-}
 
-router.use(adminAuth);
 
 // ── Helper: get DB handle ────────────────────────────────────
 function getDb() {

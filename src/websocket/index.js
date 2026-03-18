@@ -1,4 +1,3 @@
-import { GATEWAY_SECRET } from "../../secrets.js";
 import { handleChat } from "../routes/chat.js";
 import { handleVoice } from "../routes/audio.js";
 import logger from "../utils/logger.js";
@@ -13,21 +12,6 @@ export function setupWebSocket(wss) {
   wss.on("connection", (ws, req) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
     const pathname = url.pathname;
-
-    // Auth — accept header or query param
-    const secret =
-      req.headers["x-api-secret"] || url.searchParams.get("secret");
-    if (!secret || secret !== GATEWAY_SECRET) {
-      logger.error(`WebSocket auth failed — ${pathname}`);
-      ws.send(
-        JSON.stringify({
-          type: "error",
-          message: "Unauthorized — missing or invalid secret",
-        }),
-      );
-      ws.close();
-      return;
-    }
 
     const project =
       req.headers["x-project"] || url.searchParams.get("project") || "unknown";

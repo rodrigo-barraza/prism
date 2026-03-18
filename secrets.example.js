@@ -8,11 +8,7 @@
 // Server
 export const PORT = 3000;
 
-// Gateway Auth
-export const GATEWAY_SECRET = '';
 
-// Admin Auth (Iris Dashboard)
-export const ADMIN_SECRET = '';
 
 // OpenAI
 export const OPENAI_API_KEY = '';
@@ -29,8 +25,11 @@ export const ELEVENLABS_API_KEY = '';
 // Inworld (Base64-encoded apiKey:apiSecret)
 export const INWORLD_BASIC = '';
 
-// Local LLM Server (LM Studio or vLLM)
-export const LOCAL_LLM_BASE_URL = 'http://localhost:1234';
+// LM Studio (Local LLM Server)
+export const LM_STUDIO_BASE_URL = 'http://localhost:1234';
+
+// vLLM (Local LLM Server)
+export const VLLM_BASE_URL = '';
 
 // Ollama (Local LLM Server)
 export const OLLAMA_BASE_URL = 'http://localhost:11434';
