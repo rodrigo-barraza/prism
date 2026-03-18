@@ -20,7 +20,7 @@ import {
     LOCAL_LLM_BASE_URL,
     OLLAMA_BASE_URL,
 } from "../../secrets.js";
-import { getBackendType } from "../providers/lm-studio.js";
+import { getBackendType, redetectIfNeeded } from "../providers/lm-studio.js";
 
 const router = express.Router();
 
@@ -258,6 +258,9 @@ async function getOllamaModelOptions() {
  * Returns the full catalog of providers, models, voices, and capabilities.
  */
 router.get("/", async (_req, res) => {
+    // Re-probe local LLM backend if previous detection failed (e.g. vLLM started late)
+    await redetectIfNeeded();
+
     // Get static model options
     let textToTextModels = getModelOptions(TYPES.TEXT, TYPES.TEXT);
     let textToImageModels = getModelOptions(TYPES.TEXT, TYPES.IMAGE);

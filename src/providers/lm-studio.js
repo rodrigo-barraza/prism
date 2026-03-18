@@ -4,7 +4,7 @@ import { LOCAL_LLM_BASE_URL } from "../../secrets.js";
 import { TYPES, getDefaultModels } from "../config.js";
 
 // ── Backend Detection ────────────────────────────────────────
-// Cached backend type: "lm-studio" | "vllm" | null (not yet detected)
+// Cached backend type: "lm-studio" | "vllm" | null (not yet detected / detection failed)
 let _detectedBackend = null;
 
 function getBaseUrl() {
@@ -13,7 +13,7 @@ function getBaseUrl() {
 
 /**
  * Returns the detected backend type: "lm-studio" or "vllm".
- * Falls back to "lm-studio" if detection hasn't run yet.
+ * Falls back to "lm-studio" if detection hasn't run or failed.
  */
 export function getBackendType() {
     return _detectedBackend || "lm-studio";
@@ -27,11 +27,23 @@ export function getBackendLabel() {
 }
 
 /**
+ * If previous detection failed (null), re-probe the backend.
+ * Called lazily on config requests so a late-starting vLLM gets picked up.
+ */
+export async function redetectIfNeeded() {
+    if (_detectedBackend === null && getBaseUrl()) {
+        await detectBackend();
+    }
+}
+
+/**
  * Probe the local LLM server to detect whether it's LM Studio or vLLM.
  *
  * Strategy: Try LM Studio's proprietary `/api/v1/models` endpoint first.
  * If it returns a `models` array → LM Studio.
  * Otherwise try OpenAI-standard `/v1/models` — if it returns `data` array → vLLM.
+ *
+ * If neither responds, _detectedBackend stays null so we can retry later.
  */
 export async function detectBackend() {
     const baseUrl = getBaseUrl();
@@ -85,10 +97,9 @@ export async function detectBackend() {
         // Neither backend reachable
     }
 
-    // Default fallback
-    _detectedBackend = "lm-studio";
+    // Don't cache the fallback — leave null so redetectIfNeeded() can retry
     logger.warn(
-        `Could not detect local LLM backend at ${baseUrl} — defaulting to LM Studio`,
+        `Could not detect local LLM backend at ${baseUrl} — will retry on next config request`,
     );
 }
 
