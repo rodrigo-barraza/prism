@@ -442,6 +442,7 @@ async function handleStreamingText(ctx) {
 
   const stream = provider.generateTextStream(messages, resolvedModel, options);
   let usage = null;
+  let firstOutputTime = null;
   let firstTokenTime = null;
   let generationEnd = null;
   let outputCharacters = 0;
@@ -456,6 +457,8 @@ async function handleStreamingText(ctx) {
     }
     // Thinking chunks
     if (chunk && typeof chunk === "object" && chunk.type === "thinking") {
+      if (!firstOutputTime) firstOutputTime = performance.now();
+      generationEnd = performance.now();
       emit({ type: "thinking", content: chunk.content });
       continue;
     }
@@ -514,6 +517,7 @@ async function handleStreamingText(ctx) {
       continue;
     }
     // Text chunk
+    if (!firstOutputTime) firstOutputTime = performance.now();
     if (!firstTokenTime) {
       firstTokenTime = performance.now();
     }
@@ -529,6 +533,12 @@ async function handleStreamingText(ctx) {
   const timeToGenerationSec = firstTokenTime
     ? (firstTokenTime - requestStart) / 1000
     : null;
+  // Total output generation time (includes thinking + text tokens)
+  const outputGenerationSec =
+    firstOutputTime && generationEnd
+      ? (generationEnd - firstOutputTime) / 1000
+      : null;
+  // Text-only generation time (from first text token to last)
   const generationSec =
     firstTokenTime && generationEnd
       ? (generationEnd - firstTokenTime) / 1000
@@ -560,8 +570,8 @@ async function handleStreamingText(ctx) {
 
     const tokensPerSec = usage.tokensPerSec
       ? usage.tokensPerSec.toFixed(1)
-      : generationSec && generationSec > 0
-        ? (usage.outputTokens / generationSec).toFixed(1)
+      : outputGenerationSec && outputGenerationSec > 0
+        ? (usage.outputTokens / outputGenerationSec).toFixed(1)
         : "N/A";
 
     logger.request(
