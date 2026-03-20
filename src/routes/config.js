@@ -166,8 +166,10 @@ async function getLmStudioModelOptions() {
                 const entry = {
                     name: m.key,
                     label,
+                    modelType: "conversation",
                     inputTypes: [TYPES.TEXT],
                     outputTypes: [TYPES.TEXT],
+                    supportsSystemPrompt: true,
                     streaming: true,
                     defaultTemperature: 0.7,
                     pricing: { inputPerMillion: 0, outputPerMillion: 0 },
@@ -217,8 +219,10 @@ async function getVllmModelOptions() {
             .map((m) => ({
                 name: m.key,
                 label: m.display_name || m.key,
+                modelType: "conversation",
                 inputTypes: [TYPES.TEXT],
                 outputTypes: [TYPES.TEXT],
+                supportsSystemPrompt: true,
                 streaming: true,
                 defaultTemperature: 0.7,
                 pricing: { inputPerMillion: 0, outputPerMillion: 0 },
@@ -255,8 +259,10 @@ async function getOllamaModelOptions() {
             const entry = {
                 name,
                 label,
+                modelType: "conversation",
                 inputTypes: [TYPES.TEXT],
                 outputTypes: [TYPES.TEXT],
+                supportsSystemPrompt: true,
                 streaming: true,
                 defaultTemperature: 0.7,
                 pricing: { inputPerMillion: 0, outputPerMillion: 0 },
