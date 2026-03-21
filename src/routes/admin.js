@@ -227,6 +227,8 @@ router.get("/stats/projects", async (req, res, next) => {
                 $group: {
                     _id: "$project",
                     totalRequests: { $sum: 1 },
+                    totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
+                    totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
                     totalTokens: {
                         $sum: {
                             $add: [
@@ -237,7 +239,16 @@ router.get("/stats/projects", async (req, res, next) => {
                     },
                     totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
                     avgLatency: { $avg: { $ifNull: ["$totalTime", 0] } },
+                    avgTokensPerSec: { $avg: { $ifNull: ["$tokensPerSec", null] } },
                     lastRequest: { $max: "$timestamp" },
+                    _models: { $addToSet: "$model" },
+                    _providers: { $addToSet: "$provider" },
+                },
+            },
+            {
+                $addFields: {
+                    modelCount: { $size: "$_models" },
+                    providerCount: { $size: "$_providers" },
                 },
             },
             { $sort: { totalRequests: -1 } },
@@ -258,9 +269,15 @@ router.get("/stats/projects", async (req, res, next) => {
             { $project: { _id: 1, workflowCount: { $size: "$workflowIds" } } },
         ];
 
-        const [results, workflowCounts] = await Promise.all([
+        // Count conversations per project
+        const convPipeline = [
+            { $group: { _id: "$project", conversationCount: { $sum: 1 } } },
+        ];
+
+        const [results, workflowCounts, convCounts] = await Promise.all([
             db.collection(REQUESTS_COL).aggregate(pipeline).toArray(),
             db.collection(WORKFLOWS_COL).aggregate(workflowPipeline).toArray(),
+            db.collection(CONVERSATIONS_COL).aggregate(convPipeline).toArray(),
         ]);
 
         // Build a project → workflowCount map
@@ -269,15 +286,27 @@ router.get("/stats/projects", async (req, res, next) => {
             wfMap[wc._id || "unknown"] = wc.workflowCount;
         }
 
+        // Build a project → conversationCount map
+        const convMap = {};
+        for (const cc of convCounts) {
+            convMap[cc._id || "unknown"] = cc.conversationCount;
+        }
+
         res.json(
             results.map((r) => ({
                 project: r._id || "unknown",
                 totalRequests: r.totalRequests,
+                totalInputTokens: r.totalInputTokens,
+                totalOutputTokens: r.totalOutputTokens,
                 totalTokens: r.totalTokens,
                 totalCost: r.totalCost,
                 avgLatency: r.avgLatency,
+                avgTokensPerSec: r.avgTokensPerSec,
                 lastRequest: r.lastRequest,
+                modelCount: r.modelCount,
+                providerCount: r.providerCount,
                 workflowCount: wfMap[r._id || "unknown"] || 0,
+                conversationCount: convMap[r._id || "unknown"] || 0,
             })),
         );
     } catch (error) {
@@ -358,6 +387,8 @@ router.get("/stats/models", async (req, res, next) => {
                 $group: {
                     _id: { model: "$model", provider: "$provider" },
                     totalRequests: { $sum: 1 },
+                    totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
+                    totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
                     totalTokens: {
                         $sum: {
                             $add: [
@@ -368,6 +399,7 @@ router.get("/stats/models", async (req, res, next) => {
                     },
                     totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
                     avgLatency: { $avg: { $ifNull: ["$totalTime", 0] } },
+                    avgTokensPerSec: { $avg: { $ifNull: ["$tokensPerSec", null] } },
                 },
             },
             { $sort: { totalRequests: -1 } },
@@ -383,9 +415,12 @@ router.get("/stats/models", async (req, res, next) => {
                 model: r._id.model,
                 provider: r._id.provider,
                 totalRequests: r.totalRequests,
+                totalInputTokens: r.totalInputTokens,
+                totalOutputTokens: r.totalOutputTokens,
                 totalTokens: r.totalTokens,
                 totalCost: r.totalCost,
                 avgLatency: r.avgLatency,
+                avgTokensPerSec: r.avgTokensPerSec,
             })),
         );
     } catch (error) {
@@ -402,7 +437,16 @@ router.get("/stats/endpoints", async (req, res, next) => {
         const db = getDb();
         if (!db) return res.status(503).json({ error: "Database not available" });
 
+        const { from, to } = req.query;
+        const match = {};
+        if (from || to) {
+            match.timestamp = {};
+            if (from) match.timestamp.$gte = from;
+            if (to) match.timestamp.$lte = to;
+        }
+
         const pipeline = [
+            ...(Object.keys(match).length ? [{ $match: match }] : []),
             {
                 $group: {
                     _id: "$endpoint",
@@ -1112,6 +1156,7 @@ router.get("/workflows", async (req, res, next) => {
         const {
             page = 1,
             limit = 50,
+            project,
             guildId,
             userId,
             userName,
@@ -1123,6 +1168,15 @@ router.get("/workflows", async (req, res, next) => {
         if (guildId) filter.guildId = guildId;
         if (userId) filter.userId = userId;
         if (userName) filter.userName = { $regex: userName, $options: "i" };
+
+        // If project is specified, find all conversation IDs for that project
+        // and filter workflows that reference those conversations
+        if (project) {
+            const convIds = await db
+                .collection(CONVERSATIONS_COL)
+                .distinct("id", { project });
+            filter.conversationIds = { $elemMatch: { $in: convIds } };
+        }
 
         const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
         const lim = parseInt(limit, 10);
