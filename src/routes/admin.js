@@ -911,6 +911,29 @@ router.get("/conversations", async (req, res, next) => {
 });
 
 // ============================================================
+// GET /admin/conversations/filters — distinct project & username values
+// ============================================================
+router.get("/conversations/filters", async (req, res, next) => {
+    try {
+        const db = getDb();
+        if (!db) return res.status(503).json({ error: "Database not available" });
+
+        const [projects, usernames] = await Promise.all([
+            db.collection(CONVERSATIONS_COL).distinct("project"),
+            db.collection(CONVERSATIONS_COL).distinct("username"),
+        ]);
+
+        res.json({
+            projects: projects.filter(Boolean).sort(),
+            usernames: usernames.filter(Boolean).sort(),
+        });
+    } catch (error) {
+        logger.error(`Admin /conversations/filters error: ${error.message}`);
+        next(error);
+    }
+});
+
+// ============================================================
 // GET /admin/conversations/:id — single conversation, full msgs
 // ============================================================
 router.get("/conversations/:id", async (req, res, next) => {
