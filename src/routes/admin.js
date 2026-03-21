@@ -747,6 +747,10 @@ router.get("/stats/timeline", async (req, res, next) => {
                         },
                     },
                     cost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
+                    avgLatency: { $avg: { $ifNull: ["$totalTime", null] } },
+                    successes: {
+                        $sum: { $cond: [{ $eq: ["$success", true] }, 1, 0] },
+                    },
                 },
             },
             { $sort: { _id: 1 } },
@@ -763,6 +767,8 @@ router.get("/stats/timeline", async (req, res, next) => {
                 requests: r.requests,
                 tokens: r.tokens,
                 cost: r.cost,
+                avgLatency: r.avgLatency ? Math.round(r.avgLatency) : 0,
+                successRate: r.requests > 0 ? Math.round((r.successes / r.requests) * 100) : 100,
             })),
         );
     } catch (error) {
