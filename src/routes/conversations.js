@@ -17,7 +17,7 @@ router.get("/", async (req, res, next) => {
             return res.status(503).json({ error: "Database not available" });
         }
 
-        const project = req.project || "default";
+        const project = req.query.project || req.project || "default";
         const username = req.username || "default";
         const conversations = await client
             .db(MONGO_DB_NAME)
@@ -44,7 +44,7 @@ router.get("/:id", async (req, res, next) => {
             return res.status(503).json({ error: "Database not available" });
         }
 
-        const project = req.project || "default";
+        const project = req.query.project || req.project || "default";
         const username = req.username || "default";
         const conversation = await client
             .db(MONGO_DB_NAME)
@@ -99,7 +99,7 @@ router.patch("/:id", async (req, res, next) => {
             return res.status(503).json({ error: "Database not available" });
         }
 
-        const project = req.project || "default";
+        const project = req.query.project || req.project || "default";
         const username = req.username || "default";
         const { title, messages, systemPrompt, settings } = req.body;
 
@@ -143,7 +143,7 @@ router.delete("/:id", async (req, res, next) => {
             return res.status(503).json({ error: "Database not available" });
         }
 
-        const project = req.project || "default";
+        const project = req.query.project || req.project || "default";
         const username = req.username || "default";
         const result = await client
             .db(MONGO_DB_NAME)
