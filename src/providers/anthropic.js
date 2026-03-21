@@ -632,9 +632,13 @@ const anthropicProvider = {
             }
 
             // Get full usage from the finalized message
-            const finalMessage = await stream.finalMessage();
-            if (finalMessage?.usage) {
-                usage = buildUsage(finalMessage.usage);
+            try {
+                const finalMessage = await stream.finalMessage();
+                if (finalMessage?.usage) {
+                    usage = buildUsage(finalMessage.usage);
+                }
+            } catch {
+                // finalMessage() can throw for tool_use stop reasons — use message_delta usage
             }
             if (usage) {
                 yield { type: "usage", usage };

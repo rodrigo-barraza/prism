@@ -564,9 +564,11 @@ async function handleStreamingText(ctx) {
   const totalSec = (now - requestStart) / 1000;
 
   // ── Cost + logging ───────────────────────────────────────────
+  let estimatedCost = null;
+  let tokensPerSec = null;
+
   if (usage) {
     const imageCount = streamedImages.length;
-    let estimatedCost;
     if (imageCount > 0) {
       const imgPricing = getPricing(TYPES.TEXT, TYPES.IMAGE)[resolvedModel]
         || modelDef?.pricing;
@@ -586,17 +588,19 @@ async function handleStreamingText(ctx) {
       estimatedCost = calculateTextCost(usage, pricing);
     }
 
-    const tokensPerSec = usage.tokensPerSec
-      ? usage.tokensPerSec.toFixed(1)
+    tokensPerSec = usage.tokensPerSec
+      ? parseFloat(usage.tokensPerSec.toFixed(1))
       : outputGenerationSec && outputGenerationSec > 0
-        ? (usage.outputTokens / outputGenerationSec).toFixed(1)
-        : "N/A";
+        ? parseFloat((usage.outputTokens / outputGenerationSec).toFixed(1))
+        : null;
+
+    const tokensPerSecStr = tokensPerSec !== null ? tokensPerSec.toFixed(1) : "N/A";
 
     logger.request(
       project, username, clientIp,
       `[chat] ${providerName} ${resolvedModel} — ` +
       `in: ${usage.inputTokens} tokens, out: ${usage.outputTokens} tokens, ` +
-      `speed: ${tokensPerSec} tok/s, ` +
+      `speed: ${tokensPerSecStr} tok/s, ` +
       `ttg: ${timeToGenerationSec !== null ? timeToGenerationSec.toFixed(2) + "s" : "N/A"}, ` +
       `generation: ${generationSec !== null ? generationSec.toFixed(2) + "s" : "N/A"}, ` +
       `total: ${totalSec.toFixed(2)}s` +
@@ -616,7 +620,7 @@ async function handleStreamingText(ctx) {
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
       estimatedCost,
-      tokensPerSec: parseFloat(tokensPerSec) || null,
+      tokensPerSec,
       temperature: options?.temperature ?? null,
       maxTokens: options?.maxTokens ?? null,
       messageCount: messages.length,
@@ -635,62 +639,60 @@ async function handleStreamingText(ctx) {
           : null,
       totalTime: parseFloat(totalSec.toFixed(3)),
     });
+  }
 
-    emit({
-      type: "done",
-      usage,
-      estimatedCost,
-      tokensPerSec: parseFloat(tokensPerSec) || null,
-      timeToGeneration:
-        timeToGenerationSec !== null
-          ? parseFloat(timeToGenerationSec.toFixed(3))
-          : null,
-      generationTime:
-        generationSec !== null
-          ? parseFloat(generationSec.toFixed(3))
-          : null,
+  emit({
+    type: "done",
+    usage: usage || null,
+    estimatedCost,
+    tokensPerSec,
+    timeToGeneration:
+      timeToGenerationSec !== null
+        ? parseFloat(timeToGenerationSec.toFixed(3))
+        : null,
+    generationTime:
+      generationSec !== null
+        ? parseFloat(generationSec.toFixed(3))
+        : null,
+    totalTime: parseFloat(totalSec.toFixed(3)),
+  });
+
+  // Auto-append to conversation (always, regardless of usage availability)
+  if (conversationId) {
+    const messagesToAppend = [];
+    if (userMessage) {
+      messagesToAppend.push({
+        role: "user",
+        ...userMessage,
+        timestamp: userMessage.timestamp || new Date().toISOString(),
+      });
+    }
+    messagesToAppend.push({
+      role: "assistant",
+      content: fullStreamedText,
+      ...(streamedImages.length > 0 && { images: streamedImages }),
+      ...(streamedToolCalls.length > 0 && { toolCalls: streamedToolCalls }),
+      model: resolvedModel,
+      provider: providerName,
+      timestamp: new Date().toISOString(),
+      usage: usage || null,
       totalTime: parseFloat(totalSec.toFixed(3)),
+      tokensPerSec,
+      estimatedCost,
     });
 
-    // Auto-append to conversation
-    if (conversationId) {
-      const messagesToAppend = [];
-      if (userMessage) {
-        messagesToAppend.push({
-          role: "user",
-          ...userMessage,
-          timestamp: userMessage.timestamp || new Date().toISOString(),
-        });
-      }
-      messagesToAppend.push({
-        role: "assistant",
-        content: fullStreamedText,
-        ...(streamedImages.length > 0 && { images: streamedImages }),
-        ...(streamedToolCalls.length > 0 && { toolCalls: streamedToolCalls }),
-        model: resolvedModel,
-        provider: providerName,
-        timestamp: new Date().toISOString(),
-        usage,
-        totalTime: parseFloat(totalSec.toFixed(3)),
-        tokensPerSec: parseFloat(tokensPerSec) || null,
-        estimatedCost,
-      });
-
-      // Stamp resolvedModel onto conversationMeta so conversation settings include the model
-      if (conversationMeta) {
-        conversationMeta.settings = { ...conversationMeta.settings, model: resolvedModel };
-      }
-
-      ConversationService.appendMessages(
-        conversationId, project, username, messagesToAppend, conversationMeta,
-      ).catch((err) =>
-        logger.error(
-          `Failed to append messages to conversation ${conversationId}: ${err.message}`,
-        ),
-      );
+    // Stamp resolvedModel onto conversationMeta so conversation settings include the model
+    if (conversationMeta) {
+      conversationMeta.settings = { ...conversationMeta.settings, model: resolvedModel };
     }
-  } else {
-    emit({ type: "done" });
+
+    ConversationService.appendMessages(
+      conversationId, project, username, messagesToAppend, conversationMeta,
+    ).catch((err) =>
+      logger.error(
+        `Failed to append messages to conversation ${conversationId}: ${err.message}`,
+      ),
+    );
   }
 }
 
