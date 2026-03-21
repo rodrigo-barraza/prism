@@ -174,6 +174,31 @@ function prepareMessages(messages) {
         merged.shift();
     }
 
+    // Strip orphaned tool_use blocks: if an assistant message has tool_use
+    // content blocks but the next message is NOT a tool_result, remove them.
+    // This handles stale conversation history loaded from the database.
+    for (let i = 0; i < merged.length; i++) {
+        const msg = merged[i];
+        if (msg.role !== "assistant" || !Array.isArray(msg.content)) continue;
+
+        const hasToolUse = msg.content.some((b) => b.type === "tool_use");
+        if (!hasToolUse) continue;
+
+        const next = merged[i + 1];
+        const nextHasToolResult =
+            next?.role === "user" &&
+            Array.isArray(next.content) &&
+            next.content.some((b) => b.type === "tool_result");
+
+        if (!nextHasToolResult) {
+            // Strip tool_use blocks, keep only text
+            msg.content = msg.content.filter((b) => b.type !== "tool_use");
+            if (msg.content.length === 0) {
+                msg.content = " ";
+            }
+        }
+    }
+
     return { systemMessage, messages: merged };
 }
 
