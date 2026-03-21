@@ -20,12 +20,17 @@ router.get("/", async (req, res, next) => {
         const db = getDb();
         if (!db) return res.status(503).json({ error: "Database not available" });
 
-        const { page = 1, limit = 50, origin, search } = req.query;
+        const { page = 1, limit = 50, origin, search, provider, model, from, to } = req.query;
         const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
         const lim = parseInt(limit, 10);
 
         // Always scope to the caller's project
         const preMatch = { project: req.project };
+        if (from || to) {
+            preMatch.updatedAt = {};
+            if (from) preMatch.updatedAt.$gte = from;
+            if (to) preMatch.updatedAt.$lte = to;
+        }
 
         const pipeline = [
             { $match: preMatch },
@@ -62,6 +67,12 @@ router.get("/", async (req, res, next) => {
                 $match: { content: { $regex: search, $options: "i" } },
             });
         }
+        if (provider) {
+            pipeline.push({ $match: { model: { $regex: `^${provider}/`, $options: "i" } } });
+        }
+        if (model) {
+            pipeline.push({ $match: { model } });
+        }
 
         const countPipeline = [...pipeline, { $count: "total" }];
         const [countResult] = await db.collection(CONVERSATIONS_COL).aggregate(countPipeline).toArray();
@@ -85,7 +96,10 @@ router.get("/", async (req, res, next) => {
             timestamp: item.timestamp,
         }));
 
-        res.json({ data, total, page: parseInt(page, 10), limit: lim });
+        res.json({ data, total, page: parseInt(page, 10), limit: lim,
+            providers: [...new Set(data.map((d) => d.model?.split("/")[0]).filter(Boolean))].sort(),
+            models: [...new Set(data.map((d) => d.model).filter(Boolean))].sort(),
+        });
     } catch (error) {
         logger.error(`GET /text error: ${error.message}`);
         next(error);

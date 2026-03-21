@@ -20,13 +20,18 @@ router.get("/", async (req, res, next) => {
         const db = getDb();
         if (!db) return res.status(503).json({ error: "Database not available" });
 
-        const { page = 1, limit = 100, type, origin, search } = req.query;
+        const { page = 1, limit = 100, type, origin, search, provider, model, from, to } = req.query;
         const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
         const lim = parseInt(limit, 10);
 
         // Always scope to the caller's project
         const preMatch = { project: req.project };
         if (search) preMatch.title = { $regex: search, $options: "i" };
+        if (from || to) {
+            preMatch.updatedAt = {};
+            if (from) preMatch.updatedAt.$gte = from;
+            if (to) preMatch.updatedAt.$lte = to;
+        }
 
         const pipeline = [
             { $match: preMatch },
@@ -98,6 +103,12 @@ router.get("/", async (req, res, next) => {
         } else if (origin === "ai") {
             pipeline.push({ $match: { role: "assistant" } });
         }
+        if (provider) {
+            pipeline.push({ $match: { model: { $regex: `^${provider}/`, $options: "i" } } });
+        }
+        if (model) {
+            pipeline.push({ $match: { model } });
+        }
 
         const countPipeline = [...pipeline, { $count: "total" }];
         const [countResult] = await db.collection(CONVERSATIONS_COL).aggregate(countPipeline).toArray();
@@ -106,6 +117,52 @@ router.get("/", async (req, res, next) => {
         pipeline.push({ $skip: skip }, { $limit: lim });
 
         const items = await db.collection(CONVERSATIONS_COL).aggregate(pipeline).toArray();
+
+        // Derive filter options from the full (non-paginated, non-provider/model-filtered) media set
+        const filterPipeline = [
+            { $match: preMatch },
+            { $unwind: "$messages" },
+            {
+                $project: {
+                    role: "$messages.role",
+                    images: { $ifNull: ["$messages.images", []] },
+                    audio: "$messages.audio",
+                    model: "$messages.model",
+                },
+            },
+            {
+                $facet: {
+                    imageModels: [
+                        { $unwind: "$images" },
+                        { $project: { mediaType: "image", role: 1, model: 1 } },
+                    ],
+                    audioModels: [
+                        { $match: { audio: { $ne: null, $exists: true } } },
+                        { $project: { mediaType: "audio", role: 1, model: 1 } },
+                    ],
+                },
+            },
+            { $project: { allMedia: { $concatArrays: ["$imageModels", "$audioModels"] } } },
+            { $unwind: "$allMedia" },
+            { $replaceRoot: { newRoot: "$allMedia" } },
+        ];
+
+        // Apply type / origin filters (but NOT provider/model filters)
+        if (type) filterPipeline.push({ $match: { mediaType: type } });
+        if (origin === "user") filterPipeline.push({ $match: { role: "user" } });
+        else if (origin === "ai") filterPipeline.push({ $match: { role: "assistant" } });
+
+        filterPipeline.push({
+            $group: {
+                _id: null,
+                allProviders: { $addToSet: { $arrayElemAt: [{ $split: ["$model", "/"] }, 0] } },
+                allModels: { $addToSet: "$model" },
+            },
+        });
+
+        const [filterResult] = await db.collection(CONVERSATIONS_COL).aggregate(filterPipeline).toArray();
+        const allProviders = (filterResult?.allProviders || []).filter(Boolean).sort();
+        const allModels = (filterResult?.allModels || []).filter(Boolean).sort();
 
         const data = items.map((item) => ({
             url: item.url,
@@ -119,7 +176,10 @@ router.get("/", async (req, res, next) => {
             timestamp: item.timestamp,
         }));
 
-        res.json({ data, total, page: parseInt(page, 10), limit: lim });
+        res.json({ data, total, page: parseInt(page, 10), limit: lim,
+            providers: allProviders,
+            models: allModels,
+        });
     } catch (error) {
         logger.error(`GET /media error: ${error.message}`);
         next(error);

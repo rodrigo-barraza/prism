@@ -1178,7 +1178,7 @@ router.get("/media", async (req, res, next) => {
         const db = getDb();
         if (!db) return res.status(503).json({ error: "Database not available" });
 
-        const { page = 1, limit = 100, type, origin, search, project, username } = req.query;
+        const { page = 1, limit = 100, type, origin, search, project, username, from, to } = req.query;
         const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
         const lim = parseInt(limit, 10);
 
@@ -1193,6 +1193,11 @@ router.get("/media", async (req, res, next) => {
         if (search) preMatch.title = { $regex: search, $options: "i" };
         if (project) preMatch.project = project;
         if (username) preMatch.username = username;
+        if (from || to) {
+            preMatch.updatedAt = {};
+            if (from) preMatch.updatedAt.$gte = from;
+            if (to) preMatch.updatedAt.$lte = to;
+        }
 
         const pipeline = [
             ...(Object.keys(preMatch).length ? [{ $match: preMatch }] : []),
@@ -1306,12 +1311,17 @@ router.get("/text", async (req, res, next) => {
         const db = getDb();
         if (!db) return res.status(503).json({ error: "Database not available" });
 
-        const { page = 1, limit = 50, origin, search, project } = req.query;
+        const { page = 1, limit = 50, origin, search, project, from, to } = req.query;
         const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
         const lim = parseInt(limit, 10);
 
         const preMatch = {};
         if (project) preMatch.project = project;
+        if (from || to) {
+            preMatch.updatedAt = {};
+            if (from) preMatch.updatedAt.$gte = from;
+            if (to) preMatch.updatedAt.$lte = to;
+        }
 
         const pipeline = [
             ...(Object.keys(preMatch).length ? [{ $match: preMatch }] : []),
