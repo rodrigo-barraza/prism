@@ -934,26 +934,6 @@ router.get("/conversations/filters", async (req, res, next) => {
 });
 
 // ============================================================
-// GET /admin/conversations/:id — single conversation, full msgs
-// ============================================================
-router.get("/conversations/:id", async (req, res, next) => {
-    try {
-        const db = getDb();
-        if (!db) return res.status(503).json({ error: "Database not available" });
-
-        const doc = await db
-            .collection(CONVERSATIONS_COL)
-            .findOne({ id: req.params.id });
-        if (!doc) return res.status(404).json({ error: "Conversation not found" });
-
-        res.json(doc);
-    } catch (error) {
-        logger.error(`Admin /conversations/:id error: ${error.message}`);
-        next(error);
-    }
-});
-
-// ============================================================
 // GET /admin/conversations/stream — SSE for real-time stats
 // ============================================================
 router.get("/conversations/stream", async (req, res) => {
@@ -1008,6 +988,26 @@ router.get("/conversations/stream", async (req, res) => {
         clearInterval(interval);
         clearInterval(keepAlive);
     });
+});
+
+// ============================================================
+// GET /admin/conversations/:id — single conversation, full msgs
+// ============================================================
+router.get("/conversations/:id", async (req, res, next) => {
+    try {
+        const db = getDb();
+        if (!db) return res.status(503).json({ error: "Database not available" });
+
+        const doc = await db
+            .collection(CONVERSATIONS_COL)
+            .findOne({ id: req.params.id });
+        if (!doc) return res.status(404).json({ error: "Conversation not found" });
+
+        res.json(doc);
+    } catch (error) {
+        logger.error(`Admin /conversations/:id error: ${error.message}`);
+        next(error);
+    }
 });
 
 // ============================================================
