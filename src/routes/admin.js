@@ -934,6 +934,30 @@ router.get("/conversations/filters", async (req, res, next) => {
 });
 
 // ============================================================
+// GET /admin/conversations/stats — quick stats snapshot
+// ============================================================
+router.get("/conversations/stats", async (req, res, next) => {
+    try {
+        const db = getDb();
+        if (!db) return res.status(503).json({ error: "Database not available" });
+
+        const project = req.query.project || null;
+        const filter = project ? { project } : {};
+        const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
+
+        const [generatingCount, recentCount] = await Promise.all([
+            db.collection(CONVERSATIONS_COL).countDocuments({ ...filter, isGenerating: true }),
+            db.collection(CONVERSATIONS_COL).countDocuments({ ...filter, updatedAt: { $gte: oneHourAgo } }),
+        ]);
+
+        res.json({ generatingCount, recentCount });
+    } catch (error) {
+        logger.error(`Admin /conversations/stats error: ${error.message}`);
+        next(error);
+    }
+});
+
+// ============================================================
 // GET /admin/conversations/stream — SSE for real-time stats
 // ============================================================
 router.get("/conversations/stream", async (req, res) => {

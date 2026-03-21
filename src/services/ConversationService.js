@@ -191,6 +191,7 @@ const ConversationService = {
                 modalities: computeModalities([]),
                 providers: extractProviders([], metaSettings),
                 totalCost: 0,
+                isGenerating: true,
 
                 createdAt: now,
                 updatedAt: now,
