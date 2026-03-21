@@ -274,6 +274,11 @@ export async function handleChat(params, emit) {
       });
     }
   } catch (error) {
+    // Clear generating flag on error
+    if (conversationId) {
+      ConversationService.setGenerating(conversationId, project, username, false)
+        .catch((err) => logger.error(`Failed to clear isGenerating on error: ${err.message}`));
+    }
     const totalSec = (performance.now() - requestStart) / 1000;
     RequestLogger.log({
       requestId,
@@ -303,6 +308,11 @@ async function handleImageAPIModel(ctx) {
     requestId, requestStart, emit,
   } = ctx;
 
+  // Mark conversation as generating
+  if (conversationId) {
+    ConversationService.setGenerating(conversationId, project, username, true)
+      .catch((err) => logger.error(`Failed to set isGenerating: ${err.message}`));
+  }
   const lastUserMsg = messages.filter((m) => m.role === "user").pop();
   const prompt = lastUserMsg?.content || "";
 
@@ -421,6 +431,8 @@ async function handleImageAPIModel(ctx) {
 
     ConversationService.appendMessages(
       conversationId, project, username, messagesToAppend, conversationMeta,
+    ).then(() =>
+      ConversationService.setGenerating(conversationId, project, username, false),
     ).catch((err) =>
       logger.error(
         `Failed to append messages to conversation ${conversationId}: ${err.message}`,
@@ -439,6 +451,12 @@ async function handleStreamingText(ctx) {
     conversationId, userMessage, conversationMeta, project, username, clientIp,
     requestId, requestStart, emit,
   } = ctx;
+
+  // Mark conversation as generating
+  if (conversationId) {
+    ConversationService.setGenerating(conversationId, project, username, true)
+      .catch((err) => logger.error(`Failed to set isGenerating: ${err.message}`));
+  }
 
   const stream = provider.generateTextStream(messages, resolvedModel, options);
   let usage = null;
@@ -689,11 +707,17 @@ async function handleStreamingText(ctx) {
 
     ConversationService.appendMessages(
       conversationId, project, username, messagesToAppend, conversationMeta,
+    ).then(() =>
+      ConversationService.setGenerating(conversationId, project, username, false),
     ).catch((err) =>
       logger.error(
         `Failed to append messages to conversation ${conversationId}: ${err.message}`,
       ),
     );
+  } else if (conversationId) {
+    // No messages to append but still clear the flag
+    ConversationService.setGenerating(conversationId, project, username, false)
+      .catch((err) => logger.error(`Failed to clear isGenerating: ${err.message}`));
   }
 }
 

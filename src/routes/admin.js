@@ -954,6 +954,63 @@ router.get("/conversations/:id", async (req, res, next) => {
 });
 
 // ============================================================
+// GET /admin/conversations/stream — SSE for real-time stats
+// ============================================================
+router.get("/conversations/stream", async (req, res) => {
+    const db = getDb();
+    if (!db) return res.status(503).json({ error: "Database not available" });
+
+    res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
+    });
+    res.write("\n");
+
+    const project = req.query.project || null;
+
+    let lastPayload = "";
+
+    const sendStats = async () => {
+        try {
+            const filter = project ? { project } : {};
+            const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
+
+            const [generatingCount, recentCount] = await Promise.all([
+                db.collection(CONVERSATIONS_COL).countDocuments({ ...filter, isGenerating: true }),
+                db.collection(CONVERSATIONS_COL).countDocuments({ ...filter, updatedAt: { $gte: oneHourAgo } }),
+            ]);
+
+            const payload = JSON.stringify({ generatingCount, recentCount });
+            // Only send if data changed
+            if (payload !== lastPayload) {
+                lastPayload = payload;
+                res.write(`data: ${payload}\n\n`);
+            }
+        } catch (err) {
+            logger.error(`SSE conversations/stream error: ${err.message}`);
+        }
+    };
+
+    // Initial send
+    await sendStats();
+
+    // Poll every 2 seconds
+    const interval = setInterval(sendStats, 2000);
+
+    // Keep-alive ping every 30s
+    const keepAlive = setInterval(() => {
+        res.write(": ping\n\n");
+    }, 30000);
+
+    req.on("close", () => {
+        clearInterval(interval);
+        clearInterval(keepAlive);
+    });
+});
+
+// ============================================================
 // GET /admin/live — conversations updated in last N minutes
 // ============================================================
 router.get("/live", async (req, res, next) => {

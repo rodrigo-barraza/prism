@@ -259,6 +259,26 @@ const ConversationService = {
 
         return col.findOne({ id: conversationId, project, username });
     },
+
+    /**
+     * Set or clear the isGenerating flag on a conversation.
+     * Lightweight update — only touches isGenerating + updatedAt.
+     *
+     * @param {string} conversationId
+     * @param {string} project
+     * @param {string} username
+     * @param {boolean} generating
+     */
+    async setGenerating(conversationId, project, username, generating) {
+        const client = MongoWrapper.getClient(MONGO_DB_NAME);
+        if (!client) return;
+
+        const db = client.db(MONGO_DB_NAME);
+        await db.collection(COLLECTION).updateOne(
+            { id: conversationId, project, username },
+            { $set: { isGenerating: generating, updatedAt: new Date().toISOString() } },
+        );
+    },
 };
 
 export default ConversationService;
