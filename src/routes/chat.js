@@ -448,6 +448,7 @@ async function handleStreamingText(ctx) {
   let outputCharacters = 0;
   let fullStreamedText = "";
   const streamedImages = [];
+  const streamedToolCalls = [];
 
   for await (const chunk of stream) {
     // Usage object (final item from provider)
@@ -513,6 +514,12 @@ async function handleStreamingText(ctx) {
     }
     // Tool call chunks (custom function calling)
     if (chunk && typeof chunk === "object" && chunk.type === "toolCall") {
+      streamedToolCalls.push({
+        id: chunk.id || null,
+        name: chunk.name,
+        args: chunk.args || {},
+        thoughtSignature: chunk.thoughtSignature || undefined,
+      });
       emit({
         type: "toolCall",
         id: chunk.id || null,
@@ -659,6 +666,7 @@ async function handleStreamingText(ctx) {
         role: "assistant",
         content: fullStreamedText,
         ...(streamedImages.length > 0 && { images: streamedImages }),
+        ...(streamedToolCalls.length > 0 && { toolCalls: streamedToolCalls }),
         model: resolvedModel,
         provider: providerName,
         timestamp: new Date().toISOString(),
@@ -796,6 +804,7 @@ async function handleNonStreamingText(ctx) {
       role: "assistant",
       content: result.text,
       thinking: result.thinking || undefined,
+      ...(result.toolCalls?.length > 0 && { toolCalls: result.toolCalls }),
       model: resolvedModel,
       provider: providerName,
       timestamp: new Date().toISOString(),

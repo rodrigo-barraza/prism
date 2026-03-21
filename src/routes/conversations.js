@@ -1,5 +1,6 @@
 import express from "express";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
+import ConversationService from "../services/ConversationService.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 
@@ -83,6 +84,31 @@ router.get("/:id/workflows", async (req, res, next) => {
         res.json(workflows);
     } catch (error) {
         logger.error(`Error fetching conversation workflows: ${error.message}`);
+        next(error);
+    }
+});
+
+/**
+ * POST /conversations/:id/messages
+ * Append messages to an existing conversation (e.g. tool results after execution).
+ */
+router.post("/:id/messages", async (req, res, next) => {
+    try {
+        const project = req.query.project || req.project || "default";
+        const username = req.username || "default";
+        const { messages } = req.body;
+
+        if (!messages || !Array.isArray(messages) || messages.length === 0) {
+            return res.status(400).json({ error: "messages must be a non-empty array" });
+        }
+
+        const conversation = await ConversationService.appendMessages(
+            req.params.id, project, username, messages,
+        );
+
+        res.json(conversation);
+    } catch (error) {
+        logger.error(`Error appending messages: ${error.message}`);
         next(error);
     }
 });
