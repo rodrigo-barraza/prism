@@ -36,6 +36,7 @@ import workflowsRouter from "./routes/workflows.js";
 import mediaRouter from "./routes/media.js";
 import textRouter from "./routes/text.js";
 import lmStudioRouter from "./routes/lm-studio.js";
+import customToolsRouter from "./routes/custom-tools.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -60,6 +61,7 @@ const ENDPOINTS = {
         "/media",
         "/text",
         "/lm-studio",
+        "/custom-tools",
     ],
     websocket: ["/ws/chat", "/ws/text-to-audio"],
     admin: ["/admin", "/admin/lm-studio"],
@@ -96,6 +98,7 @@ app.use("/workflows", workflowsRouter);
 app.use("/media", mediaRouter);
 app.use("/text", textRouter);
 app.use("/lm-studio", lmStudioRouter);
+app.use("/custom-tools", customToolsRouter);
 
 // Error handler (must be last)
 app.use(errorHandler);
