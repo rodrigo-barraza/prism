@@ -511,6 +511,17 @@ async function handleStreamingText(ctx) {
       emit({ type: "webSearchResult", results: chunk.results });
       continue;
     }
+    // Tool call chunks (custom function calling)
+    if (chunk && typeof chunk === "object" && chunk.type === "toolCall") {
+      emit({
+        type: "toolCall",
+        id: chunk.id || null,
+        name: chunk.name,
+        args: chunk.args || {},
+        thoughtSignature: chunk.thoughtSignature || undefined,
+      });
+      continue;
+    }
     // Status messages (e.g. "Loading model…")
     if (chunk && typeof chunk === "object" && chunk.type === "status") {
       emit({ type: "status", message: chunk.message });
@@ -750,6 +761,18 @@ async function handleNonStreamingText(ctx) {
   }
   if (result.thinking) {
     emit({ type: "thinking", content: result.thinking });
+  }
+  // Forward tool calls (custom function calling)
+  if (result.toolCalls && result.toolCalls.length > 0) {
+    for (const tc of result.toolCalls) {
+      emit({
+        type: "toolCall",
+        id: tc.id || null,
+        name: tc.name,
+        args: tc.args || {},
+        thoughtSignature: tc.thoughtSignature || undefined,
+      });
+    }
   }
   emit({
     type: "done",

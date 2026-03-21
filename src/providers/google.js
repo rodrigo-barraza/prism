@@ -49,9 +49,41 @@ function addWavHeader(buffer, sampleRate = 24000, numChannels = 1) {
  * Note: Images on assistant/model messages are stripped to avoid
  * Gemini's thought_signature requirement for model-generated images.
  */
+/**
+ * Convert generic tool schemas to Google's functionDeclarations format.
+ * Input:  [{ name, description, parameters: { type, properties, required } }]
+ * Output: [{ functionDeclarations: [...] }]
+ */
+function convertToolsToGoogle(tools) {
+    if (!tools || !Array.isArray(tools) || tools.length === 0) return null;
+    return [{
+        functionDeclarations: tools.map((t) => ({
+            name: t.name,
+            description: t.description || "",
+            parameters: t.parameters || {},
+        })),
+    }];
+}
+
 function convertMessages(messages) {
     return messages.map((item) => {
         const parts = [];
+
+        // Tool result messages — wrap as functionResponse parts
+        if (item.role === "tool") {
+            parts.push({
+                functionResponse: {
+                    name: item.name || "unknown",
+                    response: {
+                        result: typeof item.content === "string"
+                            ? item.content
+                            : JSON.stringify(item.content),
+                    },
+                },
+            });
+            return { role: "user", parts };
+        }
+
         // Only include media for user messages — model-generated media
         // require a thought_signature when sent back, so we skip them.
         if (item.role !== "assistant") {
@@ -70,6 +102,19 @@ function convertMessages(messages) {
                 }
             }
         }
+
+        // Assistant messages with tool calls — include functionCall parts
+        if (item.role === "assistant" && item.toolCalls) {
+            for (const tc of item.toolCalls) {
+                const fcPart = { functionCall: { name: tc.name, args: tc.args || {} } };
+                // Preserve thoughtSignature (sibling of functionCall, required by Gemini)
+                if (tc.thoughtSignature) {
+                    fcPart.thoughtSignature = tc.thoughtSignature;
+                }
+                parts.push(fcPart);
+            }
+        }
+
         if (item.content) {
             parts.push({ text: item.content });
         }
@@ -133,18 +178,42 @@ const googleProvider = {
                 config.tools = [{ googleSearch: {} }];
             }
 
+            // Custom function calling tools
+            const customTools = convertToolsToGoogle(options.tools);
+            if (customTools) {
+                config.tools = [...(config.tools || []), ...customTools];
+            }
+
             const response = await getClient().models.generateContent({
                 model,
                 contents,
                 config,
             });
-            return {
-                text: response.text,
+
+            // Check for function calls in the response
+            const toolCalls = [];
+            const textParts = [];
+            for (const part of response.candidates?.[0]?.content?.parts || []) {
+                if (part.functionCall) {
+                    toolCalls.push({
+                        name: part.functionCall.name,
+                        args: part.functionCall.args || {},
+                        thoughtSignature: part.thoughtSignature || undefined,
+                    });
+                } else if (part.text) {
+                    textParts.push(part.text);
+                }
+            }
+
+            const result = {
+                text: textParts.join("") || response.text || "",
                 usage: {
                     inputTokens: response.usageMetadata?.promptTokenCount ?? 0,
                     outputTokens: response.usageMetadata?.candidatesTokenCount ?? 0,
                 },
             };
+            if (toolCalls.length > 0) result.toolCalls = toolCalls;
+            return result;
         } catch (error) {
             throw new ProviderError("google", error.message, 500, error);
         }
@@ -201,6 +270,11 @@ const googleProvider = {
             if (options.webSearch) tools.push({ googleSearch: {} });
             if (options.codeExecution) tools.push({ codeExecution: {} });
             if (options.urlContext) tools.push({ urlContext: {} });
+
+            // Custom function calling tools
+            const customTools = convertToolsToGoogle(options.tools);
+            if (customTools) tools.push(...customTools);
+
             if (tools.length > 0) config.tools = tools;
 
             // For models that output images, enable multimodal response
@@ -219,7 +293,14 @@ const googleProvider = {
                 // Process all parts in the chunk
                 if (chunk.candidates?.[0]?.content?.parts) {
                     for (const part of chunk.candidates[0].content.parts) {
-                        if (part.thought && part.text) {
+                        if (part.functionCall) {
+                            yield {
+                                type: "toolCall",
+                                name: part.functionCall.name,
+                                args: part.functionCall.args || {},
+                                thoughtSignature: part.thoughtSignature || undefined,
+                            };
+                        } else if (part.thought && part.text) {
                             yield { type: "thinking", content: part.text };
                         } else if (part.text) {
                             yield part.text;

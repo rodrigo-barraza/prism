@@ -162,6 +162,16 @@ function buildTools(options) {
             name: "code_execution",
         });
     }
+    // Custom function calling tools
+    if (options.tools && Array.isArray(options.tools)) {
+        for (const t of options.tools) {
+            tools.push({
+                name: t.name,
+                description: t.description || "",
+                input_schema: t.parameters || { type: "object", properties: {} },
+            });
+        }
+    }
     return tools.length > 0 ? tools : undefined;
 }
 
@@ -172,6 +182,7 @@ function extractResponseContent(contentBlocks) {
     let text = "";
     let thinking = null;
     const citations = [];
+    const toolCalls = [];
 
     for (const block of contentBlocks || []) {
         if (block.type === "text") {
@@ -190,11 +201,17 @@ function extractResponseContent(contentBlocks) {
             }
         } else if (block.type === "thinking") {
             thinking = block.thinking;
+        } else if (block.type === "tool_use") {
+            toolCalls.push({
+                id: block.id,
+                name: block.name,
+                args: block.input || {},
+            });
         }
         // server_tool_use and *_tool_result blocks are informational — skip
     }
 
-    return { text, thinking, citations };
+    return { text, thinking, citations, toolCalls };
 }
 
 /**
@@ -260,7 +277,7 @@ const anthropicProvider = {
 
             const response = await getClient().messages.create(payload);
 
-            const { text, thinking, citations } = extractResponseContent(
+            const { text, thinking, citations, toolCalls } = extractResponseContent(
                 response.content,
             );
             const result = {
@@ -269,6 +286,7 @@ const anthropicProvider = {
             };
             if (thinking) result.thinking = thinking;
             if (citations.length > 0) result.citations = citations;
+            if (toolCalls.length > 0) result.toolCalls = toolCalls;
             return result;
         } catch (error) {
             throw new ProviderError(
@@ -407,6 +425,7 @@ const anthropicProvider = {
             // Track current content block type for server tool response processing
             let currentBlockType = null;
             let currentBlockName = null;
+            let currentToolUseId = null;
             let codeInput = "";
             let usage = null;
 
@@ -416,6 +435,7 @@ const anthropicProvider = {
                     const block = chunk.content_block;
                     currentBlockType = block?.type || null;
                     currentBlockName = block?.name || null;
+                    currentToolUseId = block?.id || null;
                     codeInput = "";
 
                     // Server tool use start — yield the tool name being invoked
@@ -430,7 +450,7 @@ const anthropicProvider = {
 
                 // Content block stop
                 if (chunk.type === "content_block_stop") {
-                    // If we accumulated code execution input, yield it
+                    // Server code execution — yield code
                     if (
                         currentBlockType === "server_tool_use" &&
                         currentBlockName === "code_execution" &&
@@ -449,8 +469,24 @@ const anthropicProvider = {
                             // Not valid JSON, skip
                         }
                     }
+                    // Custom tool_use block ended — emit toolCall
+                    if (currentBlockType === "tool_use" && codeInput) {
+                        let args = {};
+                        try {
+                            args = JSON.parse(codeInput);
+                        } catch {
+                            // Not valid JSON, use empty
+                        }
+                        yield {
+                            type: "toolCall",
+                            id: currentToolUseId,
+                            name: currentBlockName,
+                            args,
+                        };
+                    }
                     currentBlockType = null;
                     currentBlockName = null;
+                    currentToolUseId = null;
                     codeInput = "";
                     continue;
                 }
@@ -467,10 +503,10 @@ const anthropicProvider = {
                         yield chunk.delta.text;
                         continue;
                     }
-                    // Input JSON delta for server tool use (accumulate code execution input)
+                    // Input JSON delta for server tool use or custom tool_use (accumulate)
                     if (
                         chunk.delta.type === "input_json_delta" &&
-                        currentBlockType === "server_tool_use"
+                        (currentBlockType === "server_tool_use" || currentBlockType === "tool_use")
                     ) {
                         codeInput += chunk.delta.partial_json || "";
                         continue;

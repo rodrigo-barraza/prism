@@ -28,6 +28,38 @@ function getClient() {
     }
     return client;
 }
+
+/**
+ * Convert generic tool schemas to OpenAI Chat Completions format.
+ * Input:  [{ name, description, parameters }]
+ * Output: [{ type: "function", function: { name, description, parameters } }]
+ */
+function convertToolsToOpenAI(tools) {
+    if (!tools || !Array.isArray(tools) || tools.length === 0) return null;
+    return tools.map((t) => ({
+        type: "function",
+        function: {
+            name: t.name,
+            description: t.description || "",
+            parameters: t.parameters || {},
+        },
+    }));
+}
+
+/**
+ * Convert generic tool schemas to OpenAI Responses API format.
+ * Input:  [{ name, description, parameters }]
+ * Output: [{ type: "function", name, description, parameters }]
+ */
+function convertToolsToResponsesAPI(tools) {
+    if (!tools || !Array.isArray(tools) || tools.length === 0) return null;
+    return tools.map((t) => ({
+        type: "function",
+        name: t.name,
+        description: t.description || "",
+        parameters: t.parameters || {},
+    }));
+}
 /**
  * Detect MIME category from a base64 data URL.
  */
@@ -205,10 +237,17 @@ const openaiProvider = {
             payload.tools = [{ type: "web_search_preview" }];
         }
 
+        // Custom function calling tools
+        const customTools = convertToolsToResponsesAPI(options.tools);
+        if (customTools) {
+            payload.tools = [...(payload.tools || []), ...customTools];
+        }
+
         const response = await getClient().responses.create(payload);
 
-        // Collect any generated images from output items
+        // Collect tool calls and images from output items
         const images = [];
+        const toolCalls = [];
         if (response.output) {
             for (const item of response.output) {
                 if (item.type === "image_generation_call" && item.result) {
@@ -217,11 +256,21 @@ const openaiProvider = {
                         data: item.result,
                         mimeType: "image/png",
                     });
+                } else if (item.type === "function_call") {
+                    let args = {};
+                    try {
+                        args = JSON.parse(item.arguments || "{}");
+                    } catch { /* ignore */ }
+                    toolCalls.push({
+                        id: item.call_id,
+                        name: item.name,
+                        args,
+                    });
                 }
             }
         }
 
-        return {
+        const result = {
             text: response.output_text || "",
             images,
             usage: {
@@ -229,6 +278,8 @@ const openaiProvider = {
                 outputTokens: response.usage?.output_tokens ?? 0,
             },
         };
+        if (toolCalls.length > 0) result.toolCalls = toolCalls;
+        return result;
     },
 
     /**
@@ -263,15 +314,37 @@ const openaiProvider = {
             payload.tools = [{ type: "web_search_preview" }];
         }
 
+        // Custom function calling tools
+        const customTools = convertToolsToOpenAI(options.tools);
+        if (customTools) {
+            payload.tools = [...(payload.tools || []), ...customTools];
+        }
+
         try {
             const response = await getClient().chat.completions.create(payload);
-            return {
-                text: response.choices[0].message.content,
+            const msg = response.choices[0].message;
+            const result = {
+                text: msg.content || "",
                 usage: {
                     inputTokens: response.usage?.prompt_tokens ?? 0,
                     outputTokens: response.usage?.completion_tokens ?? 0,
                 },
             };
+            // Extract tool calls if present
+            if (msg.tool_calls && msg.tool_calls.length > 0) {
+                result.toolCalls = msg.tool_calls.map((tc) => {
+                    let args = {};
+                    try {
+                        args = JSON.parse(tc.function.arguments || "{}");
+                    } catch { /* ignore */ }
+                    return {
+                        id: tc.id,
+                        name: tc.function.name,
+                        args,
+                    };
+                });
+            }
+            return result;
         } catch (error) {
             // Retry once after stripping unsupported parameters (e.g. gpt-5-nano rejects temperature)
             if (error.status === 400 && error.message?.includes("Unsupported")) {
@@ -372,6 +445,12 @@ const openaiProvider = {
             payload.tools = [{ type: "web_search_preview" }];
         }
 
+        // Custom function calling tools
+        const customTools = convertToolsToResponsesAPI(options.tools);
+        if (customTools) {
+            payload.tools = [...(payload.tools || []), ...customTools];
+        }
+
         const stream = await getClient().responses.create(payload);
         let usage = null;
         for await (const event of stream) {
@@ -392,6 +471,19 @@ const openaiProvider = {
                     type: "image",
                     data: event.result,
                     mimeType: "image/png",
+                };
+            }
+            // Function call completed (Responses API)
+            if (event.type === "response.function_call_arguments.done") {
+                let args = {};
+                try {
+                    args = JSON.parse(event.arguments || "{}");
+                } catch { /* ignore */ }
+                yield {
+                    type: "toolCall",
+                    id: event.call_id,
+                    name: event.name,
+                    args,
                 };
             }
             // Completed response — extract usage
@@ -441,6 +533,12 @@ const openaiProvider = {
             payload.tools = [{ type: "web_search_preview" }];
         }
 
+        // Custom function calling tools
+        const customTools = convertToolsToOpenAI(options.tools);
+        if (customTools) {
+            payload.tools = [...(payload.tools || []), ...customTools];
+        }
+
         let stream;
         try {
             stream = await getClient().chat.completions.create(payload);
@@ -479,6 +577,9 @@ const openaiProvider = {
         }
 
         let usage = null;
+        // Accumulate tool calls across chunks
+        const pendingToolCalls = {};
+
         for await (const chunk of stream) {
             if (chunk.usage) {
                 usage = {
@@ -486,9 +587,43 @@ const openaiProvider = {
                     outputTokens: chunk.usage.completion_tokens ?? 0,
                 };
             }
-            const content = chunk.choices[0]?.delta?.content || "";
+            const delta = chunk.choices[0]?.delta;
+            const content = delta?.content || "";
             if (content) {
                 yield content;
+            }
+
+            // Accumulate tool call deltas
+            if (delta?.tool_calls) {
+                for (const tc of delta.tool_calls) {
+                    const idx = tc.index;
+                    if (!pendingToolCalls[idx]) {
+                        pendingToolCalls[idx] = {
+                            id: tc.id || "",
+                            name: tc.function?.name || "",
+                            args: "",
+                        };
+                    }
+                    if (tc.id) pendingToolCalls[idx].id = tc.id;
+                    if (tc.function?.name) pendingToolCalls[idx].name = tc.function.name;
+                    if (tc.function?.arguments) pendingToolCalls[idx].args += tc.function.arguments;
+                }
+            }
+
+            // If finish_reason is "tool_calls", yield accumulated tool calls
+            if (chunk.choices[0]?.finish_reason === "tool_calls") {
+                for (const tc of Object.values(pendingToolCalls)) {
+                    let args = {};
+                    try {
+                        args = JSON.parse(tc.args || "{}");
+                    } catch { /* ignore */ }
+                    yield {
+                        type: "toolCall",
+                        id: tc.id,
+                        name: tc.name,
+                        args,
+                    };
+                }
             }
         }
         if (usage) {
