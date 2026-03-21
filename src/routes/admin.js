@@ -727,16 +727,31 @@ router.get("/stats/timeline", async (req, res, next) => {
         const db = getDb();
         if (!db) return res.status(503).json({ error: "Database not available" });
 
-        const { hours = 24 } = req.query;
-        const since = new Date(
-            Date.now() - parseInt(hours, 10) * 60 * 60 * 1000,
-        ).toISOString();
+        const { hours = 24, from, to } = req.query;
+
+        let sinceDate, untilDate;
+        if (from) {
+            sinceDate = new Date(from);
+        } else {
+            sinceDate = new Date(Date.now() - parseInt(hours, 10) * 60 * 60 * 1000);
+        }
+        if (to) {
+            untilDate = new Date(to);
+        }
+
+        const spanMs = (untilDate || new Date()) - sinceDate;
+        const spanDays = spanMs / (1000 * 60 * 60 * 24);
+        const granularity = spanDays > 7 ? "day" : "hour";
+        const substrLen = granularity === "day" ? 10 : 13; // "2026-03-21" vs "2026-03-21T14"
+
+        const timeMatch = { $gte: sinceDate.toISOString() };
+        if (untilDate) timeMatch.$lte = untilDate.toISOString();
 
         const pipeline = [
-            { $match: { timestamp: { $gte: since } } },
+            { $match: { timestamp: timeMatch } },
             {
                 $group: {
-                    _id: { $substr: ["$timestamp", 0, 13] }, // group by hour
+                    _id: { $substr: ["$timestamp", 0, substrLen] },
                     requests: { $sum: 1 },
                     tokens: {
                         $sum: {
@@ -761,8 +776,9 @@ router.get("/stats/timeline", async (req, res, next) => {
             .aggregate(pipeline)
             .toArray();
 
-        res.json(
-            results.map((r) => ({
+        res.json({
+            granularity,
+            data: results.map((r) => ({
                 hour: r._id,
                 requests: r.requests,
                 tokens: r.tokens,
@@ -770,7 +786,7 @@ router.get("/stats/timeline", async (req, res, next) => {
                 avgLatency: r.avgLatency ? Math.round(r.avgLatency) : 0,
                 successRate: r.requests > 0 ? Math.round((r.successes / r.requests) * 100) : 100,
             })),
-        );
+        });
     } catch (error) {
         logger.error(`Admin /stats/timeline error: ${error.message}`);
         next(error);
