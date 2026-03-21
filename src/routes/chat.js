@@ -844,7 +844,7 @@ router.post("/", async (req, res, next) => {
     await handleChat(
       {
         ...req.body,
-        project: req.project,
+        project: req.body.project || req.project,
         username: req.username,
         clientIp: req.clientIp,
       },
@@ -859,7 +859,7 @@ router.post("/", async (req, res, next) => {
     await handleChat(
       {
         ...req.body,
-        project: req.project,
+        project: req.body.project || req.project,
         username: req.username,
         clientIp: req.clientIp,
       },
