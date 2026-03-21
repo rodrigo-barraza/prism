@@ -38,9 +38,44 @@ function prepareMessages(messages) {
 
     // Remove unsupported properties and convert media content
     const cleaned = conversation
-        .filter((m) => m.role === "user" || m.role === "assistant")
+        .filter((m) => m.role === "user" || m.role === "assistant" || m.role === "tool")
         .map((m) => {
-            const { name: _name, id: _id, images, ...rest } = m;
+            const { name: _name, id: _id, tool_call_id: _tcId, images, ...rest } = m;
+
+            // Convert tool role messages to tool_result user messages for Anthropic
+            if (m.role === "tool") {
+                return {
+                    role: "user",
+                    content: [
+                        {
+                            type: "tool_result",
+                            tool_use_id: m.tool_call_id || m.id || m.name || "unknown",
+                            content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+                        },
+                    ],
+                };
+            }
+
+            // Convert assistant messages with toolCalls to multi-part content
+            if (m.role === "assistant" && m.toolCalls?.length > 0) {
+                const contentBlocks = [];
+                if (rest.content?.trim()) {
+                    contentBlocks.push({ type: "text", text: rest.content });
+                }
+                for (const tc of m.toolCalls) {
+                    contentBlocks.push({
+                        type: "tool_use",
+                        id: tc.id || tc.name || `tc-${Date.now()}`,
+                        name: tc.name,
+                        input: tc.args || {},
+                    });
+                }
+                return {
+                    role: "assistant",
+                    content: contentBlocks,
+                };
+            }
+
             // Convert messages with media to Anthropic content block format
             if (images && images.length > 0) {
                 const contentBlocks = [];
@@ -100,6 +135,11 @@ function prepareMessages(messages) {
                     role: rest.role,
                     content: contentBlocks.length > 0 ? contentBlocks : rest.content,
                 };
+            }
+
+            // Ensure assistant messages never have empty content
+            if (rest.role === "assistant" && (!rest.content || !rest.content.trim())) {
+                return { ...rest, content: " " };
             }
             return rest;
         });
@@ -470,12 +510,14 @@ const anthropicProvider = {
                         }
                     }
                     // Custom tool_use block ended — emit toolCall
-                    if (currentBlockType === "tool_use" && codeInput) {
+                    if (currentBlockType === "tool_use") {
                         let args = {};
-                        try {
-                            args = JSON.parse(codeInput);
-                        } catch {
-                            // Not valid JSON, use empty
+                        if (codeInput) {
+                            try {
+                                args = JSON.parse(codeInput);
+                            } catch {
+                                // Not valid JSON, use empty
+                            }
                         }
                         yield {
                             type: "toolCall",
