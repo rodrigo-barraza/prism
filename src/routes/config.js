@@ -171,11 +171,8 @@ async function getLmStudioModelOptions() {
                     (p) => nameLower.includes(p),
                 );
 
-                // Detect function calling support from LM Studio API capabilities
-                const supportsFunctionCalling =
-                    m.capabilities?.functionCalling ||
-                    m.capabilities?.tool_use ||
-                    (Array.isArray(m.capabilities) && m.capabilities.includes("tool_use"));
+                // Detect function calling support — LM Studio API: capabilities.trained_for_tool_use
+                const supportsFunctionCalling = !!m.capabilities?.trained_for_tool_use;
 
                 const tools = [];
                 if (supportsThinking) tools.push("Thinking");
