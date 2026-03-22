@@ -275,10 +275,34 @@ const ConversationService = {
         if (!client) return;
 
         const db = client.db(MONGO_DB_NAME);
-        await db.collection(COLLECTION).updateOne(
-            { id: conversationId, project, username },
-            { $set: { isGenerating: generating, updatedAt: new Date().toISOString() } },
-        );
+        const now = new Date().toISOString();
+
+        if (generating) {
+            // Upsert — create a conversation stub if it doesn't exist yet
+            // (e.g. Lupos sends a brand-new conversationId that hasn't been persisted)
+            await db.collection(COLLECTION).updateOne(
+                { id: conversationId, project, username },
+                {
+                    $set: { isGenerating: true, updatedAt: now },
+                    $setOnInsert: {
+                        title: "New Conversation",
+                        messages: [],
+                        systemPrompt: "",
+                        settings: {},
+                        modalities: computeModalities([]),
+                        providers: [],
+                        totalCost: 0,
+                        createdAt: now,
+                    },
+                },
+                { upsert: true },
+            );
+        } else {
+            await db.collection(COLLECTION).updateOne(
+                { id: conversationId, project, username },
+                { $set: { isGenerating: false, updatedAt: now } },
+            );
+        }
     },
 };
 

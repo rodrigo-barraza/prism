@@ -732,6 +732,12 @@ async function handleNonStreamingText(ctx) {
     requestId, requestStart, emit,
   } = ctx;
 
+  // Mark conversation as generating
+  if (conversationId) {
+    ConversationService.setGenerating(conversationId, project, username, true)
+      .catch((err) => logger.error(`Failed to set isGenerating: ${err.message}`));
+  }
+
   const generationStart = performance.now();
   const result = await provider.generateText(messages, resolvedModel, options);
   const now = performance.now();
@@ -848,6 +854,8 @@ async function handleNonStreamingText(ctx) {
 
     ConversationService.appendMessages(
       conversationId, project, username, messagesToAppend, conversationMeta,
+    ).then(() =>
+      ConversationService.setGenerating(conversationId, project, username, false),
     ).catch((err) =>
       logger.error(
         `Failed to append messages to conversation ${conversationId}: ${err.message}`,
