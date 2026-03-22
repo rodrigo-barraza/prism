@@ -400,6 +400,7 @@ router.get("/stats/models", async (req, res, next) => {
                     totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
                     avgLatency: { $avg: { $ifNull: ["$totalTime", 0] } },
                     avgTokensPerSec: { $avg: { $ifNull: ["$tokensPerSec", null] } },
+                    _convIds: { $addToSet: "$conversationId" },
                 },
             },
             { $sort: { totalRequests: -1 } },
@@ -410,18 +411,54 @@ router.get("/stats/models", async (req, res, next) => {
             .aggregate(pipeline)
             .toArray();
 
+        // Collect all distinct conversationIds to look up workflow links
+        const allConvIds = new Set();
+        for (const r of results) {
+            for (const cid of r._convIds || []) {
+                if (cid) allConvIds.add(cid);
+            }
+        }
+
+        // Count workflows per conversationId
+        const wfByConv = {};
+        if (allConvIds.size > 0) {
+            const wfResults = await db
+                .collection(WORKFLOWS_COL)
+                .aggregate([
+                    { $match: { conversationIds: { $elemMatch: { $in: [...allConvIds] } } } },
+                    { $unwind: "$conversationIds" },
+                    { $match: { conversationIds: { $in: [...allConvIds] } } },
+                    { $group: { _id: "$conversationIds", wfIds: { $addToSet: "$_id" } } },
+                    { $project: { _id: 1, workflowCount: { $size: "$wfIds" } } },
+                ])
+                .toArray();
+            for (const w of wfResults) {
+                wfByConv[w._id] = w.workflowCount;
+            }
+        }
+
         res.json(
-            results.map((r) => ({
-                model: r._id.model,
-                provider: r._id.provider,
-                totalRequests: r.totalRequests,
-                totalInputTokens: r.totalInputTokens,
-                totalOutputTokens: r.totalOutputTokens,
-                totalTokens: r.totalTokens,
-                totalCost: r.totalCost,
-                avgLatency: r.avgLatency,
-                avgTokensPerSec: r.avgTokensPerSec,
-            })),
+            results.map((r) => {
+                const convIds = (r._convIds || []).filter(Boolean);
+                const conversationCount = convIds.length;
+                let workflowCount = 0;
+                for (const cid of convIds) {
+                    workflowCount += wfByConv[cid] || 0;
+                }
+                return {
+                    model: r._id.model,
+                    provider: r._id.provider,
+                    totalRequests: r.totalRequests,
+                    totalInputTokens: r.totalInputTokens,
+                    totalOutputTokens: r.totalOutputTokens,
+                    totalTokens: r.totalTokens,
+                    totalCost: r.totalCost,
+                    avgLatency: r.avgLatency,
+                    avgTokensPerSec: r.avgTokensPerSec,
+                    conversationCount,
+                    workflowCount,
+                };
+            }),
         );
     } catch (error) {
         logger.error(`Admin /stats/models error: ${error.message}`);
