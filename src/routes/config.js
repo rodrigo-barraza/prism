@@ -163,6 +163,24 @@ async function getLmStudioModelOptions() {
                     label += ` (${m.quantization.name})`;
                 }
 
+                const nameLower = (m.key || "").toLowerCase();
+
+                // Detect thinking-capable models by name/family
+                const THINKING_PATTERNS = ["qwen3", "deepseek-r1", "deepseek-v3", "gpt-oss"];
+                const supportsThinking = THINKING_PATTERNS.some(
+                    (p) => nameLower.includes(p),
+                );
+
+                // Detect function calling support from LM Studio API capabilities
+                const supportsFunctionCalling =
+                    m.capabilities?.functionCalling ||
+                    m.capabilities?.tool_use ||
+                    (Array.isArray(m.capabilities) && m.capabilities.includes("tool_use"));
+
+                const tools = [];
+                if (supportsThinking) tools.push("Thinking");
+                if (supportsFunctionCalling) tools.push("Function Calling");
+
                 const entry = {
                     name: m.key,
                     label,
@@ -174,6 +192,9 @@ async function getLmStudioModelOptions() {
                     defaultTemperature: 0.7,
                     pricing: { inputPerMillion: 0, outputPerMillion: 0 },
                 };
+                if (tools.length > 0) {
+                    entry.tools = tools;
+                }
                 if (m.capabilities?.vision) {
                     entry.vision = true;
                     entry.inputTypes = [TYPES.TEXT, TYPES.IMAGE];
@@ -256,6 +277,9 @@ async function getOllamaModelOptions() {
                 (p) => nameLower.includes(p),
             );
 
+            const tools = [];
+            if (supportsThinking) tools.push("Thinking");
+
             const entry = {
                 name,
                 label,
@@ -267,9 +291,11 @@ async function getOllamaModelOptions() {
                 defaultTemperature: 0.7,
                 pricing: { inputPerMillion: 0, outputPerMillion: 0 },
             };
+            if (tools.length > 0) {
+                entry.tools = tools;
+            }
             if (supportsThinking) {
                 entry.thinking = true;
-                entry.tools = ["Thinking"];
             }
             if (details.parameter_size) {
                 entry.params = details.parameter_size;

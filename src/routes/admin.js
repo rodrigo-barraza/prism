@@ -404,6 +404,7 @@ router.get("/stats/models", async (req, res, next) => {
                     avgLatency: { $avg: { $ifNull: ["$totalTime", 0] } },
                     avgTokensPerSec: { $avg: { $cond: [{ $and: [{ $ne: ["$tokensPerSec", null] }, { $lte: ["$tokensPerSec", 10000] }] }, "$tokensPerSec", null] } },
                     _convIds: { $addToSet: "$conversationId" },
+                    toolsUsed: { $max: { $cond: [{ $eq: ["$toolsUsed", true] }, true, false] } },
                 },
             },
             { $sort: { totalRequests: -1 } },
@@ -458,6 +459,7 @@ router.get("/stats/models", async (req, res, next) => {
                     totalCost: r.totalCost,
                     avgLatency: r.avgLatency,
                     avgTokensPerSec: r.avgTokensPerSec,
+                    toolsUsed: r.toolsUsed || false,
                     conversationCount,
                     workflowCount,
                 };
