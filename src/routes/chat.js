@@ -569,11 +569,6 @@ async function handleStreamingText(ctx) {
   const timeToGenerationSec = firstTokenTime
     ? (firstTokenTime - requestStart) / 1000
     : null;
-  // Total output generation time (includes thinking + text tokens)
-  const outputGenerationSec =
-    firstOutputTime && generationEnd
-      ? (generationEnd - firstOutputTime) / 1000
-      : null;
   // Text-only generation time (from first text token to last)
   const generationSec =
     firstTokenTime && generationEnd
@@ -608,9 +603,15 @@ async function handleStreamingText(ctx) {
 
     tokensPerSec = usage.tokensPerSec
       ? parseFloat(usage.tokensPerSec.toFixed(1))
-      : outputGenerationSec && outputGenerationSec > 0
-        ? parseFloat((usage.outputTokens / outputGenerationSec).toFixed(1))
+      : generationSec && generationSec > 0
+        ? parseFloat((usage.outputTokens / generationSec).toFixed(1))
         : null;
+
+    // Cap at 10k tok/s — anything higher is a measurement artifact
+    // (e.g. image gen where timing is unreliable)
+    if (tokensPerSec !== null && tokensPerSec > 10000) {
+      tokensPerSec = null;
+    }
 
     const tokensPerSecStr = tokensPerSec !== null ? tokensPerSec.toFixed(1) : "N/A";
 
@@ -714,10 +715,6 @@ async function handleStreamingText(ctx) {
         `Failed to append messages to conversation ${conversationId}: ${err.message}`,
       ),
     );
-  } else if (conversationId) {
-    // No messages to append but still clear the flag
-    ConversationService.setGenerating(conversationId, project, username, false)
-      .catch((err) => logger.error(`Failed to clear isGenerating: ${err.message}`));
   }
 }
 

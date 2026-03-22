@@ -153,8 +153,9 @@ router.get("/stats", async (req, res, next) => {
         const db = getDb();
         if (!db) return res.status(503).json({ error: "Database not available" });
 
-        const { from, to } = req.query;
+        const { from, to, project } = req.query;
         const match = {};
+        if (project) match.project = project;
         if (from || to) {
             match.timestamp = {};
             if (from) match.timestamp.$gte = from;
@@ -171,7 +172,7 @@ router.get("/stats", async (req, res, next) => {
                     totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
                     totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
                     avgLatency: { $avg: { $ifNull: ["$totalTime", 0] } },
-                    avgTokensPerSec: { $avg: { $ifNull: ["$tokensPerSec", 0] } },
+                    avgTokensPerSec: { $avg: { $cond: [{ $and: [{ $ne: ["$tokensPerSec", null] }, { $lte: ["$tokensPerSec", 10000] }] }, "$tokensPerSec", null] } },
                     successCount: {
                         $sum: { $cond: [{ $eq: ["$success", true] }, 1, 0] },
                     },
@@ -213,8 +214,9 @@ router.get("/stats/projects", async (req, res, next) => {
         const db = getDb();
         if (!db) return res.status(503).json({ error: "Database not available" });
 
-        const { from, to } = req.query;
+        const { from, to, project } = req.query;
         const match = {};
+        if (project) match.project = project;
         if (from || to) {
             match.timestamp = {};
             if (from) match.timestamp.$gte = from;
@@ -239,7 +241,7 @@ router.get("/stats/projects", async (req, res, next) => {
                     },
                     totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
                     avgLatency: { $avg: { $ifNull: ["$totalTime", 0] } },
-                    avgTokensPerSec: { $avg: { $ifNull: ["$tokensPerSec", null] } },
+                    avgTokensPerSec: { $avg: { $cond: [{ $and: [{ $ne: ["$tokensPerSec", null] }, { $lte: ["$tokensPerSec", 10000] }] }, "$tokensPerSec", null] } },
                     lastRequest: { $max: "$timestamp" },
                     _models: { $addToSet: "$model" },
                     _providers: { $addToSet: "$provider" },
@@ -373,8 +375,9 @@ router.get("/stats/models", async (req, res, next) => {
         const db = getDb();
         if (!db) return res.status(503).json({ error: "Database not available" });
 
-        const { from, to } = req.query;
+        const { from, to, project } = req.query;
         const match = {};
+        if (project) match.project = project;
         if (from || to) {
             match.timestamp = {};
             if (from) match.timestamp.$gte = from;
@@ -399,7 +402,7 @@ router.get("/stats/models", async (req, res, next) => {
                     },
                     totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
                     avgLatency: { $avg: { $ifNull: ["$totalTime", 0] } },
-                    avgTokensPerSec: { $avg: { $ifNull: ["$tokensPerSec", null] } },
+                    avgTokensPerSec: { $avg: { $cond: [{ $and: [{ $ne: ["$tokensPerSec", null] }, { $lte: ["$tokensPerSec", 10000] }] }, "$tokensPerSec", null] } },
                     _convIds: { $addToSet: "$conversationId" },
                 },
             },
@@ -557,7 +560,7 @@ router.get("/stats/costs", async (req, res, next) => {
                                 totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
                                 totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
                                 totalRequests: { $sum: 1 },
-                                avgTokensPerSec: { $avg: { $ifNull: ["$tokensPerSec", null] } },
+                                avgTokensPerSec: { $avg: { $cond: [{ $and: [{ $ne: ["$tokensPerSec", null] }, { $lte: ["$tokensPerSec", 10000] }] }, "$tokensPerSec", null] } },
                             },
                         },
                     ])
@@ -575,7 +578,7 @@ router.get("/stats/costs", async (req, res, next) => {
                                 totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
                                 totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
                                 totalRequests: { $sum: 1 },
-                                avgTokensPerSec: { $avg: { $ifNull: ["$tokensPerSec", null] } },
+                                avgTokensPerSec: { $avg: { $cond: [{ $and: [{ $ne: ["$tokensPerSec", null] }, { $lte: ["$tokensPerSec", 10000] }] }, "$tokensPerSec", null] } },
                             },
                         },
                         { $sort: { totalCost: -1 } },
@@ -594,7 +597,7 @@ router.get("/stats/costs", async (req, res, next) => {
                                 totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
                                 totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
                                 totalRequests: { $sum: 1 },
-                                avgTokensPerSec: { $avg: { $ifNull: ["$tokensPerSec", null] } },
+                                avgTokensPerSec: { $avg: { $cond: [{ $and: [{ $ne: ["$tokensPerSec", null] }, { $lte: ["$tokensPerSec", 10000] }] }, "$tokensPerSec", null] } },
                             },
                         },
                         { $sort: { totalCost: -1 } },
@@ -613,7 +616,7 @@ router.get("/stats/costs", async (req, res, next) => {
                                 totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
                                 totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
                                 totalRequests: { $sum: 1 },
-                                avgTokensPerSec: { $avg: { $ifNull: ["$tokensPerSec", null] } },
+                                avgTokensPerSec: { $avg: { $cond: [{ $and: [{ $ne: ["$tokensPerSec", null] }, { $lte: ["$tokensPerSec", 10000] }] }, "$tokensPerSec", null] } },
                             },
                         },
                         { $sort: { totalCost: -1 } },
@@ -632,7 +635,7 @@ router.get("/stats/costs", async (req, res, next) => {
                                 totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
                                 totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
                                 totalRequests: { $sum: 1 },
-                                avgTokensPerSec: { $avg: { $ifNull: ["$tokensPerSec", null] } },
+                                avgTokensPerSec: { $avg: { $cond: [{ $and: [{ $ne: ["$tokensPerSec", null] }, { $lte: ["$tokensPerSec", 10000] }] }, "$tokensPerSec", null] } },
                             },
                         },
                         { $sort: { totalCost: -1 } },
@@ -651,7 +654,7 @@ router.get("/stats/costs", async (req, res, next) => {
                                 totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
                                 totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
                                 totalRequests: { $sum: 1 },
-                                avgTokensPerSec: { $avg: { $ifNull: ["$tokensPerSec", null] } },
+                                avgTokensPerSec: { $avg: { $cond: [{ $and: [{ $ne: ["$tokensPerSec", null] }, { $lte: ["$tokensPerSec", 10000] }] }, "$tokensPerSec", null] } },
                             },
                         },
                         { $sort: { totalCost: -1 } },
@@ -670,7 +673,7 @@ router.get("/stats/costs", async (req, res, next) => {
                                 totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
                                 totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
                                 totalRequests: { $sum: 1 },
-                                avgTokensPerSec: { $avg: { $ifNull: ["$tokensPerSec", null] } },
+                                avgTokensPerSec: { $avg: { $cond: [{ $and: [{ $ne: ["$tokensPerSec", null] }, { $lte: ["$tokensPerSec", 10000] }] }, "$tokensPerSec", null] } },
                             },
                         },
                         { $sort: { totalCost: -1 } },
@@ -689,7 +692,7 @@ router.get("/stats/costs", async (req, res, next) => {
                                 totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
                                 totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
                                 totalRequests: { $sum: 1 },
-                                avgTokensPerSec: { $avg: { $ifNull: ["$tokensPerSec", null] } },
+                                avgTokensPerSec: { $avg: { $cond: [{ $and: [{ $ne: ["$tokensPerSec", null] }, { $lte: ["$tokensPerSec", 10000] }] }, "$tokensPerSec", null] } },
                             },
                         },
                         { $sort: { totalCost: -1 } },
@@ -808,7 +811,7 @@ router.get("/stats/timeline", async (req, res, next) => {
         const db = getDb();
         if (!db) return res.status(503).json({ error: "Database not available" });
 
-        const { hours = 24, from, to } = req.query;
+        const { hours = 24, from, to, project } = req.query;
 
         let sinceDate, untilDate;
         if (from) {
@@ -828,8 +831,11 @@ router.get("/stats/timeline", async (req, res, next) => {
         const timeMatch = { $gte: sinceDate.toISOString() };
         if (untilDate) timeMatch.$lte = untilDate.toISOString();
 
+        const matchFilter = { timestamp: timeMatch };
+        if (project) matchFilter.project = project;
+
         const pipeline = [
-            { $match: { timestamp: timeMatch } },
+            { $match: matchFilter },
             {
                 $group: {
                     _id: { $substr: ["$timestamp", 0, substrLen] },
