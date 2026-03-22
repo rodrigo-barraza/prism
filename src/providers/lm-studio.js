@@ -14,6 +14,35 @@ function prepareMessages(messages) {
     return messages.map((m) => {
         const base = { role: m.role };
         if (m.name) base.name = m.name;
+
+        // Tool result messages — include tool_call_id for correlation
+        if (m.role === "tool") {
+            return {
+                role: "tool",
+                tool_call_id: m.tool_call_id || m.id || "",
+                content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+            };
+        }
+
+        // Assistant messages with tool calls — include tool_calls in OpenAI format
+        if (m.role === "assistant" && m.toolCalls && m.toolCalls.length > 0) {
+            const msg = {
+                ...base,
+                content: m.content || null,
+                tool_calls: m.toolCalls.map((tc, i) => ({
+                    id: tc.id || `call_${i}`,
+                    type: "function",
+                    function: {
+                        name: tc.name,
+                        arguments: typeof tc.args === "string"
+                            ? tc.args
+                            : JSON.stringify(tc.args || {}),
+                    },
+                })),
+            };
+            return msg;
+        }
+
         if (m.images && m.images.length > 0) {
             const content = [];
             for (const dataUrl of m.images) {
