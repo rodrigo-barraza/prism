@@ -166,6 +166,23 @@ class ThinkTagParser {
     }
 }
 
+/**
+ * Convert generic tool schemas to OpenAI Chat Completions format.
+ * Input:  [{ name, description, parameters }]
+ * Output: [{ type: "function", function: { name, description, parameters } }]
+ */
+function convertToolsToOpenAI(tools) {
+    if (!tools || !Array.isArray(tools) || tools.length === 0) return null;
+    return tools.map((t) => ({
+        type: "function",
+        function: {
+            name: t.name,
+            description: t.description || "",
+            parameters: t.parameters || {},
+        },
+    }));
+}
+
 const lmStudioProvider = {
     name: "lm-studio",
 
@@ -182,30 +199,36 @@ const lmStudioProvider = {
         try {
             const prepared = prepareMessages(messages);
 
+            const payload = {
+                messages: prepared,
+                model,
+                temperature:
+                    options.temperature !== undefined ? options.temperature : 0.7,
+                top_p: options.topP !== undefined ? options.topP : undefined,
+                frequency_penalty:
+                    options.frequencyPenalty !== undefined
+                        ? options.frequencyPenalty
+                        : undefined,
+                presence_penalty:
+                    options.presencePenalty !== undefined
+                        ? options.presencePenalty
+                        : undefined,
+                stop:
+                    options.stopSequences !== undefined
+                        ? options.stopSequences
+                        : undefined,
+                max_tokens: options.maxTokens || -1,
+                stream: false,
+            };
+
+            // Function calling tools
+            const tools = convertToolsToOpenAI(options.tools);
+            if (tools) payload.tools = tools;
+
             const response = await fetch(`${baseUrl}/v1/chat/completions`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    messages: prepared,
-                    model,
-                    temperature:
-                        options.temperature !== undefined ? options.temperature : 0.7,
-                    top_p: options.topP !== undefined ? options.topP : undefined,
-                    frequency_penalty:
-                        options.frequencyPenalty !== undefined
-                            ? options.frequencyPenalty
-                            : undefined,
-                    presence_penalty:
-                        options.presencePenalty !== undefined
-                            ? options.presencePenalty
-                            : undefined,
-                    stop:
-                        options.stopSequences !== undefined
-                            ? options.stopSequences
-                            : undefined,
-                    max_tokens: options.maxTokens || -1,
-                    stream: false,
-                }),
+                body: JSON.stringify(payload),
             });
 
             if (!response.ok) {
@@ -214,9 +237,10 @@ const lmStudioProvider = {
             }
 
             const data = await response.json();
-            const rawText = data.choices?.[0]?.message?.content || "";
+            const msg = data.choices?.[0]?.message;
+            const rawText = msg?.content || "";
             const { thinking, text } = extractThinkTags(rawText);
-            return {
+            const result = {
                 text,
                 thinking,
                 usage: {
@@ -224,6 +248,23 @@ const lmStudioProvider = {
                     outputTokens: data.usage?.completion_tokens ?? 0,
                 },
             };
+
+            // Extract tool calls if present
+            if (msg?.tool_calls && msg.tool_calls.length > 0) {
+                result.toolCalls = msg.tool_calls.map((tc) => {
+                    let args = {};
+                    try {
+                        args = JSON.parse(tc.function.arguments || "{}");
+                    } catch { /* ignore */ }
+                    return {
+                        id: tc.id,
+                        name: tc.function.name,
+                        args,
+                    };
+                });
+            }
+
+            return result;
         } catch (error) {
             if (error instanceof ProviderError) throw error;
             throw new ProviderError("lm-studio", error.message, 500, error);
@@ -304,31 +345,37 @@ const lmStudioProvider = {
 
             const prepared = prepareMessages(messages);
 
+            const payload = {
+                messages: prepared,
+                model,
+                temperature:
+                    options.temperature !== undefined ? options.temperature : 0.7,
+                top_p: options.topP !== undefined ? options.topP : undefined,
+                frequency_penalty:
+                    options.frequencyPenalty !== undefined
+                        ? options.frequencyPenalty
+                        : undefined,
+                presence_penalty:
+                    options.presencePenalty !== undefined
+                        ? options.presencePenalty
+                        : undefined,
+                stop:
+                    options.stopSequences !== undefined
+                        ? options.stopSequences
+                        : undefined,
+                max_tokens: options.maxTokens || -1,
+                stream: true,
+                stream_options: { include_usage: true },
+            };
+
+            // Function calling tools
+            const tools = convertToolsToOpenAI(options.tools);
+            if (tools) payload.tools = tools;
+
             const response = await fetch(`${baseUrl}/v1/chat/completions`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    messages: prepared,
-                    model,
-                    temperature:
-                        options.temperature !== undefined ? options.temperature : 0.7,
-                    top_p: options.topP !== undefined ? options.topP : undefined,
-                    frequency_penalty:
-                        options.frequencyPenalty !== undefined
-                            ? options.frequencyPenalty
-                            : undefined,
-                    presence_penalty:
-                        options.presencePenalty !== undefined
-                            ? options.presencePenalty
-                            : undefined,
-                    stop:
-                        options.stopSequences !== undefined
-                            ? options.stopSequences
-                            : undefined,
-                    max_tokens: options.maxTokens || -1,
-                    stream: true,
-                    stream_options: { include_usage: true },
-                }),
+                body: JSON.stringify(payload),
             });
 
             if (!response.ok) {
@@ -341,6 +388,8 @@ const lmStudioProvider = {
             let buffer = "";
             let usage = null;
             const thinkParser = new ThinkTagParser();
+            // Accumulate tool calls across chunks
+            const pendingToolCalls = {};
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -367,7 +416,8 @@ const lmStudioProvider = {
                             };
                         }
 
-                        const content = json.choices?.[0]?.delta?.content || "";
+                        const delta = json.choices?.[0]?.delta;
+                        const content = delta?.content || "";
                         if (content) {
                             // Parse <think> tags from the streamed content
                             const parts = thinkParser.feed(content);
@@ -377,6 +427,39 @@ const lmStudioProvider = {
                                 } else {
                                     yield part.content;
                                 }
+                            }
+                        }
+
+                        // Accumulate tool call deltas
+                        if (delta?.tool_calls) {
+                            for (const tc of delta.tool_calls) {
+                                const idx = tc.index;
+                                if (!pendingToolCalls[idx]) {
+                                    pendingToolCalls[idx] = {
+                                        id: tc.id || "",
+                                        name: tc.function?.name || "",
+                                        args: "",
+                                    };
+                                }
+                                if (tc.id) pendingToolCalls[idx].id = tc.id;
+                                if (tc.function?.name) pendingToolCalls[idx].name = tc.function.name;
+                                if (tc.function?.arguments) pendingToolCalls[idx].args += tc.function.arguments;
+                            }
+                        }
+
+                        // If finish_reason is "tool_calls", yield accumulated tool calls
+                        if (json.choices?.[0]?.finish_reason === "tool_calls") {
+                            for (const tc of Object.values(pendingToolCalls)) {
+                                let args = {};
+                                try {
+                                    args = JSON.parse(tc.args || "{}");
+                                } catch { /* ignore */ }
+                                yield {
+                                    type: "toolCall",
+                                    id: tc.id,
+                                    name: tc.name,
+                                    args,
+                                };
                             }
                         }
                     } catch {
