@@ -88,6 +88,7 @@ export function computeModalities(messages) {
         audioIn: false,
         audioOut: false,
         docIn: false,
+        toolUse: false,
     };
     for (const m of messages || []) {
         const isUser = m.role === "user";
@@ -113,6 +114,9 @@ export function computeModalities(messages) {
             )
         ) {
             mod.docIn = true;
+        }
+        if (m.role === "tool" || m.toolCalls?.length > 0) {
+            mod.toolUse = true;
         }
     }
     return mod;
