@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import crypto from "crypto";
 import { Readable } from "stream";
 import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
@@ -66,22 +67,35 @@ function convertToolsToGoogle(tools) {
 }
 
 function convertMessages(messages) {
-    return messages.map((item) => {
+    const result = [];
+
+    for (let i = 0; i < messages.length; i++) {
+        const item = messages[i];
         const parts = [];
 
-        // Tool result messages — wrap as functionResponse parts
+        // ── Consecutive tool result messages → single user turn ──
+        // Gemini requires ALL functionResponse parts for a model turn
+        // to be grouped in one user message.
         if (item.role === "tool") {
-            parts.push({
-                functionResponse: {
-                    name: item.name || "unknown",
-                    response: {
-                        result: typeof item.content === "string"
-                            ? item.content
-                            : JSON.stringify(item.content),
+            const responseParts = [];
+            let j = i;
+            while (j < messages.length && messages[j].role === "tool") {
+                const toolMsg = messages[j];
+                responseParts.push({
+                    functionResponse: {
+                        name: toolMsg.name || "unknown",
+                        response: {
+                            result: typeof toolMsg.content === "string"
+                                ? toolMsg.content
+                                : JSON.stringify(toolMsg.content),
+                        },
                     },
-                },
-            });
-            return { role: "user", parts };
+                });
+                j++;
+            }
+            result.push({ role: "user", parts: responseParts });
+            i = j - 1; // skip merged messages (loop will i++)
+            continue;
         }
 
         // Only include media for user messages — model-generated media
@@ -118,11 +132,13 @@ function convertMessages(messages) {
         if (item.content) {
             parts.push({ text: item.content });
         }
-        return {
+        result.push({
             role: item.role === "assistant" ? "model" : "user",
             parts,
-        };
-    });
+        });
+    }
+
+    return result;
 }
 
 const googleProvider = {
@@ -196,6 +212,7 @@ const googleProvider = {
             for (const part of response.candidates?.[0]?.content?.parts || []) {
                 if (part.functionCall) {
                     toolCalls.push({
+                        id: `google-tc-${crypto.randomUUID()}`,
                         name: part.functionCall.name,
                         args: part.functionCall.args || {},
                         thoughtSignature: part.thoughtSignature || undefined,
@@ -296,6 +313,7 @@ const googleProvider = {
                         if (part.functionCall) {
                             yield {
                                 type: "toolCall",
+                                id: `google-tc-${crypto.randomUUID()}`,
                                 name: part.functionCall.name,
                                 args: part.functionCall.args || {},
                                 thoughtSignature: part.thoughtSignature || undefined,
