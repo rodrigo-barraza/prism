@@ -1,6 +1,10 @@
 import express from "express";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
-import ConversationService from "../services/ConversationService.js";
+import ConversationService, {
+    computeModalities,
+    extractProviders,
+    computeTotalCost,
+} from "../services/ConversationService.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 
@@ -131,7 +135,13 @@ router.patch("/:id", async (req, res, next) => {
 
         const setFields = { updatedAt: new Date().toISOString() };
         if (title !== undefined) setFields.title = title;
-        if (messages !== undefined) setFields.messages = messages;
+        if (messages !== undefined) {
+            setFields.messages = messages;
+            // Recompute derived fields when messages change
+            setFields.modalities = computeModalities(messages);
+            setFields.providers = extractProviders(messages, settings);
+            setFields.totalCost = computeTotalCost(messages);
+        }
         if (systemPrompt !== undefined) setFields.systemPrompt = systemPrompt;
         if (settings !== undefined) {
             setFields.settings = { ...settings, systemPrompt: systemPrompt || "" };
