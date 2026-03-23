@@ -144,13 +144,23 @@ async function resolveMediaRef(ref, project, username) {
  * models), vision/captioning, and audio transcription — all via a unified
  * messages-based API.
  *
+ * Payload follows a flat structure inspired by the OpenAI Chat Completions API:
+ *   { provider, model, messages, tools?, temperature?, maxTokens?, ... }
+ *
  * @param {Object}   params              Request parameters
  * @param {string}   params.provider     Provider name (required)
  * @param {string}   [params.model]      Model name (optional, uses default)
  * @param {Array}    params.messages     Messages array (required)
- * @param {Object}   [params.options]    Generation options
+ * @param {Array}    [params.tools]      Tool/function definitions
+ * @param {number}   [params.temperature]
+ * @param {number}   [params.maxTokens]
+ * @param {number}   [params.topP]
+ * @param {number}   [params.topK]
+ * @param {number}   [params.frequencyPenalty]
+ * @param {number}   [params.presencePenalty]
+ * @param {Array}    [params.stopSequences]
  * @param {string}   [params.conversationId]  Auto-append to conversation
- * @param {Object}   [params.userMessage]     User message metadata
+ * @param {Object}   [params.conversationMeta] Title + systemPrompt for storage
  * @param {string}   params.project      Project identifier
  * @param {string}   params.username     Username identifier
  * @param {Function} emit                Callback to emit events: emit({ type, ...data })
@@ -162,14 +172,59 @@ export async function handleChat(params, emit) {
     provider: providerName,
     model: requestedModel,
     messages,
-    options = {},
     conversationId,
-    userMessage,
     conversationMeta,
     project = "unknown",
     username = "unknown",
     clientIp = null,
+    // Generation options — flat at top-level (OpenAI-style)
+    tools,
+    temperature,
+    maxTokens,
+    topP,
+    topK,
+    frequencyPenalty,
+    presencePenalty,
+    stopSequences,
+    thinkingEnabled,
+    reasoningEffort,
+    thinkingLevel,
+    thinkingBudget,
+    webSearch,
+    webFetch,
+    codeExecution,
+    urlContext,
+    verbosity,
+    reasoningSummary,
+    systemPrompt: _unusedSystemPrompt, // ignored — system prompt is in messages
+    ...extraParams
   } = params;
+
+  // Build the internal options object that providers expect
+  const options = {
+    ...(tools && { tools }),
+    ...(temperature !== undefined && { temperature }),
+    ...(maxTokens !== undefined && { maxTokens }),
+    ...(topP !== undefined && { topP }),
+    ...(topK !== undefined && { topK }),
+    ...(frequencyPenalty !== undefined && { frequencyPenalty }),
+    ...(presencePenalty !== undefined && { presencePenalty }),
+    ...(stopSequences && { stopSequences }),
+    ...(thinkingEnabled && { thinkingEnabled }),
+    ...(reasoningEffort && { reasoningEffort }),
+    ...(thinkingLevel && { thinkingLevel }),
+    ...(thinkingBudget && { thinkingBudget }),
+    ...(webSearch && { webSearch }),
+    ...(webFetch && { webFetch }),
+    ...(codeExecution && { codeExecution }),
+    ...(urlContext && { urlContext }),
+    ...(verbosity && { verbosity }),
+    ...(reasoningSummary && { reasoningSummary }),
+    ...(extraParams.systemPrompt && { systemPrompt: extraParams.systemPrompt }),
+  };
+
+  // Derive userMessage from the last user message in the messages array
+  const userMessage = messages?.filter((m) => m.role === "user").pop() || null;
 
   let resolvedModel = null;
 
@@ -424,13 +479,12 @@ async function handleImageAPIModel(ctx) {
       estimatedCost,
     });
 
-    // Stamp resolvedModel onto conversationMeta so conversation settings include the model
-    if (conversationMeta) {
-      conversationMeta.settings = { ...conversationMeta.settings, model: resolvedModel };
-    }
+    const meta = conversationMeta
+      ? { ...conversationMeta, settings: { provider: providerName, model: resolvedModel } }
+      : undefined;
 
     ConversationService.appendMessages(
-      conversationId, project, username, messagesToAppend, conversationMeta,
+      conversationId, project, username, messagesToAppend, meta,
     ).then(() =>
       ConversationService.setGenerating(conversationId, project, username, false),
     ).catch((err) =>
@@ -704,13 +758,12 @@ async function handleStreamingText(ctx) {
       estimatedCost,
     });
 
-    // Stamp resolvedModel onto conversationMeta so conversation settings include the model
-    if (conversationMeta) {
-      conversationMeta.settings = { ...conversationMeta.settings, model: resolvedModel };
-    }
+    const meta = conversationMeta
+      ? { ...conversationMeta, settings: { provider: providerName, model: resolvedModel } }
+      : undefined;
 
     ConversationService.appendMessages(
-      conversationId, project, username, messagesToAppend, conversationMeta,
+      conversationId, project, username, messagesToAppend, meta,
     ).then(() =>
       ConversationService.setGenerating(conversationId, project, username, false),
     ).catch((err) =>
@@ -847,13 +900,12 @@ async function handleNonStreamingText(ctx) {
       estimatedCost,
     });
 
-    // Stamp resolvedModel onto conversationMeta so conversation settings include the model
-    if (conversationMeta) {
-      conversationMeta.settings = { ...conversationMeta.settings, model: resolvedModel };
-    }
+    const meta = conversationMeta
+      ? { ...conversationMeta, settings: { provider: providerName, model: resolvedModel } }
+      : undefined;
 
     ConversationService.appendMessages(
-      conversationId, project, username, messagesToAppend, conversationMeta,
+      conversationId, project, username, messagesToAppend, meta,
     ).then(() =>
       ConversationService.setGenerating(conversationId, project, username, false),
     ).catch((err) =>
@@ -874,7 +926,8 @@ async function handleNonStreamingText(ctx) {
  * Default:       SSE streaming (text/event-stream)
  * ?stream=false: Plain JSON response (for server-to-server callers)
  *
- * Body: { provider, model?, messages, options?, conversationId?, userMessage? }
+ * Body (flat, OpenAI-style):
+ *   { provider, model?, messages, tools?, temperature?, maxTokens?, ... }
  */
 router.post("/", async (req, res, next) => {
   const wantsStream = req.query.stream !== "false";
@@ -889,7 +942,7 @@ router.post("/", async (req, res, next) => {
     await handleChat(
       {
         ...req.body,
-        project: req.body.project || req.project,
+        project: req.project,
         username: req.username,
         clientIp: req.clientIp,
       },
@@ -904,7 +957,7 @@ router.post("/", async (req, res, next) => {
     await handleChat(
       {
         ...req.body,
-        project: req.body.project || req.project,
+        project: req.project,
         username: req.username,
         clientIp: req.clientIp,
       },

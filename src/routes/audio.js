@@ -24,7 +24,7 @@ const router = express.Router();
  * @param {string}   [params.model]      Model name
  * @param {Object}   [params.options]    Extra options
  * @param {string}   [params.conversationId]  Auto-append to conversation
- * @param {Object}   [params.userMessage]     User message metadata
+ * @param {Object}   [params.conversationMeta] Title + systemPrompt for storage
  * @param {string}   params.project      Project identifier
  * @param {string}   params.username     Username identifier
  * @param {Function} emitBinary          Callback for binary audio chunks: emitBinary(chunk)
@@ -42,7 +42,6 @@ export async function handleVoice(params, emitBinary, emitJSON) {
     model,
     options: extraOptions,
     conversationId,
-    userMessage,
     conversationMeta,
     project = "unknown",
     username = "unknown",
@@ -134,13 +133,12 @@ export async function handleVoice(params, emitBinary, emitJSON) {
       }
 
       const messagesToAppend = [];
-      if (userMessage) {
-        messagesToAppend.push({
-          role: "user",
-          ...userMessage,
-          timestamp: userMessage.timestamp || new Date().toISOString(),
-        });
-      }
+      // Derive user message from text
+      messagesToAppend.push({
+        role: "user",
+        content: text,
+        timestamp: new Date().toISOString(),
+      });
 
       messagesToAppend.push({
         role: "assistant",
@@ -153,13 +151,12 @@ export async function handleVoice(params, emitBinary, emitJSON) {
         totalTime: parseFloat(totalSec.toFixed(3)),
       });
 
-      // Stamp model onto conversationMeta so conversation settings include it
-      if (conversationMeta && model) {
-        conversationMeta.settings = { ...conversationMeta.settings, model };
-      }
+      const meta = conversationMeta
+        ? { ...conversationMeta, settings: { provider: providerName, model } }
+        : undefined;
 
       ConversationService.appendMessages(
-        conversationId, project, username, messagesToAppend, conversationMeta,
+        conversationId, project, username, messagesToAppend, meta,
       ).catch((err) =>
         logger.error(
           `Failed to append messages to conversation ${conversationId}: ${err.message}`,
@@ -193,7 +190,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
 
 /**
  * POST /text-to-audio
- * Body: { provider, text, voice?, instructions?, model?, options?, conversationId?, userMessage? }
+ * Body: { provider, text, voice?, instructions?, model?, options?, conversationId?, conversationMeta? }
  * Response: binary audio stream with content-type header
  */
 router.post("/", async (req, res, next) => {
