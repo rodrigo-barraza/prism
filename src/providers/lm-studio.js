@@ -2,6 +2,7 @@ import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
 import { LM_STUDIO_BASE_URL } from "../../secrets.js";
 import { TYPES, getDefaultModels } from "../config.js";
+import { writeFileSync } from "node:fs";
 
 function getBaseUrl() {
     return LM_STUDIO_BASE_URL;
@@ -28,7 +29,8 @@ function prepareMessages(messages) {
         if (m.role === "assistant" && m.toolCalls && m.toolCalls.length > 0) {
             const msg = {
                 ...base,
-                content: m.content || null,
+                // Per OpenAI spec, content must be null when tool_calls are present
+                content: m.content?.trim() || null,
                 tool_calls: m.toolCalls.map((tc, i) => ({
                     id: tc.id || `call_${i}`,
                     type: "function",
@@ -401,6 +403,16 @@ const lmStudioProvider = {
             const tools = convertToolsToOpenAI(options.tools);
             if (tools) payload.tools = tools;
 
+            const payloadStr = JSON.stringify(payload, null, 2);
+            logger.info(`[LM-Studio] Payload: ${prepared.length} msgs, ${tools ? tools.length : 0} tools, ${payloadStr.length} chars total`);
+            for (const m of prepared) {
+                const contentLen = typeof m.content === "string" ? m.content.length : JSON.stringify(m.content || "").length;
+                logger.info(`[LM-Studio]   ${m.role}${m.tool_calls ? ` (${m.tool_calls.length} tool_calls)` : ""}: ${contentLen} chars`);
+            }
+            // Write diagnostic payload to file
+            const ts = Date.now();
+            try { writeFileSync(`/tmp/lm-studio-payload-${ts}.json`, payloadStr); } catch {}
+
             const response = await fetch(`${baseUrl}/v1/chat/completions`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -411,6 +423,7 @@ const lmStudioProvider = {
                 const errorText = await response.text();
                 throw new Error(`API error: ${response.status} ${errorText}`);
             }
+            logger.info(`[LM-Studio] Response status: ${response.status}`);
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
@@ -497,6 +510,9 @@ const lmStudioProvider = {
                 }
             }
 
+            const tcCount = Object.keys(pendingToolCalls).length;
+            logger.info(`[LM-Studio] Stream done — toolCalls=${tcCount}, hasUsage=${!!usage}`);
+
             // Flush any remaining buffered content from the think parser
             const remaining = thinkParser.flush();
             for (const part of remaining) {
@@ -510,6 +526,7 @@ const lmStudioProvider = {
             if (usage) {
                 yield { type: "usage", usage };
             }
+
         } catch (error) {
             if (error instanceof ProviderError) throw error;
             throw new ProviderError("lm-studio", error.message, 500, error);
