@@ -88,8 +88,15 @@ export function computeModalities(messages) {
         audioIn: false,
         audioOut: false,
         docIn: false,
-        toolUse: false,
+        webSearch: false,
+        codeExecution: false,
+        functionCalling: false,
+        thinking: false,
     };
+
+    const WEB_SEARCH_NAMES = new Set(["web_search", "web_search_preview"]);
+    const CODE_EXEC_NAMES = new Set(["code_execution"]);
+
     for (const m of messages || []) {
         const isUser = m.role === "user";
         const isAssistant = m.role === "assistant";
@@ -115,8 +122,40 @@ export function computeModalities(messages) {
         ) {
             mod.docIn = true;
         }
-        if (m.role === "tool" || m.toolCalls?.length > 0) {
-            mod.toolUse = true;
+
+        // Classify tool calls by type
+        if (m.toolCalls?.length > 0) {
+            for (const tc of m.toolCalls) {
+                const name = (tc.name || "").toLowerCase();
+                if (WEB_SEARCH_NAMES.has(name)) {
+                    mod.webSearch = true;
+                } else if (CODE_EXEC_NAMES.has(name)) {
+                    mod.codeExecution = true;
+                } else {
+                    mod.functionCalling = true;
+                }
+            }
+        }
+
+        // Detect inline web search results (from streaming)
+        if (isAssistant && typeof m.content === "string" && m.content.includes("> **Sources:**")) {
+            mod.webSearch = true;
+        }
+
+        // Detect inline code execution blocks (from streaming)
+        if (isAssistant && typeof m.content === "string" && m.content.includes("```exec-")) {
+            mod.codeExecution = true;
+        }
+
+        // Tool result messages — mark as function calling
+        // (web_search and code_execution results are inlined, not stored as role:"tool")
+        if (m.role === "tool") {
+            mod.functionCalling = true;
+        }
+
+        // Detect thinking / reasoning
+        if (isAssistant && m.thinking) {
+            mod.thinking = true;
         }
     }
     return mod;

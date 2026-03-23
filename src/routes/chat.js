@@ -465,6 +465,7 @@ async function handleStreamingText(ctx) {
   let generationEnd = null;
   let outputCharacters = 0;
   let fullStreamedText = "";
+  let streamedThinking = "";
   const streamedImages = [];
   const streamedToolCalls = [];
 
@@ -478,6 +479,7 @@ async function handleStreamingText(ctx) {
     if (chunk && typeof chunk === "object" && chunk.type === "thinking") {
       if (!firstOutputTime) firstOutputTime = performance.now();
       generationEnd = performance.now();
+      streamedThinking += chunk.content;
       emit({ type: "thinking", content: chunk.content });
       continue;
     }
@@ -690,6 +692,7 @@ async function handleStreamingText(ctx) {
     messagesToAppend.push({
       role: "assistant",
       content: fullStreamedText,
+      ...(streamedThinking && { thinking: streamedThinking }),
       ...(streamedImages.length > 0 && { images: streamedImages }),
       ...(streamedToolCalls.length > 0 && { toolCalls: streamedToolCalls }),
       model: resolvedModel,
