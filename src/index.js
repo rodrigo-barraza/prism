@@ -115,6 +115,26 @@ setupWebSocket(wss);
     await MongoWrapper.createClient(MONGO_DB_NAME, MONGO_URI);
     await MemoryService.ensureIndexes();
 
+    // Clear any stale isGenerating flags left over from a previous crash/restart
+    try {
+        const db = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
+        if (db) {
+            const { modifiedCount } = await db
+                .collection("conversations")
+                .updateMany(
+                    { isGenerating: true },
+                    { $set: { isGenerating: false } },
+                );
+            if (modifiedCount > 0) {
+                logger.info(
+                    `Cleared ${modifiedCount} stale isGenerating flag(s)`,
+                );
+            }
+        }
+    } catch (err) {
+        logger.error(`Failed to clear stale isGenerating flags: ${err.message}`);
+    }
+
     // Initialize MinIO if all secrets are configured
     if (
         MINIO_ENDPOINT &&
