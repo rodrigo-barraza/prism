@@ -208,8 +208,14 @@ async function getLmStudioModelOptions() {
                 if (m.quantization?.name) {
                     entry.quantization = m.quantization.name;
                 }
+                if (m.quantization?.bits_per_weight != null) {
+                    entry.bitsPerWeight = m.quantization.bits_per_weight;
+                }
                 if (m.architecture) {
                     entry.architecture = m.architecture;
+                }
+                if (m.publisher) {
+                    entry.publisher = m.publisher;
                 }
                 if (m.loaded_instances?.length > 0) {
                     entry.loaded = true;
