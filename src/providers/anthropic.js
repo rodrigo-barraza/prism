@@ -169,6 +169,22 @@ function prepareMessages(messages) {
         return acc;
     }, []);
 
+    // Deduplicate tool_result blocks within merged user messages.
+    // Anthropic requires exactly one tool_result per tool_use_id.
+    // The frontend may send both inline results (from assistant.toolCalls
+    // expansion) and standalone tool-role messages with the same ID,
+    // which after merging creates duplicate tool_result blocks.
+    for (const msg of merged) {
+        if (msg.role !== "user" || !Array.isArray(msg.content)) continue;
+        const seenToolResultIds = new Set();
+        msg.content = msg.content.filter((block) => {
+            if (block.type !== "tool_result") return true;
+            if (seenToolResultIds.has(block.tool_use_id)) return false;
+            seenToolResultIds.add(block.tool_use_id);
+            return true;
+        });
+    }
+
     // Ensure conversation starts with a user message
     if (merged.length > 0 && merged[0].role === "assistant") {
         merged.shift();
