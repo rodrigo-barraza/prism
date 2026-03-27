@@ -245,10 +245,15 @@ export async function handleChat(params, emit, { signal } = {}) {
       );
     }
 
+    // ── Strip soft-deleted messages ──────────────────────────────
+    // Deleted messages are kept in the DB for audit / undo, but must
+    // not enter the LLM context window.
+    const activeMessages = messages.filter((m) => !m.deleted);
+
     // ── Resolve image refs ─────────────────────────────────────
     // providerMessages has data URLs (for API calls)
     // messages is mutated to have minio refs (for conversation storage)
-    const providerMessages = await resolveImageRefs(messages, project, username);
+    const providerMessages = await resolveImageRefs(activeMessages, project, username);
 
     const provider = getProvider(providerName);
 

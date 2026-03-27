@@ -98,6 +98,7 @@ export function computeModalities(messages) {
     const CODE_EXEC_NAMES = new Set(["code_execution"]);
 
     for (const m of messages || []) {
+        if (m.deleted) continue;
         const isUser = m.role === "user";
         const isAssistant = m.role === "assistant";
         if (m.content && (isUser || isAssistant)) {
@@ -170,6 +171,7 @@ export function computeModalities(messages) {
 export function extractProviders(messages, settings) {
     const providers = new Set();
     for (const m of messages || []) {
+        if (m.deleted) continue;
         if (m.provider) providers.add(m.provider.toLowerCase());
     }
     if (settings?.provider) providers.add(settings.provider.toLowerCase());
@@ -184,6 +186,7 @@ export function extractProviders(messages, settings) {
 export function computeTotalCost(messages) {
     let total = 0;
     for (const m of messages || []) {
+        if (m.deleted) continue;
         if (m.estimatedCost) total += m.estimatedCost;
     }
     return total;
