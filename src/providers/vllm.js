@@ -111,6 +111,7 @@ const vllmProvider = {
                     stream: true,
                     stream_options: { include_usage: true },
                 }),
+                ...(options.signal && { signal: options.signal }),
             });
 
             if (!response.ok) {
@@ -124,6 +125,10 @@ const vllmProvider = {
             let usage = null;
 
             while (true) {
+                if (options.signal?.aborted) {
+                    reader.cancel();
+                    break;
+                }
                 const { done, value } = await reader.read();
                 if (done) break;
 
@@ -167,6 +172,7 @@ const vllmProvider = {
                 yield { type: "usage", usage };
             }
         } catch (error) {
+            if (error.name === "AbortError") return; // Client disconnected
             if (error instanceof ProviderError) throw error;
             throw new ProviderError("vllm", error.message, 500, error);
         }

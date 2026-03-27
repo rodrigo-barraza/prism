@@ -165,7 +165,7 @@ async function resolveMediaRef(ref, project, username) {
  * @param {string}   params.username     Username identifier
  * @param {Function} emit                Callback to emit events: emit({ type, ...data })
  */
-export async function handleChat(params, emit) {
+export async function handleChat(params, emit, { signal } = {}) {
   const requestStart = performance.now();
   const requestId = crypto.randomUUID();
   const {
@@ -309,6 +309,7 @@ export async function handleChat(params, emit) {
         requestId,
         requestStart,
         emit,
+        signal,
       });
     } else {
       await handleNonStreamingText({
@@ -507,7 +508,7 @@ async function handleStreamingText(ctx) {
   const {
     provider, providerName, resolvedModel, modelDef, messages, options,
     conversationId, userMessage, conversationMeta, project, username, clientIp,
-    requestId, requestStart, emit,
+    requestId, requestStart, emit, signal,
   } = ctx;
 
   // Mark conversation as generating
@@ -516,7 +517,7 @@ async function handleStreamingText(ctx) {
       .catch((err) => logger.error(`Failed to set isGenerating: ${err.message}`));
   }
 
-  const stream = provider.generateTextStream(messages, resolvedModel, options);
+  const stream = provider.generateTextStream(messages, resolvedModel, { ...options, signal });
   let usage = null;
   let firstOutputTime = null;
   let firstTokenTime = null;
@@ -528,6 +529,12 @@ async function handleStreamingText(ctx) {
   const streamedToolCalls = [];
 
   for await (const chunk of stream) {
+    // Client disconnected — abort the upstream provider stream
+    if (signal?.aborted) {
+      if (typeof stream.return === "function") stream.return();
+      logger.info(`[chat] Client disconnected, aborting stream for ${providerName} ${resolvedModel}`);
+      break;
+    }
     // Usage object (final item from provider)
     if (chunk && typeof chunk === "object" && chunk.type === "usage") {
       usage = chunk.usage;
@@ -721,21 +728,24 @@ async function handleStreamingText(ctx) {
     });
   }
 
-  emit({
-    type: "done",
-    usage: usage || null,
-    estimatedCost,
-    tokensPerSec,
-    timeToGeneration:
-      timeToGenerationSec !== null
-        ? parseFloat(timeToGenerationSec.toFixed(3))
-        : null,
-    generationTime:
-      generationSec !== null
-        ? parseFloat(generationSec.toFixed(3))
-        : null,
-    totalTime: parseFloat(totalSec.toFixed(3)),
-  });
+  // If client disconnected, skip the done emit but still persist partial content
+  if (!signal?.aborted) {
+    emit({
+      type: "done",
+      usage: usage || null,
+      estimatedCost,
+      tokensPerSec,
+      timeToGeneration:
+        timeToGenerationSec !== null
+          ? parseFloat(timeToGenerationSec.toFixed(3))
+          : null,
+      generationTime:
+        generationSec !== null
+          ? parseFloat(generationSec.toFixed(3))
+          : null,
+      totalTime: parseFloat(totalSec.toFixed(3)),
+    });
+  }
 
   // Auto-append to conversation (always, regardless of usage availability)
   if (conversationId) {
@@ -951,6 +961,12 @@ router.post("/", async (req, res, next) => {
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders();
 
+    // Abort upstream provider when client disconnects (not on normal completion)
+    const controller = new AbortController();
+    res.on("close", () => {
+      if (!res.writableFinished) controller.abort();
+    });
+
     await handleChat(
       {
         ...req.body,
@@ -959,10 +975,13 @@ router.post("/", async (req, res, next) => {
         clientIp: req.clientIp,
       },
       (event) => {
-        res.write(`data: ${JSON.stringify(event)}\n\n`);
+        if (!controller.signal.aborted) {
+          res.write(`data: ${JSON.stringify(event)}\n\n`);
+        }
       },
+      { signal: controller.signal },
     );
-    res.end();
+    if (!controller.signal.aborted) res.end();
   } else {
     // Non-streaming JSON response (for lupos and other server callers)
     const events = [];

@@ -192,6 +192,9 @@ async function getLmStudioModelOptions() {
                 if (tools.length > 0) {
                     entry.tools = tools;
                 }
+                if (supportsThinking) {
+                    entry.thinking = true;
+                }
                 if (m.capabilities?.vision) {
                     entry.vision = true;
                     entry.inputTypes = [TYPES.TEXT, TYPES.IMAGE];

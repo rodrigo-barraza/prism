@@ -270,7 +270,10 @@ const lmStudioProvider = {
             const data = await response.json();
             const msg = data.choices?.[0]?.message;
             const rawText = msg?.content || "";
-            const { thinking, text } = extractThinkTags(rawText);
+            // Check native reasoning fields first, fall back to <think> tag parsing
+            const nativeThinking = msg?.reasoning_content || msg?.reasoning || null;
+            const { thinking: tagThinking, text } = extractThinkTags(rawText);
+            const thinking = nativeThinking || tagThinking;
             const result = {
                 text,
                 thinking,
@@ -413,10 +416,12 @@ const lmStudioProvider = {
             const ts = Date.now();
             try { writeFileSync(`/tmp/lm-studio-payload-${ts}.json`, payloadStr); } catch {}
 
+            // Pass abort signal so client disconnection cancels the upstream request
             const response = await fetch(`${baseUrl}/v1/chat/completions`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),
+                ...(options.signal && { signal: options.signal }),
             });
 
             if (!response.ok) {
@@ -434,6 +439,10 @@ const lmStudioProvider = {
             const pendingToolCalls = {};
 
             while (true) {
+                if (options.signal?.aborted) {
+                    reader.cancel();
+                    break;
+                }
                 const { done, value } = await reader.read();
                 if (done) break;
 
@@ -459,6 +468,13 @@ const lmStudioProvider = {
                         }
 
                         const delta = json.choices?.[0]?.delta;
+
+                        // Native reasoning fields (Qwen3.5, DeepSeek, etc.)
+                        const reasoning = delta?.reasoning_content || delta?.reasoning || "";
+                        if (reasoning) {
+                            yield { type: "thinking", content: reasoning };
+                        }
+
                         const content = delta?.content || "";
                         if (content) {
                             // Parse <think> tags from the streamed content
@@ -528,6 +544,7 @@ const lmStudioProvider = {
             }
 
         } catch (error) {
+            if (error.name === "AbortError") return; // Client disconnected
             if (error instanceof ProviderError) throw error;
             throw new ProviderError("lm-studio", error.message, 500, error);
         }
