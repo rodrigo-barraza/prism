@@ -572,6 +572,34 @@ const MODELS = {
         ],
     },
 
+    GEMINI_31_FLASH_LIVE: {
+        name: "gemini-3.1-flash-live-preview",
+        label: "Gemini 3.1 Flash Live",
+        provider: PROVIDERS.GOOGLE,
+        modelType: MODEL_TYPES.CONVERSATION,
+        year: 2026,
+        defaultTemperature: 1.0,
+        pricing: {
+            inputPerMillion: 0.5,
+            audioInputPerMillion: 1.0,
+            outputPerMillion: 3.0,
+            audioOutputPerMillion: 12.0,
+        },
+        maxInputTokens: 131_072,
+        maxOutputTokens: 65_536,
+        inputTypes: [TYPES.TEXT, TYPES.IMAGE, TYPES.AUDIO, TYPES.VIDEO],
+        outputTypes: [TYPES.TEXT],
+        mediaLimits: {
+            image: { maxCount: 3000, maxSizeMB: 100 },
+            audio: { maxCount: 50, maxSizeMB: 100 },
+            video: { maxCount: 10, maxSizeMB: 100 },
+        },
+        streaming: true,
+        thinking: true,
+        webSearch: "Google Search",
+        tools: ["Thinking", "Google Search", "Function Calling"],
+    },
+
     // ----- LM Studio — Local Text Generation -----
     QWEN_VL_8B: {
         name: "qwen/qwen3-vl-8b",

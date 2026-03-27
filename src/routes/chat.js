@@ -460,7 +460,7 @@ async function handleImageAPIModel(ctx) {
   }
   emit({
     type: "image",
-    data: result.imageData,
+    ...(minioRef ? {} : { data: result.imageData }),
     mimeType: result.mimeType || "image/png",
     minioRef,
   });
@@ -583,7 +583,7 @@ async function handleStreamingText(ctx) {
       }
       emit({
         type: "image",
-        data: chunk.data,
+        ...(minioRef ? {} : { data: chunk.data }),
         mimeType: chunk.mimeType,
         minioRef,
       });
