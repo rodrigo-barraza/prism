@@ -397,6 +397,7 @@ const openaiProvider = {
                 yield* this._streamChatCompletions(messages, model, options);
             }
         } catch (error) {
+            if (error.name === "AbortError") return;
             throw new ProviderError(
                 "openai",
                 error.message,
@@ -451,9 +452,12 @@ const openaiProvider = {
             payload.tools = [...(payload.tools || []), ...customTools];
         }
 
-        const stream = await getClient().responses.create(payload);
+        const stream = await getClient().responses.create(payload, {
+            ...(options.signal && { signal: options.signal }),
+        });
         let usage = null;
         for await (const event of stream) {
+            if (options.signal?.aborted) break;
             // Text delta from output_text
             if (event.type === "response.output_text.delta") {
                 yield event.delta || "";
@@ -541,7 +545,9 @@ const openaiProvider = {
 
         let stream;
         try {
-            stream = await getClient().chat.completions.create(payload);
+            stream = await getClient().chat.completions.create(payload, {
+                ...(options.signal && { signal: options.signal }),
+            });
         } catch (error) {
             // Retry once after stripping unsupported parameters (e.g. gpt-5-nano rejects temperature)
             if (error.status === 400 && error.message?.includes("Unsupported")) {
@@ -567,7 +573,9 @@ const openaiProvider = {
                     }
                 }
                 if (stripped) {
-                    stream = await getClient().chat.completions.create(payload);
+                    stream = await getClient().chat.completions.create(payload, {
+                        ...(options.signal && { signal: options.signal }),
+                    });
                 } else {
                     throw error;
                 }
@@ -581,6 +589,7 @@ const openaiProvider = {
         const pendingToolCalls = {};
 
         for await (const chunk of stream) {
+            if (options.signal?.aborted) break;
             if (chunk.usage) {
                 usage = {
                     inputTokens: chunk.usage.prompt_tokens ?? 0,

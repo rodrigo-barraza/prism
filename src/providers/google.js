@@ -300,13 +300,18 @@ const googleProvider = {
                 config.responseModalities = ["TEXT", "IMAGE"];
             }
 
+            const streamConfig = { ...config };
+            if (options.signal) {
+                streamConfig.httpOptions = { signal: options.signal };
+            }
             const responseStream = await getClient().models.generateContentStream({
                 model,
                 contents,
-                config,
+                config: streamConfig,
             });
             let usage = null;
             for await (const chunk of responseStream) {
+                if (options.signal?.aborted) break;
                 // Process all parts in the chunk
                 if (chunk.candidates?.[0]?.content?.parts) {
                     for (const part of chunk.candidates[0].content.parts) {
@@ -356,6 +361,7 @@ const googleProvider = {
                 yield { type: "usage", usage };
             }
         } catch (error) {
+            if (error.name === "AbortError") return;
             throw new ProviderError("google", error.message, 500, error);
         }
     },

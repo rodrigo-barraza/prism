@@ -501,7 +501,9 @@ const anthropicProvider = {
                 delete streamPayload.top_k;
             }
 
-            const stream = getClient().messages.stream(streamPayload);
+            const stream = getClient().messages.stream(streamPayload, {
+                ...(options.signal && { signal: options.signal }),
+            });
 
             // Track current content block type for server tool response processing
             let currentBlockType = null;
@@ -511,6 +513,10 @@ const anthropicProvider = {
             let usage = null;
 
             for await (const chunk of stream) {
+                if (options.signal?.aborted) {
+                    stream.abort();
+                    break;
+                }
                 // Content block start — track what kind of block we're in
                 if (chunk.type === "content_block_start") {
                     const block = chunk.content_block;
@@ -660,6 +666,7 @@ const anthropicProvider = {
                 yield { type: "usage", usage };
             }
         } catch (error) {
+            if (error.name === "AbortError") return;
             throw new ProviderError(
                 "anthropic",
                 error.message,
