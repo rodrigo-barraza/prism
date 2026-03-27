@@ -550,12 +550,42 @@ const googleProvider = {
                 if (item?.type === "done") return;
             }
 
-            // ── Send user message via sendRealtimeInput ───────────────────
-            // This model only accepts sendRealtimeInput (sendClientContent
-            // returns "invalid argument"). We send the last user message text.
+            // ── Seed conversation history & send user message ─────────────
+            // sendClientContent works for seeding prior turns (turnComplete: false)
+            // but causes "invalid argument" when used as the final turn.
+            // So we seed history with sendClientContent, then send the last
+            // user message via sendRealtimeInput.
             const nonSystemMessages = messages.filter((m) => m.role !== "system");
             const lastUserMsg = nonSystemMessages[nonSystemMessages.length - 1];
+            const priorMessages = nonSystemMessages.slice(0, -1);
 
+            // Build Content objects for prior history turns
+            if (priorMessages.length > 0) {
+                const historyTurns = [];
+                for (const msg of priorMessages) {
+                    const parts = [];
+
+                    if (msg.content) {
+                        parts.push({ text: msg.content });
+                    }
+
+                    if (parts.length > 0) {
+                        historyTurns.push({
+                            role: msg.role === "assistant" ? "model" : "user",
+                            parts,
+                        });
+                    }
+                }
+
+                if (historyTurns.length > 0) {
+                    session.sendClientContent({
+                        turns: historyTurns,
+                        turnComplete: false,
+                    });
+                }
+            }
+
+            // Send the final user message via sendRealtimeInput
             if (lastUserMsg?.content) {
                 session.sendRealtimeInput({ text: lastUserMsg.content });
             }

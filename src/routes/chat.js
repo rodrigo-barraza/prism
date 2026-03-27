@@ -543,6 +543,9 @@ async function handleStreamingText(ctx) {
   let streamedThinking = "";
   const streamedImages = [];
   const streamedToolCalls = [];
+  /** @type {string[]} base64-encoded PCM audio chunks from Live API */
+  const streamedAudioChunks = [];
+  let audioSampleRate = 24000;
 
   for await (const chunk of stream) {
     // Client disconnected — abort the upstream provider stream
@@ -616,6 +619,12 @@ async function handleStreamingText(ctx) {
     // Audio chunks (Live API — streamed PCM for client playback)
     if (chunk && typeof chunk === "object" && chunk.type === "audio") {
       emit({ type: "audio", data: chunk.data, mimeType: chunk.mimeType });
+      // Accumulate for WAV building after streaming
+      if (chunk.data) streamedAudioChunks.push(chunk.data);
+      if (chunk.mimeType) {
+        const rateMatch = chunk.mimeType.match(/rate=(\d+)/);
+        if (rateMatch) audioSampleRate = parseInt(rateMatch[1], 10);
+      }
       continue;
     }
     // Tool call chunks (custom function calling)
@@ -749,6 +758,43 @@ async function handleStreamingText(ctx) {
     });
   }
 
+  // Build WAV from accumulated PCM audio chunks and upload to MinIO
+  let audioRef = null;
+  if (streamedAudioChunks.length > 0) {
+    try {
+      // Concatenate all base64 PCM chunks → single Buffer
+      const pcmBuffers = streamedAudioChunks.map((b64) => Buffer.from(b64, "base64"));
+      const pcmData = Buffer.concat(pcmBuffers);
+
+      // Build WAV header (44 bytes)
+      const numChannels = 1;
+      const bitsPerSample = 16;
+      const byteRate = audioSampleRate * numChannels * (bitsPerSample / 8);
+      const blockAlign = numChannels * (bitsPerSample / 8);
+      const wavHeader = Buffer.alloc(44);
+      wavHeader.write("RIFF", 0);
+      wavHeader.writeUInt32LE(36 + pcmData.length, 4);
+      wavHeader.write("WAVE", 8);
+      wavHeader.write("fmt ", 12);
+      wavHeader.writeUInt32LE(16, 16); // PCM
+      wavHeader.writeUInt16LE(1, 20);  // AudioFormat
+      wavHeader.writeUInt16LE(numChannels, 22);
+      wavHeader.writeUInt32LE(audioSampleRate, 24);
+      wavHeader.writeUInt32LE(byteRate, 28);
+      wavHeader.writeUInt16LE(blockAlign, 32);
+      wavHeader.writeUInt16LE(bitsPerSample, 34);
+      wavHeader.write("data", 36);
+      wavHeader.writeUInt32LE(pcmData.length, 40);
+
+      const wavBuffer = Buffer.concat([wavHeader, pcmData]);
+      const dataUrl = `data:audio/wav;base64,${wavBuffer.toString("base64")}`;
+      const { ref } = await FileService.uploadFile(dataUrl, "generations", project, username);
+      audioRef = ref;
+    } catch (err) {
+      logger.error(`[chat] Failed to build/upload Live API audio WAV: ${err.message}`);
+    }
+  }
+
   // If client disconnected, skip the done emit but still persist partial content
   if (!signal?.aborted) {
     emit({
@@ -756,6 +802,7 @@ async function handleStreamingText(ctx) {
       usage: usage || null,
       estimatedCost,
       tokensPerSec,
+      ...(audioRef ? { audioRef } : {}),
       timeToGeneration:
         timeToGenerationSec !== null
           ? parseFloat(timeToGenerationSec.toFixed(3))
@@ -787,6 +834,7 @@ async function handleStreamingText(ctx) {
       content: fullStreamedText,
       ...(streamedThinking && { thinking: streamedThinking }),
       ...(streamedImages.length > 0 && { images: streamedImages }),
+      ...(audioRef && { audio: audioRef }),
       ...(streamedToolCalls.length > 0 && { toolCalls: streamedToolCalls }),
       model: resolvedModel,
       provider: providerName,
