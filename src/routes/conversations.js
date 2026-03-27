@@ -100,14 +100,14 @@ router.post("/:id/messages", async (req, res, next) => {
     try {
         const project = req.query.project || req.project || "default";
         const username = req.username || "default";
-        const { messages } = req.body;
+        const { messages, conversationMeta } = req.body;
 
         if (!messages || !Array.isArray(messages) || messages.length === 0) {
             return res.status(400).json({ error: "messages must be a non-empty array" });
         }
 
         const conversation = await ConversationService.appendMessages(
-            req.params.id, project, username, messages,
+            req.params.id, project, username, messages, conversationMeta || null,
         );
 
         res.json(conversation);
