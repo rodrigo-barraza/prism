@@ -531,7 +531,9 @@ async function handleStreamingText(ctx) {
       .catch((err) => logger.error(`Failed to set isGenerating: ${err.message}`));
   }
 
-  const stream = provider.generateTextStream(messages, resolvedModel, { ...options, signal });
+  const stream = modelDef?.liveAPI && provider.generateTextStreamLive
+    ? provider.generateTextStreamLive(messages, resolvedModel, { ...options, signal })
+    : provider.generateTextStream(messages, resolvedModel, { ...options, signal });
   let usage = null;
   let firstOutputTime = null;
   let firstTokenTime = null;
@@ -609,6 +611,11 @@ async function handleStreamingText(ctx) {
     // Web search result chunks
     if (chunk && typeof chunk === "object" && chunk.type === "webSearchResult") {
       emit({ type: "webSearchResult", results: chunk.results });
+      continue;
+    }
+    // Audio chunks (Live API — streamed PCM for client playback)
+    if (chunk && typeof chunk === "object" && chunk.type === "audio") {
+      emit({ type: "audio", data: chunk.data, mimeType: chunk.mimeType });
       continue;
     }
     // Tool call chunks (custom function calling)

@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Modality } from "@google/genai";
 import crypto from "crypto";
 import { Readable } from "stream";
 import { ProviderError } from "../utils/errors.js";
@@ -363,6 +363,240 @@ const googleProvider = {
         } catch (error) {
             if (error.name === "AbortError") return;
             throw new ProviderError("google", error.message, 500, error);
+        }
+    },
+
+    /**
+     * Live API streaming — for models that only support the bidirectional
+     * WebSocket-based BidiGenerateContent method (e.g. gemini-3.1-flash-live-preview).
+     *
+     * Bridges the event-driven Live API into an async generator matching
+     * the same interface as generateTextStream().
+     */
+    async *generateTextStreamLive(
+        messages,
+        model,
+        options = {},
+    ) {
+        logger.provider("Google", `generateTextStreamLive (Live API) model=${model}`);
+        let session = null;
+        try {
+            // ── Build Live API config ────────────────────────────────────
+            // This model ONLY supports AUDIO output modality.
+            // Text responses come via outputTranscription, not responseModalities.
+            const liveConfig = {
+                responseModalities: [Modality.AUDIO],
+                outputAudioTranscription: {},
+            };
+
+            if (options.temperature !== undefined) {
+                liveConfig.temperature = options.temperature;
+            }
+            if (options.topP !== undefined) {
+                liveConfig.topP = options.topP;
+            }
+            if (options.topK !== undefined) {
+                liveConfig.topK = options.topK;
+            }
+            if (options.maxTokens !== undefined) {
+                liveConfig.maxOutputTokens = options.maxTokens;
+            }
+            if (options.thinkingLevel || options.thinkingBudget !== undefined) {
+                liveConfig.thinkingConfig = { includeThoughts: true };
+                if (options.thinkingLevel) {
+                    liveConfig.thinkingConfig.thinkingLevel = options.thinkingLevel;
+                }
+                if (options.thinkingBudget !== undefined && options.thinkingBudget !== "") {
+                    liveConfig.thinkingConfig.thinkingBudgetTokens = parseInt(options.thinkingBudget);
+                }
+            }
+
+            // Tools
+            const tools = [];
+            if (options.webSearch) tools.push({ googleSearch: {} });
+            const customTools = convertToolsToGoogle(options.tools);
+            if (customTools) tools.push(...customTools);
+            if (tools.length > 0) liveConfig.tools = tools;
+
+            // System instruction from messages[0] if role === "system"
+            const systemMsg = messages.find((m) => m.role === "system");
+            if (systemMsg?.content) {
+                liveConfig.systemInstruction = systemMsg.content;
+            }
+
+            // ── Async queue to bridge callbacks → async generator ─────────
+            const queue = [];
+            let resolver = null;
+            let done = false;
+            let setupComplete = false;
+
+            function enqueue(item) {
+                if (resolver) {
+                    const r = resolver;
+                    resolver = null;
+                    r(item);
+                } else {
+                    queue.push(item);
+                }
+            }
+
+            function dequeue() {
+                if (queue.length > 0) {
+                    return Promise.resolve(queue.shift());
+                }
+                return new Promise((resolve) => {
+                    resolver = resolve;
+                });
+            }
+
+            // ── Connect to Live API ───────────────────────────────────────
+            session = await getClient().live.connect({
+                model,
+                config: liveConfig,
+                callbacks: {
+                    onopen: () => {
+                        logger.provider("Google", `Live API session opened for ${model}`);
+                    },
+                    onmessage: (msg) => {
+                        // Setup complete — signal we can send messages
+                        if (msg.setupComplete !== undefined) {
+                            setupComplete = true;
+                            enqueue({ type: "setupComplete" });
+                            return;
+                        }
+
+                        // Audio data from model turn (inlineData)
+                        if (msg.serverContent?.modelTurn?.parts) {
+                            for (const part of msg.serverContent.modelTurn.parts) {
+                                if (part.thought && part.text) {
+                                    enqueue({ type: "thinking", content: part.text });
+                                } else if (part.inlineData) {
+                                    // Audio chunks from the model — forward for playback
+                                    enqueue({
+                                        type: "audio",
+                                        data: part.inlineData.data,
+                                        mimeType: part.inlineData.mimeType,
+                                    });
+                                } else if (part.text) {
+                                    enqueue({ type: "text", content: part.text });
+                                } else if (part.functionCall) {
+                                    enqueue({
+                                        type: "toolCall",
+                                        id: `google-tc-${crypto.randomUUID()}`,
+                                        name: part.functionCall.name,
+                                        args: part.functionCall.args || {},
+                                        thoughtSignature: part.thoughtSignature || undefined,
+                                    });
+                                }
+                            }
+                        }
+
+                        // Output transcription — TEXT transcript of the audio output.
+                        // This is the primary text content for the SSE chat flow.
+                        if (msg.serverContent?.outputTranscription?.text) {
+                            enqueue({ type: "text", content: msg.serverContent.outputTranscription.text });
+                        }
+
+                        // Tool calls from the server
+                        if (msg.toolCall?.functionCalls) {
+                            for (const fc of msg.toolCall.functionCalls) {
+                                enqueue({
+                                    type: "toolCall",
+                                    id: `google-tc-${crypto.randomUUID()}`,
+                                    name: fc.name,
+                                    args: fc.args || {},
+                                });
+                            }
+                        }
+
+                        // Usage metadata
+                        if (msg.usageMetadata) {
+                            const u = msg.usageMetadata;
+                            if (u.promptTokenCount || u.candidatesTokenCount) {
+                                enqueue({
+                                    type: "usage",
+                                    usage: {
+                                        inputTokens: u.promptTokenCount ?? 0,
+                                        outputTokens: u.candidatesTokenCount ?? 0,
+                                    },
+                                });
+                            }
+                        }
+
+                        // Turn complete — signal we're done
+                        if (msg.serverContent?.turnComplete) {
+                            done = true;
+                            enqueue({ type: "done" });
+                        }
+                    },
+                    onerror: (e) => {
+                        logger.error(`[Google Live API] Error: ${e?.error?.message || e?.message || "unknown"}`);
+                        done = true;
+                        enqueue({ type: "error", message: e?.error?.message || e?.message || "Live API error" });
+                    },
+                    onclose: () => {
+                        logger.provider("Google", "Live API session closed");
+                        done = true;
+                        enqueue({ type: "done" });
+                    },
+                },
+            });
+
+            // ── Wait for setupComplete before sending ─────────────────────
+            while (!setupComplete) {
+                const item = await dequeue();
+                if (item?.type === "setupComplete") break;
+                if (item?.type === "error") throw new ProviderError("google", item.message, 500);
+                if (item?.type === "done") return;
+            }
+
+            // ── Send user message via sendRealtimeInput ───────────────────
+            // This model only accepts sendRealtimeInput (sendClientContent
+            // returns "invalid argument"). We send the last user message text.
+            const nonSystemMessages = messages.filter((m) => m.role !== "system");
+            const lastUserMsg = nonSystemMessages[nonSystemMessages.length - 1];
+
+            if (lastUserMsg?.content) {
+                session.sendRealtimeInput({ text: lastUserMsg.content });
+            }
+
+            // ── Yield chunks from the queue ───────────────────────────────
+            while (!done || queue.length > 0) {
+                if (options.signal?.aborted) break;
+
+                const item = await dequeue();
+                if (!item || item.type === "done") break;
+
+                if (item.type === "error") {
+                    throw new ProviderError("google", item.message, 500);
+                }
+
+                if (item.type === "text") {
+                    yield item.content;
+                } else if (item.type === "thinking") {
+                    yield { type: "thinking", content: item.content };
+                } else if (item.type === "toolCall") {
+                    yield {
+                        type: "toolCall",
+                        id: item.id,
+                        name: item.name,
+                        args: item.args,
+                        thoughtSignature: item.thoughtSignature,
+                    };
+                } else if (item.type === "usage") {
+                    yield { type: "usage", usage: item.usage };
+                } else if (item.type === "audio") {
+                    yield { type: "audio", data: item.data, mimeType: item.mimeType };
+                }
+            }
+        } catch (error) {
+            if (error.name === "AbortError") return;
+            if (error instanceof ProviderError) throw error;
+            throw new ProviderError("google", error.message, 500, error);
+        } finally {
+            if (session) {
+                try { session.close(); } catch { /* already closed */ }
+            }
         }
     },
 

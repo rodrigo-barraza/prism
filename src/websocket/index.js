@@ -1,5 +1,8 @@
 import { handleChat } from "../routes/chat.js";
 import { handleVoice } from "../routes/audio.js";
+import { GoogleGenAI, Modality } from "@google/genai";
+import { GOOGLE_API_KEY } from "../../secrets.js";
+import crypto from "crypto";
 import logger from "../utils/logger.js";
 
 /**
@@ -7,6 +10,7 @@ import logger from "../utils/logger.js";
  * Routes:
  *   /ws/chat   — Streaming chat (text, images, code, thinking, etc.)
  *   /ws/text-to-audio  — Streaming TTS (binary audio frames)
+ *   /ws/live   — Persistent Live API session (audio/text bidirectional)
  */
 export function setupWebSocket(wss) {
   wss.on("connection", (ws, req) => {
@@ -29,6 +33,8 @@ export function setupWebSocket(wss) {
       handleWsChat(ws, project, username, clientIp);
     } else if (pathname === "/ws/text-to-audio") {
       handleWsVoice(ws, project, username, clientIp);
+    } else if (pathname === "/ws/live") {
+      handleWsLive(ws, project, username, clientIp);
     } else {
       ws.send(
         JSON.stringify({
@@ -96,5 +102,237 @@ function handleWsVoice(ws, project, username, clientIp) {
     } catch {
       // Error already emitted via emitJSON in handleVoice
     }
+  });
+}
+
+// ============================================================
+// Live API — persistent bidirectional session proxy
+// ============================================================
+
+/**
+ * Manages a persistent Live API WebSocket session.
+ *
+ * Protocol (client → Prism):
+ *   { type: "setup", model, config }       — Initialize the Live API session
+ *   { type: "audio", data }                — Base64-encoded PCM audio chunk
+ *   { type: "text", text }                 — Text input
+ *   { type: "toolResponse", responses }    — Function call responses
+ *   { type: "close" }                      — Close the session
+ *
+ * Protocol (Prism → client):
+ *   { type: "setupComplete" }              — Session is ready
+ *   { type: "audio", data, mimeType }      — Audio chunk from model
+ *   { type: "text", text }                 — Text chunk from model
+ *   { type: "thinking", content }          — Thinking content
+ *   { type: "toolCall", functionCalls }    — Tool call request
+ *   { type: "inputTranscription", text }   — Transcription of user audio
+ *   { type: "outputTranscription", text }  — Transcription of model audio
+ *   { type: "turnComplete" }               — Model finished responding
+ *   { type: "interrupted" }                — Model was interrupted
+ *   { type: "error", message }             — Error
+ */
+function handleWsLive(ws, project, username, _clientIp) {
+  let liveSession = null;
+
+  function emit(event) {
+    if (ws.readyState === ws.OPEN) {
+      ws.send(JSON.stringify(event));
+    }
+  }
+
+  ws.on("message", async (rawData) => {
+    let data;
+    try {
+      data = JSON.parse(rawData.toString());
+    } catch {
+      emit({ type: "error", message: "Invalid JSON" });
+      return;
+    }
+
+    const { type } = data;
+
+    // ── Setup: create a new Live API session ────────────────────
+    if (type === "setup") {
+      if (liveSession) {
+        try { liveSession.close(); } catch { /* ignore */ }
+        liveSession = null;
+      }
+
+      const model = data.model || "gemini-3.1-flash-live-preview";
+      const clientConfig = data.config || {};
+
+      // Build Live API config
+      const liveConfig = {
+        responseModalities: clientConfig.responseModalities || [Modality.AUDIO],
+        ...(clientConfig.systemInstruction && {
+          systemInstruction: clientConfig.systemInstruction,
+        }),
+        ...(clientConfig.temperature !== undefined && {
+          temperature: clientConfig.temperature,
+        }),
+        ...(clientConfig.thinkingConfig && {
+          thinkingConfig: clientConfig.thinkingConfig,
+        }),
+        ...(clientConfig.tools && { tools: clientConfig.tools }),
+        // Enable transcription for audio responses
+        outputAudioTranscription: {},
+        inputAudioTranscription: {},
+      };
+
+      try {
+        const client = new GoogleGenAI({ apiKey: GOOGLE_API_KEY });
+        liveSession = await client.live.connect({
+          model,
+          config: liveConfig,
+          callbacks: {
+            onopen: () => {
+              logger.info(
+                `[Live API] Session opened for ${model} (project: ${project}, user: ${username})`,
+              );
+              emit({ type: "setupComplete" });
+            },
+            onmessage: (msg) => {
+              // Model turn parts (audio data, text, function calls)
+              if (msg.serverContent?.modelTurn?.parts) {
+                for (const part of msg.serverContent.modelTurn.parts) {
+                  if (part.thought && part.text) {
+                    emit({ type: "thinking", content: part.text });
+                  } else if (part.text) {
+                    emit({ type: "text", text: part.text });
+                  } else if (part.inlineData) {
+                    emit({
+                      type: "audio",
+                      data: part.inlineData.data,
+                      mimeType: part.inlineData.mimeType,
+                    });
+                  } else if (part.functionCall) {
+                    emit({
+                      type: "toolCall",
+                      functionCalls: [{
+                        id: `live-tc-${crypto.randomUUID()}`,
+                        name: part.functionCall.name,
+                        args: part.functionCall.args || {},
+                      }],
+                    });
+                  }
+                }
+              }
+
+              // Top-level tool calls
+              if (msg.toolCall?.functionCalls) {
+                emit({
+                  type: "toolCall",
+                  functionCalls: msg.toolCall.functionCalls.map((fc) => ({
+                    id: fc.id || `live-tc-${crypto.randomUUID()}`,
+                    name: fc.name,
+                    args: fc.args || {},
+                  })),
+                });
+              }
+
+              // Transcriptions
+              if (msg.serverContent?.inputTranscription?.text) {
+                emit({
+                  type: "inputTranscription",
+                  text: msg.serverContent.inputTranscription.text,
+                });
+              }
+              if (msg.serverContent?.outputTranscription?.text) {
+                emit({
+                  type: "outputTranscription",
+                  text: msg.serverContent.outputTranscription.text,
+                });
+              }
+
+              // Turn complete
+              if (msg.serverContent?.turnComplete) {
+                emit({ type: "turnComplete" });
+              }
+
+              // Interrupted (model was cut off by user speech)
+              if (msg.serverContent?.interrupted) {
+                emit({ type: "interrupted" });
+              }
+
+              // Usage metadata
+              if (msg.usageMetadata) {
+                emit({
+                  type: "usage",
+                  usage: {
+                    inputTokens: msg.usageMetadata.promptTokenCount ?? 0,
+                    outputTokens: msg.usageMetadata.candidatesTokenCount ?? 0,
+                  },
+                });
+              }
+            },
+            onerror: (e) => {
+              const errMsg = e?.error?.message || e?.message || "Live API error";
+              logger.error(`[Live API] Error (${project}/${username}): ${errMsg}`);
+              emit({ type: "error", message: errMsg });
+            },
+            onclose: () => {
+              logger.info(
+                `[Live API] Session closed (project: ${project}, user: ${username})`,
+              );
+              liveSession = null;
+              emit({ type: "sessionClosed" });
+            },
+          },
+        });
+      } catch (err) {
+        logger.error(`[Live API] Failed to connect: ${err.message}`);
+        emit({ type: "error", message: `Failed to connect: ${err.message}` });
+      }
+      return;
+    }
+
+    // ── All other messages require an active session ─────────────
+    if (!liveSession) {
+      emit({ type: "error", message: "No active session. Send a 'setup' message first." });
+      return;
+    }
+
+    // ── Audio input ─────────────────────────────────────────────
+    if (type === "audio") {
+      liveSession.sendRealtimeInput({
+        audio: {
+          data: data.data,
+          mimeType: data.mimeType || "audio/pcm;rate=16000",
+        },
+      });
+      return;
+    }
+
+    // ── Text input ──────────────────────────────────────────────
+    if (type === "text") {
+      liveSession.sendRealtimeInput({ text: data.text });
+      return;
+    }
+
+    // ── Tool response ───────────────────────────────────────────
+    if (type === "toolResponse") {
+      liveSession.sendToolResponse({
+        functionResponses: data.responses,
+      });
+      return;
+    }
+
+    // ── Close session ───────────────────────────────────────────
+    if (type === "close") {
+      try { liveSession.close(); } catch { /* ignore */ }
+      liveSession = null;
+      return;
+    }
+  });
+
+  // Clean up on client disconnect
+  ws.on("close", () => {
+    if (liveSession) {
+      try { liveSession.close(); } catch { /* ignore */ }
+      liveSession = null;
+    }
+    logger.info(
+      `[Live API] Client disconnected (project: ${project}, user: ${username})`,
+    );
   });
 }

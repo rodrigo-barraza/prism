@@ -588,7 +588,7 @@ const MODELS = {
         maxInputTokens: 131_072,
         maxOutputTokens: 65_536,
         inputTypes: [TYPES.TEXT, TYPES.IMAGE, TYPES.AUDIO, TYPES.VIDEO],
-        outputTypes: [TYPES.TEXT],
+        outputTypes: [TYPES.TEXT, TYPES.AUDIO],
         mediaLimits: {
             image: { maxCount: 3000, maxSizeMB: 100 },
             audio: { maxCount: 50, maxSizeMB: 100 },
@@ -596,6 +596,7 @@ const MODELS = {
         },
         streaming: true,
         thinking: true,
+        liveAPI: true,
         webSearch: "Google Search",
         tools: ["Thinking", "Google Search", "Function Calling"],
     },
@@ -995,6 +996,7 @@ function getModelOptions(inputType, outputType) {
             if (m.responsesAPI) entry.responsesAPI = true;
             if (m.size) entry.size = m.size;
             if (m.modelType) entry.modelType = m.modelType;
+            if (m.liveAPI) entry.liveAPI = true;
             if (m.mediaLimits) entry.mediaLimits = m.mediaLimits;
             if (m.year) entry.year = m.year;
             // System prompt support: true for chat models, false for image-only/TTS/embedding APIs
