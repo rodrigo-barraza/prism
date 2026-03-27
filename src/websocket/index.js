@@ -133,10 +133,56 @@ function handleWsVoice(ws, project, username, clientIp) {
  */
 function handleWsLive(ws, project, username, _clientIp) {
   let liveSession = null;
+  /** @type {string[]} Accumulated base64 PCM audio chunks for current turn */
+  let turnAudioChunks = [];
+  let audioSampleRate = 24000;
+  /** Accumulated usage across the current turn */
+  let turnUsage = { inputTokens: 0, outputTokens: 0 };
 
   function emit(event) {
     if (ws.readyState === ws.OPEN) {
       ws.send(JSON.stringify(event));
+    }
+  }
+
+  /**
+   * Build a WAV from accumulated PCM chunks, upload to MinIO, and return the ref.
+   * @returns {Promise<string|null>} MinIO ref or null on failure
+   */
+  async function buildAndUploadAudio() {
+    if (turnAudioChunks.length === 0) return null;
+    try {
+      const pcmBuffers = turnAudioChunks.map((b64) => Buffer.from(b64, "base64"));
+      const pcmData = Buffer.concat(pcmBuffers);
+
+      const numChannels = 1;
+      const bitsPerSample = 16;
+      const byteRate = audioSampleRate * numChannels * (bitsPerSample / 8);
+      const blockAlign = numChannels * (bitsPerSample / 8);
+      const wavHeader = Buffer.alloc(44);
+      wavHeader.write("RIFF", 0);
+      wavHeader.writeUInt32LE(36 + pcmData.length, 4);
+      wavHeader.write("WAVE", 8);
+      wavHeader.write("fmt ", 12);
+      wavHeader.writeUInt32LE(16, 16);
+      wavHeader.writeUInt16LE(1, 20);
+      wavHeader.writeUInt16LE(numChannels, 22);
+      wavHeader.writeUInt32LE(audioSampleRate, 24);
+      wavHeader.writeUInt32LE(byteRate, 28);
+      wavHeader.writeUInt16LE(blockAlign, 32);
+      wavHeader.writeUInt16LE(bitsPerSample, 34);
+      wavHeader.write("data", 36);
+      wavHeader.writeUInt32LE(pcmData.length, 40);
+
+      const wavBuffer = Buffer.concat([wavHeader, pcmData]);
+      const dataUrl = `data:audio/wav;base64,${wavBuffer.toString("base64")}`;
+
+      const FileService = (await import("../services/FileService.js")).default;
+      const { ref } = await FileService.uploadFile(dataUrl, "generations", project, username);
+      return ref;
+    } catch (err) {
+      logger.error(`[Live API] Failed to build/upload WAV: ${err.message}`);
+      return null;
     }
   }
 
@@ -205,6 +251,14 @@ function handleWsLive(ws, project, username, _clientIp) {
                       data: part.inlineData.data,
                       mimeType: part.inlineData.mimeType,
                     });
+                    // Accumulate for WAV building
+                    if (part.inlineData.data) {
+                      turnAudioChunks.push(part.inlineData.data);
+                    }
+                    if (part.inlineData.mimeType) {
+                      const rateMatch = part.inlineData.mimeType.match(/rate=(\d+)/);
+                      if (rateMatch) audioSampleRate = parseInt(rateMatch[1], 10);
+                    }
                   } else if (part.functionCall) {
                     emit({
                       type: "toolCall",
@@ -244,25 +298,39 @@ function handleWsLive(ws, project, username, _clientIp) {
                 });
               }
 
-              // Turn complete
+              // Turn complete — build WAV + upload, then emit with audioRef and usage
               if (msg.serverContent?.turnComplete) {
-                emit({ type: "turnComplete" });
+                buildAndUploadAudio().then((audioRef) => {
+                  emit({
+                    type: "turnComplete",
+                    ...(audioRef ? { audioRef } : {}),
+                    usage: { ...turnUsage },
+                  });
+                  // Reset per-turn accumulators
+                  turnAudioChunks = [];
+                  turnUsage = { inputTokens: 0, outputTokens: 0 };
+                });
+                return; // Don't emit turnComplete synchronously
               }
 
               // Interrupted (model was cut off by user speech)
               if (msg.serverContent?.interrupted) {
-                emit({ type: "interrupted" });
+                buildAndUploadAudio().then((audioRef) => {
+                  emit({
+                    type: "interrupted",
+                    ...(audioRef ? { audioRef } : {}),
+                    usage: { ...turnUsage },
+                  });
+                  turnAudioChunks = [];
+                  turnUsage = { inputTokens: 0, outputTokens: 0 };
+                });
+                return;
               }
 
-              // Usage metadata
+              // Usage metadata — accumulate per turn
               if (msg.usageMetadata) {
-                emit({
-                  type: "usage",
-                  usage: {
-                    inputTokens: msg.usageMetadata.promptTokenCount ?? 0,
-                    outputTokens: msg.usageMetadata.candidatesTokenCount ?? 0,
-                  },
-                });
+                turnUsage.inputTokens += msg.usageMetadata.promptTokenCount ?? 0;
+                turnUsage.outputTokens += msg.usageMetadata.candidatesTokenCount ?? 0;
               }
             },
             onerror: (e) => {
