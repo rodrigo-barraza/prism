@@ -196,7 +196,11 @@ export async function handleChat(params, emit, { signal } = {}) {
     urlContext,
     verbosity,
     reasoningSummary,
-    systemPrompt: _unusedSystemPrompt, // ignored — system prompt is in messages
+    // systemPrompt arrives in two places by design:
+    //  - messages[0] with role:"system" → what the LLM actually sees
+    //  - conversationMeta.systemPrompt → stored as top-level DB field for quick UI access
+    // The top-level param is ignored; only the messages array matters for generation.
+    systemPrompt: _unusedSystemPrompt,
     ...extraParams
   } = params;
 
@@ -1032,7 +1036,7 @@ router.post("/", async (req, res, next) => {
       text: text || null,
       thinking: thinking || null,
       images: images.length > 0 ? images : undefined,
-      messages: req.body.messages,
+      // provider/model echoed back — useful when Prism resolves a default model
       provider: doneEvent.provider || req.body.provider,
       model: doneEvent.model || req.body.model,
       usage: doneEvent.usage || null,
