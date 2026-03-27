@@ -210,7 +210,7 @@ export async function handleChat(params, emit, { signal } = {}) {
     ...(frequencyPenalty !== undefined && { frequencyPenalty }),
     ...(presencePenalty !== undefined && { presencePenalty }),
     ...(stopSequences && { stopSequences }),
-    ...(thinkingEnabled && { thinkingEnabled }),
+    ...(thinkingEnabled !== undefined && { thinkingEnabled }),
     ...(reasoningEffort && { reasoningEffort }),
     ...(thinkingLevel && { thinkingLevel }),
     ...(thinkingBudget && { thinkingBudget }),
@@ -222,6 +222,11 @@ export async function handleChat(params, emit, { signal } = {}) {
     ...(reasoningSummary && { reasoningSummary }),
     ...(extraParams.systemPrompt && { systemPrompt: extraParams.systemPrompt }),
   };
+
+  // LM Studio models inherently produce thinking tokens — always enable
+  if (providerName === "lm-studio") {
+    options.thinkingEnabled = true;
+  }
 
   // Derive userMessage from the last user message in the messages array
   const userMessage = messages?.filter((m) => m.role === "user").pop() || null;

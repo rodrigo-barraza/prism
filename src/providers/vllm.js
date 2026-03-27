@@ -69,7 +69,9 @@ const vllmProvider = {
             const data = await response.json();
             const message = data.choices?.[0]?.message;
             const text = message?.content || "";
-            const thinking = message?.reasoning || message?.reasoning_content || null;
+            const thinking = options.thinkingEnabled
+                ? (message?.reasoning || message?.reasoning_content || null)
+                : null;
             return {
                 text,
                 thinking,
@@ -154,7 +156,7 @@ const vllmProvider = {
 
                         const delta = json.choices?.[0]?.delta;
                         const reasoning = delta?.reasoning || delta?.reasoning_content || "";
-                        if (reasoning) {
+                        if (reasoning && options.thinkingEnabled) {
                             yield { type: "thinking", content: reasoning };
                         }
 

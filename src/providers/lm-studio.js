@@ -1,3 +1,11 @@
+// ─────────────────────────────────────────────────────────────
+// NOTE: LM Studio models have thinking ALWAYS ON by default.
+// The thinkingEnabled toggle is ignored for this provider —
+// <think> tags and native reasoning_content fields are always
+// parsed and emitted. chat.js forces thinkingEnabled=true for
+// lm-studio, and the Retina UI shows the toggle as locked.
+// ─────────────────────────────────────────────────────────────
+
 import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
 import { LM_STUDIO_BASE_URL } from "../../secrets.js";
