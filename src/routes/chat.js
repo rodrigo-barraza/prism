@@ -459,7 +459,11 @@ async function handleImageAPIModel(ctx) {
   // Auto-append to conversation
   if (conversationId) {
     const messagesToAppend = [];
-    if (userMessage) {
+    // Only append the user message on the first call for this turn
+    // (indicated by conversationMeta). Follow-up tool iterations reuse
+    // the same conversationId but omit conversationMeta, so the user
+    // message is already persisted from the first call.
+    if (userMessage && conversationMeta) {
       messagesToAppend.push({
         role: "user",
         ...userMessage,
@@ -736,7 +740,11 @@ async function handleStreamingText(ctx) {
   // Auto-append to conversation (always, regardless of usage availability)
   if (conversationId) {
     const messagesToAppend = [];
-    if (userMessage) {
+    // Only append the user message on the first call for this turn
+    // (indicated by conversationMeta). Follow-up tool iterations reuse
+    // the same conversationId but omit conversationMeta, so the user
+    // message is already persisted from the first call.
+    if (userMessage && conversationMeta) {
       messagesToAppend.push({
         role: "user",
         ...userMessage,
@@ -880,7 +888,11 @@ async function handleNonStreamingText(ctx) {
   // Auto-append to conversation
   if (conversationId) {
     const messagesToAppend = [];
-    if (userMessage) {
+    // Only append the user message on the first call for this turn
+    // (indicated by conversationMeta). Follow-up tool iterations reuse
+    // the same conversationId but omit conversationMeta, so the user
+    // message is already persisted from the first call.
+    if (userMessage && conversationMeta) {
       messagesToAppend.push({
         role: "user",
         ...userMessage,
