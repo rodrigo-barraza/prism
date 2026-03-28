@@ -11,13 +11,13 @@ import { setupWebSocket } from "./websocket/index.js";
 import { authMiddleware } from "./middleware/AuthMiddleware.js";
 import { requestLoggerMiddleware } from "./middleware/RequestLoggerMiddleware.js";
 import {
-    PORT,
-    MONGO_URI,
-    MONGO_DB_NAME,
-    MINIO_ENDPOINT,
-    MINIO_ACCESS_KEY,
-    MINIO_SECRET_KEY,
-    MINIO_BUCKET_NAME,
+  PORT,
+  MONGO_URI,
+  MONGO_DB_NAME,
+  MINIO_ENDPOINT,
+  MINIO_ACCESS_KEY,
+  MINIO_SECRET_KEY,
+  MINIO_BUCKET_NAME,
 } from "../secrets.js";
 import MongoWrapper from "./wrappers/MongoWrapper.js";
 import MinioWrapper from "./wrappers/MinioWrapper.js";
@@ -49,34 +49,34 @@ app.use(requestLoggerMiddleware);
 
 // Endpoint registry (single source of truth for health check + startup logs)
 const ENDPOINTS = {
-    rest: [
-        "/config",
-        "/chat",
-        "/text-to-audio",
-        "/audio-to-text",
-        "/embed",
-        "/conversations",
-        "/memory",
-        "/files",
-        "/workflows",
-        "/media",
-        "/text",
-        "/lm-studio",
-        "/custom-tools",
-        "/favorites",
-    ],
-    websocket: ["/ws/chat", "/ws/text-to-audio"],
-    admin: ["/admin", "/admin/lm-studio"],
+  rest: [
+    "/config",
+    "/chat",
+    "/text-to-audio",
+    "/audio-to-text",
+    "/embed",
+    "/conversations",
+    "/memory",
+    "/files",
+    "/workflows",
+    "/media",
+    "/text",
+    "/lm-studio",
+    "/custom-tools",
+    "/favorites",
+  ],
+  websocket: ["/ws/chat", "/ws/text-to-audio"],
+  admin: ["/admin", "/admin/lm-studio"],
 };
 
 // Health check (public — no auth required)
 app.get("/", (_req, res) => {
-    res.json({
-        name: "Prism the AI Gateway",
-        version: "1.0.0",
-        providers: listProviders(),
-        endpoints: ENDPOINTS,
-    });
+  res.json({
+    name: "Prism the AI Gateway",
+    version: "1.0.0",
+    providers: listProviders(),
+    endpoints: ENDPOINTS,
+  });
 });
 
 // Admin routes
@@ -112,72 +112,67 @@ setupWebSocket(wss);
 
 // Start
 (async () => {
-    await MongoWrapper.createClient(MONGO_DB_NAME, MONGO_URI);
-    await MemoryService.ensureIndexes();
+  await MongoWrapper.createClient(MONGO_DB_NAME, MONGO_URI);
+  await MemoryService.ensureIndexes();
 
-    // Clear any stale isGenerating flags left over from a previous crash/restart
-    try {
-        const db = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
-        if (db) {
-            const { modifiedCount } = await db
-                .collection("conversations")
-                .updateMany(
-                    { isGenerating: true },
-                    { $set: { isGenerating: false } },
-                );
-            if (modifiedCount > 0) {
-                logger.info(
-                    `Cleared ${modifiedCount} stale isGenerating flag(s)`,
-                );
-            }
-        }
-    } catch (err) {
-        logger.error(`Failed to clear stale isGenerating flags: ${err.message}`);
+  // Clear any stale isGenerating flags left over from a previous crash/restart
+  try {
+    const db = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
+    if (db) {
+      const { modifiedCount } = await db
+        .collection("conversations")
+        .updateMany({ isGenerating: true }, { $set: { isGenerating: false } });
+      if (modifiedCount > 0) {
+        logger.info(`Cleared ${modifiedCount} stale isGenerating flag(s)`);
+      }
     }
+  } catch (err) {
+    logger.error(`Failed to clear stale isGenerating flags: ${err.message}`);
+  }
 
-    // Initialize MinIO if all secrets are configured
-    if (
-        MINIO_ENDPOINT &&
-        MINIO_ACCESS_KEY &&
-        MINIO_SECRET_KEY &&
-        MINIO_BUCKET_NAME
-    ) {
-        await MinioWrapper.init(
-            MINIO_ENDPOINT,
-            MINIO_ACCESS_KEY,
-            MINIO_SECRET_KEY,
-            MINIO_BUCKET_NAME,
-        );
-    } else {
-        logger.info(
-            "MinIO not configured — files will be stored inline in MongoDB",
-        );
-    }
+  // Initialize MinIO if all secrets are configured
+  if (
+    MINIO_ENDPOINT &&
+    MINIO_ACCESS_KEY &&
+    MINIO_SECRET_KEY &&
+    MINIO_BUCKET_NAME
+  ) {
+    await MinioWrapper.init(
+      MINIO_ENDPOINT,
+      MINIO_ACCESS_KEY,
+      MINIO_SECRET_KEY,
+      MINIO_BUCKET_NAME,
+    );
+  } else {
+    logger.info(
+      "MinIO not configured — files will be stored inline in MongoDB",
+    );
+  }
 
-    server.listen(PORT, () => {
-        logger.success(`Prism the AI Gateway is running on port ${PORT}`);
-        logger.info("Available providers:", listProviders().join(", "));
-        // Modality colors matching Retina's MODALITY_COLORS
-        const MODALITY_COLORS = {
-            text: [99, 102, 241],       // #6366f1 — indigo
-            image: [16, 185, 129],      // #10b981 — emerald
-            audio: [245, 158, 11],      // #f59e0b — amber
-            video: [244, 63, 94],       // #f43f5e — rose
-            pdf: [100, 116, 139],       // #64748b — slate
-            embedding: [6, 182, 212],   // #06b6d4 — cyan
-        };
-        const coloredModalities = Object.values(TYPES)
-            .map((t) => {
-                const [r, g, b] = MODALITY_COLORS[t] || [255, 255, 255];
-                return `\x1b[38;2;${r};${g};${b}m${t}\x1b[0m`;
-            })
-            .join(", ");
-        logger.info("Available modalities:", coloredModalities);
-        ENDPOINTS.rest.forEach((ep) =>
-            logger.info(`  REST  →  http://localhost:${PORT}${ep}`),
-        );
-        ENDPOINTS.websocket.forEach((ep) =>
-            logger.info(`  WS    →  ws://localhost:${PORT}${ep}`),
-        );
-    });
+  server.listen(PORT, () => {
+    logger.success(`Prism the AI Gateway is running on port ${PORT}`);
+    logger.info("Available providers:", listProviders().join(", "));
+    // Modality colors matching Retina's MODALITY_COLORS
+    const MODALITY_COLORS = {
+      text: [99, 102, 241], // #6366f1 — indigo
+      image: [16, 185, 129], // #10b981 — emerald
+      audio: [245, 158, 11], // #f59e0b — amber
+      video: [244, 63, 94], // #f43f5e — rose
+      pdf: [100, 116, 139], // #64748b — slate
+      embedding: [6, 182, 212], // #06b6d4 — cyan
+    };
+    const coloredModalities = Object.values(TYPES)
+      .map((t) => {
+        const [r, g, b] = MODALITY_COLORS[t] || [255, 255, 255];
+        return `\x1b[38;2;${r};${g};${b}m${t}\x1b[0m`;
+      })
+      .join(", ");
+    logger.info("Available modalities:", coloredModalities);
+    ENDPOINTS.rest.forEach((ep) =>
+      logger.info(`  REST  →  http://localhost:${PORT}${ep}`),
+    );
+    ENDPOINTS.websocket.forEach((ep) =>
+      logger.info(`  WS    →  ws://localhost:${PORT}${ep}`),
+    );
+  });
 })();

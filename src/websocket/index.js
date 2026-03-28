@@ -1,6 +1,11 @@
 import { handleChat } from "../routes/chat.js";
 import { handleVoice } from "../routes/audio.js";
-import { GoogleGenAI, Modality, StartSensitivity, EndSensitivity } from "@google/genai";
+import {
+  GoogleGenAI,
+  Modality,
+  StartSensitivity,
+  EndSensitivity,
+} from "@google/genai";
 import { GOOGLE_API_KEY } from "../../secrets.js";
 import crypto from "crypto";
 import logger from "../utils/logger.js";
@@ -26,7 +31,8 @@ export function setupWebSocket(wss) {
       url.searchParams.get("username") ||
       "unknown";
     const clientIp =
-      req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress;
+      req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
+      req.socket.remoteAddress;
     logger.info(
       `WebSocket connection on ${pathname} (project: ${project}, user: ${username})`,
     );
@@ -62,14 +68,11 @@ function handleWsChat(ws, project, username, clientIp) {
       return;
     }
 
-    await handleChat(
-      { ...data, project, username, clientIp },
-      (event) => {
-        if (ws.readyState === ws.OPEN) {
-          ws.send(JSON.stringify(event));
-        }
-      },
-    );
+    await handleChat({ ...data, project, username, clientIp }, (event) => {
+      if (ws.readyState === ws.OPEN) {
+        ws.send(JSON.stringify(event));
+      }
+    });
   });
 }
 
@@ -154,7 +157,9 @@ function handleWsLive(ws, project, username, _clientIp) {
   async function buildAndUploadAudio() {
     if (turnAudioChunks.length === 0) return null;
     try {
-      const pcmBuffers = turnAudioChunks.map((b64) => Buffer.from(b64, "base64"));
+      const pcmBuffers = turnAudioChunks.map((b64) =>
+        Buffer.from(b64, "base64"),
+      );
       const pcmData = Buffer.concat(pcmBuffers);
 
       const numChannels = 1;
@@ -180,7 +185,12 @@ function handleWsLive(ws, project, username, _clientIp) {
       const dataUrl = `data:audio/wav;base64,${wavBuffer.toString("base64")}`;
 
       const FileService = (await import("../services/FileService.js")).default;
-      const { ref } = await FileService.uploadFile(dataUrl, "generations", project, username);
+      const { ref } = await FileService.uploadFile(
+        dataUrl,
+        "generations",
+        project,
+        username,
+      );
       return ref;
     } catch (err) {
       logger.error(`[Live API] Failed to build/upload WAV: ${err.message}`);
@@ -202,7 +212,11 @@ function handleWsLive(ws, project, username, _clientIp) {
     // ── Setup: create a new Live API session ────────────────────
     if (type === "setup") {
       if (liveSession) {
-        try { liveSession.close(); } catch { /* ignore */ }
+        try {
+          liveSession.close();
+        } catch {
+          /* ignore */
+        }
         liveSession = null;
       }
 
@@ -278,17 +292,21 @@ function handleWsLive(ws, project, username, _clientIp) {
                       turnAudioChunks.push(part.inlineData.data);
                     }
                     if (part.inlineData.mimeType) {
-                      const rateMatch = part.inlineData.mimeType.match(/rate=(\d+)/);
-                      if (rateMatch) audioSampleRate = parseInt(rateMatch[1], 10);
+                      const rateMatch =
+                        part.inlineData.mimeType.match(/rate=(\d+)/);
+                      if (rateMatch)
+                        audioSampleRate = parseInt(rateMatch[1], 10);
                     }
                   } else if (part.functionCall) {
                     emit({
                       type: "toolCall",
-                      functionCalls: [{
-                        id: `live-tc-${crypto.randomUUID()}`,
-                        name: part.functionCall.name,
-                        args: part.functionCall.args || {},
-                      }],
+                      functionCalls: [
+                        {
+                          id: `live-tc-${crypto.randomUUID()}`,
+                          name: part.functionCall.name,
+                          args: part.functionCall.args || {},
+                        },
+                      ],
                     });
                   }
                 }
@@ -324,7 +342,10 @@ function handleWsLive(ws, project, username, _clientIp) {
               if (msg.serverContent?.turnComplete) {
                 buildAndUploadAudio().then((audioRef) => {
                   const modelDef = getModelByName(model);
-                  const estimatedCost = calculateLiveCost(turnUsage, modelDef?.pricing);
+                  const estimatedCost = calculateLiveCost(
+                    turnUsage,
+                    modelDef?.pricing,
+                  );
                   emit({
                     type: "turnComplete",
                     ...(audioRef ? { audioRef } : {}),
@@ -342,7 +363,10 @@ function handleWsLive(ws, project, username, _clientIp) {
               if (msg.serverContent?.interrupted) {
                 buildAndUploadAudio().then((audioRef) => {
                   const modelDef = getModelByName(model);
-                  const estimatedCost = calculateLiveCost(turnUsage, modelDef?.pricing);
+                  const estimatedCost = calculateLiveCost(
+                    turnUsage,
+                    modelDef?.pricing,
+                  );
                   emit({
                     type: "interrupted",
                     ...(audioRef ? { audioRef } : {}),
@@ -357,13 +381,18 @@ function handleWsLive(ws, project, username, _clientIp) {
 
               // Usage metadata — accumulate per turn
               if (msg.usageMetadata) {
-                turnUsage.inputTokens += msg.usageMetadata.promptTokenCount ?? 0;
-                turnUsage.outputTokens += msg.usageMetadata.candidatesTokenCount ?? 0;
+                turnUsage.inputTokens +=
+                  msg.usageMetadata.promptTokenCount ?? 0;
+                turnUsage.outputTokens +=
+                  msg.usageMetadata.candidatesTokenCount ?? 0;
               }
             },
             onerror: (e) => {
-              const errMsg = e?.error?.message || e?.message || "Live API error";
-              logger.error(`[Live API] Error (${project}/${username}): ${errMsg}`);
+              const errMsg =
+                e?.error?.message || e?.message || "Live API error";
+              logger.error(
+                `[Live API] Error (${project}/${username}): ${errMsg}`,
+              );
               emit({ type: "error", message: errMsg });
             },
             onclose: () => {
@@ -384,7 +413,10 @@ function handleWsLive(ws, project, username, _clientIp) {
 
     // ── All other messages require an active session ─────────────
     if (!liveSession) {
-      emit({ type: "error", message: "No active session. Send a 'setup' message first." });
+      emit({
+        type: "error",
+        message: "No active session. Send a 'setup' message first.",
+      });
       return;
     }
 
@@ -421,7 +453,11 @@ function handleWsLive(ws, project, username, _clientIp) {
 
     // ── Close session ───────────────────────────────────────────
     if (type === "close") {
-      try { liveSession.close(); } catch { /* ignore */ }
+      try {
+        liveSession.close();
+      } catch {
+        /* ignore */
+      }
       liveSession = null;
       return;
     }
@@ -430,7 +466,11 @@ function handleWsLive(ws, project, username, _clientIp) {
   // Clean up on client disconnect
   ws.on("close", () => {
     if (liveSession) {
-      try { liveSession.close(); } catch { /* ignore */ }
+      try {
+        liveSession.close();
+      } catch {
+        /* ignore */
+      }
       liveSession = null;
     }
     logger.info(

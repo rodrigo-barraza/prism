@@ -33,7 +33,10 @@ export function requestLoggerMiddleware(req, res, next) {
       username = segments[4]?.split("?")[0] || null;
     }
   }
-  const clientIp = req.clientIp || req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.ip;
+  const clientIp =
+    req.clientIp ||
+    req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
+    req.ip;
 
   // Log on response finish
   res.on("finish", () => {
@@ -53,9 +56,10 @@ export function requestLoggerMiddleware(req, res, next) {
     const status = res.statusCode;
 
     // Format timing
-    const time = elapsed >= 1000
-      ? `${(elapsed / 1000).toFixed(2)}s`
-      : `${Math.round(elapsed)}ms`;
+    const time =
+      elapsed >= 1000
+        ? `${(elapsed / 1000).toFixed(2)}s`
+        : `${Math.round(elapsed)}ms`;
 
     // Request / response sizes (from headers — zero-cost)
     const inBytes = parseInt(req.headers["content-length"] || "0", 10);
@@ -63,7 +67,12 @@ export function requestLoggerMiddleware(req, res, next) {
     const totalBytes = inBytes + outBytes;
     const sizeTag = `(in: ${formatBytes(inBytes)}, out: ${formatBytes(outBytes)}, total: ${formatBytes(totalBytes)})`;
 
-    logger.request(finalProject, finalUsername, finalIp, `${method} ${path} ${status} — ${time} ${sizeTag}`);
+    logger.request(
+      finalProject,
+      finalUsername,
+      finalIp,
+      `${method} ${path} ${status} — ${time} ${sizeTag}`,
+    );
   });
 
   // Run the rest of the middleware chain inside AsyncLocalStorage context

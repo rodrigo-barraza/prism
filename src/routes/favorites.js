@@ -100,7 +100,9 @@ router.delete("/", async (req, res, next) => {
     const { type, key } = req.query;
 
     if (!type || !key) {
-      return res.status(400).json({ error: "type and key query params are required" });
+      return res
+        .status(400)
+        .json({ error: "type and key query params are required" });
     }
 
     const result = await client

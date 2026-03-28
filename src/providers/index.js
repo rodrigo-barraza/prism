@@ -8,27 +8,27 @@ import vllmProvider from "./vllm.js";
 import ollamaProvider from "./ollama.js";
 
 const providers = {
-    openai: openaiProvider,
-    anthropic: anthropicProvider,
-    google: googleProvider,
-    elevenlabs: elevenlabsProvider,
-    inworld: inworldProvider,
-    "lm-studio": lmStudioProvider,
-    vllm: vllmProvider,
-    ollama: ollamaProvider,
+  openai: openaiProvider,
+  anthropic: anthropicProvider,
+  google: googleProvider,
+  elevenlabs: elevenlabsProvider,
+  inworld: inworldProvider,
+  "lm-studio": lmStudioProvider,
+  vllm: vllmProvider,
+  ollama: ollamaProvider,
 };
 
 export function getProvider(name) {
-    const provider = providers[name];
-    if (!provider) {
-        const available = Object.keys(providers).join(", ");
-        throw new Error(`Unknown provider "${name}". Available: ${available}`);
-    }
-    return provider;
+  const provider = providers[name];
+  if (!provider) {
+    const available = Object.keys(providers).join(", ");
+    throw new Error(`Unknown provider "${name}". Available: ${available}`);
+  }
+  return provider;
 }
 
 export function listProviders() {
-    return Object.keys(providers);
+  return Object.keys(providers);
 }
 
 export { providers };

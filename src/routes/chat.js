@@ -76,7 +76,10 @@ async function resolveMediaRef(ref, project, username) {
     let storageRef = ref;
     try {
       const { ref: minioRef } = await FileService.uploadFile(
-        ref, "uploads", project, username,
+        ref,
+        "uploads",
+        project,
+        username,
       );
       storageRef = minioRef;
     } catch (err) {
@@ -115,10 +118,13 @@ async function resolveMediaRef(ref, project, username) {
     try {
       const response = await fetch(ref);
       if (!response.ok) {
-        logger.warn(`[chat] Failed to fetch media URL (${response.status}): ${ref}`);
+        logger.warn(
+          `[chat] Failed to fetch media URL (${response.status}): ${ref}`,
+        );
         return { providerRef: ref, storageRef: ref };
       }
-      const contentType = response.headers.get("content-type") || "application/octet-stream";
+      const contentType =
+        response.headers.get("content-type") || "application/octet-stream";
       const arrayBuffer = await response.arrayBuffer();
       const base64 = Buffer.from(arrayBuffer).toString("base64");
       return {
@@ -213,7 +219,8 @@ export async function handleChat(params, emit, { signal } = {}) {
   if (!conversationId) {
     conversationId = crypto.randomUUID();
     const firstUserMsg = messages?.filter((m) => m.role === "user").pop();
-    const titleSnippet = (firstUserMsg?.content || "").slice(0, 100).trim() || "New Conversation";
+    const titleSnippet =
+      (firstUserMsg?.content || "").slice(0, 100).trim() || "New Conversation";
     conversationMeta = conversationMeta || { title: titleSnippet };
   }
 
@@ -275,12 +282,17 @@ export async function handleChat(params, emit, { signal } = {}) {
     // ── Resolve image refs ─────────────────────────────────────
     // providerMessages has data URLs (for API calls)
     // messages is mutated to have minio refs (for conversation storage)
-    const providerMessages = await resolveImageRefs(activeMessages, project, username);
+    const providerMessages = await resolveImageRefs(
+      activeMessages,
+      project,
+      username,
+    );
 
     const provider = getProvider(providerName);
 
     // ── Resolve model and determine dispatch path ───────────────
-    resolvedModel = requestedModel || getDefaultModels(TYPES.TEXT, TYPES.TEXT)[providerName];
+    resolvedModel =
+      requestedModel || getDefaultModels(TYPES.TEXT, TYPES.TEXT)[providerName];
     const modelDef = getModelByName(resolvedModel);
 
     // Determine what kind of generation to perform:
@@ -359,8 +371,14 @@ export async function handleChat(params, emit, { signal } = {}) {
   } catch (error) {
     // Clear generating flag on error
     if (conversationId) {
-      ConversationService.setGenerating(conversationId, project, username, false)
-        .catch((err) => logger.error(`Failed to clear isGenerating on error: ${err.message}`));
+      ConversationService.setGenerating(
+        conversationId,
+        project,
+        username,
+        false,
+      ).catch((err) =>
+        logger.error(`Failed to clear isGenerating on error: ${err.message}`),
+      );
     }
     const totalSec = (performance.now() - requestStart) / 1000;
     RequestLogger.log({
@@ -386,15 +404,33 @@ export async function handleChat(params, emit, { signal } = {}) {
 
 async function handleImageAPIModel(ctx) {
   const {
-    provider, providerName, resolvedModel, modelDef, messages, options,
-    conversationId, userMessage, conversationMeta, project, username, clientIp,
-    requestId, requestStart, emit,
+    provider,
+    providerName,
+    resolvedModel,
+    modelDef,
+    messages,
+    options,
+    conversationId,
+    userMessage,
+    conversationMeta,
+    project,
+    username,
+    clientIp,
+    requestId,
+    requestStart,
+    emit,
   } = ctx;
 
   // Mark conversation as generating
   if (conversationId) {
-    ConversationService.setGenerating(conversationId, project, username, true)
-      .catch((err) => logger.error(`Failed to set isGenerating: ${err.message}`));
+    ConversationService.setGenerating(
+      conversationId,
+      project,
+      username,
+      true,
+    ).catch((err) =>
+      logger.error(`Failed to set isGenerating: ${err.message}`),
+    );
   }
   const lastUserMsg = messages.filter((m) => m.role === "user").pop();
   const prompt = lastUserMsg?.content || "";
@@ -416,18 +452,23 @@ async function handleImageAPIModel(ctx) {
   const totalSec = (performance.now() - requestStart) / 1000;
 
   // Cost calculation
-  const imgPricing = getPricing(TYPES.TEXT, TYPES.IMAGE)[resolvedModel]
-    || modelDef?.pricing;
+  const imgPricing =
+    getPricing(TYPES.TEXT, TYPES.IMAGE)[resolvedModel] || modelDef?.pricing;
   const outputImgTokens = providerName === "openai" ? 1056 : 258;
   const estimatedCost = calculateImageCost(
-    prompt, imgPricing, allImages.length, outputImgTokens,
+    prompt,
+    imgPricing,
+    allImages.length,
+    outputImgTokens,
   );
 
   logger.request(
-    project, username, clientIp,
+    project,
+    username,
+    clientIp,
     `[chat/image-api] ${providerName} ${resolvedModel} — ` +
-    `total: ${totalSec.toFixed(2)}s` +
-    (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
+      `total: ${totalSec.toFixed(2)}s` +
+      (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
   );
 
   // Upload generated image to MinIO
@@ -437,17 +478,22 @@ async function handleImageAPIModel(ctx) {
       const mimeType = result.mimeType || "image/png";
       const dataUrl = `data:${mimeType};base64,${result.imageData}`;
       const { ref } = await FileService.uploadFile(
-        dataUrl, "generations", project, username,
+        dataUrl,
+        "generations",
+        project,
+        username,
       );
       minioRef = ref;
     } catch (uploadErr) {
-      logger.error(`[chat/image-api] MinIO upload failed: ${uploadErr.message}`);
+      logger.error(
+        `[chat/image-api] MinIO upload failed: ${uploadErr.message}`,
+      );
     }
   }
 
   // Estimate token counts for tracking
-  const estimatedInputTokens = Math.ceil(prompt.length / 4) +
-    allImages.length * 258;
+  const estimatedInputTokens =
+    Math.ceil(prompt.length / 4) + allImages.length * 258;
 
   RequestLogger.log({
     requestId,
@@ -512,18 +558,32 @@ async function handleImageAPIModel(ctx) {
     });
 
     const meta = conversationMeta
-      ? { ...conversationMeta, settings: { provider: providerName, model: resolvedModel } }
+      ? {
+          ...conversationMeta,
+          settings: { provider: providerName, model: resolvedModel },
+        }
       : undefined;
 
     ConversationService.appendMessages(
-      conversationId, project, username, messagesToAppend, meta,
-    ).then(() =>
-      ConversationService.setGenerating(conversationId, project, username, false),
-    ).catch((err) =>
-      logger.error(
-        `Failed to append messages to conversation ${conversationId}: ${err.message}`,
-      ),
-    );
+      conversationId,
+      project,
+      username,
+      messagesToAppend,
+      meta,
+    )
+      .then(() =>
+        ConversationService.setGenerating(
+          conversationId,
+          project,
+          username,
+          false,
+        ),
+      )
+      .catch((err) =>
+        logger.error(
+          `Failed to append messages to conversation ${conversationId}: ${err.message}`,
+        ),
+      );
   }
 }
 
@@ -533,20 +593,46 @@ async function handleImageAPIModel(ctx) {
 
 async function handleStreamingText(ctx) {
   const {
-    provider, providerName, resolvedModel, modelDef, messages, options,
-    conversationId, userMessage, conversationMeta, project, username, clientIp,
-    requestId, requestStart, emit, signal,
+    provider,
+    providerName,
+    resolvedModel,
+    modelDef,
+    messages,
+    options,
+    conversationId,
+    userMessage,
+    conversationMeta,
+    project,
+    username,
+    clientIp,
+    requestId,
+    requestStart,
+    emit,
+    signal,
   } = ctx;
 
   // Mark conversation as generating
   if (conversationId) {
-    ConversationService.setGenerating(conversationId, project, username, true)
-      .catch((err) => logger.error(`Failed to set isGenerating: ${err.message}`));
+    ConversationService.setGenerating(
+      conversationId,
+      project,
+      username,
+      true,
+    ).catch((err) =>
+      logger.error(`Failed to set isGenerating: ${err.message}`),
+    );
   }
 
-  const stream = modelDef?.liveAPI && provider.generateTextStreamLive
-    ? provider.generateTextStreamLive(messages, resolvedModel, { ...options, signal })
-    : provider.generateTextStream(messages, resolvedModel, { ...options, signal });
+  const stream =
+    modelDef?.liveAPI && provider.generateTextStreamLive
+      ? provider.generateTextStreamLive(messages, resolvedModel, {
+          ...options,
+          signal,
+        })
+      : provider.generateTextStream(messages, resolvedModel, {
+          ...options,
+          signal,
+        });
   let usage = null;
   let firstOutputTime = null;
   let firstTokenTime = null;
@@ -564,7 +650,9 @@ async function handleStreamingText(ctx) {
     // Client disconnected — abort the upstream provider stream
     if (signal?.aborted) {
       if (typeof stream.return === "function") stream.return();
-      logger.info(`[chat] Client disconnected, aborting stream for ${providerName} ${resolvedModel}`);
+      logger.info(
+        `[chat] Client disconnected, aborting stream for ${providerName} ${resolvedModel}`,
+      );
       break;
     }
     // Usage object (final item from provider)
@@ -589,14 +677,20 @@ async function handleStreamingText(ctx) {
           const mimeType = chunk.mimeType || "image/png";
           const dataUrl = `data:${mimeType};base64,${chunk.data}`;
           const { ref } = await FileService.uploadFile(
-            dataUrl, "generations", project, username,
+            dataUrl,
+            "generations",
+            project,
+            username,
           );
           minioRef = ref;
         } catch (uploadErr) {
-          logger.error(`[chat/stream] MinIO upload failed: ${uploadErr.message}`);
+          logger.error(
+            `[chat/stream] MinIO upload failed: ${uploadErr.message}`,
+          );
         }
         streamedImages.push(
-          minioRef || `data:${chunk.mimeType || "image/png"};base64,${chunk.data}`,
+          minioRef ||
+            `data:${chunk.mimeType || "image/png"};base64,${chunk.data}`,
         );
       }
       emit({
@@ -616,7 +710,11 @@ async function handleStreamingText(ctx) {
       });
       continue;
     }
-    if (chunk && typeof chunk === "object" && chunk.type === "codeExecutionResult") {
+    if (
+      chunk &&
+      typeof chunk === "object" &&
+      chunk.type === "codeExecutionResult"
+    ) {
       emit({
         type: "codeExecutionResult",
         output: chunk.output,
@@ -625,7 +723,11 @@ async function handleStreamingText(ctx) {
       continue;
     }
     // Web search result chunks
-    if (chunk && typeof chunk === "object" && chunk.type === "webSearchResult") {
+    if (
+      chunk &&
+      typeof chunk === "object" &&
+      chunk.type === "webSearchResult"
+    ) {
       emit({ type: "webSearchResult", results: chunk.results });
       continue;
     }
@@ -693,15 +795,20 @@ async function handleStreamingText(ctx) {
   if (usage) {
     const imageCount = streamedImages.length;
     if (imageCount > 0) {
-      const imgPricing = getPricing(TYPES.TEXT, TYPES.IMAGE)[resolvedModel]
-        || modelDef?.pricing;
+      const imgPricing =
+        getPricing(TYPES.TEXT, TYPES.IMAGE)[resolvedModel] || modelDef?.pricing;
       if (imgPricing?.imageOutputPerMillion) {
         const imageTokens = imageCount * 258;
         const textOutputTokens = Math.max(0, usage.outputTokens - imageTokens);
-        const inputCost = (usage.inputTokens / 1_000_000) * (imgPricing.inputPerMillion || 0);
-        const textOutCost = (textOutputTokens / 1_000_000) * (imgPricing.outputPerMillion || 0);
-        const imageOutCost = (imageTokens / 1_000_000) * imgPricing.imageOutputPerMillion;
-        estimatedCost = parseFloat((inputCost + textOutCost + imageOutCost).toFixed(8));
+        const inputCost =
+          (usage.inputTokens / 1_000_000) * (imgPricing.inputPerMillion || 0);
+        const textOutCost =
+          (textOutputTokens / 1_000_000) * (imgPricing.outputPerMillion || 0);
+        const imageOutCost =
+          (imageTokens / 1_000_000) * imgPricing.imageOutputPerMillion;
+        estimatedCost = parseFloat(
+          (inputCost + textOutCost + imageOutCost).toFixed(8),
+        );
       } else {
         const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[resolvedModel];
         estimatedCost = calculateTextCost(usage, pricing);
@@ -711,9 +818,8 @@ async function handleStreamingText(ctx) {
       estimatedCost = calculateTextCost(usage, pricing);
     }
 
-    const effectiveGenSec = (generationSec && generationSec > 0.001)
-      ? generationSec
-      : totalSec;
+    const effectiveGenSec =
+      generationSec && generationSec > 0.001 ? generationSec : totalSec;
 
     tokensPerSec = usage.tokensPerSec
       ? parseFloat(usage.tokensPerSec.toFixed(1))
@@ -731,17 +837,20 @@ async function handleStreamingText(ctx) {
   // ── Always log — even when usage is unavailable ─────────────
   const inputTokens = usage?.inputTokens || 0;
   const outputTokens = usage?.outputTokens || 0;
-  const tokensPerSecStr = tokensPerSec !== null ? tokensPerSec.toFixed(1) : "N/A";
+  const tokensPerSecStr =
+    tokensPerSec !== null ? tokensPerSec.toFixed(1) : "N/A";
 
   logger.request(
-    project, username, clientIp,
+    project,
+    username,
+    clientIp,
     `[chat] ${providerName} ${resolvedModel} — ` +
-    `in: ${inputTokens} tokens, out: ${outputTokens} tokens, ` +
-    `speed: ${tokensPerSecStr} tok/s, ` +
-    `ttg: ${timeToGenerationSec !== null ? timeToGenerationSec.toFixed(2) + "s" : "N/A"}, ` +
-    `generation: ${generationSec !== null ? generationSec.toFixed(2) + "s" : "N/A"}, ` +
-    `total: ${totalSec.toFixed(2)}s` +
-    (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
+      `in: ${inputTokens} tokens, out: ${outputTokens} tokens, ` +
+      `speed: ${tokensPerSecStr} tok/s, ` +
+      `ttg: ${timeToGenerationSec !== null ? timeToGenerationSec.toFixed(2) + "s" : "N/A"}, ` +
+      `generation: ${generationSec !== null ? generationSec.toFixed(2) + "s" : "N/A"}, ` +
+      `total: ${totalSec.toFixed(2)}s` +
+      (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
   );
 
   RequestLogger.log({
@@ -772,9 +881,7 @@ async function handleStreamingText(ctx) {
         ? parseFloat(timeToGenerationSec.toFixed(3))
         : null,
     generationTime:
-      generationSec !== null
-        ? parseFloat(generationSec.toFixed(3))
-        : null,
+      generationSec !== null ? parseFloat(generationSec.toFixed(3)) : null,
     totalTime: parseFloat(totalSec.toFixed(3)),
   });
 
@@ -783,7 +890,9 @@ async function handleStreamingText(ctx) {
   if (streamedAudioChunks.length > 0) {
     try {
       // Concatenate all base64 PCM chunks → single Buffer
-      const pcmBuffers = streamedAudioChunks.map((b64) => Buffer.from(b64, "base64"));
+      const pcmBuffers = streamedAudioChunks.map((b64) =>
+        Buffer.from(b64, "base64"),
+      );
       const pcmData = Buffer.concat(pcmBuffers);
 
       // Build WAV header (44 bytes)
@@ -797,7 +906,7 @@ async function handleStreamingText(ctx) {
       wavHeader.write("WAVE", 8);
       wavHeader.write("fmt ", 12);
       wavHeader.writeUInt32LE(16, 16); // PCM
-      wavHeader.writeUInt16LE(1, 20);  // AudioFormat
+      wavHeader.writeUInt16LE(1, 20); // AudioFormat
       wavHeader.writeUInt16LE(numChannels, 22);
       wavHeader.writeUInt32LE(audioSampleRate, 24);
       wavHeader.writeUInt32LE(byteRate, 28);
@@ -808,10 +917,17 @@ async function handleStreamingText(ctx) {
 
       const wavBuffer = Buffer.concat([wavHeader, pcmData]);
       const dataUrl = `data:audio/wav;base64,${wavBuffer.toString("base64")}`;
-      const { ref } = await FileService.uploadFile(dataUrl, "generations", project, username);
+      const { ref } = await FileService.uploadFile(
+        dataUrl,
+        "generations",
+        project,
+        username,
+      );
       audioRef = ref;
     } catch (err) {
-      logger.error(`[chat] Failed to build/upload Live API audio WAV: ${err.message}`);
+      logger.error(
+        `[chat] Failed to build/upload Live API audio WAV: ${err.message}`,
+      );
     }
   }
 
@@ -828,9 +944,7 @@ async function handleStreamingText(ctx) {
           ? parseFloat(timeToGenerationSec.toFixed(3))
           : null,
       generationTime:
-        generationSec !== null
-          ? parseFloat(generationSec.toFixed(3))
-          : null,
+        generationSec !== null ? parseFloat(generationSec.toFixed(3)) : null,
       totalTime: parseFloat(totalSec.toFixed(3)),
     });
   }
@@ -866,18 +980,32 @@ async function handleStreamingText(ctx) {
     });
 
     const meta = conversationMeta
-      ? { ...conversationMeta, settings: { provider: providerName, model: resolvedModel } }
+      ? {
+          ...conversationMeta,
+          settings: { provider: providerName, model: resolvedModel },
+        }
       : undefined;
 
     ConversationService.appendMessages(
-      conversationId, project, username, messagesToAppend, meta,
-    ).then(() =>
-      ConversationService.setGenerating(conversationId, project, username, false),
-    ).catch((err) =>
-      logger.error(
-        `Failed to append messages to conversation ${conversationId}: ${err.message}`,
-      ),
-    );
+      conversationId,
+      project,
+      username,
+      messagesToAppend,
+      meta,
+    )
+      .then(() =>
+        ConversationService.setGenerating(
+          conversationId,
+          project,
+          username,
+          false,
+        ),
+      )
+      .catch((err) =>
+        logger.error(
+          `Failed to append messages to conversation ${conversationId}: ${err.message}`,
+        ),
+      );
   }
 }
 
@@ -887,15 +1015,32 @@ async function handleStreamingText(ctx) {
 
 async function handleNonStreamingText(ctx) {
   const {
-    provider, providerName, resolvedModel, messages, options,
-    conversationId, userMessage, conversationMeta, project, username, clientIp,
-    requestId, requestStart, emit,
+    provider,
+    providerName,
+    resolvedModel,
+    messages,
+    options,
+    conversationId,
+    userMessage,
+    conversationMeta,
+    project,
+    username,
+    clientIp,
+    requestId,
+    requestStart,
+    emit,
   } = ctx;
 
   // Mark conversation as generating
   if (conversationId) {
-    ConversationService.setGenerating(conversationId, project, username, true)
-      .catch((err) => logger.error(`Failed to set isGenerating: ${err.message}`));
+    ConversationService.setGenerating(
+      conversationId,
+      project,
+      username,
+      true,
+    ).catch((err) =>
+      logger.error(`Failed to set isGenerating: ${err.message}`),
+    );
   }
 
   const generationStart = performance.now();
@@ -909,19 +1054,19 @@ async function handleNonStreamingText(ctx) {
   const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[resolvedModel];
   const estimatedCost = calculateTextCost(usage, pricing);
   const tokensPerSec =
-    generationSec > 0
-      ? (usage.outputTokens / generationSec).toFixed(1)
-      : "N/A";
+    generationSec > 0 ? (usage.outputTokens / generationSec).toFixed(1) : "N/A";
 
   logger.request(
-    project, username, clientIp,
+    project,
+    username,
+    clientIp,
     `[chat] ${providerName} ${resolvedModel} — ` +
-    `in: ${usage.inputTokens} tokens, out: ${usage.outputTokens} tokens, ` +
-    `speed: ${tokensPerSec} tok/s, ` +
-    `ttg: ${timeToGenerationSec.toFixed(2)}s, ` +
-    `generation: ${generationSec.toFixed(2)}s, ` +
-    `total: ${totalSec.toFixed(2)}s` +
-    (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
+      `in: ${usage.inputTokens} tokens, out: ${usage.outputTokens} tokens, ` +
+      `speed: ${tokensPerSec} tok/s, ` +
+      `ttg: ${timeToGenerationSec.toFixed(2)}s, ` +
+      `generation: ${generationSec.toFixed(2)}s, ` +
+      `total: ${totalSec.toFixed(2)}s` +
+      (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
   );
 
   RequestLogger.log({
@@ -1012,18 +1157,32 @@ async function handleNonStreamingText(ctx) {
     });
 
     const meta = conversationMeta
-      ? { ...conversationMeta, settings: { provider: providerName, model: resolvedModel } }
+      ? {
+          ...conversationMeta,
+          settings: { provider: providerName, model: resolvedModel },
+        }
       : undefined;
 
     ConversationService.appendMessages(
-      conversationId, project, username, messagesToAppend, meta,
-    ).then(() =>
-      ConversationService.setGenerating(conversationId, project, username, false),
-    ).catch((err) =>
-      logger.error(
-        `Failed to append messages to conversation ${conversationId}: ${err.message}`,
-      ),
-    );
+      conversationId,
+      project,
+      username,
+      messagesToAppend,
+      meta,
+    )
+      .then(() =>
+        ConversationService.setGenerating(
+          conversationId,
+          project,
+          username,
+          false,
+        ),
+      )
+      .catch((err) =>
+        logger.error(
+          `Failed to append messages to conversation ${conversationId}: ${err.message}`,
+        ),
+      );
   }
 }
 

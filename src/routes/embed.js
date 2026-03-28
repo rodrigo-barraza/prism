@@ -52,7 +52,8 @@ router.post("/", async (req, res, next) => {
     }
 
     // At least one content input is required
-    const hasContent = text || (images && images.length > 0) || audio || video || pdf;
+    const hasContent =
+      text || (images && images.length > 0) || audio || video || pdf;
     if (!hasContent) {
       throw new ProviderError(
         "server",
@@ -71,7 +72,9 @@ router.post("/", async (req, res, next) => {
     }
 
     resolvedModel =
-      model || getDefaultModels(TYPES.TEXT, TYPES.EMBEDDING)[providerName] || null;
+      model ||
+      getDefaultModels(TYPES.TEXT, TYPES.EMBEDDING)[providerName] ||
+      null;
 
     // Build content for provider — text-only vs multimodal
     let content;
@@ -126,7 +129,11 @@ router.post("/", async (req, res, next) => {
     if (taskType) options.taskType = taskType;
     if (dimensions) options.dimensions = dimensions;
 
-    const result = await provider.generateEmbedding(content, resolvedModel, options);
+    const result = await provider.generateEmbedding(
+      content,
+      resolvedModel,
+      options,
+    );
     const totalSec = (performance.now() - requestStart) / 1000;
 
     // Cost estimation
@@ -138,10 +145,12 @@ router.post("/", async (req, res, next) => {
     }
 
     logger.request(
-      req.project, req.username, req.clientIp,
+      req.project,
+      req.username,
+      req.clientIp,
       `[embed] ${providerName} model=${resolvedModel} — ` +
-      `dims: ${result.dimensions}, total: ${totalSec.toFixed(2)}s` +
-      (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
+        `dims: ${result.dimensions}, total: ${totalSec.toFixed(2)}s` +
+        (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
     );
 
     RequestLogger.log({

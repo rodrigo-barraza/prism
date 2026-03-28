@@ -86,10 +86,14 @@ router.put("/:id", async (req, res, next) => {
 
     const updates = {
       ...(req.body.name !== undefined && { name: req.body.name }),
-      ...(req.body.description !== undefined && { description: req.body.description }),
+      ...(req.body.description !== undefined && {
+        description: req.body.description,
+      }),
       ...(req.body.endpoint !== undefined && { endpoint: req.body.endpoint }),
       ...(req.body.method !== undefined && { method: req.body.method }),
-      ...(req.body.parameters !== undefined && { parameters: req.body.parameters }),
+      ...(req.body.parameters !== undefined && {
+        parameters: req.body.parameters,
+      }),
       ...(req.body.enabled !== undefined && { enabled: req.body.enabled }),
       updatedAt: new Date(),
     };

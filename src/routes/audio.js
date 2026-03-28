@@ -106,9 +106,11 @@ export async function handleVoice(params, emitBinary, emitJSON) {
     }
 
     logger.request(
-      project, username, clientIp,
+      project,
+      username,
+      clientIp,
       `[audio] ${providerName} model=${model || "default"} — ` +
-      `total: ${totalSec.toFixed(2)}s`,
+        `total: ${totalSec.toFixed(2)}s`,
     );
 
     RequestLogger.log({
@@ -134,7 +136,10 @@ export async function handleVoice(params, emitBinary, emitJSON) {
         const audioBuffer = Buffer.concat(audioChunks);
         const dataUrl = `data:${contentType};base64,${audioBuffer.toString("base64")}`;
         const { ref } = await FileService.uploadFile(
-          dataUrl, "generations", project, username,
+          dataUrl,
+          "generations",
+          project,
+          username,
         );
         audioRef = ref;
       } catch (err) {
@@ -165,7 +170,11 @@ export async function handleVoice(params, emitBinary, emitJSON) {
         : undefined;
 
       ConversationService.appendMessages(
-        conversationId, project, username, messagesToAppend, meta,
+        conversationId,
+        project,
+        username,
+        messagesToAppend,
+        meta,
       ).catch((err) =>
         logger.error(
           `Failed to append messages to conversation ${conversationId}: ${err.message}`,
@@ -221,7 +230,9 @@ router.post("/", async (req, res, next) => {
         }
         res.write(chunk);
       },
-      (_event) => { /* REST doesn't send JSON events to client */ },
+      (_event) => {
+        /* REST doesn't send JSON events to client */
+      },
     );
 
     if (resultContentType) {
@@ -235,8 +246,6 @@ router.post("/", async (req, res, next) => {
     }
   }
 });
-
-
 
 // ============================================================
 // REST endpoint — audio transcription (speech-to-text)
@@ -260,7 +269,11 @@ router.post("/", async (req, res, next) => {
 
   try {
     if (!providerName) {
-      throw new ProviderError("server", "Missing required field: provider", 400);
+      throw new ProviderError(
+        "server",
+        "Missing required field: provider",
+        400,
+      );
     }
     if (!audio) {
       throw new ProviderError("server", "Missing required field: audio", 400);
@@ -290,13 +303,20 @@ router.post("/", async (req, res, next) => {
     if (language) options.language = language;
     if (transcriptionPrompt) options.prompt = transcriptionPrompt;
 
-    const result = await provider.transcribeAudio(audioBuffer, mimeType, model, options);
+    const result = await provider.transcribeAudio(
+      audioBuffer,
+      mimeType,
+      model,
+      options,
+    );
     const totalSec = (performance.now() - requestStart) / 1000;
 
     logger.request(
-      req.project, req.username, req.clientIp,
+      req.project,
+      req.username,
+      req.clientIp,
       `[audio/transcribe] ${providerName} model=${model || "default"} — ` +
-      `total: ${totalSec.toFixed(2)}s`,
+        `total: ${totalSec.toFixed(2)}s`,
     );
 
     RequestLogger.log({

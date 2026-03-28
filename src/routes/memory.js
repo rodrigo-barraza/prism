@@ -11,7 +11,8 @@ const router = express.Router();
  */
 router.post("/extract", async (req, res, next) => {
   try {
-    const { guildId, channelId, messages, participants, sourceMessageId } = req.body;
+    const { guildId, channelId, messages, participants, sourceMessageId } =
+      req.body;
 
     if (!guildId || !messages || !participants) {
       return res.status(400).json({

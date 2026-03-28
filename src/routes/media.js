@@ -7,183 +7,217 @@ const router = express.Router();
 const CONVERSATIONS_COL = "conversations";
 
 function getDb() {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) return null;
-    return client.db(MONGO_DB_NAME);
+  const client = MongoWrapper.getClient(MONGO_DB_NAME);
+  if (!client) return null;
+  return client.db(MONGO_DB_NAME);
 }
 
 // ============================================================
 // GET /media — extract media from the caller's project conversations
 // ============================================================
 router.get("/", async (req, res, next) => {
-    try {
-        const db = getDb();
-        if (!db) return res.status(503).json({ error: "Database not available" });
+  try {
+    const db = getDb();
+    if (!db) return res.status(503).json({ error: "Database not available" });
 
-        const { page = 1, limit = 100, type, origin, search, provider, model, from, to } = req.query;
-        const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
-        const lim = parseInt(limit, 10);
+    const {
+      page = 1,
+      limit = 100,
+      type,
+      origin,
+      search,
+      provider,
+      model,
+      from,
+      to,
+    } = req.query;
+    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
+    const lim = parseInt(limit, 10);
 
-        // Always scope to the caller's project
-        const preMatch = { project: req.project };
-        if (search) preMatch.title = { $regex: search, $options: "i" };
-        if (from || to) {
-            preMatch.updatedAt = {};
-            if (from) preMatch.updatedAt.$gte = from;
-            if (to) preMatch.updatedAt.$lte = to;
-        }
-
-        const pipeline = [
-            { $match: preMatch },
-            { $unwind: "$messages" },
-            {
-                $project: {
-                    convId: "$id",
-                    convTitle: "$title",
-                    project: 1,
-                    username: 1,
-                    role: "$messages.role",
-                    images: { $ifNull: ["$messages.images", []] },
-                    audio: "$messages.audio",
-                    timestamp: { $ifNull: ["$messages.timestamp", "$updatedAt"] },
-                    model: "$messages.model",
-                },
-            },
-            {
-                $facet: {
-                    imageItems: [
-                        { $unwind: "$images" },
-                        {
-                            $project: {
-                                url: "$images",
-                                mediaType: "image",
-                                convId: 1,
-                                convTitle: 1,
-                                project: 1,
-                                username: 1,
-                                role: 1,
-                                timestamp: 1,
-                                model: 1,
-                            },
-                        },
-                    ],
-                    audioItems: [
-                        { $match: { audio: { $ne: null, $exists: true } } },
-                        {
-                            $project: {
-                                url: "$audio",
-                                mediaType: "audio",
-                                convId: 1,
-                                convTitle: 1,
-                                project: 1,
-                                username: 1,
-                                role: 1,
-                                timestamp: 1,
-                                model: 1,
-                            },
-                        },
-                    ],
-                },
-            },
-            {
-                $project: {
-                    allMedia: { $concatArrays: ["$imageItems", "$audioItems"] },
-                },
-            },
-            { $unwind: "$allMedia" },
-            { $replaceRoot: { newRoot: "$allMedia" } },
-            { $sort: { timestamp: -1 } },
-        ];
-
-        if (type) {
-            pipeline.push({ $match: { mediaType: type } });
-        }
-        if (origin === "user") {
-            pipeline.push({ $match: { role: "user" } });
-        } else if (origin === "ai") {
-            pipeline.push({ $match: { role: "assistant" } });
-        }
-        if (provider) {
-            pipeline.push({ $match: { model: { $regex: `^${provider}/`, $options: "i" } } });
-        }
-        if (model) {
-            pipeline.push({ $match: { model } });
-        }
-
-        const countPipeline = [...pipeline, { $count: "total" }];
-        const [countResult] = await db.collection(CONVERSATIONS_COL).aggregate(countPipeline).toArray();
-        const total = countResult?.total || 0;
-
-        pipeline.push({ $skip: skip }, { $limit: lim });
-
-        const items = await db.collection(CONVERSATIONS_COL).aggregate(pipeline).toArray();
-
-        // Derive filter options from the full (non-paginated, non-provider/model-filtered) media set
-        const filterPipeline = [
-            { $match: preMatch },
-            { $unwind: "$messages" },
-            {
-                $project: {
-                    role: "$messages.role",
-                    images: { $ifNull: ["$messages.images", []] },
-                    audio: "$messages.audio",
-                    model: "$messages.model",
-                },
-            },
-            {
-                $facet: {
-                    imageModels: [
-                        { $unwind: "$images" },
-                        { $project: { mediaType: "image", role: 1, model: 1 } },
-                    ],
-                    audioModels: [
-                        { $match: { audio: { $ne: null, $exists: true } } },
-                        { $project: { mediaType: "audio", role: 1, model: 1 } },
-                    ],
-                },
-            },
-            { $project: { allMedia: { $concatArrays: ["$imageModels", "$audioModels"] } } },
-            { $unwind: "$allMedia" },
-            { $replaceRoot: { newRoot: "$allMedia" } },
-        ];
-
-        // Apply type / origin filters (but NOT provider/model filters)
-        if (type) filterPipeline.push({ $match: { mediaType: type } });
-        if (origin === "user") filterPipeline.push({ $match: { role: "user" } });
-        else if (origin === "ai") filterPipeline.push({ $match: { role: "assistant" } });
-
-        filterPipeline.push({
-            $group: {
-                _id: null,
-                allProviders: { $addToSet: { $arrayElemAt: [{ $split: ["$model", "/"] }, 0] } },
-                allModels: { $addToSet: "$model" },
-            },
-        });
-
-        const [filterResult] = await db.collection(CONVERSATIONS_COL).aggregate(filterPipeline).toArray();
-        const allProviders = (filterResult?.allProviders || []).filter(Boolean).sort();
-        const allModels = (filterResult?.allModels || []).filter(Boolean).sort();
-
-        const data = items.map((item) => ({
-            url: item.url,
-            mediaType: item.mediaType,
-            origin: item.role === "assistant" ? "ai" : "user",
-            convId: item.convId,
-            convTitle: item.convTitle || "Untitled",
-            project: item.project,
-            username: item.username,
-            model: item.model,
-            timestamp: item.timestamp,
-        }));
-
-        res.json({ data, total, page: parseInt(page, 10), limit: lim,
-            providers: allProviders,
-            models: allModels,
-        });
-    } catch (error) {
-        logger.error(`GET /media error: ${error.message}`);
-        next(error);
+    // Always scope to the caller's project
+    const preMatch = { project: req.project };
+    if (search) preMatch.title = { $regex: search, $options: "i" };
+    if (from || to) {
+      preMatch.updatedAt = {};
+      if (from) preMatch.updatedAt.$gte = from;
+      if (to) preMatch.updatedAt.$lte = to;
     }
+
+    const pipeline = [
+      { $match: preMatch },
+      { $unwind: "$messages" },
+      {
+        $project: {
+          convId: "$id",
+          convTitle: "$title",
+          project: 1,
+          username: 1,
+          role: "$messages.role",
+          images: { $ifNull: ["$messages.images", []] },
+          audio: "$messages.audio",
+          timestamp: { $ifNull: ["$messages.timestamp", "$updatedAt"] },
+          model: "$messages.model",
+        },
+      },
+      {
+        $facet: {
+          imageItems: [
+            { $unwind: "$images" },
+            {
+              $project: {
+                url: "$images",
+                mediaType: "image",
+                convId: 1,
+                convTitle: 1,
+                project: 1,
+                username: 1,
+                role: 1,
+                timestamp: 1,
+                model: 1,
+              },
+            },
+          ],
+          audioItems: [
+            { $match: { audio: { $ne: null, $exists: true } } },
+            {
+              $project: {
+                url: "$audio",
+                mediaType: "audio",
+                convId: 1,
+                convTitle: 1,
+                project: 1,
+                username: 1,
+                role: 1,
+                timestamp: 1,
+                model: 1,
+              },
+            },
+          ],
+        },
+      },
+      {
+        $project: {
+          allMedia: { $concatArrays: ["$imageItems", "$audioItems"] },
+        },
+      },
+      { $unwind: "$allMedia" },
+      { $replaceRoot: { newRoot: "$allMedia" } },
+      { $sort: { timestamp: -1 } },
+    ];
+
+    if (type) {
+      pipeline.push({ $match: { mediaType: type } });
+    }
+    if (origin === "user") {
+      pipeline.push({ $match: { role: "user" } });
+    } else if (origin === "ai") {
+      pipeline.push({ $match: { role: "assistant" } });
+    }
+    if (provider) {
+      pipeline.push({
+        $match: { model: { $regex: `^${provider}/`, $options: "i" } },
+      });
+    }
+    if (model) {
+      pipeline.push({ $match: { model } });
+    }
+
+    const countPipeline = [...pipeline, { $count: "total" }];
+    const [countResult] = await db
+      .collection(CONVERSATIONS_COL)
+      .aggregate(countPipeline)
+      .toArray();
+    const total = countResult?.total || 0;
+
+    pipeline.push({ $skip: skip }, { $limit: lim });
+
+    const items = await db
+      .collection(CONVERSATIONS_COL)
+      .aggregate(pipeline)
+      .toArray();
+
+    // Derive filter options from the full (non-paginated, non-provider/model-filtered) media set
+    const filterPipeline = [
+      { $match: preMatch },
+      { $unwind: "$messages" },
+      {
+        $project: {
+          role: "$messages.role",
+          images: { $ifNull: ["$messages.images", []] },
+          audio: "$messages.audio",
+          model: "$messages.model",
+        },
+      },
+      {
+        $facet: {
+          imageModels: [
+            { $unwind: "$images" },
+            { $project: { mediaType: "image", role: 1, model: 1 } },
+          ],
+          audioModels: [
+            { $match: { audio: { $ne: null, $exists: true } } },
+            { $project: { mediaType: "audio", role: 1, model: 1 } },
+          ],
+        },
+      },
+      {
+        $project: {
+          allMedia: { $concatArrays: ["$imageModels", "$audioModels"] },
+        },
+      },
+      { $unwind: "$allMedia" },
+      { $replaceRoot: { newRoot: "$allMedia" } },
+    ];
+
+    // Apply type / origin filters (but NOT provider/model filters)
+    if (type) filterPipeline.push({ $match: { mediaType: type } });
+    if (origin === "user") filterPipeline.push({ $match: { role: "user" } });
+    else if (origin === "ai")
+      filterPipeline.push({ $match: { role: "assistant" } });
+
+    filterPipeline.push({
+      $group: {
+        _id: null,
+        allProviders: {
+          $addToSet: { $arrayElemAt: [{ $split: ["$model", "/"] }, 0] },
+        },
+        allModels: { $addToSet: "$model" },
+      },
+    });
+
+    const [filterResult] = await db
+      .collection(CONVERSATIONS_COL)
+      .aggregate(filterPipeline)
+      .toArray();
+    const allProviders = (filterResult?.allProviders || [])
+      .filter(Boolean)
+      .sort();
+    const allModels = (filterResult?.allModels || []).filter(Boolean).sort();
+
+    const data = items.map((item) => ({
+      url: item.url,
+      mediaType: item.mediaType,
+      origin: item.role === "assistant" ? "ai" : "user",
+      convId: item.convId,
+      convTitle: item.convTitle || "Untitled",
+      project: item.project,
+      username: item.username,
+      model: item.model,
+      timestamp: item.timestamp,
+    }));
+
+    res.json({
+      data,
+      total,
+      page: parseInt(page, 10),
+      limit: lim,
+      providers: allProviders,
+      models: allModels,
+    });
+  } catch (error) {
+    logger.error(`GET /media error: ${error.message}`);
+    next(error);
+  }
 });
 
 export default router;

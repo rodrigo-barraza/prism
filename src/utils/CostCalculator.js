@@ -64,7 +64,8 @@ export function calculateAudioCost(usage, pricing) {
 export function calculateLiveCost(usage, pricing) {
   if (!pricing || !usage) return null;
 
-  const inputRate = pricing.audioInputPerMillion || pricing.inputPerMillion || 0;
+  const inputRate =
+    pricing.audioInputPerMillion || pricing.inputPerMillion || 0;
   const outputRate =
     pricing.audioOutputPerMillion || pricing.outputPerMillion || 0;
 

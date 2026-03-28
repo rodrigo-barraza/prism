@@ -52,7 +52,10 @@ async function extractFactsFromConversation(messages, participants) {
   const provider = getProvider(EXTRACTION_PROVIDER);
 
   const participantList = participants
-    .map((p) => `- ID: ${p.id}, Username: ${p.username}, Display: ${p.displayName || p.username}`)
+    .map(
+      (p) =>
+        `- ID: ${p.id}, Username: ${p.username}, Display: ${p.displayName || p.username}`,
+    )
     .join("\n");
 
   const conversationText = messages
@@ -91,7 +94,10 @@ ${participantList}`;
 
   const aiMessages = [
     { role: "system", content: systemPrompt },
-    { role: "user", content: `Extract personal facts from this conversation:\n\n${conversationText}` },
+    {
+      role: "user",
+      content: `Extract personal facts from this conversation:\n\n${conversationText}`,
+    },
   ];
 
   const result = await provider.generateText(aiMessages, EXTRACTION_MODEL, {
@@ -121,7 +127,10 @@ ${participantList}`;
         f.confidence >= 0.5,
     );
   } catch {
-    logger.warn("[MemoryService] Failed to parse extraction result:", jsonText.substring(0, 200));
+    logger.warn(
+      "[MemoryService] Failed to parse extraction result:",
+      jsonText.substring(0, 200),
+    );
     return [];
   }
 }
@@ -141,7 +150,13 @@ const MemoryService = {
    * @param {string} [params.sourceMessageId]
    * @returns {Promise<Array>} The stored memory documents
    */
-  async extractAndStore({ guildId, channelId, messages, participants, sourceMessageId }) {
+  async extractAndStore({
+    guildId,
+    channelId,
+    messages,
+    participants,
+    sourceMessageId,
+  }) {
     const client = MongoWrapper.getClient(MONGO_DB_NAME);
     if (!client) throw new Error("Database not available");
 
@@ -151,11 +166,15 @@ const MemoryService = {
     // Extract facts from the conversation via AI
     const facts = await extractFactsFromConversation(messages, participants);
     if (facts.length === 0) {
-      logger.info("[MemoryService] No personal facts extracted from conversation.");
+      logger.info(
+        "[MemoryService] No personal facts extracted from conversation.",
+      );
       return [];
     }
 
-    logger.info(`[MemoryService] Extracted ${facts.length} fact(s), generating embeddings...`);
+    logger.info(
+      `[MemoryService] Extracted ${facts.length} fact(s), generating embeddings...`,
+    );
 
     const storedMemories = [];
     const now = new Date().toISOString();
@@ -174,12 +193,17 @@ const MemoryService = {
           // Check if a very similar fact already exists
           const isDuplicate = existingMemories.some((existing) => {
             if (!existing.embedding) return false;
-            const similarity = cosineSimilarity(newEmbedding, existing.embedding);
+            const similarity = cosineSimilarity(
+              newEmbedding,
+              existing.embedding,
+            );
             return similarity > 0.92; // High threshold for dedup
           });
 
           if (isDuplicate) {
-            logger.info(`[MemoryService] Skipping duplicate fact: "${fact.fact.substring(0, 60)}..."`);
+            logger.info(
+              `[MemoryService] Skipping duplicate fact: "${fact.fact.substring(0, 60)}..."`,
+            );
             continue;
           }
 
@@ -203,7 +227,9 @@ const MemoryService = {
 
           await collection.insertOne(memory);
           storedMemories.push(memory);
-          logger.info(`[MemoryService] Stored: "${fact.fact.substring(0, 60)}..." (about: ${fact.aboutUsername})`);
+          logger.info(
+            `[MemoryService] Stored: "${fact.fact.substring(0, 60)}..." (about: ${fact.aboutUsername})`,
+          );
         } else {
           // No existing memories, generate embedding and store
           const embedding = await generateEmbedding(fact.fact);
@@ -227,7 +253,9 @@ const MemoryService = {
 
           await collection.insertOne(memory);
           storedMemories.push(memory);
-          logger.info(`[MemoryService] Stored: "${fact.fact.substring(0, 60)}..." (about: ${fact.aboutUsername})`);
+          logger.info(
+            `[MemoryService] Stored: "${fact.fact.substring(0, 60)}..." (about: ${fact.aboutUsername})`,
+          );
         }
       } catch (err) {
         logger.error(`[MemoryService] Failed to store fact: ${err.message}`);
@@ -265,7 +293,17 @@ const MemoryService = {
 
     // Fetch all memories matching the filter
     const memories = await collection
-      .find(filter, { projection: { embedding: 1, fact: 1, aboutUserId: 1, aboutUsername: 1, category: 1, confidence: 1, createdAt: 1 } })
+      .find(filter, {
+        projection: {
+          embedding: 1,
+          fact: 1,
+          aboutUserId: 1,
+          aboutUsername: 1,
+          category: 1,
+          confidence: 1,
+          createdAt: 1,
+        },
+      })
       .toArray();
 
     if (memories.length === 0) return [];
@@ -287,7 +325,9 @@ const MemoryService = {
       .sort((a, b) => b.score - a.score)
       .slice(0, limit);
 
-    logger.info(`[MemoryService] Search found ${scored.length} relevant memories (from ${memories.length} total)`);
+    logger.info(
+      `[MemoryService] Search found ${scored.length} relevant memories (from ${memories.length} total)`,
+    );
 
     return scored;
   },

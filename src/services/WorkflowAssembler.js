@@ -59,10 +59,12 @@ function resolveModelModalities(step) {
       inputTypes: configModel.inputTypes || ["text"],
       outputTypes: configModel.outputTypes || ["text"],
       rawInputTypes: configModel.inputTypes || ["text"],
-      modelType: configModel.modelType || (isImageGen ? "image" : "conversation"),
-      supportsSystemPrompt: configModel.supportsSystemPrompt !== undefined
-        ? configModel.supportsSystemPrompt
-        : configModel.outputTypes?.includes("text") ?? true,
+      modelType:
+        configModel.modelType || (isImageGen ? "image" : "conversation"),
+      supportsSystemPrompt:
+        configModel.supportsSystemPrompt !== undefined
+          ? configModel.supportsSystemPrompt
+          : (configModel.outputTypes?.includes("text") ?? true),
     };
   }
 
@@ -106,7 +108,6 @@ function assembleGraph(steps) {
   const allNodes = [];
   const allEdges = [];
   const nodeResults = {};
-
 
   // Track the last non-utility model ID for chain edges
   let prevOutputModelId = null;
@@ -153,7 +154,8 @@ function assembleGraph(steps) {
     // ── 3. Conversation Node ──
     const convId = `${stepPrefix}_conv`;
     const messages = [];
-    if (step.systemPrompt) messages.push({ role: "system", content: step.systemPrompt });
+    if (step.systemPrompt)
+      messages.push({ role: "system", content: step.systemPrompt });
     const userMsg = { role: "user", content: step.input || "" };
     messages.push(userMsg);
     if (step.output) {
@@ -163,9 +165,13 @@ function assembleGraph(steps) {
     }
 
     // Derive conversation supported modalities from the model's raw input types
-    const supportedModalities = (modalities.rawInputTypes || ["text"])
-      .filter((t) => t !== "conversation");
-    const convInputTypes = buildConversationPorts(messages, supportedModalities);
+    const supportedModalities = (modalities.rawInputTypes || ["text"]).filter(
+      (t) => t !== "conversation",
+    );
+    const convInputTypes = buildConversationPorts(
+      messages,
+      supportedModalities,
+    );
 
     allNodes.push({
       id: convId,
@@ -249,7 +255,11 @@ function assembleGraph(steps) {
         nodeType: "viewer",
         modality: null,
         content: viewerResult.text || viewerResult.image || null,
-        contentType: viewerResult.image ? "image" : viewerResult.text ? "text" : null,
+        contentType: viewerResult.image
+          ? "image"
+          : viewerResult.text
+            ? "text"
+            : null,
         receivedOutputs: viewerResult,
         inputTypes: ["text", "image", "audio"],
         outputTypes: ["text", "image", "audio"],
