@@ -11,6 +11,7 @@ import {
 import { getProvider } from "../providers/index.js";
 import { ARENA_SCORES } from "../arrays.js";
 import logger from "../utils/logger.js";
+import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
 import {
   OPENAI_API_KEY,
   ANTHROPIC_API_KEY,
@@ -450,6 +451,15 @@ router.get("/", async (_req, res) => {
       defaults: filterDefaults(getDefaultModels(TYPES.AUDIO, TYPES.TEXT)),
     },
   });
+});
+
+/**
+ * GET /config/tools
+ * Returns the tool schemas fetched on startup.
+ */
+router.get("/tools", (_req, res) => {
+  const schemas = ToolOrchestratorService.getToolSchemas();
+  res.json(schemas || []);
 });
 
 export default router;

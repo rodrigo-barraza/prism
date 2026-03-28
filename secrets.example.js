@@ -43,3 +43,6 @@ export const MINIO_ENDPOINT = '';
 export const MINIO_ACCESS_KEY = '';
 export const MINIO_SECRET_KEY = '';
 export const MINIO_BUCKET_NAME = '';
+
+// Tools API
+export const TOOLS_API_URL = 'http://localhost:5590';

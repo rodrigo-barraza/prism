@@ -1,0 +1,255 @@
+import { TOOLS_API_URL } from "../../secrets.js";
+import logger from "../utils/logger.js";
+
+// ────────────────────────────────────────────────────────────
+// Schema Cache — fetched from tools-api at startup
+// ────────────────────────────────────────────────────────────
+
+/** @type {Array} Full tool schemas (with endpoint metadata) */
+let cachedSchemas = [];
+
+/** @type {Array} Clean schemas for LLM (without endpoint metadata) */
+let cachedAISchemas = [];
+
+/** @type {Map<string, object>} Tool name → full schema (for executor lookup) */
+const toolMap = new Map();
+
+/** @type {boolean} Whether initial fetch has completed */
+let initialized = false;
+
+/**
+ * Fetch tool schemas from tools-api and populate caches.
+ * Called eagerly at module load — non-blocking, graceful fallback.
+ */
+async function fetchSchemas() {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    const res = await fetch(`${TOOLS_API_URL}/admin/tool-schemas`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      logger.warn(
+        `[ToolOrchestrator] Failed to fetch tool schemas: ${res.status} ${res.statusText}`,
+      );
+      return;
+    }
+
+    const schemas = await res.json();
+
+    if (!Array.isArray(schemas) || schemas.length === 0) {
+      logger.warn("[ToolOrchestrator] Tool schemas response was empty or invalid");
+      return;
+    }
+
+    cachedSchemas = schemas;
+
+    // Strip endpoint metadata for LLM consumption
+    cachedAISchemas = schemas.map(({ endpoint: _endpoint, ...rest }) => rest);
+
+    // Build lookup map for executor
+    toolMap.clear();
+    for (const schema of schemas) {
+      toolMap.set(schema.name, schema);
+    }
+
+    initialized = true;
+    logger.info(
+      `[ToolOrchestrator] Loaded ${schemas.length} tool schemas from tools-api`,
+    );
+  } catch (err) {
+    logger.warn(
+      `[ToolOrchestrator] Could not reach tools-api for schemas: ${err.message}`,
+    );
+  }
+}
+
+// Kick off schema fetch immediately at module load
+fetchSchemas();
+
+// ────────────────────────────────────────────────────────────
+// Generic URL Builder — uses endpoint metadata
+// ────────────────────────────────────────────────────────────
+
+function buildUrlFromEndpoint(endpoint, args = {}) {
+  let path = endpoint.path;
+  if (endpoint.conditionalPath) {
+    const { param, template } = endpoint.conditionalPath;
+    if (args[param]) {
+      path = template;
+    }
+  }
+
+  const pathParams = new Set(endpoint.pathParams || []);
+  for (const param of pathParams) {
+    if (args[param] !== undefined && args[param] !== null) {
+      path = path.replace(`:${param}`, encodeURIComponent(String(args[param])));
+    }
+  }
+
+  const params = new URLSearchParams();
+
+  const queryParams = endpoint.queryParams || [];
+  for (const key of queryParams) {
+    const value = args[key];
+    if (value !== undefined && value !== null && value !== "") {
+      params.set(key, value);
+    }
+  }
+
+  if (args.fields) {
+    const fieldsStr = Array.isArray(args.fields)
+      ? args.fields.join(",")
+      : args.fields;
+    params.set("fields", fieldsStr);
+  }
+
+  const qs = params.toString();
+  return `${TOOLS_API_URL}${path}${qs ? `?${qs}` : ""}`;
+}
+
+const ARG_REMAPS = {
+  search_events: { query: "q" },
+  search_products: { query: "q" },
+};
+
+async function executeToolGeneric(name, args = {}) {
+  const schema = toolMap.get(name);
+  if (!schema || !schema.endpoint) {
+    return { error: `Unknown tool: ${name}` };
+  }
+
+  const remaps = ARG_REMAPS[name];
+  let resolvedArgs = args;
+  if (remaps) {
+    resolvedArgs = { ...args };
+    for (const [from, to] of Object.entries(remaps)) {
+      if (resolvedArgs[from] !== undefined) {
+        resolvedArgs[to] = resolvedArgs[from];
+        delete resolvedArgs[from];
+      }
+    }
+  }
+
+  const url = buildUrlFromEndpoint(schema.endpoint, resolvedArgs);
+  return fetchJson(url);
+}
+
+async function fetchJson(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      return { error: `API returned ${res.status}: ${res.statusText}` };
+    }
+    return await res.json();
+  } catch (err) {
+    return { error: `Failed to reach API: ${err.message}` };
+  }
+}
+
+// ────────────────────────────────────────────────────────────
+// Public API
+// ────────────────────────────────────────────────────────────
+
+export default class ToolOrchestratorService {
+  static getToolSchemas() {
+    return cachedAISchemas;
+  }
+
+  static getToolFields(toolName) {
+    const tool = cachedAISchemas.find((t) => t.name === toolName);
+    if (!tool) return null;
+    return tool.parameters?.properties?.fields?.items?.enum || null;
+  }
+
+  static async checkApiHealth() {
+    const toolNames = cachedSchemas.map((t) => t.name);
+
+    let online = false;
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3000);
+      const res = await fetch(`${TOOLS_API_URL}/health`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      online = res.ok;
+    } catch {
+      online = false;
+    }
+
+    const apiStatus = { [TOOLS_API_URL]: online };
+
+    const offline = new Set();
+    if (!online) {
+      for (const name of toolNames) {
+        offline.add(name);
+      }
+    }
+
+    return { offline, apiStatus };
+  }
+
+  static async refreshSchemas() {
+    await fetchSchemas();
+    return cachedSchemas.length;
+  }
+
+  static isInitialized() {
+    return initialized;
+  }
+
+  static async executeTool(name, args = {}) {
+    return executeToolGeneric(name, args);
+  }
+
+  static async executeToolCalls(toolCalls) {
+    return Promise.all(
+      toolCalls.map(async (tc) => ({
+        name: tc.name,
+        id: tc.id,
+        result: await ToolOrchestratorService.executeTool(tc.name, tc.args),
+      })),
+    );
+  }
+
+  static async executeCustomTool(toolDef, args = {}) {
+    try {
+      const headers = { "Content-Type": "application/json" };
+      if (toolDef.bearerToken) {
+        headers["Authorization"] = `Bearer ${toolDef.bearerToken}`;
+      }
+
+      if (toolDef.method === "POST") {
+        const res = await fetch(toolDef.endpoint, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(args),
+        });
+        if (!res.ok) {
+          return { error: `API returned ${res.status}: ${res.statusText}` };
+        }
+        return await res.json();
+      }
+
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(args)) {
+        if (value !== undefined && value !== null && value !== "") {
+          params.set(key, value);
+        }
+      }
+      const qs = params.toString();
+      const url = `${toolDef.endpoint}${qs ? `?${qs}` : ""}`;
+      const res = await fetch(url, { headers });
+      if (!res.ok) {
+        return { error: `API returned ${res.status}: ${res.statusText}` };
+      }
+      return await res.json();
+    } catch (err) {
+      return { error: `Failed to reach API: ${err.message}` };
+    }
+  }
+}

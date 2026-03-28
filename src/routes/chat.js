@@ -16,6 +16,7 @@ import logger from "../utils/logger.js";
 import RequestLogger from "../services/RequestLogger.js";
 import ConversationService from "../services/ConversationService.js";
 import FileService from "../services/FileService.js";
+import AgenticLoopService from "../services/AgenticLoopService.js";
 
 const router = express.Router();
 
@@ -202,6 +203,8 @@ export async function handleChat(params, emit, { signal } = {}) {
     urlContext,
     verbosity,
     reasoningSummary,
+    functionCallingEnabled,
+    enabledTools,
     // systemPrompt arrives in two places by design:
     //  - messages[0] with role:"system" → what the LLM actually sees
     //  - conversationMeta.systemPrompt → stored as top-level DB field for quick UI access
@@ -244,6 +247,8 @@ export async function handleChat(params, emit, { signal } = {}) {
     ...(urlContext && { urlContext }),
     ...(verbosity && { verbosity }),
     ...(reasoningSummary && { reasoningSummary }),
+    ...(functionCallingEnabled !== undefined && { functionCallingEnabled }),
+    ...(enabledTools && { enabledTools }),
     ...(extraParams.systemPrompt && { systemPrompt: extraParams.systemPrompt }),
   };
 
@@ -332,24 +337,45 @@ export async function handleChat(params, emit, { signal } = {}) {
 
     // Prefer streaming; fall back to non-streaming
     if (provider.generateTextStream) {
-      await handleStreamingText({
-        provider,
-        providerName,
-        resolvedModel,
-        modelDef,
-        messages: providerMessages,
-        options,
-        conversationId,
-        userMessage,
-        conversationMeta,
-        project,
-        username,
-        clientIp,
-        requestId,
-        requestStart,
-        emit,
-        signal,
-      });
+      if (options.functionCallingEnabled) {
+        await AgenticLoopService.runAgenticLoop({
+          provider,
+          providerName,
+          resolvedModel,
+          modelDef,
+          messages: providerMessages,
+          options,
+          conversationId,
+          userMessage,
+          conversationMeta,
+          project,
+          username,
+          clientIp,
+          requestId,
+          requestStart,
+          emit,
+          signal,
+        });
+      } else {
+        await handleStreamingText({
+          provider,
+          providerName,
+          resolvedModel,
+          modelDef,
+          messages: providerMessages,
+          options,
+          conversationId,
+          userMessage,
+          conversationMeta,
+          project,
+          username,
+          clientIp,
+          requestId,
+          requestStart,
+          emit,
+          signal,
+        });
+      }
     } else {
       await handleNonStreamingText({
         provider,
@@ -610,7 +636,23 @@ function sanitizeMsg(m) {
 // ── cost, logging, payloads, WAV, done event, persistence ──
 // ============================================================
 
-async function finalizeTextGeneration(ctx, result) {
+export async function finalizeTextGeneration(
+  ctx,
+  {
+    text,
+    thinking,
+    images,
+    toolCalls,
+    audioChunks,
+    audioSampleRate,
+    usage,
+    outputCharacters,
+    timeToGenerationSec,
+    generationSec,
+    totalSec,
+  },
+  overrideMessagesToAppend = null,
+) {
   const {
     providerName,
     resolvedModel,
@@ -627,20 +669,6 @@ async function finalizeTextGeneration(ctx, result) {
     emit,
     signal,
   } = ctx;
-
-  const {
-    text,
-    thinking,
-    images,
-    toolCalls,
-    audioChunks,
-    audioSampleRate,
-    usage,
-    outputCharacters,
-    timeToGenerationSec,
-    generationSec,
-    totalSec,
-  } = result;
 
   // ── Cost calculation ──────────────────────────────────────────
   let estimatedCost = null;
@@ -834,33 +862,53 @@ async function finalizeTextGeneration(ctx, result) {
 
   // ── Conversation persistence ──────────────────────────────────
   if (conversationId) {
-    const messagesToAppend = [];
-    // Only append the user message on the first call for this turn
-    // (indicated by conversationMeta). Follow-up tool iterations reuse
-    // the same conversationId but omit conversationMeta, so the user
-    // message is already persisted from the first call.
-    if (userMessage && conversationMeta) {
+    let messagesToAppend = [];
+    if (overrideMessagesToAppend) {
+      messagesToAppend = [...overrideMessagesToAppend];
+      // Append the final LLM response block (contains telemetry and final text step)
       messagesToAppend.push({
-        role: "user",
-        ...userMessage,
-        timestamp: userMessage.timestamp || new Date().toISOString(),
+        role: "assistant",
+        content: text,
+        ...(thinking && { thinking }),
+        ...(images.length > 0 && { images }),
+        ...(audioRef && { audio: audioRef }),
+        // We do not append toolCalls here because overrideMessagesToAppend handles intermediate tool iterations
+        model: resolvedModel,
+        provider: providerName,
+        timestamp: new Date().toISOString(),
+        usage: usage || null,
+        totalTime: parseFloat(totalSec.toFixed(3)),
+        tokensPerSec,
+        estimatedCost,
+      });
+    } else {
+      // Only append the user message on the first call for this turn
+      // (indicated by conversationMeta). Follow-up tool iterations reuse
+      // the same conversationId but omit conversationMeta, so the user
+      // message is already persisted from the first call.
+      if (userMessage && conversationMeta) {
+        messagesToAppend.push({
+          role: "user",
+          ...userMessage,
+          timestamp: userMessage.timestamp || new Date().toISOString(),
+        });
+      }
+      messagesToAppend.push({
+        role: "assistant",
+        content: text,
+        ...(thinking && { thinking }),
+        ...(images.length > 0 && { images }),
+        ...(audioRef && { audio: audioRef }),
+        ...(toolCalls.length > 0 && { toolCalls }),
+        model: resolvedModel,
+        provider: providerName,
+        timestamp: new Date().toISOString(),
+        usage: usage || null,
+        totalTime: parseFloat(totalSec.toFixed(3)),
+        tokensPerSec,
+        estimatedCost,
       });
     }
-    messagesToAppend.push({
-      role: "assistant",
-      content: text,
-      ...(thinking && { thinking }),
-      ...(images.length > 0 && { images }),
-      ...(audioRef && { audio: audioRef }),
-      ...(toolCalls.length > 0 && { toolCalls }),
-      model: resolvedModel,
-      provider: providerName,
-      timestamp: new Date().toISOString(),
-      usage: usage || null,
-      totalTime: parseFloat(totalSec.toFixed(3)),
-      tokensPerSec,
-      estimatedCost,
-    });
 
     const meta = conversationMeta
       ? {
@@ -1253,10 +1301,18 @@ router.post("/", async (req, res, next) => {
         minioRef: e.minioRef || null,
       }));
 
+    const toolCalls = events
+      .filter((e) => e.type === "tool_execution" && e.status === "calling")
+      .map((e) => ({
+        name: e.tool?.name,
+        args: e.tool?.args,
+      }));
+
     res.json({
       text: text || null,
       thinking: thinking || null,
       images: images.length > 0 ? images : undefined,
+      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
       // provider/model echoed back — useful when Prism resolves a default model
       provider: doneEvent.provider || req.body.provider,
       model: doneEvent.model || req.body.model,
