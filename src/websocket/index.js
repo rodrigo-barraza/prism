@@ -212,9 +212,11 @@ function handleWsLive(ws, project, username, _clientIp) {
       // Build Live API config
       const liveConfig = {
         responseModalities: clientConfig.responseModalities || [Modality.AUDIO],
-        ...(clientConfig.systemInstruction && {
-          systemInstruction: clientConfig.systemInstruction,
-        }),
+        // Always include a base system instruction with language hint to anchor
+        // the input transcription model (which has no languageCode field)
+        systemInstruction: clientConfig.systemInstruction
+          ? `${clientConfig.systemInstruction}\n\nAlways respond in the same language the user speaks. The user's primary language is English.`
+          : "Always respond in the same language the user speaks. The user's primary language is English.",
         ...(clientConfig.temperature !== undefined && {
           temperature: clientConfig.temperature,
         }),
