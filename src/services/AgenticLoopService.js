@@ -90,7 +90,7 @@ export default class AgenticLoopService {
     let iterations = 0;
     let currentMessages = [...messages];
 
-    let overallUsage = null;
+    const overallUsage = { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 };
     let overallFirstTokenTime = null;
     let overallGenerationEnd = null;
     let overallOutputCharacters = 0;
@@ -135,7 +135,10 @@ export default class AgenticLoopService {
         }
         
         if (chunk && typeof chunk === "object" && chunk.type === "usage") {
-          overallUsage = chunk.usage;
+          overallUsage.inputTokens += chunk.usage.inputTokens || 0;
+          overallUsage.outputTokens += chunk.usage.outputTokens || 0;
+          overallUsage.cacheReadInputTokens += chunk.usage.cacheReadInputTokens || 0;
+          overallUsage.cacheCreationInputTokens += chunk.usage.cacheCreationInputTokens || 0;
           continue;
         }
 
