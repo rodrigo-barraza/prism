@@ -244,7 +244,7 @@ export default class AgenticLoopService {
             const res = results.find(r => r.id === tc.id || (!r.id && r.name === tc.name));
             emit({
                 type: "tool_execution",
-                tool: { name: tc.name, args: tc.args || {}, id: tc.id },
+                tool: { name: tc.name, args: tc.args || {}, id: tc.id, result: res?.result },
                 status: res?.result?.error ? "error" : "done",
             });
         }
