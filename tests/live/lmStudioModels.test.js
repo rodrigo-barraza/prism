@@ -33,10 +33,20 @@ const MAX_SIZE_GB = 16;
 
 // ── Helpers ─────────────────────────────────────────────────
 
+// Known param counts for models whose IDs don't contain a parseable size
+const KNOWN_PARAM_COUNTS = {
+  "mistralai/devstral-small-2507": 24,
+  "mistralai/devstral-small-2-2512": 24,
+  "nvidia/nemotron-3-nano": 8,
+  "ibm/granite-4-h-tiny": 1,
+  "lfm2.5-vl-1.6b": 1.6,
+  "lfm2.5-1.2b-instruct": 1.2,
+};
+
 /**
  * Extract approximate parameter count (in billions) from model ID.
  * Parses patterns like "8b", "32b", "1.7b", "4b", "0.6b", etc.
- * Returns null if no param count found (will be included by default).
+ * Falls back to known param counts, returns null if unknown.
  */
 function extractParamCount(modelId) {
   const lower = modelId.toLowerCase();
@@ -48,7 +58,8 @@ function extractParamCount(modelId) {
   const moeMatch = lower.match(/(\d+)b-a\d+b/);
   if (moeMatch) return parseFloat(moeMatch[1]);
 
-  return null;
+  // Fall back to known lookup
+  return KNOWN_PARAM_COUNTS[modelId] ?? null;
 }
 
 /**
@@ -60,7 +71,8 @@ function estimateSizeGB(modelId, paramBillions) {
   const lower = modelId.toLowerCase();
 
   // Detect quantization level
-  let bytesPerParam = 2.0; // Default: assume Q4 (~2 bytes/param)
+  // LM Studio models are pre-quantized GGUFs
+  let bytesPerParam = 0.5; // Default: assume Q4 (~0.5 bytes/param)
   if (lower.includes("f16") || lower.includes("fp16")) bytesPerParam = 2.0;
   else if (lower.includes("q8_0") || lower.includes("q8")) bytesPerParam = 1.0;
   else if (lower.includes("q4_k_m")) bytesPerParam = 0.56;
