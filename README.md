@@ -2,13 +2,13 @@
 
 A centralized Node.js backend that routes AI requests to multiple providers through a unified REST + WebSocket API. Supports text generation, image generation, text-to-speech, speech-to-text, embeddings, and more — all behind a single gateway with built-in request logging, cost tracking, and an admin API.
 
-## Prerequisites
+## ⚙️ Prerequisites
 
 - **Node.js** v20+ (ES Modules)
 - **MongoDB** — used for conversation storage and request logging
 - **MinIO** _(optional)_ — object storage for uploaded files. If not configured, files are stored inline in MongoDB
 
-### Optional Provider Dependencies
+### 🔌 Optional Provider Dependencies
 
 These are only needed if you plan to use the corresponding providers:
 
@@ -19,7 +19,7 @@ These are only needed if you plan to use the corresponding providers:
 - **Inworld Credentials** — for Inworld TTS (Base64-encoded `apiKey:apiSecret`)
 - **LM Studio** — for local LLM inference (runs on `localhost:1234` by default)
 
-## Supported Providers
+## 🌐 Supported Providers
 
 | Provider         | Text Gen | Streaming | TTS | STT | Image Gen | Vision | Embeddings | Thinking | Web Search | Code Exec |
 | ---------------- | -------- | --------- | --- | --- | --------- | ------ | ---------- | -------- | ---------- | --------- |
@@ -30,15 +30,27 @@ These are only needed if you plan to use the corresponding providers:
 | **Inworld**      | —        | —         | ✅  | —   | —         | —      | —          | —        | —          | —         |
 | **LM Studio**    | ✅       | ✅        | —   | —   | —         | ✅     | —          | —        | —          | —         |
 
-## Setup
+## 🛠️ Tech Stack
 
-### 1. Install dependencies
+| Dependency | Purpose |
+| --- | --- |
+| Node.js | Runtime |
+| Express | HTTP framework |
+| MongoDB | Database driver |
+| MinIO | S3-compatible object storage |
+| ws | WebSockets for streaming |
+| Vitest | Testing framework |
+| Auth Providers | OpenAI, Anthropic, Google GenAI SDKs |
+
+## 🚀 Setup
+
+### 1️⃣ Install dependencies
 
 ```bash
 npm install
 ```
 
-### 2. Configure secrets
+### 2️⃣ Configure secrets
 
 ```bash
 cp secrets.example.js secrets.js
@@ -64,14 +76,14 @@ Edit `secrets.js` and fill in your API keys and configuration:
 | `MINIO_SECRET_KEY`  | No       | MinIO secret key                                       |
 | `MINIO_BUCKET_NAME` | No       | MinIO bucket name                                      |
 
-### 3. Start the server
+### 3️⃣ Start the server
 
 ```bash
 npm run dev        # Development (auto-reload with nodemon)
 npm start          # Production
 ```
 
-## API Endpoints
+## 📡 API Endpoints
 
 All endpoints except `/` and `/admin/*` require the `x-api-secret` header.
 
@@ -119,7 +131,7 @@ All endpoints except `/` and `/admin/*` require the `x-api-secret` header.
 | POST   | `/admin/lm-studio/load`       | Load a model in LM Studio                 |
 | POST   | `/admin/lm-studio/unload`     | Unload a model from LM Studio             |
 
-## Features
+## ✨ Features
 
 - **Unified Gateway** — single API for 6 AI providers
 - **WebSocket Streaming** — real-time text generation and TTS
@@ -131,7 +143,7 @@ All endpoints except `/` and `/admin/*` require the `x-api-secret` header.
 - **Auth Middleware** — separate secrets for client API and admin access
 - **Model Catalog** — centralized model definitions with pricing, capabilities, and arena scores
 
-## Scripts
+## 📜 Scripts
 
 ```bash
 npm start            # Start server
@@ -143,3 +155,7 @@ npm run format:check # Check formatting
 npm test             # Run tests (vitest)
 npm run test:watch   # Run tests in watch mode
 ```
+
+## ☀️ Part of [Sun](https://github.com/rodrigo-barraza)
+
+Prism is one service in the Sun ecosystem — a collection of composable backend services and frontends designed to be mixed and matched.
