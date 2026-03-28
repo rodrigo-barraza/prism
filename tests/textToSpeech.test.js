@@ -12,6 +12,7 @@ describe("POST /text-to-audio", () => {
           res.write(Buffer.from("fake-audio-data"));
           res.end();
         },
+        on: () => {},
         [Symbol.asyncIterator]: async function* () {
           yield Buffer.from("fake-audio-data");
         },
@@ -197,6 +198,7 @@ describe("POST /text-to-audio", () => {
           res.write(Buffer.from("wav-data"));
           res.end();
         },
+        on: () => {},
         [Symbol.asyncIterator]: async function* () {
           yield Buffer.from("wav-data");
         },

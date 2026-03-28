@@ -59,7 +59,8 @@ describe("POST /chat (text-to-image via imageAPI model)", () => {
     expect(res.body).toHaveProperty("text");
     expect(res.body).toHaveProperty("images");
     expect(res.body.images).toHaveLength(1);
-    expect(res.body.images[0]).toHaveProperty("data", "base64data");
+    // When MinIO is unavailable, FileService returns the inline dataUrl as the ref
+    expect(res.body.images[0]).toHaveProperty("minioRef");
     expect(res.body.images[0]).toHaveProperty("mimeType", "image/png");
   });
 

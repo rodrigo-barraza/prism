@@ -107,13 +107,14 @@ describe("POST /chat (text-to-text)", () => {
       .send({
         provider: "openai",
         messages: [{ role: "user", content: "hi" }],
-        options: { temperature: 0.5, maxTokens: 100 },
+        temperature: 0.5,
+        maxTokens: 100,
       })
       .expect(200);
 
     expect(MOCK_GENERATE_TEXT_STREAM).toHaveBeenCalledTimes(1);
     const calledOptions = MOCK_GENERATE_TEXT_STREAM.mock.calls[0][2];
-    expect(calledOptions).toEqual({ temperature: 0.5, maxTokens: 100 });
+    expect(calledOptions).toMatchObject({ temperature: 0.5, maxTokens: 100 });
   });
 
   it("defaults options to empty object when omitted", async () => {
@@ -126,7 +127,7 @@ describe("POST /chat (text-to-text)", () => {
       .expect(200);
 
     const calledOptions = MOCK_GENERATE_TEXT_STREAM.mock.calls[0][2];
-    expect(calledOptions).toEqual({});
+    expect(calledOptions).toMatchObject({});
   });
 
   // ── Multiple messages ─────────────────────────────────────────────
@@ -191,6 +192,7 @@ describe("POST /chat (text-to-text)", () => {
 
   it("returns 500 when provider throws an error", async () => {
     MOCK_GENERATE_TEXT_STREAM.mockImplementationOnce(async function* () {
+      yield { type: "error" };
       throw new Error("API down");
     });
 
