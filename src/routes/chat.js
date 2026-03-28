@@ -355,6 +355,7 @@ export async function handleChat(params, emit, { signal } = {}) {
         provider,
         providerName,
         resolvedModel,
+        modelDef,
         messages: providerMessages,
         options,
         conversationId,
@@ -588,12 +589,29 @@ async function handleImageAPIModel(ctx) {
 }
 
 // ============================================================
-// Dispatch: Streaming text/multimodal generation
+// Shared: Sanitize message content for admin payload logging
 // ============================================================
 
-async function handleStreamingText(ctx) {
+function sanitizeMsg(m) {
+  return {
+    role: m.role,
+    content:
+      typeof m.content === "string"
+        ? m.content.length > 500
+          ? m.content.slice(0, 500) + "…"
+          : m.content
+        : m.content,
+    ...(m.images ? { images: `[${m.images.length} image(s)]` } : {}),
+  };
+}
+
+// ============================================================
+// Shared: Post-generation finalization
+// ── cost, logging, payloads, WAV, done event, persistence ──
+// ============================================================
+
+async function finalizeTextGeneration(ctx, result) {
   const {
-    provider,
     providerName,
     resolvedModel,
     modelDef,
@@ -606,6 +624,289 @@ async function handleStreamingText(ctx) {
     username,
     clientIp,
     requestId,
+    emit,
+    signal,
+  } = ctx;
+
+  const {
+    text,
+    thinking,
+    images,
+    toolCalls,
+    audioChunks,
+    audioSampleRate,
+    usage,
+    outputCharacters,
+    timeToGenerationSec,
+    generationSec,
+    totalSec,
+  } = result;
+
+  // ── Cost calculation ──────────────────────────────────────────
+  let estimatedCost = null;
+  let tokensPerSec = null;
+
+  if (usage) {
+    const imageCount = images.length;
+    if (imageCount > 0) {
+      const imgPricing =
+        getPricing(TYPES.TEXT, TYPES.IMAGE)[resolvedModel] || modelDef?.pricing;
+      if (imgPricing?.imageOutputPerMillion) {
+        const imageTokens = imageCount * 258;
+        const textOutputTokens = Math.max(0, usage.outputTokens - imageTokens);
+        const inputCost =
+          (usage.inputTokens / 1_000_000) * (imgPricing.inputPerMillion || 0);
+        const textOutCost =
+          (textOutputTokens / 1_000_000) * (imgPricing.outputPerMillion || 0);
+        const imageOutCost =
+          (imageTokens / 1_000_000) * imgPricing.imageOutputPerMillion;
+        estimatedCost = parseFloat(
+          (inputCost + textOutCost + imageOutCost).toFixed(8),
+        );
+      } else {
+        const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[resolvedModel];
+        estimatedCost = calculateTextCost(usage, pricing);
+      }
+    } else {
+      const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[resolvedModel];
+      estimatedCost = calculateTextCost(usage, pricing);
+    }
+
+    const effectiveGenSec =
+      generationSec && generationSec > 0.001 ? generationSec : totalSec;
+
+    tokensPerSec = usage.tokensPerSec
+      ? parseFloat(usage.tokensPerSec.toFixed(1))
+      : effectiveGenSec > 0 && usage.outputTokens > 0
+        ? parseFloat((usage.outputTokens / effectiveGenSec).toFixed(1))
+        : null;
+
+    // Cap at 10k tok/s — anything higher is a measurement artifact
+    if (tokensPerSec !== null && tokensPerSec > 10000) {
+      tokensPerSec = null;
+    }
+  }
+
+  // ── Console logging ───────────────────────────────────────────
+  const inputTokens = usage?.inputTokens || 0;
+  const outputTokens = usage?.outputTokens || 0;
+  const tokensPerSecStr =
+    tokensPerSec !== null ? tokensPerSec.toFixed(1) : "N/A";
+  const cacheInfo =
+    usage?.cacheReadInputTokens || usage?.cacheCreationInputTokens
+      ? `, cache_read: ${usage.cacheReadInputTokens || 0}, cache_write: ${usage.cacheCreationInputTokens || 0}`
+      : "";
+
+  logger.request(
+    project,
+    username,
+    clientIp,
+    `[chat] ${providerName} ${resolvedModel} — ` +
+      `in: ${inputTokens} tokens, out: ${outputTokens} tokens${cacheInfo}, ` +
+      `speed: ${tokensPerSecStr} tok/s, ` +
+      `ttg: ${timeToGenerationSec !== null ? timeToGenerationSec.toFixed(2) + "s" : "N/A"}, ` +
+      `generation: ${generationSec !== null ? generationSec.toFixed(2) + "s" : "N/A"}, ` +
+      `total: ${totalSec.toFixed(2)}s` +
+      (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
+  );
+
+  // ── Request logging with sanitized payloads ────────────────────
+  RequestLogger.log({
+    requestId,
+    endpoint: "chat",
+    project,
+    username,
+    clientIp,
+    provider: providerName,
+    model: resolvedModel,
+    conversationId: conversationId || null,
+    toolsUsed: toolCalls.length > 0,
+    success: true,
+    inputTokens,
+    outputTokens,
+    estimatedCost,
+    tokensPerSec,
+    temperature: options?.temperature ?? null,
+    maxTokens: options?.maxTokens ?? null,
+    topP: options?.topP ?? null,
+    topK: options?.topK ?? null,
+    frequencyPenalty: options?.frequencyPenalty ?? null,
+    presencePenalty: options?.presencePenalty ?? null,
+    stopSequences: options?.stopSequences ?? null,
+    messageCount: messages.length,
+    inputCharacters: messages.reduce(
+      (sum, m) => sum + (typeof m.content === "string" ? m.content.length : 0),
+      0,
+    ),
+    outputCharacters,
+    timeToGeneration:
+      timeToGenerationSec !== null
+        ? parseFloat(timeToGenerationSec.toFixed(3))
+        : null,
+    generationTime:
+      generationSec !== null ? parseFloat(generationSec.toFixed(3)) : null,
+    totalTime: parseFloat(totalSec.toFixed(3)),
+    requestPayload: {
+      messages: messages.map(sanitizeMsg),
+      ...(options?.tools
+        ? { tools: options.tools.map((t) => t.name || t.function?.name) }
+        : {}),
+    },
+    responsePayload: {
+      text:
+        text && text.length > 2000 ? text.slice(0, 2000) + "…" : text || null,
+      thinking: thinking ? "[present]" : null,
+      toolCalls:
+        toolCalls.length > 0
+          ? toolCalls.map((tc) => ({
+              name: tc.name,
+              id: tc.id,
+              args: tc.args,
+            }))
+          : null,
+      usage,
+    },
+  });
+
+  // ── Build WAV from accumulated PCM audio chunks ───────────────
+  let audioRef = null;
+  if (audioChunks.length > 0) {
+    try {
+      const pcmBuffers = audioChunks.map((b64) =>
+        Buffer.from(b64, "base64"),
+      );
+      const pcmData = Buffer.concat(pcmBuffers);
+
+      const numChannels = 1;
+      const bitsPerSample = 16;
+      const byteRate = audioSampleRate * numChannels * (bitsPerSample / 8);
+      const blockAlign = numChannels * (bitsPerSample / 8);
+      const wavHeader = Buffer.alloc(44);
+      wavHeader.write("RIFF", 0);
+      wavHeader.writeUInt32LE(36 + pcmData.length, 4);
+      wavHeader.write("WAVE", 8);
+      wavHeader.write("fmt ", 12);
+      wavHeader.writeUInt32LE(16, 16);
+      wavHeader.writeUInt16LE(1, 20);
+      wavHeader.writeUInt16LE(numChannels, 22);
+      wavHeader.writeUInt32LE(audioSampleRate, 24);
+      wavHeader.writeUInt32LE(byteRate, 28);
+      wavHeader.writeUInt16LE(blockAlign, 32);
+      wavHeader.writeUInt16LE(bitsPerSample, 34);
+      wavHeader.write("data", 36);
+      wavHeader.writeUInt32LE(pcmData.length, 40);
+
+      const wavBuffer = Buffer.concat([wavHeader, pcmData]);
+      const dataUrl = `data:audio/wav;base64,${wavBuffer.toString("base64")}`;
+      const { ref } = await FileService.uploadFile(
+        dataUrl,
+        "generations",
+        project,
+        username,
+      );
+      audioRef = ref;
+    } catch (err) {
+      logger.error(
+        `[chat] Failed to build/upload Live API audio WAV: ${err.message}`,
+      );
+    }
+  }
+
+  // ── Emit done event ───────────────────────────────────────────
+  if (!signal?.aborted) {
+    emit({
+      type: "done",
+      provider: providerName,
+      model: resolvedModel,
+      usage: usage || null,
+      estimatedCost,
+      tokensPerSec,
+      ...(audioRef ? { audioRef } : {}),
+      timeToGeneration:
+        timeToGenerationSec !== null
+          ? parseFloat(timeToGenerationSec.toFixed(3))
+          : null,
+      generationTime:
+        generationSec !== null ? parseFloat(generationSec.toFixed(3)) : null,
+      totalTime: parseFloat(totalSec.toFixed(3)),
+    });
+  }
+
+  // ── Conversation persistence ──────────────────────────────────
+  if (conversationId) {
+    const messagesToAppend = [];
+    // Only append the user message on the first call for this turn
+    // (indicated by conversationMeta). Follow-up tool iterations reuse
+    // the same conversationId but omit conversationMeta, so the user
+    // message is already persisted from the first call.
+    if (userMessage && conversationMeta) {
+      messagesToAppend.push({
+        role: "user",
+        ...userMessage,
+        timestamp: userMessage.timestamp || new Date().toISOString(),
+      });
+    }
+    messagesToAppend.push({
+      role: "assistant",
+      content: text,
+      ...(thinking && { thinking }),
+      ...(images.length > 0 && { images }),
+      ...(audioRef && { audio: audioRef }),
+      ...(toolCalls.length > 0 && { toolCalls }),
+      model: resolvedModel,
+      provider: providerName,
+      timestamp: new Date().toISOString(),
+      usage: usage || null,
+      totalTime: parseFloat(totalSec.toFixed(3)),
+      tokensPerSec,
+      estimatedCost,
+    });
+
+    const meta = conversationMeta
+      ? {
+          ...conversationMeta,
+          settings: { provider: providerName, model: resolvedModel },
+        }
+      : undefined;
+
+    ConversationService.appendMessages(
+      conversationId,
+      project,
+      username,
+      messagesToAppend,
+      meta,
+    )
+      .then(() =>
+        ConversationService.setGenerating(
+          conversationId,
+          project,
+          username,
+          false,
+        ),
+      )
+      .catch((err) =>
+        logger.error(
+          `Failed to append messages to conversation ${conversationId}: ${err.message}`,
+        ),
+      );
+  }
+}
+
+// ============================================================
+// Dispatch: Streaming text/multimodal generation
+// ============================================================
+
+async function handleStreamingText(ctx) {
+  const {
+    provider,
+    providerName,
+    resolvedModel,
+    modelDef,
+    messages,
+    options,
+    conversationId,
+    project,
+    username,
     requestStart,
     emit,
     signal,
@@ -633,8 +934,8 @@ async function handleStreamingText(ctx) {
           ...options,
           signal,
         });
+
   let usage = null;
-  let firstOutputTime = null;
   let firstTokenTime = null;
   let generationEnd = null;
   let outputCharacters = 0;
@@ -662,7 +963,6 @@ async function handleStreamingText(ctx) {
     }
     // Thinking chunks
     if (chunk && typeof chunk === "object" && chunk.type === "thinking") {
-      if (!firstOutputTime) firstOutputTime = performance.now();
       generationEnd = performance.now();
       streamedThinking += chunk.content;
       emit({ type: "thinking", content: chunk.content });
@@ -672,7 +972,6 @@ async function handleStreamingText(ctx) {
     if (chunk && typeof chunk === "object" && chunk.type === "image") {
       let minioRef = null;
       if (chunk.data) {
-        // Upload to MinIO (same pattern as handleImageAPIModel)
         try {
           const mimeType = chunk.mimeType || "image/png";
           const dataUrl = `data:${mimeType};base64,${chunk.data}`;
@@ -734,7 +1033,6 @@ async function handleStreamingText(ctx) {
     // Audio chunks (Live API — streamed PCM for client playback)
     if (chunk && typeof chunk === "object" && chunk.type === "audio") {
       emit({ type: "audio", data: chunk.data, mimeType: chunk.mimeType });
-      // Accumulate for WAV building after streaming
       if (chunk.data) streamedAudioChunks.push(chunk.data);
       if (chunk.mimeType) {
         const rateMatch = chunk.mimeType.match(/rate=(\d+)/);
@@ -765,7 +1063,6 @@ async function handleStreamingText(ctx) {
       continue;
     }
     // Text chunk
-    if (!firstOutputTime) firstOutputTime = performance.now();
     if (!firstTokenTime) {
       firstTokenTime = performance.now();
     }
@@ -776,237 +1073,26 @@ async function handleStreamingText(ctx) {
     emit({ type: "chunk", content: chunk });
   }
 
-  // ── Timing ───────────────────────────────────────────────────
+  // Build normalized result for shared finalization
   const now = performance.now();
-  const timeToGenerationSec = firstTokenTime
-    ? (firstTokenTime - requestStart) / 1000
-    : null;
-  // Text-only generation time (from first text token to last)
-  const generationSec =
-    firstTokenTime && generationEnd
-      ? (generationEnd - firstTokenTime) / 1000
-      : null;
-  const totalSec = (now - requestStart) / 1000;
-
-  // ── Cost + logging ───────────────────────────────────────────
-  let estimatedCost = null;
-  let tokensPerSec = null;
-
-  if (usage) {
-    const imageCount = streamedImages.length;
-    if (imageCount > 0) {
-      const imgPricing =
-        getPricing(TYPES.TEXT, TYPES.IMAGE)[resolvedModel] || modelDef?.pricing;
-      if (imgPricing?.imageOutputPerMillion) {
-        const imageTokens = imageCount * 258;
-        const textOutputTokens = Math.max(0, usage.outputTokens - imageTokens);
-        const inputCost =
-          (usage.inputTokens / 1_000_000) * (imgPricing.inputPerMillion || 0);
-        const textOutCost =
-          (textOutputTokens / 1_000_000) * (imgPricing.outputPerMillion || 0);
-        const imageOutCost =
-          (imageTokens / 1_000_000) * imgPricing.imageOutputPerMillion;
-        estimatedCost = parseFloat(
-          (inputCost + textOutCost + imageOutCost).toFixed(8),
-        );
-      } else {
-        const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[resolvedModel];
-        estimatedCost = calculateTextCost(usage, pricing);
-      }
-    } else {
-      const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[resolvedModel];
-      estimatedCost = calculateTextCost(usage, pricing);
-    }
-
-    const effectiveGenSec =
-      generationSec && generationSec > 0.001 ? generationSec : totalSec;
-
-    tokensPerSec = usage.tokensPerSec
-      ? parseFloat(usage.tokensPerSec.toFixed(1))
-      : effectiveGenSec > 0 && usage.outputTokens > 0
-        ? parseFloat((usage.outputTokens / effectiveGenSec).toFixed(1))
-        : null;
-
-    // Cap at 10k tok/s — anything higher is a measurement artifact
-    // (e.g. image gen where timing is unreliable)
-    if (tokensPerSec !== null && tokensPerSec > 10000) {
-      tokensPerSec = null;
-    }
-  }
-
-  // ── Always log — even when usage is unavailable ─────────────
-  const inputTokens = usage?.inputTokens || 0;
-  const outputTokens = usage?.outputTokens || 0;
-  const tokensPerSecStr =
-    tokensPerSec !== null ? tokensPerSec.toFixed(1) : "N/A";
-
-  logger.request(
-    project,
-    username,
-    clientIp,
-    `[chat] ${providerName} ${resolvedModel} — ` +
-      `in: ${inputTokens} tokens, out: ${outputTokens} tokens, ` +
-      `speed: ${tokensPerSecStr} tok/s, ` +
-      `ttg: ${timeToGenerationSec !== null ? timeToGenerationSec.toFixed(2) + "s" : "N/A"}, ` +
-      `generation: ${generationSec !== null ? generationSec.toFixed(2) + "s" : "N/A"}, ` +
-      `total: ${totalSec.toFixed(2)}s` +
-      (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
-  );
-
-  RequestLogger.log({
-    requestId,
-    endpoint: "chat",
-    project,
-    username,
-    clientIp,
-    provider: providerName,
-    model: resolvedModel,
-    conversationId: conversationId || null,
-    toolsUsed: streamedToolCalls.length > 0,
-    success: true,
-    inputTokens,
-    outputTokens,
-    estimatedCost,
-    tokensPerSec,
-    temperature: options?.temperature ?? null,
-    maxTokens: options?.maxTokens ?? null,
-    messageCount: messages.length,
-    inputCharacters: messages.reduce(
-      (sum, m) => sum + (typeof m.content === "string" ? m.content.length : 0),
-      0,
-    ),
+  await finalizeTextGeneration(ctx, {
+    text: fullStreamedText,
+    thinking: streamedThinking,
+    images: streamedImages,
+    toolCalls: streamedToolCalls,
+    audioChunks: streamedAudioChunks,
+    audioSampleRate,
+    usage,
     outputCharacters,
-    timeToGeneration:
-      timeToGenerationSec !== null
-        ? parseFloat(timeToGenerationSec.toFixed(3))
+    timeToGenerationSec: firstTokenTime
+      ? (firstTokenTime - requestStart) / 1000
+      : null,
+    generationSec:
+      firstTokenTime && generationEnd
+        ? (generationEnd - firstTokenTime) / 1000
         : null,
-    generationTime:
-      generationSec !== null ? parseFloat(generationSec.toFixed(3)) : null,
-    totalTime: parseFloat(totalSec.toFixed(3)),
+    totalSec: (now - requestStart) / 1000,
   });
-
-  // Build WAV from accumulated PCM audio chunks and upload to MinIO
-  let audioRef = null;
-  if (streamedAudioChunks.length > 0) {
-    try {
-      // Concatenate all base64 PCM chunks → single Buffer
-      const pcmBuffers = streamedAudioChunks.map((b64) =>
-        Buffer.from(b64, "base64"),
-      );
-      const pcmData = Buffer.concat(pcmBuffers);
-
-      // Build WAV header (44 bytes)
-      const numChannels = 1;
-      const bitsPerSample = 16;
-      const byteRate = audioSampleRate * numChannels * (bitsPerSample / 8);
-      const blockAlign = numChannels * (bitsPerSample / 8);
-      const wavHeader = Buffer.alloc(44);
-      wavHeader.write("RIFF", 0);
-      wavHeader.writeUInt32LE(36 + pcmData.length, 4);
-      wavHeader.write("WAVE", 8);
-      wavHeader.write("fmt ", 12);
-      wavHeader.writeUInt32LE(16, 16); // PCM
-      wavHeader.writeUInt16LE(1, 20); // AudioFormat
-      wavHeader.writeUInt16LE(numChannels, 22);
-      wavHeader.writeUInt32LE(audioSampleRate, 24);
-      wavHeader.writeUInt32LE(byteRate, 28);
-      wavHeader.writeUInt16LE(blockAlign, 32);
-      wavHeader.writeUInt16LE(bitsPerSample, 34);
-      wavHeader.write("data", 36);
-      wavHeader.writeUInt32LE(pcmData.length, 40);
-
-      const wavBuffer = Buffer.concat([wavHeader, pcmData]);
-      const dataUrl = `data:audio/wav;base64,${wavBuffer.toString("base64")}`;
-      const { ref } = await FileService.uploadFile(
-        dataUrl,
-        "generations",
-        project,
-        username,
-      );
-      audioRef = ref;
-    } catch (err) {
-      logger.error(
-        `[chat] Failed to build/upload Live API audio WAV: ${err.message}`,
-      );
-    }
-  }
-
-  // If client disconnected, skip the done emit but still persist partial content
-  if (!signal?.aborted) {
-    emit({
-      type: "done",
-      usage: usage || null,
-      estimatedCost,
-      tokensPerSec,
-      ...(audioRef ? { audioRef } : {}),
-      timeToGeneration:
-        timeToGenerationSec !== null
-          ? parseFloat(timeToGenerationSec.toFixed(3))
-          : null,
-      generationTime:
-        generationSec !== null ? parseFloat(generationSec.toFixed(3)) : null,
-      totalTime: parseFloat(totalSec.toFixed(3)),
-    });
-  }
-
-  // Auto-append to conversation (always, regardless of usage availability)
-  if (conversationId) {
-    const messagesToAppend = [];
-    // Only append the user message on the first call for this turn
-    // (indicated by conversationMeta). Follow-up tool iterations reuse
-    // the same conversationId but omit conversationMeta, so the user
-    // message is already persisted from the first call.
-    if (userMessage && conversationMeta) {
-      messagesToAppend.push({
-        role: "user",
-        ...userMessage,
-        timestamp: userMessage.timestamp || new Date().toISOString(),
-      });
-    }
-    messagesToAppend.push({
-      role: "assistant",
-      content: fullStreamedText,
-      ...(streamedThinking && { thinking: streamedThinking }),
-      ...(streamedImages.length > 0 && { images: streamedImages }),
-      ...(audioRef && { audio: audioRef }),
-      ...(streamedToolCalls.length > 0 && { toolCalls: streamedToolCalls }),
-      model: resolvedModel,
-      provider: providerName,
-      timestamp: new Date().toISOString(),
-      usage: usage || null,
-      totalTime: parseFloat(totalSec.toFixed(3)),
-      tokensPerSec,
-      estimatedCost,
-    });
-
-    const meta = conversationMeta
-      ? {
-          ...conversationMeta,
-          settings: { provider: providerName, model: resolvedModel },
-        }
-      : undefined;
-
-    ConversationService.appendMessages(
-      conversationId,
-      project,
-      username,
-      messagesToAppend,
-      meta,
-    )
-      .then(() =>
-        ConversationService.setGenerating(
-          conversationId,
-          project,
-          username,
-          false,
-        ),
-      )
-      .catch((err) =>
-        logger.error(
-          `Failed to append messages to conversation ${conversationId}: ${err.message}`,
-        ),
-      );
-  }
 }
 
 // ============================================================
@@ -1016,17 +1102,12 @@ async function handleStreamingText(ctx) {
 async function handleNonStreamingText(ctx) {
   const {
     provider,
-    providerName,
     resolvedModel,
     messages,
     options,
     conversationId,
-    userMessage,
-    conversationMeta,
     project,
     username,
-    clientIp,
-    requestId,
     requestStart,
     emit,
   } = ctx;
@@ -1044,110 +1125,22 @@ async function handleNonStreamingText(ctx) {
   }
 
   const generationStart = performance.now();
-  const result = await provider.generateText(messages, resolvedModel, options);
-  const now = performance.now();
-  const timeToGenerationSec = (generationStart - requestStart) / 1000;
-  const generationSec = (now - generationStart) / 1000;
-  const totalSec = (now - requestStart) / 1000;
-
-  const usage = result.usage || { inputTokens: 0, outputTokens: 0 };
-  const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[resolvedModel];
-  const estimatedCost = calculateTextCost(usage, pricing);
-  const tokensPerSec =
-    generationSec > 0 ? (usage.outputTokens / generationSec).toFixed(1) : "N/A";
-
-  const cacheInfo =
-    usage.cacheReadInputTokens || usage.cacheCreationInputTokens
-      ? `, cache_read: ${usage.cacheReadInputTokens || 0}, cache_write: ${usage.cacheCreationInputTokens || 0}`
-      : "";
-
-  logger.request(
-    project,
-    username,
-    clientIp,
-    `[chat] ${providerName} ${resolvedModel} — ` +
-      `in: ${usage.inputTokens} tokens, out: ${usage.outputTokens} tokens${cacheInfo}, ` +
-      `speed: ${tokensPerSec} tok/s, ` +
-      `ttg: ${timeToGenerationSec.toFixed(2)}s, ` +
-      `generation: ${generationSec.toFixed(2)}s, ` +
-      `total: ${totalSec.toFixed(2)}s` +
-      (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
+  const genResult = await provider.generateText(
+    messages,
+    resolvedModel,
+    options,
   );
+  const now = performance.now();
 
-  // Build sanitized payloads for admin inspection
-  const sanitizeMsg = (m) => ({
-    role: m.role,
-    content:
-      typeof m.content === "string"
-        ? m.content.length > 500
-          ? m.content.slice(0, 500) + "…"
-          : m.content
-        : m.content,
-    ...(m.images ? { images: `[${m.images.length} image(s)]` } : {}),
-  });
-
-  RequestLogger.log({
-    requestId,
-    endpoint: "chat",
-    project,
-    username,
-    clientIp,
-    provider: providerName,
-    model: resolvedModel,
-    conversationId: conversationId || null,
-    toolsUsed: !!(result.toolCalls && result.toolCalls.length > 0),
-    success: true,
-    inputTokens: usage.inputTokens,
-    outputTokens: usage.outputTokens,
-    estimatedCost,
-    tokensPerSec: parseFloat(tokensPerSec) || null,
-    temperature: options?.temperature ?? null,
-    maxTokens: options?.maxTokens ?? null,
-    topP: options?.topP ?? null,
-    topK: options?.topK ?? null,
-    frequencyPenalty: options?.frequencyPenalty ?? null,
-    presencePenalty: options?.presencePenalty ?? null,
-    stopSequences: options?.stopSequences ?? null,
-    messageCount: messages.length,
-    inputCharacters: messages.reduce(
-      (sum, m) => sum + (typeof m.content === "string" ? m.content.length : 0),
-      0,
-    ),
-    outputCharacters: result.text ? result.text.length : 0,
-    timeToGeneration: parseFloat(timeToGenerationSec.toFixed(3)),
-    generationTime: parseFloat(generationSec.toFixed(3)),
-    totalTime: parseFloat(totalSec.toFixed(3)),
-    requestPayload: {
-      messages: messages.map(sanitizeMsg),
-      ...(options?.tools
-        ? { tools: options.tools.map((t) => t.name || t.function?.name) }
-        : {}),
-    },
-    responsePayload: {
-      text:
-        result.text && result.text.length > 2000
-          ? result.text.slice(0, 2000) + "…"
-          : result.text || null,
-      thinking: result.thinking ? "[present]" : null,
-      toolCalls: result.toolCalls?.map((tc) => ({
-        name: tc.name,
-        id: tc.id,
-        args: tc.args,
-      })) || null,
-      usage,
-    },
-  });
-
-  // Emit the full text as a single chunk, then done
-  if (result.text) {
-    emit({ type: "chunk", content: result.text });
+  // Emit chunk/thinking/toolCall events before finalization
+  if (genResult.text) {
+    emit({ type: "chunk", content: genResult.text });
   }
-  if (result.thinking) {
-    emit({ type: "thinking", content: result.thinking });
+  if (genResult.thinking) {
+    emit({ type: "thinking", content: genResult.thinking });
   }
-  // Forward tool calls (custom function calling)
-  if (result.toolCalls && result.toolCalls.length > 0) {
-    for (const tc of result.toolCalls) {
+  if (genResult.toolCalls && genResult.toolCalls.length > 0) {
+    for (const tc of genResult.toolCalls) {
       emit({
         type: "toolCall",
         id: tc.id || null,
@@ -1157,69 +1150,27 @@ async function handleNonStreamingText(ctx) {
       });
     }
   }
-  emit({
-    type: "done",
-    provider: providerName,
-    model: resolvedModel,
-    usage,
-    estimatedCost,
+
+  // Build normalized result for shared finalization
+  await finalizeTextGeneration(ctx, {
+    text: genResult.text || "",
+    thinking: genResult.thinking || "",
+    images: [],
+    toolCalls:
+      genResult.toolCalls?.map((tc) => ({
+        id: tc.id || null,
+        name: tc.name,
+        args: tc.args || {},
+        thoughtSignature: tc.thoughtSignature || undefined,
+      })) || [],
+    audioChunks: [],
+    audioSampleRate: 24000,
+    usage: genResult.usage || { inputTokens: 0, outputTokens: 0 },
+    outputCharacters: genResult.text ? genResult.text.length : 0,
+    timeToGenerationSec: (generationStart - requestStart) / 1000,
+    generationSec: (now - generationStart) / 1000,
+    totalSec: (now - requestStart) / 1000,
   });
-
-  // Auto-append to conversation
-  if (conversationId) {
-    const messagesToAppend = [];
-    // Only append the user message on the first call for this turn
-    // (indicated by conversationMeta). Follow-up tool iterations reuse
-    // the same conversationId but omit conversationMeta, so the user
-    // message is already persisted from the first call.
-    if (userMessage && conversationMeta) {
-      messagesToAppend.push({
-        role: "user",
-        ...userMessage,
-        timestamp: userMessage.timestamp || new Date().toISOString(),
-      });
-    }
-    messagesToAppend.push({
-      role: "assistant",
-      content: result.text,
-      thinking: result.thinking || undefined,
-      ...(result.toolCalls?.length > 0 && { toolCalls: result.toolCalls }),
-      model: resolvedModel,
-      provider: providerName,
-      timestamp: new Date().toISOString(),
-      usage,
-      totalTime: parseFloat(totalSec.toFixed(3)),
-      estimatedCost,
-    });
-
-    const meta = conversationMeta
-      ? {
-          ...conversationMeta,
-          settings: { provider: providerName, model: resolvedModel },
-        }
-      : undefined;
-
-    ConversationService.appendMessages(
-      conversationId,
-      project,
-      username,
-      messagesToAppend,
-      meta,
-    )
-      .then(() =>
-        ConversationService.setGenerating(
-          conversationId,
-          project,
-          username,
-          false,
-        ),
-      )
-      .catch((err) =>
-        logger.error(
-          `Failed to append messages to conversation ${conversationId}: ${err.message}`,
-        ),
-      );
-  }
 }
 
 // ============================================================
