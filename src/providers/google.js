@@ -359,6 +359,8 @@ const googleProvider = {
             }
             if (usage) {
                 yield { type: "usage", usage };
+            } else {
+                yield { type: "usage", usage: { inputTokens: 0, outputTokens: 0 } };
             }
         } catch (error) {
             if (error.name === "AbortError") return;

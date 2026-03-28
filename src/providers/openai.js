@@ -500,6 +500,8 @@ const openaiProvider = {
         }
         if (usage) {
             yield { type: "usage", usage };
+        } else {
+            yield { type: "usage", usage: { inputTokens: 0, outputTokens: 0 } };
         }
     },
 
@@ -637,6 +639,8 @@ const openaiProvider = {
         }
         if (usage) {
             yield { type: "usage", usage };
+        } else {
+            yield { type: "usage", usage: { inputTokens: 0, outputTokens: 0 } };
         }
     },
 

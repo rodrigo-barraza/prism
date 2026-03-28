@@ -709,54 +709,57 @@ async function handleStreamingText(ctx) {
     if (tokensPerSec !== null && tokensPerSec > 10000) {
       tokensPerSec = null;
     }
-
-    const tokensPerSecStr = tokensPerSec !== null ? tokensPerSec.toFixed(1) : "N/A";
-
-    logger.request(
-      project, username, clientIp,
-      `[chat] ${providerName} ${resolvedModel} — ` +
-      `in: ${usage.inputTokens} tokens, out: ${usage.outputTokens} tokens, ` +
-      `speed: ${tokensPerSecStr} tok/s, ` +
-      `ttg: ${timeToGenerationSec !== null ? timeToGenerationSec.toFixed(2) + "s" : "N/A"}, ` +
-      `generation: ${generationSec !== null ? generationSec.toFixed(2) + "s" : "N/A"}, ` +
-      `total: ${totalSec.toFixed(2)}s` +
-      (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
-    );
-
-    RequestLogger.log({
-      requestId,
-      endpoint: "chat",
-      project,
-      username,
-      clientIp,
-      provider: providerName,
-      model: resolvedModel,
-      conversationId: conversationId || null,
-      toolsUsed: streamedToolCalls.length > 0,
-      success: true,
-      inputTokens: usage.inputTokens,
-      outputTokens: usage.outputTokens,
-      estimatedCost,
-      tokensPerSec,
-      temperature: options?.temperature ?? null,
-      maxTokens: options?.maxTokens ?? null,
-      messageCount: messages.length,
-      inputCharacters: messages.reduce(
-        (sum, m) => sum + (typeof m.content === "string" ? m.content.length : 0),
-        0,
-      ),
-      outputCharacters,
-      timeToGeneration:
-        timeToGenerationSec !== null
-          ? parseFloat(timeToGenerationSec.toFixed(3))
-          : null,
-      generationTime:
-        generationSec !== null
-          ? parseFloat(generationSec.toFixed(3))
-          : null,
-      totalTime: parseFloat(totalSec.toFixed(3)),
-    });
   }
+
+  // ── Always log — even when usage is unavailable ─────────────
+  const inputTokens = usage?.inputTokens || 0;
+  const outputTokens = usage?.outputTokens || 0;
+  const tokensPerSecStr = tokensPerSec !== null ? tokensPerSec.toFixed(1) : "N/A";
+
+  logger.request(
+    project, username, clientIp,
+    `[chat] ${providerName} ${resolvedModel} — ` +
+    `in: ${inputTokens} tokens, out: ${outputTokens} tokens, ` +
+    `speed: ${tokensPerSecStr} tok/s, ` +
+    `ttg: ${timeToGenerationSec !== null ? timeToGenerationSec.toFixed(2) + "s" : "N/A"}, ` +
+    `generation: ${generationSec !== null ? generationSec.toFixed(2) + "s" : "N/A"}, ` +
+    `total: ${totalSec.toFixed(2)}s` +
+    (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
+  );
+
+  RequestLogger.log({
+    requestId,
+    endpoint: "chat",
+    project,
+    username,
+    clientIp,
+    provider: providerName,
+    model: resolvedModel,
+    conversationId: conversationId || null,
+    toolsUsed: streamedToolCalls.length > 0,
+    success: true,
+    inputTokens,
+    outputTokens,
+    estimatedCost,
+    tokensPerSec,
+    temperature: options?.temperature ?? null,
+    maxTokens: options?.maxTokens ?? null,
+    messageCount: messages.length,
+    inputCharacters: messages.reduce(
+      (sum, m) => sum + (typeof m.content === "string" ? m.content.length : 0),
+      0,
+    ),
+    outputCharacters,
+    timeToGeneration:
+      timeToGenerationSec !== null
+        ? parseFloat(timeToGenerationSec.toFixed(3))
+        : null,
+    generationTime:
+      generationSec !== null
+        ? parseFloat(generationSec.toFixed(3))
+        : null,
+    totalTime: parseFloat(totalSec.toFixed(3)),
+  });
 
   // Build WAV from accumulated PCM audio chunks and upload to MinIO
   let audioRef = null;
