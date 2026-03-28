@@ -399,6 +399,12 @@ function handleWsLive(ws, project, username, _clientIp) {
       return;
     }
 
+    // ── Audio stream end (mic stopped — flush server-side cache) ──
+    if (type === "audioStreamEnd") {
+      liveSession.sendRealtimeInput({ audioStreamEnd: true });
+      return;
+    }
+
     // ── Text input ──────────────────────────────────────────────
     if (type === "text") {
       liveSession.sendRealtimeInput({ text: data.text });
