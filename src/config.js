@@ -482,6 +482,7 @@ const MODELS = {
         },
         streaming: true,
         thinking: true,
+        thinkingLevels: ["minimal", "low", "high"],
         webSearch: "Google Search",
         codeExecution: true,
         urlContext: true,
@@ -524,6 +525,7 @@ const MODELS = {
         },
         streaming: true,
         thinking: true,
+        thinkingLevels: ["minimal", "low", "high"],
         webSearch: "Google Search",
         codeExecution: true,
         urlContext: true,
@@ -560,6 +562,7 @@ const MODELS = {
         },
         streaming: true,
         thinking: true,
+        thinkingLevels: ["low", "medium", "high"],
         webSearch: "Google Search",
         codeExecution: true,
         urlContext: true,
@@ -596,6 +599,7 @@ const MODELS = {
         },
         streaming: true,
         thinking: true,
+        thinkingLevels: ["minimal", "low", "medium", "high"],
         liveAPI: true,
         webSearch: "Google Search",
         tools: ["Thinking", "Google Search", "Function Calling"],
@@ -791,6 +795,7 @@ const MODELS = {
         outputTypes: [TYPES.TEXT, TYPES.IMAGE],
         streaming: false,
         thinking: true,
+        thinkingLevels: ["minimal", "low", "high"],
         webSearch: true,
         tools: ["Thinking", "Image Generation", "Web Search"],
     },
@@ -814,6 +819,7 @@ const MODELS = {
         outputTypes: [TYPES.TEXT, TYPES.IMAGE],
         streaming: false,
         thinking: true,
+        thinkingLevels: ["minimal", "low", "medium", "high"],
         webSearch: true,
         tools: ["Thinking", "Image Generation", "Web Search"],
     },
@@ -997,6 +1003,7 @@ function getModelOptions(inputType, outputType) {
             if (m.size) entry.size = m.size;
             if (m.modelType) entry.modelType = m.modelType;
             if (m.liveAPI) entry.liveAPI = true;
+            if (m.thinkingLevels) entry.thinkingLevels = m.thinkingLevels;
             if (m.mediaLimits) entry.mediaLimits = m.mediaLimits;
             if (m.year) entry.year = m.year;
             // System prompt support: true for chat models, false for image-only/TTS/embedding APIs
