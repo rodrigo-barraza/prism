@@ -172,8 +172,8 @@ export async function handleChat(params, emit, { signal } = {}) {
     provider: providerName,
     model: requestedModel,
     messages,
-    conversationId,
-    conversationMeta,
+    conversationId: incomingConversationId,
+    conversationMeta: incomingConversationMeta,
     project = "unknown",
     username = "unknown",
     clientIp = null,
@@ -203,6 +203,19 @@ export async function handleChat(params, emit, { signal } = {}) {
     systemPrompt: _unusedSystemPrompt,
     ...extraParams
   } = params;
+
+  // ── Auto-conversation: every AI request gets tracked ────────────
+  // If the caller didn't provide a conversationId, auto-generate one
+  // so that all projects (Stickers, Lupos, etc.) get conversations
+  // persisted without needing to explicitly manage IDs.
+  let conversationId = incomingConversationId;
+  let conversationMeta = incomingConversationMeta;
+  if (!conversationId) {
+    conversationId = crypto.randomUUID();
+    const firstUserMsg = messages?.filter((m) => m.role === "user").pop();
+    const titleSnippet = (firstUserMsg?.content || "").slice(0, 100).trim() || "New Conversation";
+    conversationMeta = conversationMeta || { title: titleSnippet };
+  }
 
   // Build the internal options object that providers expect
   const options = {

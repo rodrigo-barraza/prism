@@ -41,12 +41,21 @@ export async function handleVoice(params, emitBinary, emitJSON) {
     instructions,
     model,
     options: extraOptions,
-    conversationId,
-    conversationMeta,
+    conversationId: incomingConversationId,
+    conversationMeta: incomingConversationMeta,
     project = "unknown",
     username = "unknown",
     clientIp = null,
   } = params;
+
+  // ── Auto-conversation: every AI request gets tracked ────────────
+  let conversationId = incomingConversationId;
+  let conversationMeta = incomingConversationMeta;
+  if (!conversationId) {
+    conversationId = crypto.randomUUID();
+    const titleSnippet = (text || "").slice(0, 100).trim() || "TTS Request";
+    conversationMeta = conversationMeta || { title: titleSnippet };
+  }
 
   try {
     if (!providerName) {
