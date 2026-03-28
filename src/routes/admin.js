@@ -963,10 +963,14 @@ router.get("/conversations/filters", async (req, res, next) => {
         const db = getDb();
         if (!db) return res.status(503).json({ error: "Database not available" });
 
-        const [projects, usernames] = await Promise.all([
+        const [convProjects, reqProjects, usernames] = await Promise.all([
             db.collection(CONVERSATIONS_COL).distinct("project"),
+            db.collection(REQUESTS_COL).distinct("project"),
             db.collection(CONVERSATIONS_COL).distinct("username"),
         ]);
+
+        // Merge and deduplicate projects from both collections
+        const projects = [...new Set([...convProjects, ...reqProjects])];
 
         res.json({
             projects: projects.filter(Boolean).sort(),

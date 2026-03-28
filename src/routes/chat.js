@@ -698,10 +698,14 @@ async function handleStreamingText(ctx) {
       estimatedCost = calculateTextCost(usage, pricing);
     }
 
+    const effectiveGenSec = (generationSec && generationSec > 0.001)
+      ? generationSec
+      : totalSec;
+
     tokensPerSec = usage.tokensPerSec
       ? parseFloat(usage.tokensPerSec.toFixed(1))
-      : generationSec && generationSec > 0
-        ? parseFloat((usage.outputTokens / generationSec).toFixed(1))
+      : effectiveGenSec > 0 && usage.outputTokens > 0
+        ? parseFloat((usage.outputTokens / effectiveGenSec).toFixed(1))
         : null;
 
     // Cap at 10k tok/s — anything higher is a measurement artifact
