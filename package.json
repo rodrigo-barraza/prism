@@ -12,7 +12,9 @@
     "format": "prettier --write \"src/**/*.js\"",
     "format:check": "prettier --check \"src/**/*.js\"",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:live": "vitest run --config vitest.live.config.js",
+    "test:lm-studio": "vitest run --config vitest.live.config.js tests/live/lmStudioModels.test.js"
   },
   "keywords": [
     "ai",

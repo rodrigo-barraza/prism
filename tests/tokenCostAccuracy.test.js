@@ -22,19 +22,273 @@ import { TYPES, getPricing } from "../src/config.js";
 
 const TEXT_PRICING = getPricing(TYPES.TEXT, TYPES.TEXT);
 
-// 10 realistic tool definitions for FC tests
-const SAMPLE_TOOLS = Array.from({ length: 10 }, (_, i) => ({
-  name: `tool_${i + 1}`,
-  description: `Test tool number ${i + 1} that does something useful.`,
-  parameters: {
-    type: "object",
-    properties: {
-      query: { type: "string", description: "Search query" },
-      limit: { type: "integer", description: "Max results" },
+// ── 10 real tool definitions from tools.clankerbox.com ────────
+// Sourced from GET /admin/tool-schemas — covers Weather,
+// Events, Markets, Finance, Knowledge, Health, Transit, Utilities.
+const SAMPLE_TOOLS = [
+  // 1. Weather & Environment — get_current_weather
+  {
+    name: "get_current_weather",
+    description:
+      "Get current weather conditions including temperature, humidity, wind, UV index, feels-like temperature, precipitation, and air quality indicators.",
+    parameters: {
+      type: "object",
+      properties: {
+        fields: {
+          type: "string",
+          description:
+            "Comma-separated list of fields to return. Available: temperature, apparentTemperature, humidity, weatherCode, weatherDescription, cloudCover, precipitation, rain, showers, snowfall, windSpeed, windDirection, windGust, pressure, isDay, uvIndex, sunrise, sunset, daylightDuration, usAqi, europeanAqi, pm25, pm10, ozone, carbonMonoxide, nitrogenDioxide, dust",
+        },
+      },
+      required: ["fields"],
     },
-    required: ["query"],
   },
-}));
+  // 2. Weather & Environment — get_earthquakes
+  {
+    name: "get_earthquakes",
+    description:
+      "Get recent earthquake data. Each earthquake includes magnitude, location, depth, time, and alert level.",
+    parameters: {
+      type: "object",
+      properties: {
+        fields: {
+          type: "string",
+          description:
+            "Comma-separated list of fields to return. Available: usgsId, magnitude, magnitudeType, magnitudeClass, place, time, url, felt, alert, tsunami, significance, title, latitude, longitude, depth",
+        },
+      },
+      required: ["fields"],
+    },
+  },
+  // 3. Events — search_events
+  {
+    name: "search_events",
+    description:
+      "Search for local events including concerts, sports games, festivals, community gatherings, and movie releases. Can filter by source, category, and text search.",
+    parameters: {
+      type: "object",
+      properties: {
+        q: {
+          type: "string",
+          description: "Text search query for event names or descriptions",
+        },
+        source: {
+          type: "string",
+          description:
+            "Filter by event source (e.g. ticketmaster, seatgeek, craigslist, ubc, sfu, city_of_vancouver, nhl, whitecaps, bc_lions, tmdb, google_places)",
+        },
+        category: {
+          type: "string",
+          description:
+            "Filter by event category (music, sports, arts, comedy, family, film, food, tech, other)",
+        },
+        limit: {
+          type: "number",
+          description: "Maximum number of events to return (default: 20)",
+        },
+        fields: {
+          type: "string",
+          description:
+            "Comma-separated list of fields to return. Available: name, description, source, category, startDate, endDate, url, imageUrl, status, genres, priceRange.min, priceRange.max, priceRange.currency, venue.name, venue.address, venue.city, venue.state, venue.country, venue.latitude, venue.longitude, mapImageUrl",
+        },
+      },
+      required: ["fields"],
+    },
+  },
+  // 4. Markets & Commodities — get_commodity_ticker
+  {
+    name: "get_commodity_ticker",
+    description:
+      "Get detailed data for a specific commodity/market ticker symbol.",
+    parameters: {
+      type: "object",
+      properties: {
+        ticker: {
+          type: "string",
+          description:
+            "Ticker symbol (e.g. CL=F for crude oil, GC=F for gold, SI=F for silver, BTC-USD for Bitcoin, ^GSPC for S&P 500)",
+        },
+        fields: {
+          type: "string",
+          description:
+            "Comma-separated list of fields to return. Available: ticker, name, price, change, changePercent, category, unit, dayHigh, dayLow, previousClose, volume",
+        },
+      },
+      required: ["ticker", "fields"],
+    },
+  },
+  // 5. Finance — get_stock_quote
+  {
+    name: "get_stock_quote",
+    description:
+      "Get real-time stock quote. Fields: c=current price, d=change, dp=percent change, h=day high, l=day low, o=open, pc=previous close, t=timestamp.",
+    parameters: {
+      type: "object",
+      properties: {
+        symbol: {
+          type: "string",
+          description: "Stock ticker symbol (e.g. AAPL, MSFT, GOOGL)",
+        },
+        fields: {
+          type: "string",
+          description:
+            "Comma-separated list of fields to return. Available: symbol, c, d, dp, h, l, o, pc, t, cached",
+        },
+      },
+      required: ["symbol", "fields"],
+    },
+  },
+  // 6. Knowledge — get_wikipedia_summary
+  {
+    name: "get_wikipedia_summary",
+    description:
+      "Get a summary of any Wikipedia article including extract text, thumbnail image, description, and page URL. Good for quick factual lookups.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description:
+            "Wikipedia article title (e.g. 'Albert Einstein', 'Machine learning')",
+        },
+        fields: {
+          type: "string",
+          description:
+            "Comma-separated list of fields to return. Available: found, title, displayTitle, extract, description, thumbnail, originalImage, pageUrl, lastModified",
+        },
+      },
+      required: ["title"],
+    },
+  },
+  // 7. Health — search_usda_nutrition
+  {
+    name: "search_usda_nutrition",
+    description:
+      "Search USDA's curated database of ~1,346 raw whole foods for detailed nutritional information. Returns per-100g nutrient values including macros, minerals, vitamins, amino acids, lipid profiles, and more.",
+    parameters: {
+      type: "object",
+      properties: {
+        q: {
+          type: "string",
+          description:
+            "Food name to search (e.g. 'chicken', 'spinach', 'salmon', 'almond')",
+        },
+        limit: { type: "number", description: "Max results (default: 10)" },
+        kingdom: {
+          type: "string",
+          description:
+            "Filter by biological kingdom: animalia, plantae, or fungi",
+          enum: ["animalia", "plantae", "fungi"],
+        },
+        foodType: {
+          type: "string",
+          description: "Filter by food type: animal, plant, or fungus",
+        },
+        nutrientTypes: {
+          type: "string",
+          description:
+            "Comma-separated nutrient categories to include: macros, minerals, vitamins, amino_acids, lipids, carbs, sterols. Omit for all.",
+        },
+        fields: {
+          type: "string",
+          description:
+            "Comma-separated list of fields to return. Available: name, description, kingdom, foodType, foodSubtype, part, form, state, taxonomy.taxon, taxonomy.kingdom, taxonomy.phylum, taxonomy.class, taxonomy.order, taxonomy.suborder, taxonomy.family, taxonomy.subfamily, taxonomy.tribe, taxonomy.genus, taxonomy.species, taxonomy.subspecies, taxonomy.variety, taxonomy.form, taxonomy.group, taxonomy.cultivar, taxonomy.phenotype, taxonomy.binomial, taxonomy.nomial, taxonomy.trinomial, perHundredGrams.macros, perHundredGrams.minerals, perHundredGrams.vitamins, perHundredGrams.aminoAcids, perHundredGrams.lipidProfile, perHundredGrams.carbDetails, perHundredGrams.sterols",
+        },
+      },
+      required: ["q"],
+    },
+  },
+  // 8. Transit — get_next_bus
+  {
+    name: "get_next_bus",
+    description:
+      "Get real-time bus arrival estimates for a TransLink (Vancouver) bus stop. Shows route, direction, expected arrival time, countdown, schedule status, and whether the trip is cancelled.",
+    parameters: {
+      type: "object",
+      properties: {
+        stopNo: {
+          type: "number",
+          description: "5-digit TransLink bus stop number (e.g. 51479)",
+        },
+        route: {
+          type: "string",
+          description: "Optional route number filter (e.g. '99', '014')",
+        },
+        fields: {
+          type: "string",
+          description:
+            "Comma-separated list of fields to return. Available: stopNo, count, routes",
+        },
+      },
+      required: ["stopNo"],
+    },
+  },
+  // 9. Utilities — convert_currency
+  {
+    name: "convert_currency",
+    description:
+      "Convert an amount between any two currencies using real-time exchange rates. Supports 161 currencies including USD, CAD, EUR, GBP, JPY, etc.",
+    parameters: {
+      type: "object",
+      properties: {
+        amount: {
+          type: "number",
+          description: "Amount to convert (default: 1)",
+        },
+        from: {
+          type: "string",
+          description: "Source currency code (e.g. 'USD', 'CAD', 'EUR')",
+        },
+        to: {
+          type: "string",
+          description: "Target currency code (e.g. 'CAD', 'JPY', 'GBP')",
+        },
+        fields: {
+          type: "string",
+          description:
+            "Comma-separated list of fields to return. Available: from, to, amount, rate, converted, lastUpdate",
+        },
+      },
+      required: ["from", "to"],
+    },
+  },
+  // 10. Knowledge — search_papers
+  {
+    name: "search_papers",
+    description:
+      "Search academic papers on arXiv. Returns titles, abstracts, authors, publication dates, PDF links, and category classifications. Covers CS, physics, math, biology, economics, and more.",
+    parameters: {
+      type: "object",
+      properties: {
+        q: {
+          type: "string",
+          description: "Search query for paper titles/abstracts",
+        },
+        category: {
+          type: "string",
+          description:
+            "arXiv category filter (e.g. cs.AI, cs.LG, cs.CL, cs.CV, cs.SE, physics, math, econ, stat)",
+        },
+        limit: {
+          type: "number",
+          description: "Max results (default: 10, max: 30)",
+        },
+        sortBy: {
+          type: "string",
+          description:
+            "Sort order: relevance, lastUpdatedDate, submittedDate",
+          enum: ["relevance", "lastUpdatedDate", "submittedDate"],
+        },
+        fields: {
+          type: "string",
+          description:
+            "Comma-separated list of fields to return. Available: arxivId, title, abstract, authors, published, updated, primaryCategory, categories, pdfUrl, abstractUrl, doi, comment",
+        },
+      },
+      required: ["q"],
+    },
+  },
+];
 
 // ── Helper: compute expected cost from config pricing ────────
 function expectedCost(model, usage) {
