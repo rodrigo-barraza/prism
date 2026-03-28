@@ -1,9 +1,11 @@
 import { handleChat } from "../routes/chat.js";
 import { handleVoice } from "../routes/audio.js";
-import { GoogleGenAI, Modality } from "@google/genai";
+import { GoogleGenAI, Modality, StartSensitivity, EndSensitivity } from "@google/genai";
 import { GOOGLE_API_KEY } from "../../secrets.js";
 import crypto from "crypto";
 import logger from "../utils/logger.js";
+import { calculateLiveCost } from "../utils/CostCalculator.js";
+import { getModelByName } from "../config.js";
 
 /**
  * Set up WebSocket handlers on the HTTP server.
@@ -220,6 +222,24 @@ function handleWsLive(ws, project, username, _clientIp) {
           thinkingConfig: clientConfig.thinkingConfig,
         }),
         ...(clientConfig.tools && { tools: clientConfig.tools }),
+        // Voice Activity Detection — tuned for reliable speech capture
+        realtimeInputConfig: {
+          automaticActivityDetection: {
+            disabled: false,
+            startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_HIGH,
+            endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_LOW,
+            prefixPaddingMs: 500,
+            silenceDurationMs: 1500,
+          },
+        },
+        // Voice config — explicit voice selection
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: {
+              voiceName: clientConfig.voiceName || "Puck",
+            },
+          },
+        },
         // Enable transcription for audio responses
         outputAudioTranscription: {},
         inputAudioTranscription: {},
@@ -301,10 +321,13 @@ function handleWsLive(ws, project, username, _clientIp) {
               // Turn complete — build WAV + upload, then emit with audioRef and usage
               if (msg.serverContent?.turnComplete) {
                 buildAndUploadAudio().then((audioRef) => {
+                  const modelDef = getModelByName(model);
+                  const estimatedCost = calculateLiveCost(turnUsage, modelDef?.pricing);
                   emit({
                     type: "turnComplete",
                     ...(audioRef ? { audioRef } : {}),
                     usage: { ...turnUsage },
+                    ...(estimatedCost !== null ? { estimatedCost } : {}),
                   });
                   // Reset per-turn accumulators
                   turnAudioChunks = [];
@@ -316,10 +339,13 @@ function handleWsLive(ws, project, username, _clientIp) {
               // Interrupted (model was cut off by user speech)
               if (msg.serverContent?.interrupted) {
                 buildAndUploadAudio().then((audioRef) => {
+                  const modelDef = getModelByName(model);
+                  const estimatedCost = calculateLiveCost(turnUsage, modelDef?.pricing);
                   emit({
                     type: "interrupted",
                     ...(audioRef ? { audioRef } : {}),
                     usage: { ...turnUsage },
+                    ...(estimatedCost !== null ? { estimatedCost } : {}),
                   });
                   turnAudioChunks = [];
                   turnUsage = { inputTokens: 0, outputTokens: 0 };

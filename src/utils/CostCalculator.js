@@ -52,6 +52,31 @@ export function calculateAudioCost(usage, pricing) {
 }
 
 /**
+ * Calculate the estimated cost for a Live API session turn.
+ * The Live API streams audio in and out, so input tokens should
+ * use audioInputPerMillion and output tokens should use
+ * audioOutputPerMillion when available.
+ *
+ * @param {{ inputTokens: number, outputTokens: number }} usage
+ * @param {{ inputPerMillion?: number, audioInputPerMillion?: number, outputPerMillion?: number, audioOutputPerMillion?: number }} pricing
+ * @returns {number|null} Cost in USD, or null if pricing is unavailable.
+ */
+export function calculateLiveCost(usage, pricing) {
+  if (!pricing || !usage) return null;
+
+  const inputRate = pricing.audioInputPerMillion || pricing.inputPerMillion || 0;
+  const outputRate =
+    pricing.audioOutputPerMillion || pricing.outputPerMillion || 0;
+
+  return parseFloat(
+    (
+      (usage.inputTokens / 1_000_000) * inputRate +
+      (usage.outputTokens / 1_000_000) * outputRate
+    ).toFixed(8),
+  );
+}
+
+/**
  * Calculate the estimated cost for a text-to-image request.
  * Estimates input tokens from prompt length (~4 chars per token).
  * Output image tokens vary by provider and resolution:
