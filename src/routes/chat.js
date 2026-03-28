@@ -1056,12 +1056,17 @@ async function handleNonStreamingText(ctx) {
   const tokensPerSec =
     generationSec > 0 ? (usage.outputTokens / generationSec).toFixed(1) : "N/A";
 
+  const cacheInfo =
+    usage.cacheReadInputTokens || usage.cacheCreationInputTokens
+      ? `, cache_read: ${usage.cacheReadInputTokens || 0}, cache_write: ${usage.cacheCreationInputTokens || 0}`
+      : "";
+
   logger.request(
     project,
     username,
     clientIp,
     `[chat] ${providerName} ${resolvedModel} — ` +
-      `in: ${usage.inputTokens} tokens, out: ${usage.outputTokens} tokens, ` +
+      `in: ${usage.inputTokens} tokens, out: ${usage.outputTokens} tokens${cacheInfo}, ` +
       `speed: ${tokensPerSec} tok/s, ` +
       `ttg: ${timeToGenerationSec.toFixed(2)}s, ` +
       `generation: ${generationSec.toFixed(2)}s, ` +

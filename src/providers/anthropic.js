@@ -519,11 +519,19 @@ const anthropicProvider = {
       let currentToolUseId = null;
       let codeInput = "";
       let usage = null;
+      let messageStartUsage = null;
 
       for await (const chunk of stream) {
         if (options.signal?.aborted) {
           stream.abort();
           break;
+        }
+        // Capture input token counts from message_start (sent once at stream start).
+        // Anthropic sends input_tokens, cache_read_input_tokens, and
+        // cache_creation_input_tokens here — message_delta only has output_tokens.
+        if (chunk.type === "message_start" && chunk.message?.usage) {
+          messageStartUsage = chunk.message.usage;
+          continue;
         }
         // Content block start — track what kind of block we're in
         if (chunk.type === "content_block_start") {
@@ -653,11 +661,15 @@ const anthropicProvider = {
           continue;
         }
 
-        // Message delta (final usage)
+        // Message delta (final usage) — carries output_tokens only
         if (chunk.type === "message_delta" && chunk.usage) {
           usage = {
-            inputTokens: 0,
+            inputTokens: messageStartUsage?.input_tokens ?? 0,
             outputTokens: chunk.usage.output_tokens ?? 0,
+            cacheReadInputTokens:
+              messageStartUsage?.cache_read_input_tokens ?? 0,
+            cacheCreationInputTokens:
+              messageStartUsage?.cache_creation_input_tokens ?? 0,
           };
         }
       }

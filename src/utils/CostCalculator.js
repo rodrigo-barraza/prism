@@ -1,22 +1,34 @@
-// ============================================================
-// CostCalculator — Pure cost estimation utilities
-// ============================================================
-
 /**
  * Calculate the estimated cost for a text-to-text request.
+ * Supports Anthropic prompt caching: cache reads at reduced rate,
+ * cache writes at premium rate.
  *
- * @param {{ inputTokens: number, outputTokens: number }} usage
- * @param {{ inputPerMillion: number, outputPerMillion: number }} pricing
+ * @param {{ inputTokens: number, outputTokens: number, cacheReadInputTokens?: number, cacheCreationInputTokens?: number }} usage
+ * @param {{ inputPerMillion: number, outputPerMillion: number, cachedInputPerMillion?: number, cacheWriteInputPerMillion?: number }} pricing
  * @returns {number|null} Cost in USD, or null if pricing is unavailable.
  */
 export function calculateTextCost(usage, pricing) {
   if (!pricing || !usage) return null;
-  return parseFloat(
-    (
-      (usage.inputTokens / 1_000_000) * (pricing.inputPerMillion || 0) +
-      (usage.outputTokens / 1_000_000) * (pricing.outputPerMillion || 0)
-    ).toFixed(8),
-  );
+
+  let cost =
+    (usage.inputTokens / 1_000_000) * (pricing.inputPerMillion || 0) +
+    (usage.outputTokens / 1_000_000) * (pricing.outputPerMillion || 0);
+
+  // Cache read tokens (Anthropic: 0.1x base rate)
+  if (usage.cacheReadInputTokens && pricing.cachedInputPerMillion) {
+    cost +=
+      (usage.cacheReadInputTokens / 1_000_000) *
+      pricing.cachedInputPerMillion;
+  }
+
+  // Cache write tokens (Anthropic: 1.25x base rate)
+  if (usage.cacheCreationInputTokens && pricing.cacheWriteInputPerMillion) {
+    cost +=
+      (usage.cacheCreationInputTokens / 1_000_000) *
+      pricing.cacheWriteInputPerMillion;
+  }
+
+  return parseFloat(cost.toFixed(8));
 }
 
 /**
