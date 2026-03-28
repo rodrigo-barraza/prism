@@ -37,6 +37,8 @@ const RequestLogger = {
     timeToGeneration = null,
     generationTime = null,
     totalTime = null,
+    requestPayload = null,
+    responsePayload = null,
   }) {
     try {
       const client = MongoWrapper.getClient(MONGO_DB_NAME);
@@ -75,6 +77,8 @@ const RequestLogger = {
         timeToGeneration,
         generationTime,
         totalTime,
+        requestPayload,
+        responsePayload,
       };
 
       await client.db(MONGO_DB_NAME).collection(COLLECTION).insertOne(doc);

@@ -60,7 +60,9 @@ router.get("/requests", async (req, res, next) => {
     const [docs, total] = await Promise.all([
       db
         .collection(REQUESTS_COL)
-        .find(filter)
+        .find(filter, {
+          projection: { requestPayload: 0, responsePayload: 0 },
+        })
         .sort({ [sort]: sortDir })
         .skip(skip)
         .limit(lim)

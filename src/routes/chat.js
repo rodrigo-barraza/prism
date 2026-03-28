@@ -1074,6 +1074,18 @@ async function handleNonStreamingText(ctx) {
       (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
   );
 
+  // Build sanitized payloads for admin inspection
+  const sanitizeMsg = (m) => ({
+    role: m.role,
+    content:
+      typeof m.content === "string"
+        ? m.content.length > 500
+          ? m.content.slice(0, 500) + "…"
+          : m.content
+        : m.content,
+    ...(m.images ? { images: `[${m.images.length} image(s)]` } : {}),
+  });
+
   RequestLogger.log({
     requestId,
     endpoint: "chat",
@@ -1105,6 +1117,25 @@ async function handleNonStreamingText(ctx) {
     timeToGeneration: parseFloat(timeToGenerationSec.toFixed(3)),
     generationTime: parseFloat(generationSec.toFixed(3)),
     totalTime: parseFloat(totalSec.toFixed(3)),
+    requestPayload: {
+      messages: messages.map(sanitizeMsg),
+      ...(options?.tools
+        ? { tools: options.tools.map((t) => t.name || t.function?.name) }
+        : {}),
+    },
+    responsePayload: {
+      text:
+        result.text && result.text.length > 2000
+          ? result.text.slice(0, 2000) + "…"
+          : result.text || null,
+      thinking: result.thinking ? "[present]" : null,
+      toolCalls: result.toolCalls?.map((tc) => ({
+        name: tc.name,
+        id: tc.id,
+        args: tc.args,
+      })) || null,
+      usage,
+    },
   });
 
   // Emit the full text as a single chunk, then done
