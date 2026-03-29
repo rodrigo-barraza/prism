@@ -11,6 +11,7 @@ import {
 import {
   calculateTextCost,
   calculateImageCost,
+  getTotalInputTokens,
 } from "../utils/CostCalculator.js";
 import logger from "../utils/logger.js";
 import RequestLogger from "../services/RequestLogger.js";
@@ -716,7 +717,7 @@ export async function finalizeTextGeneration(
   }
 
   // ── Console logging ───────────────────────────────────────────
-  const inputTokens = usage?.inputTokens || 0;
+  const inputTokens = getTotalInputTokens(usage);
   const outputTokens = usage?.outputTokens || 0;
   const tokensPerSecStr =
     tokensPerSec !== null ? tokensPerSec.toFixed(1) : "N/A";

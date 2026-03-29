@@ -1,4 +1,21 @@
 /**
+ * Get the total input token count from a usage object.
+ * Providers like Anthropic and Google split prompt tokens into
+ * new + cache_read + cache_write. This aggregates all three.
+ *
+ * @param {{ inputTokens?: number, cacheReadInputTokens?: number, cacheCreationInputTokens?: number }} usage
+ * @returns {number}
+ */
+export function getTotalInputTokens(usage) {
+  if (!usage) return 0;
+  return (
+    (usage.inputTokens || 0) +
+    (usage.cacheReadInputTokens || 0) +
+    (usage.cacheCreationInputTokens || 0)
+  );
+}
+
+/**
  * Calculate the estimated cost for a text-to-text request.
  * Supports Anthropic prompt caching: cache reads at reduced rate,
  * cache writes at premium rate.
