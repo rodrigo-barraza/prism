@@ -161,6 +161,7 @@ function handleWsLive(ws, project, username, _clientIp) {
   let turnThinking = "";
   let turnToolCalls = [];
   let turnInputText = "";
+  let turnUserAudioRef = null;
 
   function emit(event) {
     if (ws.readyState === ws.OPEN) {
@@ -367,6 +368,7 @@ function handleWsLive(ws, project, username, _clientIp) {
                   buildAndUploadAudio(userInputAudioChunks, userInputSampleRate)
                     .then((userAudioRef) => {
                       if (userAudioRef) {
+                        turnUserAudioRef = userAudioRef;
                         emit({ type: "userAudioReady", userAudioRef });
                       }
                     });
@@ -563,11 +565,16 @@ function handleWsLive(ws, project, username, _clientIp) {
                     generationSec,
                     totalSec,
                     options: activeConfig,
-                    messages: [{ role: "user", content: turnInputText.trim() || "[Voice Input]" }],
+                    messages: [{
+                      role: "user",
+                      content: turnInputText.trim() || "[Voice Input]",
+                      ...(turnUserAudioRef ? { audio: [turnUserAudioRef] } : {})
+                    }],
                     text: turnText,
                     thinking: turnThinking,
                     toolCalls: turnToolCalls,
                     outputCharacters: turnText.length,
+                    ...(audioRef ? { audioRef } : {})
                   }).catch(err => logger.error(`[Live API] Failed to log request: ${err.message}`));
 
                   emit({
@@ -589,6 +596,7 @@ function handleWsLive(ws, project, username, _clientIp) {
                   turnThinking = "";
                   turnToolCalls = [];
                   turnInputText = "";
+                  turnUserAudioRef = null;
                 });
                 return; // Don't emit turnComplete synchronously
               }
@@ -623,11 +631,16 @@ function handleWsLive(ws, project, username, _clientIp) {
                     generationSec,
                     totalSec,
                     options: activeConfig,
-                    messages: [{ role: "user", content: turnInputText.trim() || "[Voice Input]" }],
+                    messages: [{
+                      role: "user",
+                      content: turnInputText.trim() || "[Voice Input]",
+                      ...(turnUserAudioRef ? { audio: [turnUserAudioRef] } : {})
+                    }],
                     text: turnText,
                     thinking: turnThinking,
                     toolCalls: turnToolCalls,
                     outputCharacters: turnText.length,
+                    ...(audioRef ? { audioRef } : {})
                   }).catch(err => logger.error(`[Live API] Failed to log interrupted request: ${err.message}`));
 
                   emit({
@@ -647,6 +660,7 @@ function handleWsLive(ws, project, username, _clientIp) {
                   turnThinking = "";
                   turnToolCalls = [];
                   turnInputText = "";
+                  turnUserAudioRef = null;
                 });
                 return;
               }

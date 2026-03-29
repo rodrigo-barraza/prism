@@ -25,6 +25,9 @@ const API_TO_CANONICAL = {
 };
 
 function sanitizeMsg(m) {
+  const sanitizeStr = (s) => (typeof s === "string" && s.startsWith("data:") ? `[base64 data]` : s);
+  const sanitizeArr = (arr) => (Array.isArray(arr) ? arr.map(sanitizeStr) : arr);
+
   return {
     role: m.role,
     content:
@@ -33,7 +36,10 @@ function sanitizeMsg(m) {
           ? m.content.slice(0, 500) + "…"
           : m.content
         : m.content,
-    ...(m.images ? { images: `[${m.images.length} image(s)]` } : {}),
+    ...(m.images?.length ? { images: sanitizeArr(m.images) } : {}),
+    ...(m.audio?.length ? { audio: sanitizeArr(m.audio) } : {}),
+    ...(m.video?.length ? { video: sanitizeArr(m.video) } : {}),
+    ...(m.pdf?.length ? { pdf: sanitizeArr(m.pdf) } : {}),
   };
 }
 
@@ -155,7 +161,7 @@ const RequestLogger = {
     thinking = null,
     toolCalls = [],
     outputCharacters = 0,
-    
+    audioRef = null,
     // Optional
     agenticIteration = null,
   }) {
@@ -204,6 +210,7 @@ const RequestLogger = {
         text: text && text.length > 2000 ? text.slice(0, 2000) + "…" : text || null,
         thinking: thinking ? "[present]" : null,
         toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls.map((tc) => ({ name: API_TO_CANONICAL[tc.name] || tc.name, id: tc.id, args: tc.args })) : null,
+        ...(audioRef ? { audioRef } : {}),
         usage,
       },
     });
