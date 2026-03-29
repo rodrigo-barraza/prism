@@ -616,23 +616,6 @@ async function handleImageAPIModel(ctx) {
 }
 
 // ============================================================
-// Shared: Sanitize message content for admin payload logging
-// ============================================================
-
-function sanitizeMsg(m) {
-  return {
-    role: m.role,
-    content:
-      typeof m.content === "string"
-        ? m.content.length > 500
-          ? m.content.slice(0, 500) + "…"
-          : m.content
-        : m.content,
-    ...(m.images ? { images: `[${m.images.length} image(s)]` } : {}),
-  };
-}
-
-// ============================================================
 // Shared: Post-generation finalization
 // ── cost, logging, payloads, WAV, done event, persistence ──
 // ============================================================
@@ -742,64 +725,27 @@ export async function finalizeTextGeneration(
 
   // ── Request logging with sanitized payloads ────────────────────
   if (!skipRequestLog) {
-    RequestLogger.log({
+    RequestLogger.logChatGeneration({
       requestId,
-    endpoint: "chat",
-    project,
-    username,
-    clientIp,
-    provider: providerName,
-    model: resolvedModel,
-    conversationId: conversationId || null,
-    toolsUsed: toolCalls.length > 0,
-    toolNames: toolCalls.length > 0
-      ? [...new Set(toolCalls.map((tc) => tc.name))]
-      : [],
-    success: true,
-    inputTokens,
-    outputTokens,
-    estimatedCost,
-    tokensPerSec,
-    temperature: options?.temperature ?? null,
-    maxTokens: options?.maxTokens ?? null,
-    topP: options?.topP ?? null,
-    topK: options?.topK ?? null,
-    frequencyPenalty: options?.frequencyPenalty ?? null,
-    presencePenalty: options?.presencePenalty ?? null,
-    stopSequences: options?.stopSequences ?? null,
-    messageCount: messages.length,
-    inputCharacters: messages.reduce(
-      (sum, m) => sum + (typeof m.content === "string" ? m.content.length : 0),
-      0,
-    ),
-    outputCharacters,
-    timeToGeneration:
-      timeToGenerationSec !== null
-        ? parseFloat(timeToGenerationSec.toFixed(3))
-        : null,
-    generationTime:
-      generationSec !== null ? parseFloat(generationSec.toFixed(3)) : null,
-    totalTime: parseFloat(totalSec.toFixed(3)),
-    requestPayload: {
-      messages: messages.map(sanitizeMsg),
-      ...(options?.tools
-        ? { tools: options.tools.map((t) => t.name || t.function?.name) }
-        : {}),
-    },
-      responsePayload: {
-        text:
-          text && text.length > 2000 ? text.slice(0, 2000) + "…" : text || null,
-        thinking: thinking ? "[present]" : null,
-        toolCalls:
-          toolCalls.length > 0
-            ? toolCalls.map((tc) => ({
-                name: tc.name,
-                id: tc.id,
-                args: tc.args,
-              }))
-            : null,
-        usage,
-      },
+      project,
+      username,
+      clientIp,
+      provider: providerName,
+      model: resolvedModel,
+      conversationId: conversationId || null,
+      success: true,
+      usage,
+      estimatedCost,
+      tokensPerSec,
+      timeToGenerationSec,
+      generationSec,
+      totalSec,
+      options,
+      messages,
+      text,
+      thinking,
+      toolCalls,
+      outputCharacters,
     });
   }
 

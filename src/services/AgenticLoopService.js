@@ -8,7 +8,7 @@ import FileService from "./FileService.js";
 import { finalizeTextGeneration } from "../routes/chat.js";
 import RequestLogger from "./RequestLogger.js";
 import { TYPES, getPricing } from "../config.js";
-import { calculateTextCost, getTotalInputTokens } from "../utils/CostCalculator.js";
+import { calculateTextCost } from "../utils/CostCalculator.js";
 
 const MAX_TOOL_ITERATIONS = 10;
 
@@ -256,49 +256,28 @@ export default class AgenticLoopService {
         const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[resolvedModel];
         const passEstimatedCost = calculateTextCost(passUsage, pricing);
 
-        RequestLogger.log({
+        RequestLogger.logChatGeneration({
           requestId: `${ctx.requestId}-${iterations}`,
-          endpoint: "chat",
           project,
           username,
           clientIp: ctx.clientIp,
           provider: providerName,
           model: resolvedModel,
           conversationId,
-          toolsUsed: passPendingToolCalls.length > 0,
-          toolNames: passPendingToolCalls.length > 0 ? [...new Set(passPendingToolCalls.map((tc) => tc.name))] : [],
           success: true,
-          inputTokens: getTotalInputTokens(passUsage),
-          outputTokens: passUsage.outputTokens,
+          usage: passUsage,
           estimatedCost: passEstimatedCost,
           tokensPerSec: passTokensPerSec,
-          temperature: options?.temperature ?? null,
-          maxTokens: options?.maxTokens ?? null,
-          topP: options?.topP ?? null,
-          topK: options?.topK ?? null,
-          frequencyPenalty: options?.frequencyPenalty ?? null,
-          presencePenalty: options?.presencePenalty ?? null,
-          stopSequences: options?.stopSequences ?? null,
-          messageCount: currentMessages.length,
-          inputCharacters: currentMessages.reduce(
-            (sum, m) => sum + (typeof m.content === "string" ? m.content.length : 0),
-            0,
-          ),
+          timeToGenerationSec: passFirstTokenTime ? (passFirstTokenTime - passStart) / 1000 : null,
+          generationSec: passGenerationSec,
+          totalSec: passTotalSec,
+          options: passOptions,
+          messages: currentMessages.slice(-2),
+          text: passStreamedText,
+          thinking: passStreamedThinking,
+          toolCalls: passPendingToolCalls,
           outputCharacters: passOutputCharacters,
-          timeToGeneration: passFirstTokenTime ? parseFloat(((passFirstTokenTime - passStart) / 1000).toFixed(3)) : null,
-          generationTime: passGenerationSec ? parseFloat(passGenerationSec.toFixed(3)) : null,
-          totalTime: parseFloat(passTotalSec.toFixed(3)),
-          requestPayload: {
-            messages: currentMessages.slice(-2).map((m) => ({ role: m.role, content: typeof m.content === "string" ? (m.content.length > 500 ? m.content.slice(0, 500) + "…" : m.content) : m.content })),
-            ...(passOptions.tools ? { tools: passOptions.tools.map((t) => t.name) } : {}),
-            agenticIteration: iterations,
-          },
-          responsePayload: {
-            text: passStreamedText && passStreamedText.length > 2000 ? passStreamedText.slice(0, 2000) + "…" : passStreamedText || null,
-            thinking: passStreamedThinking ? "[present]" : null,
-            toolCalls: passPendingToolCalls.length > 0 ? passPendingToolCalls.map((tc) => ({ name: tc.name, id: tc.id, args: tc.args })) : null,
-            usage: passUsage,
-          },
+          agenticIteration: iterations,
         }).catch(err => logger.error(`[AgenticLoopService] Failed to log intermediate request: ${err.message}`));
 
         // If the LLM returned tool calls, we execute them and loop
