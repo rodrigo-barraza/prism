@@ -1062,6 +1062,8 @@ router.get("/conversations", async (req, res, next) => {
       project,
       username,
       search,
+      provider,
+      model,
       sort = "updatedAt",
       order = "desc",
     } = req.query;
@@ -1070,6 +1072,8 @@ router.get("/conversations", async (req, res, next) => {
     if (project) filter.project = project;
     if (username) filter.username = username;
     if (search) filter.title = { $regex: search, $options: "i" };
+    if (provider) filter.providers = provider;
+    if (model) filter["messages.model"] = model;
 
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const lim = parseInt(limit, 10);
@@ -1483,6 +1487,8 @@ router.get("/workflows", async (req, res, next) => {
       page = 1,
       limit = 50,
       project,
+      provider,
+      model,
       guildId,
       userId,
       userName,
@@ -1495,12 +1501,16 @@ router.get("/workflows", async (req, res, next) => {
     if (userId) filter.userId = userId;
     if (userName) filter.userName = { $regex: userName, $options: "i" };
 
-    // If project is specified, find all conversation IDs for that project
+    // If project, provider, or model is specified, find matching conversation IDs
     // and filter workflows that reference those conversations
-    if (project) {
+    if (project || provider || model) {
+      const convFilter = {};
+      if (project) convFilter.project = project;
+      if (provider) convFilter.providers = provider;
+      if (model) convFilter["messages.model"] = model;
       const convIds = await db
         .collection(CONVERSATIONS_COL)
-        .distinct("id", { project });
+        .distinct("id", convFilter);
       filter.conversationIds = { $elemMatch: { $in: convIds } };
     }
 
