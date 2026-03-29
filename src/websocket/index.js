@@ -348,8 +348,28 @@ function handleWsLive(ws, project, username, _clientIp) {
                   msg.usageMetadata.candidatesTokenCount ?? 0;
               }
 
+              // Finalize usage: the Live API does not report
+              // candidatesTokenCount for audio output, so we estimate
+              // output tokens from accumulated PCM data.
+              // Google tokenises audio at 32 tokens/second.
+              function finalizeUsage() {
+                if (turnUsage.outputTokens === 0 && turnAudioChunks.length > 0) {
+                  const totalPcmBytes = turnAudioChunks.reduce(
+                    (sum, b64) => sum + Buffer.from(b64, "base64").length,
+                    0,
+                  );
+                  // 16-bit mono → 2 bytes per sample
+                  const durationSeconds =
+                    totalPcmBytes / (audioSampleRate * 2);
+                  turnUsage.outputTokens = Math.ceil(
+                    durationSeconds * 32,
+                  );
+                }
+              }
+
               // Turn complete — build WAV + upload, then emit with audioRef and usage
               if (msg.serverContent?.turnComplete) {
+                finalizeUsage();
                 buildAndUploadAudio().then((audioRef) => {
                   const modelDef = getModelByName(model);
                   const estimatedCost = calculateLiveCost(
@@ -371,6 +391,7 @@ function handleWsLive(ws, project, username, _clientIp) {
 
               // Interrupted (model was cut off by user speech)
               if (msg.serverContent?.interrupted) {
+                finalizeUsage();
                 buildAndUploadAudio().then((audioRef) => {
                   const modelDef = getModelByName(model);
                   const estimatedCost = calculateLiveCost(
