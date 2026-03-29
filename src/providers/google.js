@@ -242,15 +242,22 @@ const googleProvider = {
         config.tools = [...(config.tools || []), ...customTools];
       }
 
+      // For models that output images, enable multimodal response
+      const modelDef = Object.values(MODELS).find((m) => m.name === model);
+      if (modelDef?.outputTypes?.includes(TYPES.IMAGE)) {
+        config.responseModalities = ["TEXT", "IMAGE"];
+      }
+
       const response = await getClient().models.generateContent({
         model,
         contents,
         config,
       });
 
-      // Check for function calls in the response
+      // Check for function calls, images, and text in the response
       const toolCalls = [];
       const textParts = [];
+      const images = [];
       for (const part of response.candidates?.[0]?.content?.parts || []) {
         if (part.functionCall) {
           toolCalls.push({
@@ -261,6 +268,11 @@ const googleProvider = {
           });
         } else if (part.text) {
           textParts.push(part.text);
+        } else if (part.inlineData) {
+          images.push({
+            data: part.inlineData.data,
+            mimeType: part.inlineData.mimeType || "image/png",
+          });
         }
       }
 
@@ -272,6 +284,7 @@ const googleProvider = {
         },
       };
       if (toolCalls.length > 0) result.toolCalls = toolCalls;
+      if (images.length > 0) result.images = images;
       return result;
     } catch (error) {
       throw new ProviderError("google", error.message, 500, error);

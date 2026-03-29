@@ -336,8 +336,14 @@ export async function handleChat(params, emit, { signal } = {}) {
       );
     }
 
-    // Prefer streaming; fall back to non-streaming
-    if (provider.generateTextStream) {
+    // Prefer streaming; fall back to non-streaming.
+    // Models with streaming: false (e.g. Gemini image models) should use
+    // non-streaming generateText to get a clean single-response result.
+    const useStreaming =
+      provider.generateTextStream &&
+      modelDef?.streaming !== false;
+
+    if (useStreaming) {
       if (options.functionCallingEnabled) {
         await AgenticLoopService.runAgenticLoop({
           provider,
@@ -1152,11 +1158,46 @@ async function handleNonStreamingText(ctx) {
     }
   }
 
+  // Handle images from the generation result (e.g. Gemini image models)
+  const images = [];
+  if (genResult.images && genResult.images.length > 0) {
+    for (const img of genResult.images) {
+      let minioRef = null;
+      if (img.data) {
+        try {
+          const mimeType = img.mimeType || "image/png";
+          const dataUrl = `data:${mimeType};base64,${img.data}`;
+          const { ref } = await FileService.uploadFile(
+            dataUrl,
+            "generations",
+            project,
+            username,
+          );
+          minioRef = ref;
+        } catch (uploadErr) {
+          logger.error(
+            `[chat/non-stream] MinIO upload failed: ${uploadErr.message}`,
+          );
+        }
+        images.push(
+          minioRef ||
+            `data:${img.mimeType || "image/png"};base64,${img.data}`,
+        );
+      }
+      emit({
+        type: "image",
+        ...(minioRef ? {} : { data: img.data }),
+        mimeType: img.mimeType,
+        minioRef,
+      });
+    }
+  }
+
   // Build normalized result for shared finalization
   await finalizeTextGeneration(ctx, {
     text: genResult.text || "",
     thinking: genResult.thinking || "",
-    images: [],
+    images,
     toolCalls:
       genResult.toolCalls?.map((tc) => ({
         id: tc.id || null,
