@@ -230,6 +230,63 @@ function handleWsLive(ws, project, username, _clientIp) {
       const model = data.model || "gemini-3.1-flash-live-preview";
       const clientConfig = data.config || {};
 
+      // Tools setup
+      const tools = [];
+      if (clientConfig.enabledTools && Array.isArray(clientConfig.enabledTools)) {
+        const enabledSet = new Set(clientConfig.enabledTools);
+        
+        if (enabledSet.has("Web Search") || enabledSet.has("Google Search")) {
+          tools.push({ googleSearch: {} });
+        }
+        
+        try {
+          const ToolOrchestratorService = (await import("../services/ToolOrchestratorService.js")).default;
+          const { convertToolsToGoogle } = await import("../providers/google.js");
+          const MongoWrapper = (await import("../wrappers/MongoWrapper.js")).default;
+          const { MONGO_DB_NAME } = await import("../../secrets.js");
+
+          const dynamicTools = [...ToolOrchestratorService.getToolSchemas()];
+
+          const mClient = MongoWrapper.getClient(MONGO_DB_NAME);
+          if (mClient) {
+            const customToolsData = await mClient
+              .db(MONGO_DB_NAME)
+              .collection("custom_tools")
+              .find({ project, username, enabled: true })
+              .toArray();
+              
+            for (const t of customToolsData) {
+              dynamicTools.push({
+                name: t.name,
+                description: t.description,
+                parameters: {
+                  type: "object",
+                  properties: Object.fromEntries(
+                    (t.parameters || []).map((p) => [
+                      p.name,
+                      {
+                        type: p.type || "string",
+                        description: p.description || "",
+                        ...(p.enum?.length ? { enum: p.enum } : {}),
+                      },
+                    ]),
+                  ),
+                  required: (t.parameters || []).filter((p) => p.required).map((p) => p.name),
+                },
+              });
+            }
+          }
+
+          const filtered = dynamicTools.filter((t) => enabledSet.has(t.name));
+          const googleFormats = convertToolsToGoogle(filtered);
+          if (googleFormats) {
+            tools.push(...googleFormats);
+          }
+        } catch (err) {
+          logger.error(`[Live API] Error loading tools: ${err.message}`);
+        }
+      }
+
       // Build Live API config
       const liveConfig = {
         responseModalities: clientConfig.responseModalities || [Modality.AUDIO],
@@ -244,7 +301,7 @@ function handleWsLive(ws, project, username, _clientIp) {
         ...(clientConfig.thinkingConfig && {
           thinkingConfig: clientConfig.thinkingConfig,
         }),
-        ...(clientConfig.tools && { tools: clientConfig.tools }),
+        ...(tools.length > 0 && { tools }),
         // Voice Activity Detection — tuned for reliable speech capture
         realtimeInputConfig: {
           automaticActivityDetection: {
@@ -333,14 +390,79 @@ function handleWsLive(ws, project, username, _clientIp) {
 
               // Top-level tool calls
               if (msg.toolCall?.functionCalls) {
-                emit({
-                  type: "toolCall",
-                  functionCalls: msg.toolCall.functionCalls.map((fc) => ({
-                    id: fc.id || `live-tc-${crypto.randomUUID()}`,
-                    name: fc.name,
-                    args: fc.args || {},
-                  })),
-                });
+                const functionCalls = msg.toolCall.functionCalls.map((fc) => ({
+                  id: fc.id || `live-tc-${crypto.randomUUID()}`,
+                  name: fc.name,
+                  args: fc.args || {},
+                }));
+
+                // Emit calling status to the client
+                for (const fc of functionCalls) {
+                  emit({
+                    type: "tool_execution",
+                    tool: { name: fc.name, args: fc.args, id: fc.id },
+                    status: "calling",
+                  });
+                }
+
+                // Execute tools natively in Prism and return response to Gemini
+                (async () => {
+                  try {
+                    const ToolOrchestratorService = (await import("../services/ToolOrchestratorService.js")).default;
+                    const { truncateToolResult } = await import("../utils/FunctionCallingUtilities.js");
+                    const MongoWrapper = (await import("../wrappers/MongoWrapper.js")).default;
+                    const { MONGO_DB_NAME } = await import("../../secrets.js");
+
+                    // Build merged tool map (custom + built-in) for execution
+                    const customToolMap = new Map();
+                    try {
+                      const mClient = MongoWrapper.getClient(MONGO_DB_NAME);
+                      if (mClient) {
+                        const customToolsData = await mClient
+                          .db(MONGO_DB_NAME)
+                          .collection("custom_tools")
+                          .find({ project, username, enabled: true })
+                          .toArray();
+                        for (const t of customToolsData) {
+                          customToolMap.set(t.name, t);
+                        }
+                      }
+                    } catch (e) {
+                      logger.warn(`Failed to fetch custom tools for Live API loop: ${e.message}`);
+                    }
+
+                    const results = await Promise.all(
+                      functionCalls.map(async (tc) => {
+                        let result;
+                        const customDef = customToolMap.get(tc.name);
+                        if (customDef) {
+                          result = await ToolOrchestratorService.executeCustomTool(customDef, tc.args);
+                        } else {
+                          result = await ToolOrchestratorService.executeTool(tc.name, tc.args);
+                        }
+                        return { id: tc.id, name: tc.name, result };
+                      })
+                    );
+
+                    for (const res of results) {
+                      emit({
+                        type: "tool_execution",
+                        tool: { name: res.name, id: res.id, result: res.result },
+                        status: res.result?.error ? "error" : "done",
+                      });
+                    }
+
+                    const functionResponses = results.map((r) => ({
+                      id: r.id,
+                      name: r.name,
+                      response: truncateToolResult(r.result),
+                    }));
+
+                    liveSession.sendToolResponse({ functionResponses });
+                  } catch (err) {
+                    logger.error(`[Live API] Error executing tools: ${err.message}`);
+                  }
+                })();
               }
 
               // Transcriptions

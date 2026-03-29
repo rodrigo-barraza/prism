@@ -92,7 +92,7 @@ function sanitizeSchemaForGoogle(schema, isPropertyMap = false) {
  * Input:  [{ name, description, parameters: { type, properties, required } }]
  * Output: [{ functionDeclarations: [...] }]
  */
-function convertToolsToGoogle(tools) {
+export function convertToolsToGoogle(tools) {
   if (!tools || !Array.isArray(tools) || tools.length === 0) return null;
   return [
     {
