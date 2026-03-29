@@ -350,6 +350,8 @@ export default class AgenticLoopService {
       // However, since we bypassed handleStreamingText entirely, we must manually finalize
       // We can just call finalizeTextGeneration and pass the collected metrics!
 
+      overallUsage.requests = iterations;
+
       await finalizeTextGeneration(ctx, {
           text: finalStreamedText,
           thinking: streamedThinking,
