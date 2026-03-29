@@ -749,6 +749,9 @@ export async function finalizeTextGeneration(
     model: resolvedModel,
     conversationId: conversationId || null,
     toolsUsed: toolCalls.length > 0,
+    toolNames: toolCalls.length > 0
+      ? [...new Set(toolCalls.map((tc) => tc.name))]
+      : [],
     success: true,
     inputTokens,
     outputTokens,
