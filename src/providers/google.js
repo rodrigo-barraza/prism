@@ -51,6 +51,43 @@ function addWavHeader(buffer, sampleRate = 24000, numChannels = 1) {
  * Gemini's thought_signature requirement for model-generated images.
  */
 /**
+ * Recursively sanitize a JSON Schema object for Google's restricted format.
+ * Gemini's functionDeclarations only support a subset of JSON Schema —
+ * unsupported keywords like `const`, `$schema`, `$id`, `$ref`, `examples`,
+ * `default`, `additionalProperties` etc. cause 400 INVALID_ARGUMENT errors.
+ *
+ * Strategy:
+ *   - `const: "value"` → `enum: ["value"]` (semantically equivalent)
+ *   - Other unsupported keys → stripped entirely
+ */
+const GOOGLE_UNSUPPORTED_KEYS = new Set([
+  "$schema", "$id", "$ref", "examples", "default",
+  "additionalProperties", "patternProperties", "if", "then", "else",
+  "allOf", "anyOf", "oneOf", "not", "title",
+]);
+
+function sanitizeSchemaForGoogle(schema, isPropertyMap = false) {
+  if (!schema || typeof schema !== "object") return schema;
+  if (Array.isArray(schema)) return schema.map((item) => sanitizeSchemaForGoogle(item, false));
+
+  const cleaned = {};
+  for (const [key, value] of Object.entries(schema)) {
+    // Convert `const` → single-value `enum`
+    if (key === "const" && !isPropertyMap) {
+      cleaned.enum = [value];
+      continue;
+    }
+    // Strip unsupported schema keywords — but NOT when we're iterating
+    // over a `properties` map, where keys are user-defined field names
+    // (e.g. properties.title is a field called "title", not the JSON Schema title keyword)
+    if (!isPropertyMap && GOOGLE_UNSUPPORTED_KEYS.has(key)) continue;
+    // When we hit a "properties" key, its children are a map of field names → schemas
+    cleaned[key] = sanitizeSchemaForGoogle(value, key === "properties");
+  }
+  return cleaned;
+}
+
+/**
  * Convert generic tool schemas to Google's functionDeclarations format.
  * Input:  [{ name, description, parameters: { type, properties, required } }]
  * Output: [{ functionDeclarations: [...] }]
@@ -62,7 +99,7 @@ function convertToolsToGoogle(tools) {
       functionDeclarations: tools.map((t) => ({
         name: t.name,
         description: t.description || "",
-        parameters: t.parameters || {},
+        parameters: sanitizeSchemaForGoogle(t.parameters || {}),
       })),
     },
   ];
