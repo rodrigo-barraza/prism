@@ -1226,11 +1226,12 @@ router.get("/conversations/stats", async (req, res, next) => {
     const project = req.query.project || null;
     const filter = project ? { project } : {};
     const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
 
     const [generatingCount, recentCount] = await Promise.all([
       db
         .collection(CONVERSATIONS_COL)
-        .countDocuments({ ...filter, isGenerating: true }),
+        .countDocuments({ ...filter, isGenerating: true, updatedAt: { $gte: fiveMinAgo } }),
       db
         .collection(CONVERSATIONS_COL)
         .countDocuments({ ...filter, updatedAt: { $gte: oneHourAgo } }),
@@ -1266,15 +1267,28 @@ router.get("/conversations/stream", async (req, res) => {
     try {
       const filter = project ? { project } : {};
       const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
+      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
 
       const [generatingCount, recentCount] = await Promise.all([
         db
           .collection(CONVERSATIONS_COL)
-          .countDocuments({ ...filter, isGenerating: true }),
+          .countDocuments({ ...filter, isGenerating: true, updatedAt: { $gte: fiveMinAgo } }),
         db
           .collection(CONVERSATIONS_COL)
           .countDocuments({ ...filter, updatedAt: { $gte: oneHourAgo } }),
       ]);
+
+      // Auto-clear stale isGenerating flags (> 5 min without update)
+      db.collection(CONVERSATIONS_COL)
+        .updateMany(
+          { isGenerating: true, updatedAt: { $lt: fiveMinAgo } },
+          { $set: { isGenerating: false } },
+        )
+        .then(({ modifiedCount }) => {
+          if (modifiedCount > 0)
+            logger.info(`Auto-cleared ${modifiedCount} stale isGenerating flag(s)`);
+        })
+        .catch(() => {});
 
       const payload = JSON.stringify({ generatingCount, recentCount });
       // Only send if data changed

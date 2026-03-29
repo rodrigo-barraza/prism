@@ -138,9 +138,14 @@ function handleWsVoice(ws, project, username, clientIp) {
  */
 function handleWsLive(ws, project, username, _clientIp) {
   let liveSession = null;
-  /** @type {string[]} Accumulated base64 PCM audio chunks for current turn */
+  /** @type {string[]} Accumulated base64 PCM audio chunks for current turn (model output, 24kHz) */
   let turnAudioChunks = [];
   let audioSampleRate = 24000;
+  /** @type {string[]} Accumulated base64 PCM audio chunks for current turn (user input, 16kHz) */
+  const userInputAudioChunks = [];
+  const userInputSampleRate = 16000;
+  /** Whether user audio upload has been triggered for this turn */
+  let userAudioUploading = false;
   /** Accumulated usage across the current turn */
   let turnUsage = { inputTokens: 0, outputTokens: 0 };
 
@@ -152,19 +157,21 @@ function handleWsLive(ws, project, username, _clientIp) {
 
   /**
    * Build a WAV from accumulated PCM chunks, upload to MinIO, and return the ref.
+   * @param {string[]} chunks - base64-encoded PCM chunks
+   * @param {number} sampleRate - sample rate of the PCM data
    * @returns {Promise<string|null>} MinIO ref or null on failure
    */
-  async function buildAndUploadAudio() {
-    if (turnAudioChunks.length === 0) return null;
+  async function buildAndUploadAudio(chunks = turnAudioChunks, sampleRate = audioSampleRate) {
+    if (chunks.length === 0) return null;
     try {
-      const pcmBuffers = turnAudioChunks.map((b64) =>
+      const pcmBuffers = chunks.map((b64) =>
         Buffer.from(b64, "base64"),
       );
       const pcmData = Buffer.concat(pcmBuffers);
 
       const numChannels = 1;
       const bitsPerSample = 16;
-      const byteRate = audioSampleRate * numChannels * (bitsPerSample / 8);
+      const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
       const blockAlign = numChannels * (bitsPerSample / 8);
       const wavHeader = Buffer.alloc(44);
       wavHeader.write("RIFF", 0);
@@ -174,7 +181,7 @@ function handleWsLive(ws, project, username, _clientIp) {
       wavHeader.writeUInt32LE(16, 16);
       wavHeader.writeUInt16LE(1, 20);
       wavHeader.writeUInt16LE(numChannels, 22);
-      wavHeader.writeUInt32LE(audioSampleRate, 24);
+      wavHeader.writeUInt32LE(sampleRate, 24);
       wavHeader.writeUInt32LE(byteRate, 28);
       wavHeader.writeUInt16LE(blockAlign, 32);
       wavHeader.writeUInt16LE(bitsPerSample, 34);
@@ -276,6 +283,18 @@ function handleWsLive(ws, project, username, _clientIp) {
             onmessage: (msg) => {
               // Model turn parts (audio data, text, function calls)
               if (msg.serverContent?.modelTurn?.parts) {
+                // First model turn message = user is done speaking.
+                // Eagerly upload user audio and emit userAudioReady now,
+                // so the audio card shows up before the model finishes.
+                if (!userAudioUploading && userInputAudioChunks.length > 0) {
+                  userAudioUploading = true;
+                  buildAndUploadAudio(userInputAudioChunks, userInputSampleRate)
+                    .then((userAudioRef) => {
+                      if (userAudioRef) {
+                        emit({ type: "userAudioReady", userAudioRef });
+                      }
+                    });
+                }
                 for (const part of msg.serverContent.modelTurn.parts) {
                   if (part.thought && part.text) {
                     emit({ type: "thinking", content: part.text });
@@ -384,6 +403,8 @@ function handleWsLive(ws, project, username, _clientIp) {
                   });
                   // Reset per-turn accumulators
                   turnAudioChunks = [];
+                  userInputAudioChunks.length = 0;
+                  userAudioUploading = false;
                   turnUsage = { inputTokens: 0, outputTokens: 0 };
                 });
                 return; // Don't emit turnComplete synchronously
@@ -405,6 +426,8 @@ function handleWsLive(ws, project, username, _clientIp) {
                     ...(estimatedCost !== null ? { estimatedCost } : {}),
                   });
                   turnAudioChunks = [];
+                  userInputAudioChunks.length = 0;
+                  userAudioUploading = false;
                   turnUsage = { inputTokens: 0, outputTokens: 0 };
                 });
                 return;
@@ -445,6 +468,10 @@ function handleWsLive(ws, project, username, _clientIp) {
 
     // ── Audio input ─────────────────────────────────────────────
     if (type === "audio") {
+      // Accumulate user's mic audio for WAV upload at turn end
+      if (data.data) {
+        userInputAudioChunks.push(data.data);
+      }
       liveSession.sendRealtimeInput({
         audio: {
           data: data.data,

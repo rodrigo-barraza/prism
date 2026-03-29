@@ -102,7 +102,9 @@ export function computeModalities(messages) {
     const isUser = m.role === "user";
     const isAssistant = m.role === "assistant";
     if (m.content && (isUser || isAssistant)) {
-      if (isUser) mod.textIn = true;
+      // liveTranscription = the content is a speech-to-text transcript
+      // from the Live API, not typed text — don't count as textIn.
+      if (isUser && !m.liveTranscription) mod.textIn = true;
       if (isAssistant) mod.textOut = true;
     }
     if (m.images?.length > 0 || m.image) {
