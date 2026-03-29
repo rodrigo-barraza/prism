@@ -6,6 +6,9 @@ import logger from "../utils/logger.js";
 import ConversationService from "./ConversationService.js";
 import FileService from "./FileService.js";
 import { finalizeTextGeneration } from "../routes/chat.js";
+import RequestLogger from "./RequestLogger.js";
+import { TYPES, getPricing } from "../config.js";
+import { calculateTextCost, getTotalInputTokens } from "../utils/CostCalculator.js";
 
 const MAX_TOOL_ITERATIONS = 10;
 
@@ -113,7 +116,13 @@ export default class AgenticLoopService {
         iterations++;
         
         let passStreamedText = "";
+        let passStreamedThinking = "";
         const passPendingToolCalls = [];
+        const passStart = performance.now();
+        let passFirstTokenTime = null;
+        let passGenerationEnd = null;
+        let passOutputCharacters = 0;
+        const passUsage = { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 };
 
         const passOptions = { ...options };      if (isLocalProvider && hasCalledTools) {
           delete passOptions.tools;
@@ -140,12 +149,19 @@ export default class AgenticLoopService {
             overallUsage.outputTokens += chunk.usage.outputTokens || 0;
             overallUsage.cacheReadInputTokens += chunk.usage.cacheReadInputTokens || 0;
             overallUsage.cacheCreationInputTokens += chunk.usage.cacheCreationInputTokens || 0;
+            
+            passUsage.inputTokens += chunk.usage.inputTokens || 0;
+            passUsage.outputTokens += chunk.usage.outputTokens || 0;
+            passUsage.cacheReadInputTokens += chunk.usage.cacheReadInputTokens || 0;
+            passUsage.cacheCreationInputTokens += chunk.usage.cacheCreationInputTokens || 0;
             continue;
           }
 
           if (chunk && typeof chunk === "object" && chunk.type === "thinking") {
             overallGenerationEnd = performance.now();
+            passGenerationEnd = performance.now();
             streamedThinking += chunk.content;
+            passStreamedThinking += chunk.content;
             emit({ type: "thinking", content: chunk.content });
             continue;
           }
@@ -218,15 +234,72 @@ export default class AgenticLoopService {
           if (!overallFirstTokenTime) {
             overallFirstTokenTime = performance.now();
           }
+          if (!passFirstTokenTime) {
+            passFirstTokenTime = performance.now();
+          }
           overallGenerationEnd = performance.now();
+          passGenerationEnd = performance.now();
           const chunkStr = typeof chunk === "string" ? chunk : "";
           overallOutputCharacters += chunkStr.length;
+          passOutputCharacters += chunkStr.length;
           finalStreamedText = passStreamedText + chunkStr;
           passStreamedText += chunkStr;
           emit({ type: "chunk", content: chunk });
         }
 
         if (signal?.aborted) break;
+
+        // Log the intermediate request
+        const passGenerationSec = passFirstTokenTime && passGenerationEnd ? (passGenerationEnd - passFirstTokenTime) / 1000 : null;
+        const passTotalSec = (performance.now() - passStart) / 1000;
+        const passTokensPerSec = passGenerationSec > 0 && passUsage.outputTokens > 0 ? parseFloat((passUsage.outputTokens / passGenerationSec).toFixed(1)) : null;
+        const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[resolvedModel];
+        const passEstimatedCost = calculateTextCost(passUsage, pricing);
+
+        RequestLogger.log({
+          requestId: `${ctx.requestId}-${iterations}`,
+          endpoint: "chat",
+          project,
+          username,
+          clientIp: ctx.clientIp,
+          provider: providerName,
+          model: resolvedModel,
+          conversationId,
+          toolsUsed: passPendingToolCalls.length > 0,
+          toolNames: passPendingToolCalls.length > 0 ? [...new Set(passPendingToolCalls.map((tc) => tc.name))] : [],
+          success: true,
+          inputTokens: getTotalInputTokens(passUsage),
+          outputTokens: passUsage.outputTokens,
+          estimatedCost: passEstimatedCost,
+          tokensPerSec: passTokensPerSec,
+          temperature: options?.temperature ?? null,
+          maxTokens: options?.maxTokens ?? null,
+          topP: options?.topP ?? null,
+          topK: options?.topK ?? null,
+          frequencyPenalty: options?.frequencyPenalty ?? null,
+          presencePenalty: options?.presencePenalty ?? null,
+          stopSequences: options?.stopSequences ?? null,
+          messageCount: currentMessages.length,
+          inputCharacters: currentMessages.reduce(
+            (sum, m) => sum + (typeof m.content === "string" ? m.content.length : 0),
+            0,
+          ),
+          outputCharacters: passOutputCharacters,
+          timeToGeneration: passFirstTokenTime ? parseFloat(((passFirstTokenTime - passStart) / 1000).toFixed(3)) : null,
+          generationTime: passGenerationSec ? parseFloat(passGenerationSec.toFixed(3)) : null,
+          totalTime: parseFloat(passTotalSec.toFixed(3)),
+          requestPayload: {
+            messages: currentMessages.slice(-2).map((m) => ({ role: m.role, content: typeof m.content === "string" ? (m.content.length > 500 ? m.content.slice(0, 500) + "…" : m.content) : m.content })),
+            ...(passOptions.tools ? { tools: passOptions.tools.map((t) => t.name) } : {}),
+            agenticIteration: iterations,
+          },
+          responsePayload: {
+            text: passStreamedText && passStreamedText.length > 2000 ? passStreamedText.slice(0, 2000) + "…" : passStreamedText || null,
+            thinking: passStreamedThinking ? "[present]" : null,
+            toolCalls: passPendingToolCalls.length > 0 ? passPendingToolCalls.map((tc) => ({ name: tc.name, id: tc.id, args: tc.args })) : null,
+            usage: passUsage,
+          },
+        }).catch(err => logger.error(`[AgenticLoopService] Failed to log intermediate request: ${err.message}`));
 
         // If the LLM returned tool calls, we execute them and loop
         if (passPendingToolCalls.length > 0) {
@@ -310,7 +383,7 @@ export default class AgenticLoopService {
           timeToGenerationSec: overallFirstTokenTime ? (overallFirstTokenTime - requestStart) / 1000 : null,
           generationSec: overallFirstTokenTime && overallGenerationEnd ? (overallGenerationEnd - overallFirstTokenTime) / 1000 : null,
           totalSec: (now - requestStart) / 1000,
-      }, currentMessages); // <--- we need to pass currentMessages to finalizeTextGeneration so it saves the tool iterations
+      }, currentMessages, true); // <--- pass true to skip the overall request logging so we don't duplicate
     } catch (err) {
       // Clear generating flag so the conversation doesn't stay stuck
       if (conversationId) {

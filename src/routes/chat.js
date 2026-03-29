@@ -653,6 +653,7 @@ export async function finalizeTextGeneration(
     totalSec,
   },
   overrideMessagesToAppend = null,
+  skipRequestLog = false
 ) {
   const {
     providerName,
@@ -740,8 +741,9 @@ export async function finalizeTextGeneration(
   );
 
   // ── Request logging with sanitized payloads ────────────────────
-  RequestLogger.log({
-    requestId,
+  if (!skipRequestLog) {
+    RequestLogger.log({
+      requestId,
     endpoint: "chat",
     project,
     username,
@@ -784,21 +786,22 @@ export async function finalizeTextGeneration(
         ? { tools: options.tools.map((t) => t.name || t.function?.name) }
         : {}),
     },
-    responsePayload: {
-      text:
-        text && text.length > 2000 ? text.slice(0, 2000) + "…" : text || null,
-      thinking: thinking ? "[present]" : null,
-      toolCalls:
-        toolCalls.length > 0
-          ? toolCalls.map((tc) => ({
-              name: tc.name,
-              id: tc.id,
-              args: tc.args,
-            }))
-          : null,
-      usage,
-    },
-  });
+      responsePayload: {
+        text:
+          text && text.length > 2000 ? text.slice(0, 2000) + "…" : text || null,
+        thinking: thinking ? "[present]" : null,
+        toolCalls:
+          toolCalls.length > 0
+            ? toolCalls.map((tc) => ({
+                name: tc.name,
+                id: tc.id,
+                args: tc.args,
+              }))
+            : null,
+        usage,
+      },
+    });
+  }
 
   // ── Build WAV from accumulated PCM audio chunks ───────────────
   let audioRef = null;
