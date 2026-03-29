@@ -971,7 +971,7 @@ router.get("/stats/costs", async (req, res, next) => {
 });
 
 // ============================================================
-// GET /admin/stats/timeline — requests grouped by hour/day
+// GET /admin/stats/timeline — requests grouped by 10min/hour/day
 // ============================================================
 router.get("/stats/timeline", async (req, res, next) => {
   try {
@@ -992,8 +992,42 @@ router.get("/stats/timeline", async (req, res, next) => {
 
     const spanMs = (untilDate || new Date()) - sinceDate;
     const spanDays = spanMs / (1000 * 60 * 60 * 24);
-    const granularity = spanDays > 7 ? "day" : "hour";
-    const substrLen = granularity === "day" ? 10 : 13; // "2026-03-21" vs "2026-03-21T14"
+
+    // Three-tier granularity
+    let granularity, groupId;
+    if (spanDays <= 1) {
+      // ≤ 1 day → 10-minute bins
+      // Bucket key: "2026-03-21T14:10", "2026-03-21T14:20", etc.
+      granularity = "10min";
+      groupId = {
+        $concat: [
+          { $substr: ["$timestamp", 0, 14] },        // "2026-03-21T14:" 
+          {
+            $toString: {
+              $multiply: [
+                {
+                  $floor: {
+                    $divide: [
+                      { $toInt: { $substr: ["$timestamp", 14, 2] } },
+                      10,
+                    ],
+                  },
+                },
+                10,
+              ],
+            },
+          },
+        ],
+      };
+    } else if (spanDays <= 7) {
+      // 1–7 days → hourly bins
+      granularity = "hour";
+      groupId = { $substr: ["$timestamp", 0, 13] };  // "2026-03-21T14"
+    } else {
+      // > 7 days → daily bins
+      granularity = "day";
+      groupId = { $substr: ["$timestamp", 0, 10] };  // "2026-03-21"
+    }
 
     const timeMatch = { $gte: sinceDate.toISOString() };
     if (untilDate) timeMatch.$lte = untilDate.toISOString();
@@ -1005,7 +1039,7 @@ router.get("/stats/timeline", async (req, res, next) => {
       { $match: matchFilter },
       {
         $group: {
-          _id: { $substr: ["$timestamp", 0, substrLen] },
+          _id: groupId,
           requests: { $sum: 1 },
           tokens: {
             $sum: {
