@@ -9,6 +9,7 @@ import {
 import { GOOGLE_API_KEY } from "../../secrets.js";
 import crypto from "crypto";
 import logger from "../utils/logger.js";
+import RequestLogger from "../services/RequestLogger.js";
 import { calculateLiveCost } from "../utils/CostCalculator.js";
 import { getModelByName } from "../config.js";
 
@@ -149,6 +150,18 @@ function handleWsLive(ws, project, username, _clientIp) {
   /** Accumulated usage across the current turn */
   let turnUsage = { inputTokens: 0, outputTokens: 0 };
 
+  // Variables for Request Logging
+  let activeModel = "gemini-3.1-flash-live-preview";
+  let activeConversationId = null;
+  let activeConfig = {};
+  
+  let turnStart = performance.now();
+  let passFirstTokenTime = null;
+  let turnText = "";
+  let turnThinking = "";
+  let turnToolCalls = [];
+  let turnInputText = "";
+
   function emit(event) {
     if (ws.readyState === ws.OPEN) {
       ws.send(JSON.stringify(event));
@@ -229,6 +242,9 @@ function handleWsLive(ws, project, username, _clientIp) {
 
       const model = data.model || "gemini-3.1-flash-live-preview";
       const clientConfig = data.config || {};
+      
+      activeModel = model;
+      activeConversationId = data.conversationId || clientConfig?.conversationId || null;
 
       // Tools setup
       const tools = [];
@@ -324,6 +340,7 @@ function handleWsLive(ws, project, username, _clientIp) {
         outputAudioTranscription: {},
         inputAudioTranscription: {},
       };
+      activeConfig = liveConfig;
 
       try {
         const client = new GoogleGenAI({ apiKey: GOOGLE_API_KEY });
@@ -340,6 +357,8 @@ function handleWsLive(ws, project, username, _clientIp) {
             onmessage: (msg) => {
               // Model turn parts (audio data, text, function calls)
               if (msg.serverContent?.modelTurn?.parts) {
+                if (!passFirstTokenTime) passFirstTokenTime = performance.now();
+                
                 // First model turn message = user is done speaking.
                 // Eagerly upload user audio and emit userAudioReady now,
                 // so the audio card shows up before the model finishes.
@@ -355,8 +374,10 @@ function handleWsLive(ws, project, username, _clientIp) {
                 for (const part of msg.serverContent.modelTurn.parts) {
                   if (part.thought && part.text) {
                     emit({ type: "thinking", content: part.text });
+                    turnThinking += part.text;
                   } else if (part.text) {
                     emit({ type: "text", text: part.text });
+                    turnText += part.text;
                   } else if (part.inlineData) {
                     emit({
                       type: "audio",
@@ -395,6 +416,7 @@ function handleWsLive(ws, project, username, _clientIp) {
                   name: fc.name,
                   args: fc.args || {},
                 }));
+                turnToolCalls.push(...functionCalls);
 
                 // Emit calling status to the client
                 for (const fc of functionCalls) {
@@ -467,15 +489,18 @@ function handleWsLive(ws, project, username, _clientIp) {
 
               // Transcriptions
               if (msg.serverContent?.inputTranscription?.text) {
+                turnInputText += msg.serverContent.inputTranscription.text + "\n";
                 emit({
                   type: "inputTranscription",
                   text: msg.serverContent.inputTranscription.text,
                 });
               }
               if (msg.serverContent?.outputTranscription?.text) {
+                const outText = msg.serverContent.outputTranscription.text;
+                turnText += outText;
                 emit({
                   type: "outputTranscription",
-                  text: msg.serverContent.outputTranscription.text,
+                  text: outText,
                 });
               }
 
@@ -517,6 +542,34 @@ function handleWsLive(ws, project, username, _clientIp) {
                     turnUsage,
                     modelDef?.pricing,
                   );
+                  
+                  const totalSec = (performance.now() - turnStart) / 1000;
+                  const timeToGenerationSec = passFirstTokenTime ? (passFirstTokenTime - turnStart) / 1000 : null;
+                  const generationSec = passFirstTokenTime ? totalSec - timeToGenerationSec : null;
+
+                  RequestLogger.logChatGeneration({
+                    requestId: `live-${crypto.randomUUID()}`,
+                    project,
+                    username,
+                    clientIp: _clientIp,
+                    provider: "google",
+                    model: activeModel,
+                    conversationId: activeConversationId || null,
+                    success: true,
+                    usage: { ...turnUsage },
+                    estimatedCost,
+                    tokensPerSec: generationSec > 0 && turnUsage.outputTokens > 0 ? parseFloat((turnUsage.outputTokens / generationSec).toFixed(1)) : null,
+                    timeToGenerationSec,
+                    generationSec,
+                    totalSec,
+                    options: activeConfig,
+                    messages: [{ role: "user", content: turnInputText.trim() || "[Voice Input]" }],
+                    text: turnText,
+                    thinking: turnThinking,
+                    toolCalls: turnToolCalls,
+                    outputCharacters: turnText.length,
+                  }).catch(err => logger.error(`[Live API] Failed to log request: ${err.message}`));
+
                   emit({
                     type: "turnComplete",
                     ...(audioRef ? { audioRef } : {}),
@@ -528,6 +581,14 @@ function handleWsLive(ws, project, username, _clientIp) {
                   userInputAudioChunks.length = 0;
                   userAudioUploading = false;
                   turnUsage = { inputTokens: 0, outputTokens: 0 };
+                  
+                  // Reset logger vars
+                  turnStart = performance.now();
+                  passFirstTokenTime = null;
+                  turnText = "";
+                  turnThinking = "";
+                  turnToolCalls = [];
+                  turnInputText = "";
                 });
                 return; // Don't emit turnComplete synchronously
               }
@@ -541,6 +602,34 @@ function handleWsLive(ws, project, username, _clientIp) {
                     turnUsage,
                     modelDef?.pricing,
                   );
+                  
+                  const totalSec = (performance.now() - turnStart) / 1000;
+                  const timeToGenerationSec = passFirstTokenTime ? (passFirstTokenTime - turnStart) / 1000 : null;
+                  const generationSec = passFirstTokenTime ? totalSec - timeToGenerationSec : null;
+
+                  RequestLogger.logChatGeneration({
+                    requestId: `live-${crypto.randomUUID()}`,
+                    project,
+                    username,
+                    clientIp: _clientIp,
+                    provider: "google",
+                    model: activeModel,
+                    conversationId: activeConversationId || null,
+                    success: true,
+                    usage: { ...turnUsage },
+                    estimatedCost,
+                    tokensPerSec: generationSec > 0 && turnUsage.outputTokens > 0 ? parseFloat((turnUsage.outputTokens / generationSec).toFixed(1)) : null,
+                    timeToGenerationSec,
+                    generationSec,
+                    totalSec,
+                    options: activeConfig,
+                    messages: [{ role: "user", content: turnInputText.trim() || "[Voice Input]" }],
+                    text: turnText,
+                    thinking: turnThinking,
+                    toolCalls: turnToolCalls,
+                    outputCharacters: turnText.length,
+                  }).catch(err => logger.error(`[Live API] Failed to log interrupted request: ${err.message}`));
+
                   emit({
                     type: "interrupted",
                     ...(audioRef ? { audioRef } : {}),
@@ -551,6 +640,13 @@ function handleWsLive(ws, project, username, _clientIp) {
                   userInputAudioChunks.length = 0;
                   userAudioUploading = false;
                   turnUsage = { inputTokens: 0, outputTokens: 0 };
+                  
+                  turnStart = performance.now();
+                  passFirstTokenTime = null;
+                  turnText = "";
+                  turnThinking = "";
+                  turnToolCalls = [];
+                  turnInputText = "";
                 });
                 return;
               }
@@ -611,6 +707,7 @@ function handleWsLive(ws, project, username, _clientIp) {
 
     // ── Text input ──────────────────────────────────────────────
     if (type === "text") {
+      turnInputText += data.text + "\n";
       liveSession.sendRealtimeInput({ text: data.text });
       return;
     }
