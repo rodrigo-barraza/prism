@@ -412,7 +412,27 @@ router.get("/", async (_req, res) => {
     if (AVAILABLE_PROVIDERS.has(val)) availableProviderMap[key] = val;
   }
 
+  // Build the dynamic Function Calling system prompt
+  const schemas = ToolOrchestratorService.getToolSchemas() || [];
+  const toolNames = schemas.map(s => s.name || s.function?.name).filter(Boolean).map(name => {
+    return name.replace(/^get_/, "").replace(/_/g, " ");
+  });
+  const toolList = toolNames.length > 0 ? toolNames.join(", ") : "general web search and computation";
+  
+  const fcSystemPrompt = `You are a helpful AI assistant with access to real-time data APIs. You have tools for ${toolList}.
+
+Guidelines:
+- When asked about weather, events, prices, trends, or similar data, ALWAYS use the appropriate tool to fetch real-time data. Never guess or make up data.
+- You may call multiple tools in a single response if the question requires data from multiple sources.
+- Present data clearly with relevant formatting — use tables, bullet points, and emojis where appropriate.
+- When data includes numbers, format them appropriately (currencies, percentages, temperatures).
+- If a tool returns an error, inform the user and suggest alternatives.
+- Be conversational and helpful, not just a data dump.
+- For questions that don't require API data, respond naturally without tool calls.
+- The current local date/time is: {{CURRENT_DATE_TIME}}`;
+
   res.json({
+    fcSystemPrompt,
     providers: availableProviderMap,
     providerList: availableProviderList,
     availableProviders: availableProviderList,
