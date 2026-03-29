@@ -5,6 +5,25 @@ import { getTotalInputTokens } from "../utils/CostCalculator.js";
 
 const COLLECTION = "requests";
 
+const API_TO_CANONICAL = {
+  googleSearch: "Google Search",
+  googleSearchRetrieval: "Google Search",
+  web_search: "Web Search",
+  webSearch: "Web Search",
+  webFetch: "Web Fetch",
+  codeExecution: "Code Execution",
+  code_execution: "Code Execution",
+  computerUse: "Computer Use",
+  computer_use: "Computer Use",
+  fileSearch: "File Search",
+  file_search: "File Search",
+  urlContext: "URL Context",
+  url_context: "URL Context",
+  thinking: "Thinking",
+  imageGeneration: "Image Generation",
+  image_generation: "Image Generation",
+};
+
 function sanitizeMsg(m) {
   return {
     role: m.role,
@@ -153,7 +172,7 @@ const RequestLogger = {
       model,
       conversationId,
       toolsUsed: toolCalls && toolCalls.length > 0,
-      toolNames: toolCalls && toolCalls.length > 0 ? [...new Set(toolCalls.map((tc) => tc.name))] : [],
+      toolNames: toolCalls && toolCalls.length > 0 ? [...new Set(toolCalls.map((tc) => API_TO_CANONICAL[tc.name] || tc.name))] : [],
       success,
       errorMessage,
       inputTokens,
@@ -184,7 +203,7 @@ const RequestLogger = {
       responsePayload: {
         text: text && text.length > 2000 ? text.slice(0, 2000) + "…" : text || null,
         thinking: thinking ? "[present]" : null,
-        toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls.map((tc) => ({ name: tc.name, id: tc.id, args: tc.args })) : null,
+        toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls.map((tc) => ({ name: API_TO_CANONICAL[tc.name] || tc.name, id: tc.id, args: tc.args })) : null,
         usage,
       },
     });
