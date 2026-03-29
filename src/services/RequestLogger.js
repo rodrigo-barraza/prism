@@ -26,7 +26,11 @@ const API_TO_CANONICAL = {
 
 function sanitizeMsg(m) {
   const sanitizeStr = (s) => (typeof s === "string" && s.startsWith("data:") ? `[base64 data]` : s);
-  const sanitizeArr = (arr) => (Array.isArray(arr) ? arr.map(sanitizeStr) : arr);
+  const sanitizeMedia = (val) => {
+    if (Array.isArray(val)) return val.map(sanitizeStr);
+    if (typeof val === "string") return sanitizeStr(val);
+    return val;
+  };
 
   return {
     role: m.role,
@@ -36,10 +40,10 @@ function sanitizeMsg(m) {
           ? m.content.slice(0, 500) + "…"
           : m.content
         : m.content,
-    ...(m.images?.length ? { images: sanitizeArr(m.images) } : {}),
-    ...(m.audio?.length ? { audio: sanitizeArr(m.audio) } : {}),
-    ...(m.video?.length ? { video: sanitizeArr(m.video) } : {}),
-    ...(m.pdf?.length ? { pdf: sanitizeArr(m.pdf) } : {}),
+    ...(m.images?.length ? { images: sanitizeMedia(m.images) } : {}),
+    ...(m.audio ? { audio: sanitizeMedia(m.audio) } : {}),
+    ...(m.video?.length ? { video: sanitizeMedia(m.video) } : {}),
+    ...(m.pdf?.length ? { pdf: sanitizeMedia(m.pdf) } : {}),
   };
 }
 
@@ -159,6 +163,7 @@ const RequestLogger = {
     // Outputs
     text = null,
     thinking = null,
+    images = [],
     toolCalls = [],
     outputCharacters = 0,
     audioRef = null,
@@ -209,6 +214,7 @@ const RequestLogger = {
       responsePayload: {
         text: text && text.length > 2000 ? text.slice(0, 2000) + "…" : text || null,
         thinking: thinking ? "[present]" : null,
+        ...(images && images.length > 0 ? { images } : {}),
         toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls.map((tc) => ({ name: API_TO_CANONICAL[tc.name] || tc.name, id: tc.id, args: tc.args })) : null,
         ...(audioRef ? { audioRef } : {}),
         usage,
