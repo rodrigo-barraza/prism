@@ -108,207 +108,217 @@ export default class AgenticLoopService {
       );
     }
 
-    while (iterations < MAX_TOOL_ITERATIONS) {
-      iterations++;
-      
-      let passStreamedText = "";
-      const passPendingToolCalls = [];
-
-      const passOptions = { ...options };      if (isLocalProvider && hasCalledTools) {
-        delete passOptions.tools;
-      } else {
-        passOptions.tools = finalTools;
-      }
-
-      const expandedMessages = expandMessagesForFC(currentMessages, { filterDeleted: false });
-
-      // Build the stream!
-      const stream =
-        modelDef?.liveAPI && provider.generateTextStreamLive
-          ? provider.generateTextStreamLive(expandedMessages, resolvedModel, { ...passOptions, signal })
-          : provider.generateTextStream(expandedMessages, resolvedModel, { ...passOptions, signal });
-
-      for await (const chunk of stream) {
-        if (signal?.aborted) {
-          if (typeof stream.return === "function") stream.return();
-          break;
-        }
+    try {
+      while (iterations < MAX_TOOL_ITERATIONS) {
+        iterations++;
         
-        if (chunk && typeof chunk === "object" && chunk.type === "usage") {
-          overallUsage.inputTokens += chunk.usage.inputTokens || 0;
-          overallUsage.outputTokens += chunk.usage.outputTokens || 0;
-          overallUsage.cacheReadInputTokens += chunk.usage.cacheReadInputTokens || 0;
-          overallUsage.cacheCreationInputTokens += chunk.usage.cacheCreationInputTokens || 0;
-          continue;
+        let passStreamedText = "";
+        const passPendingToolCalls = [];
+
+        const passOptions = { ...options };      if (isLocalProvider && hasCalledTools) {
+          delete passOptions.tools;
+        } else {
+          passOptions.tools = finalTools;
         }
 
-        if (chunk && typeof chunk === "object" && chunk.type === "thinking") {
-          overallGenerationEnd = performance.now();
-          streamedThinking += chunk.content;
-          emit({ type: "thinking", content: chunk.content });
-          continue;
-        }
+        const expandedMessages = expandMessagesForFC(currentMessages, { filterDeleted: false });
 
-        if (chunk && typeof chunk === "object" && chunk.type === "toolCall") {
-          passPendingToolCalls.push({
-            id: chunk.id || null,
-            name: chunk.name,
-            args: chunk.args || {},
-            thoughtSignature: chunk.thoughtSignature || undefined,
-          });
-          streamedToolCalls.push({
-            id: chunk.id || null,
-            name: chunk.name,
-            args: chunk.args || {},
-            thoughtSignature: chunk.thoughtSignature || undefined,
-          });
-          emit({
-            type: "tool_execution",
-            tool: { name: chunk.name, args: chunk.args || {}, id: chunk.id },
-            status: "calling",
-          });
-          continue;
-        }
+        // Build the stream!
+        const stream =
+          modelDef?.liveAPI && provider.generateTextStreamLive
+            ? provider.generateTextStreamLive(expandedMessages, resolvedModel, { ...passOptions, signal })
+            : provider.generateTextStream(expandedMessages, resolvedModel, { ...passOptions, signal });
 
-        if (chunk && typeof chunk === "object" && chunk.type === "image") {
-            let minioRef = null;
-            if (chunk.data) {
-                try {
-                const mimeType = chunk.mimeType || "image/png";
-                const dataUrl = `data:${mimeType};base64,${chunk.data}`;
-                const { ref } = await FileService.uploadFile(dataUrl, "generations", project, username);
-                minioRef = ref;
-                } catch (err) {
-                    logger.error(`MinIO upload failed: ${err.message}`);
-                }
-                streamedImages.push(minioRef || `data:${chunk.mimeType || "image/png"};base64,${chunk.data}`);
-            }
-            emit({ type: "image", ...(minioRef ? {} : { data: chunk.data }), mimeType: chunk.mimeType, minioRef });
+        for await (const chunk of stream) {
+          if (signal?.aborted) {
+            if (typeof stream.return === "function") stream.return();
+            break;
+          }
+          
+          if (chunk && typeof chunk === "object" && chunk.type === "usage") {
+            overallUsage.inputTokens += chunk.usage.inputTokens || 0;
+            overallUsage.outputTokens += chunk.usage.outputTokens || 0;
+            overallUsage.cacheReadInputTokens += chunk.usage.cacheReadInputTokens || 0;
+            overallUsage.cacheCreationInputTokens += chunk.usage.cacheCreationInputTokens || 0;
             continue;
-        }
+          }
 
-        if (chunk && typeof chunk === "object" && chunk.type === "executableCode") {
-            emit({ type: "executableCode", code: chunk.code, language: chunk.language });
+          if (chunk && typeof chunk === "object" && chunk.type === "thinking") {
+            overallGenerationEnd = performance.now();
+            streamedThinking += chunk.content;
+            emit({ type: "thinking", content: chunk.content });
             continue;
-        }
-        if (chunk && typeof chunk === "object" && chunk.type === "codeExecutionResult") {
-            emit({ type: "codeExecutionResult", output: chunk.output, outcome: chunk.outcome });
-            continue;
-        }
-        if (chunk && typeof chunk === "object" && chunk.type === "webSearchResult") {
-            emit({ type: "webSearchResult", results: chunk.results });
-            continue;
-        }
-        if (chunk && typeof chunk === "object" && chunk.type === "audio") {
-            emit({ type: "audio", data: chunk.data, mimeType: chunk.mimeType });
-            if (chunk.data) streamedAudioChunks.push(chunk.data);
-            if (chunk.mimeType) {
-                const rateMatch = chunk.mimeType.match(/rate=(\d+)/);
-                if (rateMatch) audioSampleRate = parseInt(rateMatch[1], 10);
-            }
-            continue;
-        }
-        if (chunk && typeof chunk === "object" && chunk.type === "status") {
-            emit({ type: "status", message: chunk.message });
-            continue;
-        }
+          }
 
-        // Text chunk
-        if (!overallFirstTokenTime) {
-          overallFirstTokenTime = performance.now();
-        }
-        overallGenerationEnd = performance.now();
-        const chunkStr = typeof chunk === "string" ? chunk : "";
-        overallOutputCharacters += chunkStr.length;
-        finalStreamedText = passStreamedText + chunkStr;
-        passStreamedText += chunkStr;
-        emit({ type: "chunk", content: chunk });
-      }
-
-      if (signal?.aborted) break;
-
-      // If the LLM returned tool calls, we execute them and loop
-      if (passPendingToolCalls.length > 0) {
-        hasCalledTools = true;
-
-        // Execute tools in parallel
-        const results = await Promise.all(
-          passPendingToolCalls.map(async (tc) => {
-             const customDef = customToolMap.get(tc.name);
-             if (customDef) {
-                 return { name: tc.name, id: tc.id, result: await ToolOrchestratorService.executeCustomTool(customDef, tc.args) };
-             }
-             return { name: tc.name, id: tc.id, result: await ToolOrchestratorService.executeTool(tc.name, tc.args) };
-          })
-        );
-
-        // Emit done events for UI
-        for (const tc of passPendingToolCalls) {
-            const res = results.find(r => r.id === tc.id || (!r.id && r.name === tc.name));
+          if (chunk && typeof chunk === "object" && chunk.type === "toolCall") {
+            passPendingToolCalls.push({
+              id: chunk.id || null,
+              name: chunk.name,
+              args: chunk.args || {},
+              thoughtSignature: chunk.thoughtSignature || undefined,
+            });
+            streamedToolCalls.push({
+              id: chunk.id || null,
+              name: chunk.name,
+              args: chunk.args || {},
+              thoughtSignature: chunk.thoughtSignature || undefined,
+            });
             emit({
-                type: "tool_execution",
-                tool: { name: tc.name, args: tc.args || {}, id: tc.id, result: res?.result },
-                status: res?.result?.error ? "error" : "done",
+              type: "tool_execution",
+              tool: { name: chunk.name, args: chunk.args || {}, id: chunk.id },
+              status: "calling",
             });
+            continue;
+          }
+
+          if (chunk && typeof chunk === "object" && chunk.type === "image") {
+              let minioRef = null;
+              if (chunk.data) {
+                  try {
+                  const mimeType = chunk.mimeType || "image/png";
+                  const dataUrl = `data:${mimeType};base64,${chunk.data}`;
+                  const { ref } = await FileService.uploadFile(dataUrl, "generations", project, username);
+                  minioRef = ref;
+                  } catch (err) {
+                      logger.error(`MinIO upload failed: ${err.message}`);
+                  }
+                  streamedImages.push(minioRef || `data:${chunk.mimeType || "image/png"};base64,${chunk.data}`);
+              }
+              emit({ type: "image", ...(minioRef ? {} : { data: chunk.data }), mimeType: chunk.mimeType, minioRef });
+              continue;
+          }
+
+          if (chunk && typeof chunk === "object" && chunk.type === "executableCode") {
+              emit({ type: "executableCode", code: chunk.code, language: chunk.language });
+              continue;
+          }
+          if (chunk && typeof chunk === "object" && chunk.type === "codeExecutionResult") {
+              emit({ type: "codeExecutionResult", output: chunk.output, outcome: chunk.outcome });
+              continue;
+          }
+          if (chunk && typeof chunk === "object" && chunk.type === "webSearchResult") {
+              emit({ type: "webSearchResult", results: chunk.results });
+              continue;
+          }
+          if (chunk && typeof chunk === "object" && chunk.type === "audio") {
+              emit({ type: "audio", data: chunk.data, mimeType: chunk.mimeType });
+              if (chunk.data) streamedAudioChunks.push(chunk.data);
+              if (chunk.mimeType) {
+                  const rateMatch = chunk.mimeType.match(/rate=(\d+)/);
+                  if (rateMatch) audioSampleRate = parseInt(rateMatch[1], 10);
+              }
+              continue;
+          }
+          if (chunk && typeof chunk === "object" && chunk.type === "status") {
+              emit({ type: "status", message: chunk.message });
+              continue;
+          }
+
+          // Text chunk
+          if (!overallFirstTokenTime) {
+            overallFirstTokenTime = performance.now();
+          }
+          overallGenerationEnd = performance.now();
+          const chunkStr = typeof chunk === "string" ? chunk : "";
+          overallOutputCharacters += chunkStr.length;
+          finalStreamedText = passStreamedText + chunkStr;
+          passStreamedText += chunkStr;
+          emit({ type: "chunk", content: chunk });
         }
 
-        // Append to context for next pass
-        const assistantMsg = {
-           role: "assistant",
-           content: passStreamedText || "",
-           toolCalls: passPendingToolCalls.map((tc) => {
-               const match = results.find((r) => r.id === tc.id);
-               return {
-                   id: tc.id || null,
-                   name: tc.name,
-                   args: tc.args,
-                   thoughtSignature: tc.thoughtSignature || undefined,
-                   result: match ? match.result : null
-               };
-           })
-        };
-        currentMessages.push(assistantMsg);
+        if (signal?.aborted) break;
 
-        for (const res of results) {
-            currentMessages.push({
-                role: "tool",
-                name: res.name,
-                tool_call_id: res.id,
-                content: JSON.stringify(truncateToolResult(res.result)),
-            });
+        // If the LLM returned tool calls, we execute them and loop
+        if (passPendingToolCalls.length > 0) {
+          hasCalledTools = true;
+
+          // Execute tools in parallel
+          const results = await Promise.all(
+            passPendingToolCalls.map(async (tc) => {
+               const customDef = customToolMap.get(tc.name);
+               if (customDef) {
+                   return { name: tc.name, id: tc.id, result: await ToolOrchestratorService.executeCustomTool(customDef, tc.args) };
+               }
+               return { name: tc.name, id: tc.id, result: await ToolOrchestratorService.executeTool(tc.name, tc.args) };
+            })
+          );
+
+          // Emit done events for UI
+          for (const tc of passPendingToolCalls) {
+              const res = results.find(r => r.id === tc.id || (!r.id && r.name === tc.name));
+              emit({
+                  type: "tool_execution",
+                  tool: { name: tc.name, args: tc.args || {}, id: tc.id, result: res?.result },
+                  status: res?.result?.error ? "error" : "done",
+              });
+          }
+
+          // Append to context for next pass
+          const assistantMsg = {
+             role: "assistant",
+             content: passStreamedText || "",
+             toolCalls: passPendingToolCalls.map((tc) => {
+                 const match = results.find((r) => r.id === tc.id);
+                 return {
+                     id: tc.id || null,
+                     name: tc.name,
+                     args: tc.args,
+                     thoughtSignature: tc.thoughtSignature || undefined,
+                     result: match ? match.result : null
+                 };
+             })
+          };
+          currentMessages.push(assistantMsg);
+
+          for (const res of results) {
+              currentMessages.push({
+                  role: "tool",
+                  name: res.name,
+                  tool_call_id: res.id,
+                  content: JSON.stringify(truncateToolResult(res.result)),
+              });
+          }
+
+          // Clean up empty assistant text content nodes
+          currentMessages = currentMessages.filter((m) => !(m.role === "assistant" && !m.content?.trim() && (!m.toolCalls || m.toolCalls.length === 0)));
+
+          // Run the next iteration
+          continue;
         }
 
-        // Clean up empty assistant text content nodes
-        currentMessages = currentMessages.filter((m) => !(m.role === "assistant" && !m.content?.trim() && (!m.toolCalls || m.toolCalls.length === 0)));
-
-        // Run the next iteration
-        continue;
+        // If text was returned without new tools, we're done
+        if (passStreamedText) {
+           break;
+        }
       }
 
-      // If text was returned without new tools, we're done
-      if (passStreamedText) {
-         break;
+      const now = performance.now();
+      
+      // We construct the modified context that finalizes and commits the DB
+      // However, since we bypassed handleStreamingText entirely, we must manually finalize
+      // We can just call finalizeTextGeneration and pass the collected metrics!
+
+      await finalizeTextGeneration(ctx, {
+          text: finalStreamedText,
+          thinking: streamedThinking,
+          images: streamedImages,
+          toolCalls: streamedToolCalls,
+          audioChunks: streamedAudioChunks,
+          audioSampleRate,
+          usage: overallUsage,
+          outputCharacters: overallOutputCharacters,
+          timeToGenerationSec: overallFirstTokenTime ? (overallFirstTokenTime - requestStart) / 1000 : null,
+          generationSec: overallFirstTokenTime && overallGenerationEnd ? (overallGenerationEnd - overallFirstTokenTime) / 1000 : null,
+          totalSec: (now - requestStart) / 1000,
+      }, currentMessages); // <--- we need to pass currentMessages to finalizeTextGeneration so it saves the tool iterations
+    } catch (err) {
+      // Clear generating flag so the conversation doesn't stay stuck
+      if (conversationId) {
+        ConversationService.setGenerating(conversationId, project, username, false).catch((e) =>
+          logger.error(`Failed to clear isGenerating in agentic loop: ${e.message}`)
+        );
       }
+      throw err; // Re-throw so handleChat's catch handler can log + emit the error event
     }
-
-    const now = performance.now();
-    
-    // We construct the modified context that finalizes and commits the DB
-    // However, since we bypassed handleStreamingText entirely, we must manually finalize
-    // We can just call finalizeTextGeneration and pass the collected metrics!
-
-    await finalizeTextGeneration(ctx, {
-        text: finalStreamedText,
-        thinking: streamedThinking,
-        images: streamedImages,
-        toolCalls: streamedToolCalls,
-        audioChunks: streamedAudioChunks,
-        audioSampleRate,
-        usage: overallUsage,
-        outputCharacters: overallOutputCharacters,
-        timeToGenerationSec: overallFirstTokenTime ? (overallFirstTokenTime - requestStart) / 1000 : null,
-        generationSec: overallFirstTokenTime && overallGenerationEnd ? (overallGenerationEnd - overallFirstTokenTime) / 1000 : null,
-        totalSec: (now - requestStart) / 1000,
-    }, currentMessages); // <--- we need to pass currentMessages to finalizeTextGeneration so it saves the tool iterations
   }
 }

@@ -274,7 +274,13 @@ const lmStudioProvider = {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`API error: ${response.status} ${errorText}`);
+        let errorMsg = `API error: ${response.status} ${errorText}`;
+        try {
+          const parsed = JSON.parse(errorText);
+          if (parsed?.error?.message) errorMsg = parsed.error.message;
+          else if (parsed?.message) errorMsg = parsed.message;
+        } catch { /* raw text fallback */ }
+        throw new Error(errorMsg);
       }
 
       const data = await response.json();
@@ -447,7 +453,13 @@ const lmStudioProvider = {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`API error: ${response.status} ${errorText}`);
+        let errorMsg = `API error: ${response.status} ${errorText}`;
+        try {
+          const parsed = JSON.parse(errorText);
+          if (parsed?.error?.message) errorMsg = parsed.error.message;
+          else if (parsed?.message) errorMsg = parsed.message;
+        } catch { /* raw text fallback */ }
+        throw new Error(errorMsg);
       }
       logger.info(`[LM-Studio] Response status: ${response.status}`);
 
@@ -618,7 +630,13 @@ const lmStudioProvider = {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`API error: ${response.status} ${errorText}`);
+        let errorMsg = `API error: ${response.status} ${errorText}`;
+        try {
+          const parsed = JSON.parse(errorText);
+          if (parsed?.error?.message) errorMsg = parsed.error.message;
+          else if (parsed?.message) errorMsg = parsed.message;
+        } catch { /* raw text fallback */ }
+        throw new Error(errorMsg);
       }
 
       const data = await response.json();
@@ -671,7 +689,7 @@ const lmStudioProvider = {
       const response = await fetch(`${baseUrl}/api/v1/models/load`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model }),
+        body: JSON.stringify({ model, context_length: 32768 }),
       });
 
       if (!response.ok) {
