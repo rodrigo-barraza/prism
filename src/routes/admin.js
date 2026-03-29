@@ -1107,6 +1107,35 @@ router.get("/conversations", async (req, res, next) => {
               },
             ],
           },
+          model: {
+            $ifNull: [
+              "$settings.model",
+              {
+                $let: {
+                  vars: {
+                    assistantMsgs: {
+                      $filter: {
+                        input: { $ifNull: ["$messages", []] },
+                        as: "m",
+                        cond: {
+                          $and: [
+                            { $eq: ["$$m.role", "assistant"] },
+                            { $ne: [{ $ifNull: ["$$m.model", null] }, null] },
+                          ],
+                        },
+                      },
+                    },
+                  },
+                  in: {
+                    $arrayElemAt: [
+                      "$$assistantMsgs.model",
+                      { $subtract: [{ $size: "$$assistantMsgs" }, 1] },
+                    ],
+                  },
+                },
+              },
+            ],
+          },
         },
       },
       { $skip: skip },
