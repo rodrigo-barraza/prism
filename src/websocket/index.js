@@ -338,6 +338,16 @@ function handleWsLive(ws, project, username, _clientIp) {
                 });
               }
 
+              // Usage metadata — accumulate per turn (must run BEFORE
+              // turnComplete / interrupted checks because the final
+              // usageMetadata arrives in the same message as those events)
+              if (msg.usageMetadata) {
+                turnUsage.inputTokens +=
+                  msg.usageMetadata.promptTokenCount ?? 0;
+                turnUsage.outputTokens +=
+                  msg.usageMetadata.candidatesTokenCount ?? 0;
+              }
+
               // Turn complete — build WAV + upload, then emit with audioRef and usage
               if (msg.serverContent?.turnComplete) {
                 buildAndUploadAudio().then((audioRef) => {
@@ -377,14 +387,6 @@ function handleWsLive(ws, project, username, _clientIp) {
                   turnUsage = { inputTokens: 0, outputTokens: 0 };
                 });
                 return;
-              }
-
-              // Usage metadata — accumulate per turn
-              if (msg.usageMetadata) {
-                turnUsage.inputTokens +=
-                  msg.usageMetadata.promptTokenCount ?? 0;
-                turnUsage.outputTokens +=
-                  msg.usageMetadata.candidatesTokenCount ?? 0;
               }
             },
             onerror: (e) => {
