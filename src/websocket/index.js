@@ -10,6 +10,7 @@ import { GOOGLE_API_KEY } from "../../secrets.js";
 import crypto from "crypto";
 import logger from "../utils/logger.js";
 import RequestLogger from "../services/RequestLogger.js";
+import ConversationService from "../services/ConversationService.js";
 import { calculateLiveCost } from "../utils/CostCalculator.js";
 import { getModelByName } from "../config.js";
 
@@ -353,12 +354,28 @@ function handleWsLive(ws, project, username, _clientIp) {
               logger.info(
                 `[Live API] Session opened for ${model} (project: ${project}, user: ${username})`,
               );
+              // Mark conversation as generating when the Live session opens
+              if (activeConversationId) {
+                ConversationService.setGenerating(
+                  activeConversationId, project, username, true,
+                ).catch((err) =>
+                  logger.error(`[Live API] Failed to set isGenerating: ${err.message}`),
+                );
+              }
               emit({ type: "setupComplete" });
             },
             onmessage: (msg) => {
               // Model turn parts (audio data, text, function calls)
               if (msg.serverContent?.modelTurn?.parts) {
-                if (!passFirstTokenTime) passFirstTokenTime = performance.now();
+                if (!passFirstTokenTime) {
+                  passFirstTokenTime = performance.now();
+                  // Re-set isGenerating at the start of each new turn
+                  if (activeConversationId) {
+                    ConversationService.setGenerating(
+                      activeConversationId, project, username, true,
+                    ).catch(() => {});
+                  }
+                }
                 
                 // First model turn message = user is done speaking.
                 // Eagerly upload user audio and emit userAudioReady now,
@@ -598,6 +615,15 @@ function handleWsLive(ws, project, username, _clientIp) {
                   turnToolCalls = [];
                   turnInputText = "";
                   turnUserAudioRef = null;
+
+                  // Clear isGenerating flag after each completed turn
+                  if (activeConversationId) {
+                    ConversationService.setGenerating(
+                      activeConversationId, project, username, false,
+                    ).catch((err) =>
+                      logger.error(`[Live API] Failed to clear isGenerating: ${err.message}`),
+                    );
+                  }
                 });
                 return; // Don't emit turnComplete synchronously
               }
@@ -663,6 +689,15 @@ function handleWsLive(ws, project, username, _clientIp) {
                   turnToolCalls = [];
                   turnInputText = "";
                   turnUserAudioRef = null;
+
+                  // Clear isGenerating flag after interrupted turn
+                  if (activeConversationId) {
+                    ConversationService.setGenerating(
+                      activeConversationId, project, username, false,
+                    ).catch((err) =>
+                      logger.error(`[Live API] Failed to clear isGenerating on interrupt: ${err.message}`),
+                    );
+                  }
                 });
                 return;
               }
@@ -673,6 +708,12 @@ function handleWsLive(ws, project, username, _clientIp) {
               logger.error(
                 `[Live API] Error (${project}/${username}): ${errMsg}`,
               );
+              // Clear isGenerating flag on error
+              if (activeConversationId) {
+                ConversationService.setGenerating(
+                  activeConversationId, project, username, false,
+                ).catch(() => {});
+              }
               emit({ type: "error", message: errMsg });
             },
             onclose: () => {
@@ -680,6 +721,14 @@ function handleWsLive(ws, project, username, _clientIp) {
                 `[Live API] Session closed (project: ${project}, user: ${username})`,
               );
               liveSession = null;
+              // Clear isGenerating flag when the Live API session closes
+              if (activeConversationId) {
+                ConversationService.setGenerating(
+                  activeConversationId, project, username, false,
+                ).catch((err) =>
+                  logger.error(`[Live API] Failed to clear isGenerating on close: ${err.message}`),
+                );
+              }
               emit({ type: "sessionClosed" });
             },
           },
@@ -768,6 +817,14 @@ function handleWsLive(ws, project, username, _clientIp) {
         /* ignore */
       }
       liveSession = null;
+    }
+    // Clear isGenerating flag on client disconnect
+    if (activeConversationId) {
+      ConversationService.setGenerating(
+        activeConversationId, project, username, false,
+      ).catch((err) =>
+        logger.error(`[Live API] Failed to clear isGenerating on disconnect: ${err.message}`),
+      );
     }
     logger.info(
       `[Live API] Client disconnected (project: ${project}, user: ${username})`,
