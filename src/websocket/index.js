@@ -722,9 +722,20 @@ function handleWsLive(ws, project, username, _clientIp) {
     }
 
     // ── Text input ──────────────────────────────────────────────
+    // The Live API uses server-managed VAD (Voice Activity Detection).
+    // For text input we must bracket the message with activityStart /
+    // activityEnd signals so the API recognises the turn boundary and
+    // triggers a model response — without these the session closes.
     if (type === "text") {
       turnInputText += data.text + "\n";
-      liveSession.sendRealtimeInput({ text: data.text });
+      try {
+        liveSession.sendRealtimeInput({ activityStart: {} });
+        liveSession.sendRealtimeInput({ text: data.text });
+        liveSession.sendRealtimeInput({ activityEnd: {} });
+      } catch (err) {
+        logger.error(`[Live API] Failed to send text: ${err.message}`);
+        emit({ type: "error", message: `Failed to send text: ${err.message}` });
+      }
       return;
     }
 
