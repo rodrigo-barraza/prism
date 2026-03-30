@@ -9,6 +9,7 @@ const router = express.Router();
 const REQUESTS_COL = "requests";
 const CONVERSATIONS_COL = "conversations";
 const WORKFLOWS_COL = "workflows";
+const SESSIONS_COL = "sessions";
 
 // ── Helper: get DB handle ────────────────────────────────────
 function getDb() {
@@ -98,7 +99,7 @@ router.get("/requests/:id", async (req, res, next) => {
 });
 
 // ============================================================
-// GET /admin/requests/:id/associations — conversations & workflows
+// GET /admin/requests/:id/associations — conversations, workflows & sessions
 // ============================================================
 router.get("/requests/:id/associations", async (req, res, next) => {
   try {
@@ -112,13 +113,14 @@ router.get("/requests/:id/associations", async (req, res, next) => {
 
     let conversations = [];
     let workflows = [];
+    let sessions = [];
 
     if (request.conversationId) {
       // Find conversations matching this conversationId
       conversations = await db
         .collection(CONVERSATIONS_COL)
         .find({ id: request.conversationId })
-        .project({ id: 1, title: 1, project: 1 })
+        .project({ id: 1, title: 1, project: 1, sessionId: 1 })
         .toArray();
 
       // Find workflows that contain this conversationId
@@ -136,9 +138,37 @@ router.get("/requests/:id/associations", async (req, res, next) => {
         edgeCount: w.edgeCount || 0,
         source: w.source || "retina",
       }));
+
+      // Find sessions linked to this conversation
+      const sessionIds = new Set();
+      for (const c of conversations) {
+        if (c.sessionId) sessionIds.add(c.sessionId);
+      }
+      if (sessionIds.size > 0) {
+        sessions = await db
+          .collection("sessions")
+          .find({ id: { $in: [...sessionIds] } })
+          .project({
+            id: 1,
+            project: 1,
+            username: 1,
+            conversationIds: 1,
+            createdAt: 1,
+            updatedAt: 1,
+          })
+          .toArray();
+        sessions = sessions.map((s) => ({
+          id: s.id,
+          project: s.project,
+          username: s.username,
+          conversationCount: (s.conversationIds || []).length,
+          createdAt: s.createdAt,
+          updatedAt: s.updatedAt,
+        }));
+      }
     }
 
-    res.json({ conversations, workflows });
+    res.json({ conversations, workflows, sessions });
   } catch (error) {
     logger.error(`Admin /requests/:id/associations error: ${error.message}`);
     next(error);
@@ -196,23 +226,29 @@ router.get("/stats", async (req, res, next) => {
       },
     ];
 
-    const [result] = await db
-      .collection(REQUESTS_COL)
-      .aggregate(pipeline)
-      .toArray();
+    // Count total sessions and conversations
+    const convMatch = {};
+    if (project) convMatch.project = project;
 
-    res.json(
-      result || {
-        totalRequests: 0,
-        totalInputTokens: 0,
-        totalOutputTokens: 0,
-        totalCost: 0,
-        avgLatency: 0,
-        avgTokensPerSec: 0,
-        successCount: 0,
-        errorCount: 0,
-      },
-    );
+    const [result, sessionCount, conversationCount] = await Promise.all([
+      db.collection(REQUESTS_COL).aggregate(pipeline).toArray().then((r) => r[0]),
+      db.collection(SESSIONS_COL).countDocuments(),
+      db.collection(CONVERSATIONS_COL).countDocuments(convMatch),
+    ]);
+
+    res.json({
+      totalRequests: 0,
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      totalCost: 0,
+      avgLatency: 0,
+      avgTokensPerSec: 0,
+      successCount: 0,
+      errorCount: 0,
+      ...result,
+      sessionCount,
+      conversationCount,
+    });
   } catch (error) {
     logger.error(`Admin /stats error: ${error.message}`);
     next(error);
@@ -306,10 +342,29 @@ router.get("/stats/projects", async (req, res, next) => {
       { $group: { _id: "$project", conversationCount: { $sum: 1 } } },
     ];
 
-    const [results, workflowCounts, convCounts] = await Promise.all([
+    // Count sessions per project
+    const sessionPipeline = [
+      {
+        $lookup: {
+          from: CONVERSATIONS_COL,
+          localField: "conversationIds",
+          foreignField: "id",
+          as: "_convs",
+          pipeline: [{ $project: { project: 1 } }],
+        },
+      },
+      { $unwind: "$_convs" },
+      {
+        $group: { _id: "$_convs.project", sessionIds: { $addToSet: "$_id" } },
+      },
+      { $project: { _id: 1, sessionCount: { $size: "$sessionIds" } } },
+    ];
+
+    const [results, workflowCounts, convCounts, sessionCounts] = await Promise.all([
       db.collection(REQUESTS_COL).aggregate(pipeline).toArray(),
       db.collection(WORKFLOWS_COL).aggregate(workflowPipeline).toArray(),
       db.collection(CONVERSATIONS_COL).aggregate(convPipeline).toArray(),
+      db.collection(SESSIONS_COL).aggregate(sessionPipeline).toArray(),
     ]);
 
     // Build a project → workflowCount map
@@ -322,6 +377,12 @@ router.get("/stats/projects", async (req, res, next) => {
     const convMap = {};
     for (const cc of convCounts) {
       convMap[cc._id || "unknown"] = cc.conversationCount;
+    }
+
+    // Build a project → sessionCount map
+    const sessMap = {};
+    for (const sc of sessionCounts) {
+      sessMap[sc._id || "unknown"] = sc.sessionCount;
     }
 
     res.json(
@@ -339,6 +400,7 @@ router.get("/stats/projects", async (req, res, next) => {
         providerCount: r.providerCount,
         workflowCount: wfMap[r._id || "unknown"] || 0,
         conversationCount: convMap[r._id || "unknown"] || 0,
+        sessionCount: sessMap[r._id || "unknown"] || 0,
       })),
     );
   } catch (error) {
@@ -490,13 +552,28 @@ router.get("/stats/models", async (req, res, next) => {
       }
     }
 
+    // Map conversationId → sessionId for session counting
+    const sessByConv = {};
+    if (allConvIds.size > 0) {
+      const convDocs = await db
+        .collection(CONVERSATIONS_COL)
+        .find({ id: { $in: [...allConvIds] }, sessionId: { $exists: true, $ne: null } })
+        .project({ id: 1, sessionId: 1 })
+        .toArray();
+      for (const c of convDocs) {
+        sessByConv[c.id] = c.sessionId;
+      }
+    }
+
     res.json(
       results.map((r) => {
         const convIds = (r._convIds || []).filter(Boolean);
         const conversationCount = convIds.length;
         let workflowCount = 0;
+        const sessionSet = new Set();
         for (const cid of convIds) {
           workflowCount += wfByConv[cid] || 0;
+          if (sessByConv[cid]) sessionSet.add(sessByConv[cid]);
         }
         return {
           model: r._id.model,
@@ -511,6 +588,7 @@ router.get("/stats/models", async (req, res, next) => {
           toolsUsed: r.toolsUsed || false,
           conversationCount,
           workflowCount,
+          sessionCount: sessionSet.size,
         };
       }),
     );
