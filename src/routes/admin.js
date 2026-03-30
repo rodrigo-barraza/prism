@@ -2041,7 +2041,7 @@ router.get("/sessions", async (req, res, next) => {
           foreignField: "id",
           as: "conversations",
           pipeline: [
-            { $project: { totalCost: 1, title: 1, id: 1, modalities: 1, providers: 1, project: 1, username: 1, source: 1, updatedAt: 1 } },
+            { $project: { totalCost: 1, title: 1, id: 1, modalities: 1, providers: 1, project: 1, username: 1, source: 1, createdAt: 1, updatedAt: 1 } },
           ],
         },
       },
