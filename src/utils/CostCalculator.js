@@ -110,20 +110,20 @@ export function calculateLiveCost(usage, pricing) {
  * Calculate the estimated cost for a text-to-image request.
  * Estimates input tokens from prompt length (~4 chars per token).
  * Output image tokens vary by provider and resolution:
- *   - Google 1K images  ≈ 258 tokens
+ *   - Google 512px ≈ 747 tokens, 1024px ≈ 1120 tokens, 2048px ≈ 1680 tokens, 4096px ≈ 2520 tokens
  *   - OpenAI 1024×1024 high-quality ≈ 1056 tokens
  *
  * @param {string} prompt - The text prompt used for generation
  * @param {{ inputPerMillion?: number, outputPerMillion?: number, imageOutputPerMillion?: number, imageInputPerMillion?: number }} pricing
  * @param {number} [inputImages=0] - Number of input images (for edit requests)
- * @param {number} [outputImageTokens=258] - Estimated output image tokens (provider-specific)
+ * @param {number} [outputImageTokens=1120] - Estimated output image tokens (provider-specific)
  * @returns {number|null} Cost in USD, or null if pricing is unavailable.
  */
 export function calculateImageCost(
   prompt,
   pricing,
   inputImages = 0,
-  outputImageTokens = 258,
+  outputImageTokens = 1120,
 ) {
   if (!pricing || !prompt) return null;
 

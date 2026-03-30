@@ -1,7 +1,7 @@
-import { describe, it, expect } from "vitest";
 import {
     calculateTextCost,
     calculateAudioCost,
+    calculateImageCost,
 } from "../src/utils/CostCalculator.js";
 import { TYPES, getPricing } from "../src/config.js";
 
@@ -275,5 +275,119 @@ describe("Cost calculation with real config pricing", () => {
         const pricing = textPricing["nonexistent-model-xyz"];
         const cost = calculateTextCost({ inputTokens: 100, outputTokens: 50 }, pricing);
         expect(cost).toBeNull();
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// calculateImageCost — Unit Tests
+// ═══════════════════════════════════════════════════════════════
+
+describe("calculateImageCost", () => {
+    it("returns null when pricing is null", () => {
+        expect(calculateImageCost("a prompt", null)).toBeNull();
+    });
+
+    it("returns null when prompt is empty", () => {
+        const pricing = { inputPerMillion: 0.25, imageOutputPerMillion: 60.0 };
+        expect(calculateImageCost("", pricing)).toBeNull();
+    });
+
+    it("returns null when prompt is null", () => {
+        const pricing = { inputPerMillion: 0.25, imageOutputPerMillion: 60.0 };
+        expect(calculateImageCost(null, pricing)).toBeNull();
+    });
+
+    // ── Google Gemini 3.1 Flash Image (default 1024px ≈ 1120 tokens) ──
+
+    it("calculates cost for Gemini 3.1 Flash Image (short prompt, default tokens)", () => {
+        // inputPerMillion: 0.25, imageOutputPerMillion: 60.0
+        // Default outputImageTokens = 1120
+        const pricing = { inputPerMillion: 0.25, outputPerMillion: 1.5, imageOutputPerMillion: 60.0 };
+        const prompt = "A cute cartoon turtle"; // ~5 tokens (21 chars / 4)
+        const cost = calculateImageCost(prompt, pricing);
+        // Input: ceil(21/4)=6 tokens → (6/1M)*0.25 = $0.0000015
+        // Output image: (1120/1M)*60 = $0.0672
+        // Total ≈ $0.0672015
+        expect(cost).toBeCloseTo(0.0672, 3);
+    });
+
+    it("calculates cost for Gemini 3 Pro Image (1120 tokens)", () => {
+        const pricing = { inputPerMillion: 2.0, imageInputPerMillion: 2.0, outputPerMillion: 12.0, imageOutputPerMillion: 120.0 };
+        const prompt = "A watercolor painting of a sunset";
+        const cost = calculateImageCost(prompt, pricing, 0, 1120);
+        // Input: ceil(34/4)=9 tokens → (9/1M)*2.0 = $0.000018
+        // Output image: (1120/1M)*120 = $0.1344
+        // Total ≈ $0.134418
+        expect(cost).toBeCloseTo(0.1344, 3);
+    });
+
+    it("calculates cost for GPT Image 1.5 (1056 tokens)", () => {
+        const pricing = { inputPerMillion: 2.5, imageInputPerMillion: 4.0, imageOutputPerMillion: 16.0 };
+        const prompt = "A photo-realistic cat sitting on a chair";
+        const cost = calculateImageCost(prompt, pricing, 0, 1056);
+        // Input: ceil(41/4)=11 tokens → (11/1M)*2.5 = $0.0000275
+        // Output image: (1056/1M)*16 = $0.016896
+        // Total ≈ $0.0169235
+        expect(cost).toBeCloseTo(0.01692, 4);
+    });
+
+    // ── With input images (edit requests) ──
+
+    it("includes input image cost for edit requests", () => {
+        const pricing = { inputPerMillion: 0.25, imageInputPerMillion: 0.25, imageOutputPerMillion: 60.0 };
+        const prompt = "Make the background blue";
+        const cost = calculateImageCost(prompt, pricing, 2, 1120);
+        // Input text: ceil(24/4)=6 → (6/1M)*0.25 = $0.0000015
+        // Input images: (2*258/1M)*0.25 = (516/1M)*0.25 = $0.000129
+        // Output image: (1120/1M)*60 = $0.0672
+        // Total ≈ $0.0673305
+        expect(cost).toBeCloseTo(0.0673, 3);
+    });
+
+    // ── Fallback to outputPerMillion when imageOutputPerMillion is absent ──
+
+    it("falls back to outputPerMillion when imageOutputPerMillion is missing", () => {
+        const pricing = { inputPerMillion: 0.5, outputPerMillion: 3.0 };
+        const prompt = "Generate something";
+        const cost = calculateImageCost(prompt, pricing, 0, 1120);
+        // Input: ceil(18/4)=5 → (5/1M)*0.5 = $0.0000025
+        // Output image: (1120/1M)*3.0 = $0.00336
+        // Total ≈ $0.0033625
+        expect(cost).toBeCloseTo(0.00336, 4);
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// calculateImageCost — real pricing from config.js
+// ═══════════════════════════════════════════════════════════════
+
+describe("calculateImageCost with real config pricing", () => {
+    const imagePricing = getPricing(TYPES.TEXT, TYPES.IMAGE);
+
+    it("Gemini 3.1 Flash Image: ~$0.067 per 1024px image", () => {
+        const pricing = imagePricing["gemini-3.1-flash-image-preview"];
+        const prompt = "A cute cartoon turtle standing upright with a friendly expression";
+        const cost = calculateImageCost(prompt, pricing, 0, 1120);
+        // Google's published price for 1024px: ~$0.067
+        expect(cost).toBeGreaterThan(0.065);
+        expect(cost).toBeLessThan(0.070);
+    });
+
+    it("Gemini 3 Pro Image: ~$0.134 per 1024px image", () => {
+        const pricing = imagePricing["gemini-3-pro-image-preview"];
+        const prompt = "A watercolor landscape painting";
+        const cost = calculateImageCost(prompt, pricing, 0, 1120);
+        // Google's published price for 1024px: ~$0.134
+        expect(cost).toBeGreaterThan(0.130);
+        expect(cost).toBeLessThan(0.140);
+    });
+
+    it("GPT Image 1.5: ~$0.017 per 1024px image", () => {
+        const pricing = imagePricing["gpt-image-1.5"];
+        const prompt = "A realistic photo of a mountain landscape";
+        const cost = calculateImageCost(prompt, pricing, 0, 1056);
+        // OpenAI 1024×1024 high-quality: ~$0.017
+        expect(cost).toBeGreaterThan(0.015);
+        expect(cost).toBeLessThan(0.020);
     });
 });

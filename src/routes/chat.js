@@ -492,7 +492,7 @@ async function handleImageAPIModel(ctx) {
   // Cost calculation
   const imgPricing =
     getPricing(TYPES.TEXT, TYPES.IMAGE)[resolvedModel] || modelDef?.pricing;
-  const outputImgTokens = providerName === "openai" ? 1056 : 258;
+  const outputImgTokens = modelDef?.imageTokensPerImage || (providerName === "openai" ? 1056 : 1120);
   const estimatedCost = calculateImageCost(
     prompt,
     imgPricing,
@@ -531,7 +531,7 @@ async function handleImageAPIModel(ctx) {
 
   // Estimate token counts for tracking
   const estimatedInputTokens =
-    Math.ceil(prompt.length / 4) + allImages.length * 258;
+    Math.ceil(prompt.length / 4) + allImages.length * (modelDef?.imageTokensPerImage || 1120);
 
   RequestLogger.log({
     requestId,
@@ -676,7 +676,8 @@ export async function finalizeTextGeneration(
       const imgPricing =
         getPricing(TYPES.TEXT, TYPES.IMAGE)[resolvedModel] || modelDef?.pricing;
       if (imgPricing?.imageOutputPerMillion) {
-        const imageTokens = imageCount * 258;
+        const tokensPerImage = modelDef?.imageTokensPerImage || 1120;
+        const imageTokens = imageCount * tokensPerImage;
         const textOutputTokens = Math.max(0, usage.outputTokens - imageTokens);
         const inputCost =
           (usage.inputTokens / 1_000_000) * (imgPricing.inputPerMillion || 0);
