@@ -676,8 +676,13 @@ export async function finalizeTextGeneration(
       const imgPricing =
         getPricing(TYPES.TEXT, TYPES.IMAGE)[resolvedModel] || modelDef?.pricing;
       if (imgPricing?.imageOutputPerMillion) {
-        const tokensPerImage = modelDef?.imageTokensPerImage || 1120;
-        const imageTokens = imageCount * tokensPerImage;
+        // Derive image tokens dynamically from the API-reported total.
+        // The API's outputTokens already includes both text and image tokens,
+        // so we estimate text tokens from the generated text length (~4 chars/token)
+        // and attribute the remainder to images. This adapts to any resolution
+        // (512px≈747tok, 1024px≈1120tok, 2048px≈1680tok, 4096px≈2520tok).
+        const estimatedTextOutputTokens = Math.ceil((text?.length || 0) / 4);
+        const imageTokens = Math.max(0, usage.outputTokens - estimatedTextOutputTokens);
         const textOutputTokens = Math.max(0, usage.outputTokens - imageTokens);
         const inputCost =
           (usage.inputTokens / 1_000_000) * (imgPricing.inputPerMillion || 0);

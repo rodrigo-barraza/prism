@@ -34,21 +34,21 @@ describe("calculateTextCost", () => {
     // ── Real model pricing ───────────────────────────────────────
 
     it("calculates cost for GPT 5.2 (10 in, 5 out)", () => {
-        // GPT-5.2: input $0.875/M, output $7.00/M
+        // GPT-5.2: input $1.75/M, output $14.00/M
         const usage = { inputTokens: 10, outputTokens: 5 };
-        const pricing = { inputPerMillion: 0.875, outputPerMillion: 7.0 };
-        // Expected: (10/1M)*0.875 + (5/1M)*7.0 = 0.00000875 + 0.000035 = 0.00004375
+        const pricing = { inputPerMillion: 1.75, outputPerMillion: 14.0 };
+        // Expected: (10/1M)*1.75 + (5/1M)*14.0 = 0.0000175 + 0.00007 = 0.0000875
         const cost = calculateTextCost(usage, pricing);
-        expect(cost).toBeCloseTo(0.00004375, 8);
+        expect(cost).toBeCloseTo(0.0000875, 8);
     });
 
     it("calculates cost for GPT 5 Mini (1000 in, 500 out)", () => {
-        // GPT-5-mini: input $0.125/M, output $1.00/M
+        // GPT-5-mini: input $0.25/M, output $2.00/M
         const usage = { inputTokens: 1000, outputTokens: 500 };
-        const pricing = { inputPerMillion: 0.125, outputPerMillion: 1.0 };
-        // Expected: (1000/1M)*0.125 + (500/1M)*1.0 = 0.000125 + 0.0005 = 0.000625
+        const pricing = { inputPerMillion: 0.25, outputPerMillion: 2.0 };
+        // Expected: (1000/1M)*0.25 + (500/1M)*2.0 = 0.00025 + 0.001 = 0.00125
         const cost = calculateTextCost(usage, pricing);
-        expect(cost).toBeCloseTo(0.000625, 8);
+        expect(cost).toBeCloseTo(0.00125, 8);
     });
 
     it("calculates cost for Haiku 4.5 (5000 in, 2000 out)", () => {
@@ -232,10 +232,11 @@ describe("Cost calculation with real config pricing", () => {
     const textPricing = getPricing(TYPES.TEXT, TYPES.TEXT);
     const audioPricing = getPricing(TYPES.AUDIO, TYPES.TEXT);
 
-    it("GPT-5.2: 1000 in / 500 out = $0.004375", () => {
+    it("GPT-5.2: 1000 in / 500 out = $0.00875", () => {
         const pricing = textPricing["gpt-5.2"];
         const cost = calculateTextCost({ inputTokens: 1000, outputTokens: 500 }, pricing);
-        expect(cost).toBeCloseTo(0.004375, 8);
+        // (1000/1M)*1.75 + (500/1M)*14.0 = 0.00175 + 0.007 = 0.00875
+        expect(cost).toBeCloseTo(0.00875, 8);
     });
 
     it("Sonnet 4.5: 5000 in / 2000 out = $0.045", () => {
@@ -250,11 +251,11 @@ describe("Cost calculation with real config pricing", () => {
         expect(cost).toBeCloseTo(0.014, 8);
     });
 
-    it("GPT 5.4 Pro: 50000 in / 10000 out = $1.65", () => {
+    it("GPT 5.4 Pro: 50000 in / 10000 out = $3.30", () => {
         const pricing = textPricing["gpt-5.4-pro"];
         const cost = calculateTextCost({ inputTokens: 50000, outputTokens: 10000 }, pricing);
-        // (50000/1M)*15.0 + (10000/1M)*90.0 = 0.75 + 0.9 = 1.65
-        expect(cost).toBeCloseTo(1.65, 8);
+        // (50000/1M)*30.0 + (10000/1M)*180.0 = 1.5 + 1.8 = 3.3
+        expect(cost).toBeCloseTo(3.30, 8);
     });
 
     it("Whisper-1: 120s audio = $0.012", () => {
@@ -382,12 +383,12 @@ describe("calculateImageCost with real config pricing", () => {
         expect(cost).toBeLessThan(0.140);
     });
 
-    it("GPT Image 1.5: ~$0.017 per 1024px image", () => {
+    it("GPT Image 1.5: ~$0.034 per 1024px image", () => {
         const pricing = imagePricing["gpt-image-1.5"];
         const prompt = "A realistic photo of a mountain landscape";
         const cost = calculateImageCost(prompt, pricing, 0, 1056);
-        // OpenAI 1024×1024 high-quality: ~$0.017
-        expect(cost).toBeGreaterThan(0.015);
-        expect(cost).toBeLessThan(0.020);
+        // OpenAI 1024×1024 high-quality: ~$0.034
+        expect(cost).toBeGreaterThan(0.030);
+        expect(cost).toBeLessThan(0.040);
     });
 });
