@@ -1961,7 +1961,7 @@ router.get("/sessions", async (req, res, next) => {
           from: CONVERSATIONS_COL,
           localField: "conversationIds",
           foreignField: "id",
-          as: "_conversations",
+          as: "conversations",
           pipeline: [
             { $project: { totalCost: 1, title: 1, id: 1, modalities: 1, providers: 1, updatedAt: 1 } },
           ],
@@ -1969,18 +1969,16 @@ router.get("/sessions", async (req, res, next) => {
       },
       {
         $addFields: {
-          conversationCount: { $size: "$_conversations" },
+          conversationCount: { $size: "$conversations" },
           totalCost: {
             $reduce: {
-              input: "$_conversations",
+              input: "$conversations",
               initialValue: 0,
               in: { $add: ["$$value", { $ifNull: ["$$this.totalCost", 0] }] },
             },
           },
         },
       },
-      // Drop the full conversation docs from the list response
-      { $project: { _conversations: 0 } },
     ];
 
     const [docs, total] = await Promise.all([
