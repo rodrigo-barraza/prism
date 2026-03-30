@@ -557,7 +557,7 @@ async function handleImageAPIModel(ctx) {
   }
   emit({
     type: "image",
-    ...(minioRef ? {} : { data: result.imageData }),
+    data: result.imageData,
     mimeType: result.mimeType || "image/png",
     minioRef,
   });
@@ -1010,7 +1010,7 @@ async function handleStreamingText(ctx) {
       }
       emit({
         type: "image",
-        ...(minioRef ? {} : { data: chunk.data }),
+        data: chunk.data,
         mimeType: chunk.mimeType,
         minioRef,
       });
@@ -1195,7 +1195,7 @@ async function handleNonStreamingText(ctx) {
       }
       emit({
         type: "image",
-        ...(minioRef ? {} : { data: img.data }),
+        data: img.data,
         mimeType: img.mimeType,
         minioRef,
       });
@@ -1262,7 +1262,14 @@ router.post("/", async (req, res, next) => {
       },
       (event) => {
         if (!controller.signal.aborted) {
-          res.write(`data: ${JSON.stringify(event)}\n\n`);
+          // Strip heavy base64 data from image events when minioRef is
+          // available — SSE/browser clients load images via the ref URL.
+          if (event.type === "image" && event.minioRef && event.data) {
+            const { data: _stripped, ...lightweight } = event;
+            res.write(`data: ${JSON.stringify(lightweight)}\n\n`);
+          } else {
+            res.write(`data: ${JSON.stringify(event)}\n\n`);
+          }
         }
       },
       { signal: controller.signal },
