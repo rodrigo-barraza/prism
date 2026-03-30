@@ -2004,8 +2004,9 @@ router.get("/sessions", async (req, res, next) => {
                     cReqs: {
                       $filter: {
                         input: "$_requests",
+                        as: "req",
                         cond: {
-                          $eq: ["$$this.conversationId", "$$conv.id"],
+                          $eq: ["$$req.conversationId", "$$conv.id"],
                         },
                       },
                     },
@@ -2043,7 +2044,8 @@ router.get("/sessions", async (req, res, next) => {
                           $setUnion: {
                             $filter: {
                               input: "$$cReqs.model",
-                              cond: { $ne: ["$$this", null] },
+                              as: "m",
+                              cond: { $ne: ["$$m", null] },
                             },
                           },
                         },
@@ -2054,10 +2056,11 @@ router.get("/sessions", async (req, res, next) => {
                               $avg: {
                                 $filter: {
                                   input: "$$cReqs.tokensPerSec",
+                                  as: "tps",
                                   cond: {
                                     $and: [
-                                      { $ne: ["$$this", null] },
-                                      { $gt: ["$$this", 0] },
+                                      { $ne: ["$$tps", null] },
+                                      { $gt: ["$$tps", 0] },
                                     ],
                                   },
                                 },
