@@ -551,6 +551,7 @@ function handleWsLive(ws, project, username, _clientIp) {
 
                   RequestLogger.logChatGeneration({
                     requestId: `live-${crypto.randomUUID()}`,
+                    endpoint: "live",
                     project,
                     username,
                     clientIp: _clientIp,
@@ -617,6 +618,7 @@ function handleWsLive(ws, project, username, _clientIp) {
 
                   RequestLogger.logChatGeneration({
                     requestId: `live-${crypto.randomUUID()}`,
+                    endpoint: "live",
                     project,
                     username,
                     clientIp: _clientIp,
