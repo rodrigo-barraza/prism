@@ -1914,5 +1914,136 @@ router.get("/text", async (req, res, next) => {
     next(error);
   }
 });
+// ============================================================
+// GET /admin/sessions — paginated session list
+// ============================================================
+router.get("/sessions", async (req, res, next) => {
+  try {
+    const db = getDb();
+    if (!db) return res.status(503).json({ error: "Database not available" });
+
+    const {
+      page = 1,
+      limit = 50,
+      project,
+      username,
+      source,
+      search,
+      sort = "createdAt",
+      order = "desc",
+    } = req.query;
+
+    const filter = {};
+    if (project) filter.project = project;
+    if (username) filter.username = username;
+    if (source) filter.source = source;
+    if (search) {
+      filter.$or = [
+        { "trigger.userName": { $regex: search, $options: "i" } },
+        { "trigger.userContent": { $regex: search, $options: "i" } },
+        { "trigger.guildName": { $regex: search, $options: "i" } },
+        { "trigger.channelName": { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
+    const lim = parseInt(limit, 10);
+    const sortDir = order === "asc" ? 1 : -1;
+
+    const pipeline = [
+      ...(Object.keys(filter).length ? [{ $match: filter }] : []),
+      { $sort: { [sort]: sortDir } },
+      { $skip: skip },
+      { $limit: lim },
+      // Look up linked conversations for live cost + count
+      {
+        $lookup: {
+          from: CONVERSATIONS_COL,
+          localField: "conversationIds",
+          foreignField: "id",
+          as: "_conversations",
+          pipeline: [
+            { $project: { totalCost: 1, title: 1, id: 1, modalities: 1, providers: 1, updatedAt: 1 } },
+          ],
+        },
+      },
+      {
+        $addFields: {
+          conversationCount: { $size: "$_conversations" },
+          totalCost: {
+            $reduce: {
+              input: "$_conversations",
+              initialValue: 0,
+              in: { $add: ["$$value", { $ifNull: ["$$this.totalCost", 0] }] },
+            },
+          },
+        },
+      },
+      // Drop the full conversation docs from the list response
+      { $project: { _conversations: 0 } },
+    ];
+
+    const [docs, total] = await Promise.all([
+      db.collection("sessions").aggregate(pipeline).toArray(),
+      db.collection("sessions").countDocuments(filter),
+    ]);
+
+    res.json({ data: docs, total, page: parseInt(page, 10), limit: lim });
+  } catch (error) {
+    logger.error(`Admin /sessions error: ${error.message}`);
+    next(error);
+  }
+});
+
+// ============================================================
+// GET /admin/sessions/:id — single session with conversations
+// ============================================================
+router.get("/sessions/:id", async (req, res, next) => {
+  try {
+    const db = getDb();
+    if (!db) return res.status(503).json({ error: "Database not available" });
+
+    const session = await db
+      .collection("sessions")
+      .findOne({ id: req.params.id });
+    if (!session) return res.status(404).json({ error: "Session not found" });
+
+    // Fetch linked conversations (without full message bodies for performance)
+    let conversations = [];
+    if (
+      Array.isArray(session.conversationIds) &&
+      session.conversationIds.length > 0
+    ) {
+      conversations = await db
+        .collection(CONVERSATIONS_COL)
+        .find({ id: { $in: session.conversationIds } })
+        .project({
+          id: 1,
+          title: 1,
+          project: 1,
+          username: 1,
+          modalities: 1,
+          providers: 1,
+          totalCost: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          messageCount: { $size: { $ifNull: ["$messages", []] } },
+        })
+        .toArray();
+
+      // Compute totalCost from conversations (source of truth)
+      session.totalCost = conversations.reduce(
+        (sum, c) => sum + (c.totalCost || 0),
+        0,
+      );
+      session.conversationCount = conversations.length;
+    }
+
+    res.json({ ...session, conversations });
+  } catch (error) {
+    logger.error(`Admin /sessions/:id error: ${error.message}`);
+    next(error);
+  }
+});
 
 export default router;

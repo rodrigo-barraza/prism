@@ -18,6 +18,8 @@ import RequestLogger from "../services/RequestLogger.js";
 import ConversationService from "../services/ConversationService.js";
 import FileService from "../services/FileService.js";
 import AgenticLoopService from "../services/AgenticLoopService.js";
+import MongoWrapper from "../wrappers/MongoWrapper.js";
+import { MONGO_DB_NAME } from "../../secrets.js";
 
 const router = express.Router();
 
@@ -182,6 +184,8 @@ export async function handleChat(params, emit, { signal } = {}) {
     messages,
     conversationId: incomingConversationId,
     conversationMeta: incomingConversationMeta,
+    sessionId: incomingSessionId,
+    createSession: incomingCreateSession,
     project = "unknown",
     username = "unknown",
     clientIp = null,
@@ -226,6 +230,36 @@ export async function handleChat(params, emit, { signal } = {}) {
     const titleSnippet =
       (firstUserMsg?.content || "").slice(0, 100).trim() || "New Conversation";
     conversationMeta = conversationMeta || { title: titleSnippet };
+  }
+
+  // ── Session: create or reuse ────────────────────────────────
+  // Pass createSession: true on the first call → Prism creates a
+  // minimal session doc and returns the sessionId.
+  // Subsequent calls pass the returned sessionId to join the session.
+  let sessionId = incomingSessionId || null;
+  if (!sessionId && incomingCreateSession) {
+    sessionId = crypto.randomUUID();
+    try {
+      const sessionDb = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
+      if (sessionDb) {
+        const now = new Date().toISOString();
+        await sessionDb.collection("sessions").insertOne({
+          id: sessionId,
+          conversationIds: [],
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    } catch (err) {
+      logger.error(`Failed to create session: ${err.message}`);
+    }
+  }
+
+  // Inject sessionId into conversationMeta for storage on the conversation doc
+  if (sessionId && conversationMeta) {
+    conversationMeta.sessionId = sessionId;
+  } else if (sessionId) {
+    conversationMeta = { sessionId };
   }
 
   // Build the internal options object that providers expect
@@ -318,6 +352,7 @@ export async function handleChat(params, emit, { signal } = {}) {
         conversationId,
         userMessage,
         conversationMeta,
+        sessionId,
         project,
         username,
         clientIp,
@@ -357,6 +392,7 @@ export async function handleChat(params, emit, { signal } = {}) {
           conversationId,
           userMessage,
           conversationMeta,
+          sessionId,
           project,
           username,
           clientIp,
@@ -377,6 +413,7 @@ export async function handleChat(params, emit, { signal } = {}) {
           conversationId,
           userMessage,
           conversationMeta,
+          sessionId,
           project,
           username,
           clientIp,
@@ -398,6 +435,7 @@ export async function handleChat(params, emit, { signal } = {}) {
         conversationId,
         userMessage,
         conversationMeta,
+        sessionId,
         project,
         username,
         clientIp,
@@ -451,6 +489,7 @@ async function handleImageAPIModel(ctx) {
     conversationId,
     userMessage,
     conversationMeta,
+    sessionId,
     project,
     username,
     clientIp,
@@ -566,7 +605,28 @@ async function handleImageAPIModel(ctx) {
     usage: result.usage || null,
     estimatedCost,
     totalTime: totalSec,
+    ...(sessionId && { sessionId }),
   });
+
+  // Link conversation to session
+  if (sessionId && conversationId) {
+    try {
+      const sessionDb = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
+      if (sessionDb) {
+        sessionDb.collection("sessions").updateOne(
+          { id: sessionId },
+          {
+            $addToSet: { conversationIds: conversationId },
+            $set: { updatedAt: new Date().toISOString() },
+          },
+        ).catch((err) =>
+          logger.error(`Failed to link conversation to session: ${err.message}`),
+        );
+      }
+    } catch (err) {
+      logger.error(`Failed to link conversation to session: ${err.message}`);
+    }
+  }
 
   // Auto-append to conversation
   if (conversationId) {
@@ -658,6 +718,7 @@ export async function finalizeTextGeneration(
     conversationId,
     userMessage,
     conversationMeta,
+    sessionId,
     project,
     username,
     clientIp,
@@ -831,7 +892,28 @@ export async function finalizeTextGeneration(
       generationTime:
         generationSec !== null ? parseFloat(generationSec.toFixed(3)) : null,
       totalTime: parseFloat(totalSec.toFixed(3)),
+      ...(sessionId && { sessionId }),
     });
+  }
+
+  // ── Link conversation to session ──────────────────────────────
+  if (sessionId && conversationId) {
+    try {
+      const sessionDb = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
+      if (sessionDb) {
+        sessionDb.collection("sessions").updateOne(
+          { id: sessionId },
+          {
+            $addToSet: { conversationIds: conversationId },
+            $set: { updatedAt: new Date().toISOString() },
+          },
+        ).catch((err) =>
+          logger.error(`Failed to link conversation to session: ${err.message}`),
+        );
+      }
+    } catch (err) {
+      logger.error(`Failed to link conversation to session: ${err.message}`);
+    }
   }
 
   // ── Conversation persistence ──────────────────────────────────
@@ -1334,6 +1416,7 @@ router.post("/", async (req, res, next) => {
       model: doneEvent.model || req.body.model,
       usage: doneEvent.usage || null,
       estimatedCost: doneEvent.estimatedCost ?? null,
+      ...(doneEvent.sessionId && { sessionId: doneEvent.sessionId }),
     });
   }
 });

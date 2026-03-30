@@ -38,6 +38,7 @@ import textRouter from "./routes/text.js";
 import lmStudioRouter from "./routes/lm-studio.js";
 import customToolsRouter from "./routes/custom-tools.js";
 import favoritesRouter from "./routes/favorites.js";
+import sessionsRouter from "./routes/sessions.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -64,9 +65,10 @@ const ENDPOINTS = {
     "/lm-studio",
     "/custom-tools",
     "/favorites",
+    "/sessions",
   ],
   websocket: ["/ws/chat", "/ws/text-to-audio"],
-  admin: ["/admin", "/admin/lm-studio"],
+  admin: ["/admin", "/admin/lm-studio", "/admin/sessions"],
 };
 
 // Health check (public — no auth required)
@@ -102,6 +104,7 @@ app.use("/text", textRouter);
 app.use("/lm-studio", lmStudioRouter);
 app.use("/custom-tools", customToolsRouter);
 app.use("/favorites", favoritesRouter);
+app.use("/sessions", sessionsRouter);
 
 // Error handler (must be last)
 app.use(errorHandler);

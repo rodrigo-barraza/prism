@@ -230,6 +230,7 @@ const ConversationService = {
     newMessages,
     conversationMeta = null,
   ) {
+    const sessionId = conversationMeta?.sessionId || null;
     const client = MongoWrapper.getClient(MONGO_DB_NAME);
     if (!client) throw new Error("Database not available");
 
@@ -258,6 +259,7 @@ const ConversationService = {
         providers: extractProviders([], metaSettings),
         totalCost: 0,
         isGenerating: true,
+        ...(sessionId && { sessionId }),
 
         createdAt: now,
         updatedAt: now,
@@ -275,6 +277,11 @@ const ConversationService = {
 
     // Build $set — always update timestamp
     const setFields = { updatedAt: now };
+
+    // Set sessionId if provided and not already on the doc
+    if (sessionId) {
+      setFields.sessionId = sessionId;
+    }
 
     // Apply conversationMeta if provided (title, settings, systemPrompt)
     if (conversationMeta) {
