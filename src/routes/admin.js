@@ -2228,6 +2228,82 @@ router.get("/sessions", async (req, res, next) => {
               },
             },
           },
+          // Roll up providers from conversations
+          providers: {
+            $setUnion: {
+              $reduce: {
+                input: "$conversations",
+                initialValue: [],
+                in: {
+                  $concatArrays: [
+                    "$$value",
+                    {
+                      $cond: [
+                        { $isArray: "$$this.providers" },
+                        "$$this.providers",
+                        {
+                          $cond: [
+                            { $ne: ["$$this.providers", null] },
+                            ["$$this.providers"],
+                            [],
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          },
+          // Roll up unique tool names from requests
+          toolNames: {
+            $setUnion: {
+              $reduce: {
+                input: "$_requests",
+                initialValue: [],
+                in: {
+                  $concatArrays: [
+                    "$$value",
+                    { $ifNull: ["$$this.toolNames", []] },
+                  ],
+                },
+              },
+            },
+          },
+          // Average tokens-per-second across requests that have it
+          avgTokensPerSec: {
+            $cond: [
+              { $gt: [{ $size: "$_requests" }, 0] },
+              {
+                $avg: {
+                  $filter: {
+                    input: "$_requests.tokensPerSec",
+                    as: "tps",
+                    cond: {
+                      $and: [
+                        { $ne: ["$$tps", null] },
+                        { $gt: ["$$tps", 0] },
+                      ],
+                    },
+                  },
+                },
+              },
+              null,
+            ],
+          },
+          // Total latency across all requests
+          totalLatency: {
+            $reduce: {
+              input: "$_requests",
+              initialValue: 0,
+              in: {
+                $add: [
+                  "$$value",
+                  { $ifNull: ["$$this.totalTime", 0] },
+                ],
+              },
+            },
+          },
           // Derive start/finish timestamps from earliest/latest request
           startedAt: { $min: "$_requests.timestamp" },
           finishedAt: { $max: "$_requests.timestamp" },
