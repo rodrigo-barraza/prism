@@ -569,7 +569,7 @@ function handleWsLive(ws, project, username, _clientIp) {
                     messages: [{
                       role: "user",
                       content: turnInputText.trim() || "[Voice Input]",
-                      ...(turnUserAudioRef ? { audio: [turnUserAudioRef] } : {})
+                      ...(turnUserAudioRef ? { audio: [turnUserAudioRef], liveTranscription: true } : {})
                     }],
                     text: turnText,
                     thinking: turnThinking,
@@ -636,7 +636,7 @@ function handleWsLive(ws, project, username, _clientIp) {
                     messages: [{
                       role: "user",
                       content: turnInputText.trim() || "[Voice Input]",
-                      ...(turnUserAudioRef ? { audio: [turnUserAudioRef] } : {})
+                      ...(turnUserAudioRef ? { audio: [turnUserAudioRef], liveTranscription: true } : {})
                     }],
                     text: turnText,
                     thinking: turnThinking,

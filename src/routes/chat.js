@@ -734,33 +734,6 @@ export async function finalizeTextGeneration(
       (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
   );
 
-  // ── Request logging with sanitized payloads ────────────────────
-  if (!skipRequestLog) {
-    RequestLogger.logChatGeneration({
-      requestId,
-      project,
-      username,
-      clientIp,
-      provider: providerName,
-      model: resolvedModel,
-      conversationId: conversationId || null,
-      success: true,
-      usage,
-      estimatedCost,
-      tokensPerSec,
-      timeToGenerationSec,
-      generationSec,
-      totalSec,
-      options,
-      messages: originalMessages || messages,
-      text,
-      thinking,
-      images,
-      toolCalls,
-      outputCharacters,
-    });
-  }
-
   // ── Build WAV from accumulated PCM audio chunks ───────────────
   let audioRef = null;
   if (audioChunks.length > 0) {
@@ -803,6 +776,36 @@ export async function finalizeTextGeneration(
         `[chat] Failed to build/upload Live API audio WAV: ${err.message}`,
       );
     }
+  }
+
+  // ── Request logging with sanitized payloads ────────────────────
+  // Placed after audio build so audioRef is available for modality detection
+  if (!skipRequestLog) {
+    RequestLogger.logChatGeneration({
+      requestId,
+      endpoint: modelDef?.liveAPI ? "live" : "chat",
+      project,
+      username,
+      clientIp,
+      provider: providerName,
+      model: resolvedModel,
+      conversationId: conversationId || null,
+      success: true,
+      usage,
+      estimatedCost,
+      tokensPerSec,
+      timeToGenerationSec,
+      generationSec,
+      totalSec,
+      options,
+      messages: originalMessages || messages,
+      text,
+      thinking,
+      images,
+      toolCalls,
+      outputCharacters,
+      audioRef,
+    });
   }
 
   // ── Emit done event ───────────────────────────────────────────

@@ -2,6 +2,7 @@ import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 import { getTotalInputTokens } from "../utils/CostCalculator.js";
+import { computeModalities } from "./ConversationService.js";
 
 const COLLECTION = "requests";
 
@@ -83,6 +84,7 @@ const RequestLogger = {
     totalTime = null,
     requestPayload = null,
     responsePayload = null,
+    modalities = null,
   }) {
     try {
       const client = MongoWrapper.getClient(MONGO_DB_NAME);
@@ -124,6 +126,7 @@ const RequestLogger = {
         totalTime,
         requestPayload,
         responsePayload,
+        modalities,
       };
 
       await client.db(MONGO_DB_NAME).collection(COLLECTION).insertOne(doc);
@@ -172,7 +175,21 @@ const RequestLogger = {
   }) {
     const inputTokens = usage ? getTotalInputTokens(usage) : 0;
     const outputTokens = usage ? (usage.outputTokens || 0) : 0;
-    
+
+    // Build synthetic message array for computeModalities (same function used by conversations)
+    const syntheticMessages = [
+      ...messages,
+      {
+        role: "assistant",
+        content: text || null,
+        ...(images && images.length > 0 ? { images } : {}),
+        ...(audioRef ? { audio: audioRef } : {}),
+        ...(toolCalls && toolCalls.length > 0 ? { toolCalls } : {}),
+        ...(thinking ? { thinking } : {}),
+      },
+    ];
+    const modalities = computeModalities(syntheticMessages);
+
     return this.log({
       requestId,
       endpoint,
@@ -219,6 +236,7 @@ const RequestLogger = {
         ...(audioRef ? { audioRef } : {}),
         usage,
       },
+      modalities,
     });
   },
 };

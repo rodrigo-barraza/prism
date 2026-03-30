@@ -258,6 +258,7 @@ export default class AgenticLoopService {
 
         RequestLogger.logChatGeneration({
           requestId: `${ctx.requestId}-${iterations}`,
+          endpoint: modelDef?.liveAPI ? "live" : "chat",
           project,
           username,
           clientIp: ctx.clientIp,
