@@ -1967,6 +1967,140 @@ router.get("/sessions", async (req, res, next) => {
           ],
         },
       },
+      // Look up requests for token/model/request aggregation
+      {
+        $lookup: {
+          from: "requests",
+          localField: "conversationIds",
+          foreignField: "conversationId",
+          as: "_requests",
+          pipeline: [
+            {
+              $project: {
+                conversationId: 1,
+                inputTokens: 1,
+                outputTokens: 1,
+                model: 1,
+                messageCount: 1,
+                tokensPerSec: 1,
+                totalTime: 1,
+                toolsUsed: 1,
+                toolNames: 1,
+              },
+            },
+          ],
+        },
+      },
+      // Enrich each conversation with per-conversation request stats
+      {
+        $addFields: {
+          conversations: {
+            $map: {
+              input: "$conversations",
+              as: "conv",
+              in: {
+                $let: {
+                  vars: {
+                    cReqs: {
+                      $filter: {
+                        input: "$_requests",
+                        cond: {
+                          $eq: ["$$this.conversationId", "$$conv.id"],
+                        },
+                      },
+                    },
+                  },
+                  in: {
+                    $mergeObjects: [
+                      "$$conv",
+                      {
+                        inputTokens: {
+                          $reduce: {
+                            input: "$$cReqs",
+                            initialValue: 0,
+                            in: {
+                              $add: [
+                                "$$value",
+                                { $ifNull: ["$$this.inputTokens", 0] },
+                              ],
+                            },
+                          },
+                        },
+                        outputTokens: {
+                          $reduce: {
+                            input: "$$cReqs",
+                            initialValue: 0,
+                            in: {
+                              $add: [
+                                "$$value",
+                                { $ifNull: ["$$this.outputTokens", 0] },
+                              ],
+                            },
+                          },
+                        },
+                        requestCount: { $size: "$$cReqs" },
+                        models: {
+                          $setUnion: {
+                            $filter: {
+                              input: "$$cReqs.model",
+                              cond: { $ne: ["$$this", null] },
+                            },
+                          },
+                        },
+                        avgTokensPerSec: {
+                          $cond: [
+                            { $gt: [{ $size: "$$cReqs" }, 0] },
+                            {
+                              $avg: {
+                                $filter: {
+                                  input: "$$cReqs.tokensPerSec",
+                                  cond: {
+                                    $and: [
+                                      { $ne: ["$$this", null] },
+                                      { $gt: ["$$this", 0] },
+                                    ],
+                                  },
+                                },
+                              },
+                            },
+                            null,
+                          ],
+                        },
+                        totalLatency: {
+                          $reduce: {
+                            input: "$$cReqs",
+                            initialValue: 0,
+                            in: {
+                              $add: [
+                                "$$value",
+                                { $ifNull: ["$$this.totalTime", 0] },
+                              ],
+                            },
+                          },
+                        },
+                        toolNames: {
+                          $setUnion: {
+                            $reduce: {
+                              input: "$$cReqs",
+                              initialValue: [],
+                              in: {
+                                $concatArrays: [
+                                  "$$value",
+                                  { $ifNull: ["$$this.toolNames", []] },
+                                ],
+                              },
+                            },
+                          },
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
       {
         $addFields: {
           conversationCount: { $size: "$conversations" },
@@ -1981,8 +2115,41 @@ router.get("/sessions", async (req, res, next) => {
           project: { $arrayElemAt: ["$conversations.project", 0] },
           username: { $arrayElemAt: ["$conversations.username", 0] },
           source: { $arrayElemAt: ["$conversations.source", 0] },
+          // Aggregate stats from requests
+          requestCount: { $size: "$_requests" },
+          totalInputTokens: {
+            $reduce: {
+              input: "$_requests",
+              initialValue: 0,
+              in: { $add: ["$$value", { $ifNull: ["$$this.inputTokens", 0] }] },
+            },
+          },
+          totalOutputTokens: {
+            $reduce: {
+              input: "$_requests",
+              initialValue: 0,
+              in: { $add: ["$$value", { $ifNull: ["$$this.outputTokens", 0] }] },
+            },
+          },
+          totalMessages: {
+            $reduce: {
+              input: "$_requests",
+              initialValue: 0,
+              in: { $add: ["$$value", { $ifNull: ["$$this.messageCount", 0] }] },
+            },
+          },
+          models: {
+            $setUnion: {
+              $filter: {
+                input: "$_requests.model",
+                cond: { $ne: ["$$this", null] },
+              },
+            },
+          },
         },
       },
+      // Drop raw request docs from response
+      { $project: { _requests: 0 } },
     ];
 
     const [docs, total] = await Promise.all([
