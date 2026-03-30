@@ -2064,6 +2064,7 @@ router.get("/sessions", async (req, res, next) => {
                 totalTime: 1,
                 toolsUsed: 1,
                 toolNames: 1,
+                timestamp: 1,
               },
             },
           ],
@@ -2227,6 +2228,9 @@ router.get("/sessions", async (req, res, next) => {
               },
             },
           },
+          // Derive start/finish timestamps from earliest/latest request
+          startedAt: { $min: "$_requests.timestamp" },
+          finishedAt: { $max: "$_requests.timestamp" },
         },
       },
       // Drop raw request docs from response
