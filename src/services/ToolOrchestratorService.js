@@ -134,6 +134,12 @@ async function executeToolGeneric(name, args = {}) {
     }
   }
 
+  // POST-method tools send args as JSON body
+  if (schema.endpoint.method === "POST") {
+    const url = `${TOOLS_API_URL}${schema.endpoint.path}`;
+    return fetchJsonPost(url, resolvedArgs);
+  }
+
   const url = buildUrlFromEndpoint(schema.endpoint, resolvedArgs);
   return fetchJson(url);
 }
@@ -141,6 +147,22 @@ async function executeToolGeneric(name, args = {}) {
 async function fetchJson(url) {
   try {
     const res = await fetch(url);
+    if (!res.ok) {
+      return { error: `API returned ${res.status}: ${res.statusText}` };
+    }
+    return await res.json();
+  } catch (err) {
+    return { error: `Failed to reach API: ${err.message}` };
+  }
+}
+
+async function fetchJsonPost(url, body) {
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
     if (!res.ok) {
       return { error: `API returned ${res.status}: ${res.statusText}` };
     }
