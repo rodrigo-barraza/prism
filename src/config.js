@@ -679,6 +679,22 @@ const MODELS = {
     thinking: false,
     pricing: { inputPerMillion: 0, outputPerMillion: 0 },
   },
+  LFM_25_VL: {
+    name: "lfm2.5-vl-1.6b",
+    label: "LFM 2.5 VL 1.6B",
+    provider: PROVIDERS.LM_STUDIO,
+    modelType: MODEL_TYPES.CONVERSATION,
+    year: 2025,
+    defaultTemperature: 0.7,
+    size: "1.6 GB",
+    maxInputTokens: 32_768,
+    maxOutputTokens: 4_096,
+    inputTypes: [TYPES.TEXT, TYPES.IMAGE],
+    outputTypes: [TYPES.TEXT],
+    streaming: true,
+    thinking: false,
+    pricing: { inputPerMillion: 0, outputPerMillion: 0 },
+  },
 
   // ----- Text-to-Speech -----
   GPT_4O_MINI_TTS: {
