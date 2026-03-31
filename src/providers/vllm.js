@@ -168,7 +168,8 @@ function getDataUrlMimeType(dataUrl) {
  *
  * vLLM uses the OpenAI Chat Completions API format:
  *  - Images → { type: "image_url", image_url: { url } }
- *  - Audio/video → { type: "image_url", image_url: { url } } (VLM passthrough)
+ *  - Video  → { type: "video_url", video_url: { url } }
+ *  - Audio  → { type: "input_audio", input_audio: { data, format } }
  *  - PDFs/text files → decoded and inlined as text content
  */
 function prepareMessages(messages) {
@@ -218,11 +219,20 @@ function prepareMessages(messages) {
         const mime = getDataUrlMimeType(dataUrl);
 
         if (mime && mime.startsWith("image/")) {
-          // Standard image — use image_url
+          // Standard image — use image_url (OpenAI-compatible)
           content.push({ type: "image_url", image_url: { url: dataUrl } });
-        } else if (mime && (mime.startsWith("audio/") || mime.startsWith("video/"))) {
-          // Audio/video — some VLMs accept these via image_url passthrough
-          content.push({ type: "image_url", image_url: { url: dataUrl } });
+        } else if (mime && mime.startsWith("video/")) {
+          // Video — vLLM uses video_url type with data URL
+          content.push({ type: "video_url", video_url: { url: dataUrl } });
+        } else if (mime && mime.startsWith("audio/")) {
+          // Audio — vLLM uses input_audio type (OpenAI-compatible schema)
+          // Extract base64 data and format from data URL
+          const base64Data = dataUrl.split(";base64,")[1] || "";
+          const audioFormat = mime.split("/")[1] || "wav"; // e.g. "wav", "mp3", "ogg"
+          content.push({
+            type: "input_audio",
+            input_audio: { data: base64Data, format: audioFormat },
+          });
         } else if (mime === "application/pdf") {
           // PDFs — vLLM doesn't support file uploads; inform the model
           content.push({
