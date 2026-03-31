@@ -606,6 +606,7 @@ async function handleImageAPIModel(ctx) {
     estimatedCost,
     totalTime: totalSec,
     ...(sessionId && { sessionId }),
+    ...(conversationId && { conversationId }),
   });
 
   // Link conversation to session
@@ -893,6 +894,7 @@ export async function finalizeTextGeneration(
         generationSec !== null ? parseFloat(generationSec.toFixed(3)) : null,
       totalTime: parseFloat(totalSec.toFixed(3)),
       ...(sessionId && { sessionId }),
+      ...(conversationId && { conversationId }),
     });
   }
 
@@ -1417,6 +1419,7 @@ router.post("/", async (req, res, next) => {
       usage: doneEvent.usage || null,
       estimatedCost: doneEvent.estimatedCost ?? null,
       ...(doneEvent.sessionId && { sessionId: doneEvent.sessionId }),
+      ...(doneEvent.conversationId && { conversationId: doneEvent.conversationId }),
     });
   }
 });
