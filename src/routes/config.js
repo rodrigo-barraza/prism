@@ -282,16 +282,32 @@ async function getVllmModelOptions() {
         // Detect vision/multimodal models by name patterns
         const VISION_PATTERNS = [
           "vl", "vision", "llava", "pixtral", "minicpm-v",
-          "internvl", "cogvlm", "qwen2.5-vl", "qwen2-vl",
+          "internvl", "cogvlm", "qwen2.5-vl", "qwen2-vl", "qwen3-vl",
           "molmo", "paligemma", "llama-3.2-vision", "llama-vision",
           "idefics", "phi-3-vision", "phi-3.5-vision", "phi-4-vision",
+          "phi4mm", "minicpmv", "ovis", "deepseek-vl",
         ];
         const supportsVision = VISION_PATTERNS.some((p) =>
           nameLower.includes(p),
         );
 
+        // Detect video-capable models (subset of vision models)
+        const VIDEO_PATTERNS = [
+          "qwen2.5-vl", "qwen2-vl", "qwen3-vl",
+          "llava-next-video", "llava-onevision",
+          "internvl", "phi4mm",
+        ];
+        const supportsVideo = VIDEO_PATTERNS.some((p) =>
+          nameLower.includes(p),
+        );
+
         // Detect audio-capable models
-        const AUDIO_PATTERNS = ["qwen2-audio", "qwen-audio", "salmonn"];
+        const AUDIO_PATTERNS = [
+          "qwen2-audio", "qwen-audio", "salmonn",
+          "ultravox", "phi4mm", "minicpmo",
+          "whisper", "granite-speech", "kimi-audio",
+          "qwen2.5-omni", "qwen3-omni",
+        ];
         const supportsAudio = AUDIO_PATTERNS.some((p) =>
           nameLower.includes(p),
         );
@@ -299,6 +315,7 @@ async function getVllmModelOptions() {
         // Build input types
         const inputTypes = [TYPES.TEXT];
         if (supportsVision) inputTypes.push(TYPES.IMAGE);
+        if (supportsVideo) inputTypes.push(TYPES.VIDEO);
         if (supportsAudio) inputTypes.push(TYPES.AUDIO);
 
         const entry = {
