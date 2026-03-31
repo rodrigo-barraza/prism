@@ -8,6 +8,8 @@ import ConversationService from "../services/ConversationService.js";
 import FileService from "../services/FileService.js";
 import logger from "../utils/logger.js";
 import RequestLogger from "../services/RequestLogger.js";
+import MongoWrapper from "../wrappers/MongoWrapper.js";
+import { MONGO_DB_NAME } from "../../secrets.js";
 
 const router = express.Router();
 
@@ -303,6 +305,8 @@ router.post("/", async (req, res, next) => {
     prompt: transcriptionPrompt,
     conversationId: incomingConversationId,
     conversationMeta: incomingConversationMeta,
+    sessionId: incomingSessionId,
+    createSession: incomingCreateSession,
   } = req.body;
 
   // Auto-generate conversationId when caller omits it (mirrors chat route)
@@ -311,6 +315,33 @@ router.post("/", async (req, res, next) => {
   if (!conversationId) {
     conversationId = crypto.randomUUID();
     conversationMeta = conversationMeta || { title: "Audio Transcription" };
+  }
+
+  // ── Session: create or reuse ────────────────────────────────
+  let sessionId = incomingSessionId || null;
+  if (!sessionId && incomingCreateSession) {
+    sessionId = crypto.randomUUID();
+    try {
+      const sessionDb = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
+      if (sessionDb) {
+        const now = new Date().toISOString();
+        await sessionDb.collection("sessions").insertOne({
+          id: sessionId,
+          conversationIds: [],
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    } catch (err) {
+      logger.error(`Failed to create session: ${err.message}`);
+    }
+  }
+
+  // Inject sessionId into conversationMeta for storage
+  if (sessionId && conversationMeta) {
+    conversationMeta.sessionId = sessionId;
+  } else if (sessionId) {
+    conversationMeta = { sessionId };
   }
 
   try {
@@ -469,11 +500,32 @@ router.post("/", async (req, res, next) => {
         );
     }
 
+    // ── Link conversation to session ────────────────────────────
+    if (sessionId && conversationId) {
+      try {
+        const sessionDb = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
+        if (sessionDb) {
+          sessionDb.collection("sessions").updateOne(
+            { id: sessionId },
+            {
+              $addToSet: { conversationIds: conversationId },
+              $set: { updatedAt: new Date().toISOString() },
+            },
+          ).catch((err) =>
+            logger.error(`Failed to link conversation to session: ${err.message}`),
+          );
+        }
+      } catch (err) {
+        logger.error(`Failed to link conversation to session: ${err.message}`);
+      }
+    }
+
     res.json({
       text: result.text,
       usage: result.usage || {},
       estimatedCost,
       totalTime: parseFloat(totalSec.toFixed(3)),
+      ...(sessionId && { sessionId }),
     });
   } catch (error) {
     // Clear isGenerating flag on error
