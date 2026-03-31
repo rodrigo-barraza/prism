@@ -154,8 +154,22 @@ class ThinkTagParser {
 }
 
 /**
- * Convert messages with images to OpenAI-compatible multipart content format.
- * Also handles tool result messages and assistant messages with toolCalls.
+ * Detect MIME category from a base64 data URL.
+ */
+function getDataUrlMimeType(dataUrl) {
+  const match = dataUrl.match(/^data:([^;]+);base64,/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Convert messages with media to OpenAI-compatible multipart content format.
+ * Handles images, audio, video, and PDFs via data URLs, plus tool result
+ * messages and assistant messages with toolCalls.
+ *
+ * vLLM uses the OpenAI Chat Completions API format:
+ *  - Images → { type: "image_url", image_url: { url } }
+ *  - Audio/video → { type: "image_url", image_url: { url } } (VLM passthrough)
+ *  - PDFs/text files → decoded and inlined as text content
  */
 function prepareMessages(messages) {
   return messages.map((m) => {
@@ -193,19 +207,64 @@ function prepareMessages(messages) {
       return msg;
     }
 
-    if (m.images && m.images.length > 0) {
-      const content = [];
-      for (const dataUrl of m.images) {
-        content.push({ type: "image_url", image_url: { url: dataUrl } });
+    // Collect all media from images, audio, video, pdf fields into multipart content
+    const content = [];
+
+    for (const field of ["images", "audio", "video", "pdf"]) {
+      const arr = m[field];
+      if (!arr || !Array.isArray(arr) || arr.length === 0) continue;
+
+      for (const dataUrl of arr) {
+        const mime = getDataUrlMimeType(dataUrl);
+
+        if (mime && mime.startsWith("image/")) {
+          // Standard image — use image_url
+          content.push({ type: "image_url", image_url: { url: dataUrl } });
+        } else if (mime && (mime.startsWith("audio/") || mime.startsWith("video/"))) {
+          // Audio/video — some VLMs accept these via image_url passthrough
+          content.push({ type: "image_url", image_url: { url: dataUrl } });
+        } else if (mime === "application/pdf") {
+          // PDFs — vLLM doesn't support file uploads; inform the model
+          content.push({
+            type: "text",
+            text: "[Attached PDF document — contents not extractable in this context]",
+          });
+        } else if (
+          mime &&
+          (mime.startsWith("text/") || mime === "application/json")
+        ) {
+          // Text-based files — decode and inline
+          try {
+            const base64 = dataUrl.split(";base64,")[1];
+            const decoded = Buffer.from(base64, "base64").toString("utf-8");
+            content.push({
+              type: "text",
+              text: `[Attached file (${mime})]:\n${decoded}`,
+            });
+          } catch {
+            content.push({
+              type: "text",
+              text: `[Attached file (${mime}): unable to decode]`,
+            });
+          }
+        } else {
+          // Fallback — try image_url passthrough for unknown types
+          content.push({ type: "image_url", image_url: { url: dataUrl } });
+        }
       }
+    }
+
+    if (content.length > 0) {
       if (m.content) {
         content.push({ type: "text", text: m.content });
       }
       return { ...base, content };
     }
+
     return { ...base, content: m.content };
   });
 }
+
 
 // ── Provider ─────────────────────────────────────────────────
 

@@ -279,11 +279,33 @@ async function getVllmModelOptions() {
         if (supportsThinking) tools.push("Thinking");
         if (supportsFunctionCalling) tools.push("Function Calling");
 
+        // Detect vision/multimodal models by name patterns
+        const VISION_PATTERNS = [
+          "vl", "vision", "llava", "pixtral", "minicpm-v",
+          "internvl", "cogvlm", "qwen2.5-vl", "qwen2-vl",
+          "molmo", "paligemma", "llama-3.2-vision", "llama-vision",
+          "idefics", "phi-3-vision", "phi-3.5-vision", "phi-4-vision",
+        ];
+        const supportsVision = VISION_PATTERNS.some((p) =>
+          nameLower.includes(p),
+        );
+
+        // Detect audio-capable models
+        const AUDIO_PATTERNS = ["qwen2-audio", "qwen-audio", "salmonn"];
+        const supportsAudio = AUDIO_PATTERNS.some((p) =>
+          nameLower.includes(p),
+        );
+
+        // Build input types
+        const inputTypes = [TYPES.TEXT];
+        if (supportsVision) inputTypes.push(TYPES.IMAGE);
+        if (supportsAudio) inputTypes.push(TYPES.AUDIO);
+
         const entry = {
           name: m.key,
           label: m.display_name || m.key,
           modelType: "conversation",
-          inputTypes: [TYPES.TEXT],
+          inputTypes,
           outputTypes: [TYPES.TEXT],
           supportsSystemPrompt: true,
           streaming: true,
@@ -295,6 +317,9 @@ async function getVllmModelOptions() {
         }
         if (supportsThinking) {
           entry.thinking = true;
+        }
+        if (supportsVision) {
+          entry.vision = true;
         }
         return entry;
       });
