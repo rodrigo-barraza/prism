@@ -226,15 +226,39 @@ router.get("/stats", async (req, res, next) => {
       },
     ];
 
-    // Count total sessions and conversations
+    // Count total sessions and conversations (respecting date + project filters)
     const convMatch = {};
     if (project) convMatch.project = project;
+    if (from || to) {
+      convMatch.createdAt = {};
+      if (from) convMatch.createdAt.$gte = from;
+      if (to) convMatch.createdAt.$lte = to;
+    }
 
-    const [result, sessionCount, conversationCount] = await Promise.all([
+    // Sessions: filter by matching conversations that pass the same filters
+    const sessionPipeline = [
+      {
+        $lookup: {
+          from: CONVERSATIONS_COL,
+          localField: "conversationIds",
+          foreignField: "id",
+          as: "_convs",
+          pipeline: [
+            { $match: convMatch },
+            { $project: { _id: 1 } },
+          ],
+        },
+      },
+      { $match: { "_convs.0": { $exists: true } } },
+      { $count: "total" },
+    ];
+
+    const [result, sessionResult, conversationCount] = await Promise.all([
       db.collection(REQUESTS_COL).aggregate(pipeline).toArray().then((r) => r[0]),
-      db.collection(SESSIONS_COL).countDocuments(),
+      db.collection(SESSIONS_COL).aggregate(sessionPipeline).toArray(),
       db.collection(CONVERSATIONS_COL).countDocuments(convMatch),
     ]);
+    const sessionCount = sessionResult[0]?.total || 0;
 
     res.json({
       totalRequests: 0,
@@ -398,6 +422,8 @@ router.get("/stats/projects", async (req, res, next) => {
         lastRequest: r.lastRequest,
         modelCount: r.modelCount,
         providerCount: r.providerCount,
+        models: (r._models || []).filter(Boolean),
+        providers: (r._providers || []).filter(Boolean),
         workflowCount: wfMap[r._id || "unknown"] || 0,
         conversationCount: convMap[r._id || "unknown"] || 0,
         sessionCount: sessMap[r._id || "unknown"] || 0,
@@ -1176,6 +1202,8 @@ router.get("/conversations", async (req, res, next) => {
       search,
       provider,
       model,
+      from,
+      to,
       sort = "updatedAt",
       order = "desc",
     } = req.query;
@@ -1186,6 +1214,11 @@ router.get("/conversations", async (req, res, next) => {
     if (search) filter.title = { $regex: search, $options: "i" };
     if (provider) filter.providers = provider;
     if (model) filter["messages.model"] = model;
+    if (from || to) {
+      filter.updatedAt = {};
+      if (from) filter.updatedAt.$gte = from;
+      if (to) filter.updatedAt.$lte = to;
+    }
 
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const lim = parseInt(limit, 10);
@@ -1714,6 +1747,8 @@ router.get("/workflows", async (req, res, next) => {
       guildId,
       userId,
       userName,
+      from,
+      to,
       sort = "createdAt",
       order = "desc",
     } = req.query;
@@ -1722,6 +1757,11 @@ router.get("/workflows", async (req, res, next) => {
     if (guildId) filter.guildId = guildId;
     if (userId) filter.userId = userId;
     if (userName) filter.userName = { $regex: userName, $options: "i" };
+    if (from || to) {
+      filter.createdAt = {};
+      if (from) filter.createdAt.$gte = from;
+      if (to) filter.createdAt.$lte = to;
+    }
 
     // If project, provider, or model is specified, find matching conversation IDs
     // and filter workflows that reference those conversations
@@ -2074,14 +2114,22 @@ router.get("/sessions", async (req, res, next) => {
       username,
       source,
       search,
+      from,
+      to,
       sort = "createdAt",
       order = "desc",
     } = req.query;
 
+    // Sessions don't store `project` directly — it's derived from conversations.
+    // Apply project filter after the $lookup + $addFields stages.
     const filter = {};
-    if (project) filter.project = project;
     if (username) filter.username = username;
     if (source) filter.source = source;
+    if (from || to) {
+      filter.createdAt = {};
+      if (from) filter.createdAt.$gte = from;
+      if (to) filter.createdAt.$lte = to;
+    }
     if (search) {
       filter.$or = [
         { "trigger.userName": { $regex: search, $options: "i" } },
@@ -2097,9 +2145,6 @@ router.get("/sessions", async (req, res, next) => {
 
     const pipeline = [
       ...(Object.keys(filter).length ? [{ $match: filter }] : []),
-      { $sort: { [sort]: sortDir } },
-      { $skip: skip },
-      { $limit: lim },
       // Look up linked conversations for live cost + count
       {
         $lookup: {
@@ -2378,12 +2423,23 @@ router.get("/sessions", async (req, res, next) => {
       },
       // Drop raw request docs from response
       { $project: { _requests: 0 } },
+      // Apply project filter after conversations are joined and project is derived
+      ...(project ? [{ $match: { project } }] : []),
+      { $sort: { [sort]: sortDir } },
     ];
 
-    const [docs, total] = await Promise.all([
+    // Count total matching sessions (with project filter if applicable)
+    const countPipeline = [...pipeline]; // reuse the same aggregation minus skip/limit
+    countPipeline.push({ $count: "total" });
+
+    // Add pagination to the data pipeline
+    pipeline.push({ $skip: skip }, { $limit: lim });
+
+    const [docs, countResult] = await Promise.all([
       db.collection("sessions").aggregate(pipeline).toArray(),
-      db.collection("sessions").countDocuments(filter),
+      db.collection("sessions").aggregate(countPipeline).toArray(),
     ]);
+    const total = countResult[0]?.total || 0;
 
     res.json({ data: docs, total, page: parseInt(page, 10), limit: lim });
   } catch (error) {
