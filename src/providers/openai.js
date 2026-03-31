@@ -69,6 +69,28 @@ function getDataUrlMimeType(dataUrl) {
 }
 
 /**
+ * Check if a string is a valid data: URL, HTTP(S) URL, or other ref type.
+ */
+function getUrlType(url) {
+  if (url.startsWith("data:")) return "data";
+  if (url.startsWith("http://") || url.startsWith("https://")) return "http";
+  return "unknown";
+}
+
+/**
+ * Infer MIME type from a URL's file extension.
+ */
+function inferMimeFromUrl(url) {
+  try {
+    const pathname = new URL(url).pathname.toLowerCase();
+    if (/\.(png|jpg|jpeg|gif|webp|bmp|svg|avif)$/i.test(pathname)) return "image";
+    if (/\.pdf$/i.test(pathname)) return "pdf";
+    if (/\.(txt|md|csv|json|xml|html|css|js|ts)$/i.test(pathname)) return "text";
+  } catch { /* ignore */ }
+  return "unknown";
+}
+
+/**
  * Convert messages with media to OpenAI multimodal content format (Chat Completions).
  */
 function prepareOpenAIMessages(messages) {
@@ -77,39 +99,61 @@ function prepareOpenAIMessages(messages) {
     if (m.name) base.name = m.name;
     if (m.images && m.images.length > 0) {
       const content = [];
-      for (const dataUrl of m.images) {
-        const mime = getDataUrlMimeType(dataUrl);
-        if (mime && mime.startsWith("image/")) {
-          content.push({ type: "image_url", image_url: { url: dataUrl } });
-        } else if (mime === "application/pdf") {
-          content.push({
-            type: "file",
-            file: { file_data: dataUrl, filename: "document.pdf" },
-          });
-        } else if (
-          mime &&
-          (mime.startsWith("text/") || mime === "application/json")
-        ) {
-          // Decode text files and inline as text
-          try {
-            const base64 = dataUrl.split(";base64,")[1];
-            const decoded = Buffer.from(base64, "base64").toString("utf-8");
+      for (const mediaRef of m.images) {
+        const urlType = getUrlType(mediaRef);
+
+        if (urlType === "data") {
+          // Base64 data URL — use MIME type to route
+          const mime = getDataUrlMimeType(mediaRef);
+          if (mime && mime.startsWith("image/")) {
+            content.push({ type: "image_url", image_url: { url: mediaRef } });
+          } else if (mime === "application/pdf") {
             content.push({
-              type: "text",
-              text: `[Attached file (${mime})]:\n${decoded}`,
+              type: "file",
+              file: { file_data: mediaRef, filename: "document.pdf" },
             });
-          } catch {
+          } else if (
+            mime &&
+            (mime.startsWith("text/") || mime === "application/json")
+          ) {
+            // Decode text files and inline as text
+            try {
+              const base64 = mediaRef.split(";base64,")[1];
+              const decoded = Buffer.from(base64, "base64").toString("utf-8");
+              content.push({
+                type: "text",
+                text: `[Attached file (${mime})]:\n${decoded}`,
+              });
+            } catch {
+              content.push({
+                type: "text",
+                text: `[Attached file (${mime}): unable to decode]`,
+              });
+            }
+          } else {
+            // Other data URL file types
             content.push({
-              type: "text",
-              text: `[Attached file (${mime}): unable to decode]`,
+              type: "file",
+              file: { file_data: mediaRef, filename: "attachment" },
+            });
+          }
+        } else if (urlType === "http") {
+          // HTTP(S) URL — the Chat Completions API accepts URLs in image_url
+          const inferredType = inferMimeFromUrl(mediaRef);
+          if (inferredType === "image") {
+            content.push({ type: "image_url", image_url: { url: mediaRef } });
+          } else {
+            // Chat Completions file type via URL — use file_data with the URL
+            content.push({
+              type: "file",
+              file: { file_data: mediaRef, filename: "attachment" },
             });
           }
         } else {
-          // Other file types — try sending as file
-          content.push({
-            type: "file",
-            file: { file_data: dataUrl, filename: "attachment" },
-          });
+          // Unknown ref type (e.g. minio://) — skip with warning
+          logger.warn(
+            `[openai] Skipping unresolved media ref in Chat Completions input: ${mediaRef.substring(0, 60)}...`,
+          );
         }
       }
       if (m.content) {
@@ -132,37 +176,55 @@ function prepareResponsesInput(messages) {
     if (m.name) base.name = m.name;
     if (m.images && m.images.length > 0) {
       const content = [];
-      for (const dataUrl of m.images) {
-        const mime = getDataUrlMimeType(dataUrl);
-        if (mime && mime.startsWith("image/")) {
-          content.push({ type: "input_image", image_url: dataUrl });
-        } else if (
-          mime === "application/pdf" ||
-          mime ===
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        ) {
-          content.push({ type: "input_file", file_data: dataUrl });
-        } else if (
-          mime &&
-          (mime.startsWith("text/") || mime === "application/json")
-        ) {
-          // Decode text files and inline as text
-          try {
-            const base64 = dataUrl.split(";base64,")[1];
-            const decoded = Buffer.from(base64, "base64").toString("utf-8");
-            content.push({
-              type: "input_text",
-              text: `[Attached file (${mime})]:\n${decoded}`,
-            });
-          } catch {
-            content.push({
-              type: "input_text",
-              text: `[Attached file (${mime}): unable to decode]`,
-            });
+      for (const mediaRef of m.images) {
+        const urlType = getUrlType(mediaRef);
+
+        if (urlType === "data") {
+          // Base64 data URL — use MIME type to route
+          const mime = getDataUrlMimeType(mediaRef);
+          if (mime && mime.startsWith("image/")) {
+            content.push({ type: "input_image", image_url: mediaRef });
+          } else if (
+            mime === "application/pdf" ||
+            mime ===
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          ) {
+            content.push({ type: "input_file", file_data: mediaRef, filename: "document.pdf" });
+          } else if (
+            mime &&
+            (mime.startsWith("text/") || mime === "application/json")
+          ) {
+            // Decode text files and inline as text
+            try {
+              const base64 = mediaRef.split(";base64,")[1];
+              const decoded = Buffer.from(base64, "base64").toString("utf-8");
+              content.push({
+                type: "input_text",
+                text: `[Attached file (${mime})]:\n${decoded}`,
+              });
+            } catch {
+              content.push({
+                type: "input_text",
+                text: `[Attached file (${mime}): unable to decode]`,
+              });
+            }
+          } else {
+            // Other data URL file types
+            content.push({ type: "input_file", file_data: mediaRef, filename: "attachment" });
+          }
+        } else if (urlType === "http") {
+          // HTTP(S) URL — infer type from extension, use URL-based fields
+          const inferredType = inferMimeFromUrl(mediaRef);
+          if (inferredType === "image") {
+            content.push({ type: "input_image", image_url: mediaRef });
+          } else {
+            content.push({ type: "input_file", file_url: mediaRef });
           }
         } else {
-          // Other file types — try sending as file
-          content.push({ type: "input_file", file_data: dataUrl });
+          // Unknown ref type (e.g. minio://) — skip with warning
+          logger.warn(
+            `[openai] Skipping unresolved media ref in Responses API input: ${mediaRef.substring(0, 60)}...`,
+          );
         }
       }
       if (m.content) {
