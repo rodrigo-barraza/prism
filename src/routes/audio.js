@@ -47,6 +47,8 @@ export async function handleVoice(params, emitBinary, emitJSON) {
     options: extraOptions,
     conversationId: incomingConversationId,
     conversationMeta: incomingConversationMeta,
+    sessionId: incomingSessionId,
+    createSession: incomingCreateSession,
     project = "unknown",
     username = "unknown",
     clientIp = null,
@@ -59,6 +61,33 @@ export async function handleVoice(params, emitBinary, emitJSON) {
     conversationId = crypto.randomUUID();
     const titleSnippet = (text || "").slice(0, 100).trim() || "TTS Request";
     conversationMeta = conversationMeta || { title: titleSnippet };
+  }
+
+  // ── Session: create or reuse ────────────────────────────────
+  let sessionId = incomingSessionId || null;
+  if (!sessionId && incomingCreateSession) {
+    sessionId = crypto.randomUUID();
+    try {
+      const sessionDb = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
+      if (sessionDb) {
+        const now = new Date().toISOString();
+        await sessionDb.collection("sessions").insertOne({
+          id: sessionId,
+          conversationIds: [],
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    } catch (err) {
+      logger.error(`Failed to create session: ${err.message}`);
+    }
+  }
+
+  // Inject sessionId into conversationMeta for storage
+  if (sessionId && conversationMeta) {
+    conversationMeta.sessionId = sessionId;
+  } else if (sessionId) {
+    conversationMeta = { sessionId };
   }
 
   try {
@@ -205,6 +234,26 @@ export async function handleVoice(params, emitBinary, emitJSON) {
             `Failed to append messages to conversation ${conversationId}: ${err.message}`,
           ),
         );
+    }
+
+    // ── Link conversation to session ────────────────────────────
+    if (sessionId && conversationId) {
+      try {
+        const sessionDb = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
+        if (sessionDb) {
+          sessionDb.collection("sessions").updateOne(
+            { id: sessionId },
+            {
+              $addToSet: { conversationIds: conversationId },
+              $set: { updatedAt: new Date().toISOString() },
+            },
+          ).catch((err) =>
+            logger.error(`Failed to link conversation to session: ${err.message}`),
+          );
+        }
+      } catch (err) {
+        logger.error(`Failed to link conversation to session: ${err.message}`);
+      }
     }
 
     return contentType;
