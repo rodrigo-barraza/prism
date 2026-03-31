@@ -249,17 +249,55 @@ async function getVllmModelOptions() {
 
     return models
       .filter((m) => m.type === "llm")
-      .map((m) => ({
-        name: m.key,
-        label: m.display_name || m.key,
-        modelType: "conversation",
-        inputTypes: [TYPES.TEXT],
-        outputTypes: [TYPES.TEXT],
-        supportsSystemPrompt: true,
-        streaming: true,
-        defaultTemperature: 0.7,
-        pricing: { inputPerMillion: 0, outputPerMillion: 0 },
-      }));
+      .map((m) => {
+        const nameLower = (m.key || "").toLowerCase();
+
+        // Detect thinking-capable models by name/family
+        const THINKING_PATTERNS = [
+          "qwen3",
+          "deepseek-r1",
+          "deepseek-v3",
+          "gpt-oss",
+        ];
+        const supportsThinking = THINKING_PATTERNS.some((p) =>
+          nameLower.includes(p),
+        );
+
+        // Detect function calling support — vLLM supports tool use for
+        // most chat models when launched with --enable-auto-tool-choice.
+        // We enable it broadly since vLLM silently ignores tools when the
+        // model doesn't support them rather than erroring.
+        const FC_PATTERNS = [
+          "qwen", "deepseek", "llama", "mistral", "gemma",
+          "phi", "command", "hermes", "functionary",
+        ];
+        const supportsFunctionCalling = FC_PATTERNS.some((p) =>
+          nameLower.includes(p),
+        );
+
+        const tools = [];
+        if (supportsThinking) tools.push("Thinking");
+        if (supportsFunctionCalling) tools.push("Function Calling");
+
+        const entry = {
+          name: m.key,
+          label: m.display_name || m.key,
+          modelType: "conversation",
+          inputTypes: [TYPES.TEXT],
+          outputTypes: [TYPES.TEXT],
+          supportsSystemPrompt: true,
+          streaming: true,
+          defaultTemperature: 0.7,
+          pricing: { inputPerMillion: 0, outputPerMillion: 0 },
+        };
+        if (tools.length > 0) {
+          entry.tools = tools;
+        }
+        if (supportsThinking) {
+          entry.thinking = true;
+        }
+        return entry;
+      });
   } catch (err) {
     logger.warn(`Could not fetch vLLM models for config: ${err.message}`);
     return [];
