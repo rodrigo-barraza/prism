@@ -2,6 +2,8 @@ import express from "express";
 import crypto from "crypto";
 import { getProvider } from "../providers/index.js";
 import { ProviderError } from "../utils/errors.js";
+import { TYPES, getPricing, getModelByName } from "../config.js";
+import { calculateAudioCost } from "../utils/CostCalculator.js";
 import ConversationService from "../services/ConversationService.js";
 import FileService from "../services/FileService.js";
 import logger from "../utils/logger.js";
@@ -75,6 +77,18 @@ export async function handleVoice(params, emitBinary, emitJSON) {
         providerName,
         `Provider "${providerName}" does not support text-to-speech`,
         400,
+      );
+    }
+
+    // Mark conversation as generating (creates a stub doc via upsert)
+    if (conversationId) {
+      ConversationService.setGenerating(
+        conversationId,
+        project,
+        username,
+        true,
+      ).catch((err) =>
+        logger.error(`Failed to set isGenerating: ${err.message}`),
       );
     }
 
@@ -175,15 +189,35 @@ export async function handleVoice(params, emitBinary, emitJSON) {
         username,
         messagesToAppend,
         meta,
-      ).catch((err) =>
-        logger.error(
-          `Failed to append messages to conversation ${conversationId}: ${err.message}`,
-        ),
-      );
+      )
+        .then(() =>
+          ConversationService.setGenerating(
+            conversationId,
+            project,
+            username,
+            false,
+          ),
+        )
+        .catch((err) =>
+          logger.error(
+            `Failed to append messages to conversation ${conversationId}: ${err.message}`,
+          ),
+        );
     }
 
     return contentType;
   } catch (error) {
+    // Clear isGenerating flag on error
+    if (conversationId) {
+      ConversationService.setGenerating(
+        conversationId,
+        project,
+        username,
+        false,
+      ).catch((err) =>
+        logger.error(`Failed to clear isGenerating on error: ${err.message}`),
+      );
+    }
     const totalSec = (performance.now() - requestStart) / 1000;
     RequestLogger.log({
       requestId,
@@ -212,6 +246,8 @@ export async function handleVoice(params, emitBinary, emitJSON) {
  * Response: binary audio stream with content-type header
  */
 router.post("/", async (req, res, next) => {
+  // Skip TTS handler when mounted at /audio-to-text
+  if (req.baseUrl.includes("audio-to-text")) return next();
   try {
     let contentType = "audio/mpeg";
 
@@ -265,7 +301,17 @@ router.post("/", async (req, res, next) => {
     model,
     language,
     prompt: transcriptionPrompt,
+    conversationId: incomingConversationId,
+    conversationMeta: incomingConversationMeta,
   } = req.body;
+
+  // Auto-generate conversationId when caller omits it (mirrors chat route)
+  let conversationId = incomingConversationId || null;
+  let conversationMeta = incomingConversationMeta || null;
+  if (!conversationId) {
+    conversationId = crypto.randomUUID();
+    conversationMeta = conversationMeta || { title: "Audio Transcription" };
+  }
 
   try {
     if (!providerName) {
@@ -277,6 +323,19 @@ router.post("/", async (req, res, next) => {
     }
     if (!audio) {
       throw new ProviderError("server", "Missing required field: audio", 400);
+    }
+
+    // Mark conversation as generating (creates a stub doc via upsert)
+    // so the frontend can fetch the conversation by ID immediately.
+    if (conversationId) {
+      ConversationService.setGenerating(
+        conversationId,
+        req.project,
+        req.username,
+        true,
+      ).catch((err) =>
+        logger.error(`Failed to set isGenerating: ${err.message}`),
+      );
     }
 
     const provider = getProvider(providerName);
@@ -311,12 +370,23 @@ router.post("/", async (req, res, next) => {
     );
     const totalSec = (performance.now() - requestStart) / 1000;
 
+    // ── Cost estimation ─────────────────────────────────────────
+    const modelDef = getModelByName(model);
+    const pricing =
+      modelDef?.pricing ||
+      getPricing(TYPES.AUDIO, TYPES.TEXT)[model] ||
+      null;
+    const estimatedCost = calculateAudioCost(result.usage, pricing);
+
+    // ── Logging ────────────────────────────────────────────────
+    const costStr =
+      estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : "";
     logger.request(
       req.project,
       req.username,
       req.clientIp,
       `[audio/transcribe] ${providerName} model=${model || "default"} — ` +
-        `total: ${totalSec.toFixed(2)}s`,
+        `total: ${totalSec.toFixed(2)}s${costStr}`,
     );
 
     RequestLogger.log({
@@ -327,16 +397,96 @@ router.post("/", async (req, res, next) => {
       clientIp: req.clientIp,
       provider: providerName,
       model: model || null,
-      conversationId: null,
+      conversationId,
       success: true,
+      inputTokens: result.usage?.inputTokens || 0,
+      outputTokens: result.usage?.outputTokens || 0,
+      estimatedCost,
       totalTime: parseFloat(totalSec.toFixed(3)),
     });
+
+    // ── Conversation persistence ────────────────────────────────
+    if (conversationId) {
+      // Upload audio to MinIO for storage
+      let audioRef = audio;
+      try {
+        const { ref } = await FileService.uploadFile(
+          audio,
+          "uploads",
+          req.project,
+          req.username,
+        );
+        audioRef = ref;
+      } catch (err) {
+        logger.error(`Failed to upload STT audio: ${err.message}`);
+      }
+
+      const messagesToAppend = [
+        {
+          role: "user",
+          content: transcriptionPrompt || "Transcribe this audio",
+          images: [audioRef],
+          timestamp: new Date().toISOString(),
+        },
+        {
+          role: "assistant",
+          content: result.text || "",
+          model: model || undefined,
+          provider: providerName,
+          timestamp: new Date().toISOString(),
+          totalTime: parseFloat(totalSec.toFixed(3)),
+          estimatedCost,
+          usage: result.usage || undefined,
+        },
+      ];
+
+      const meta = conversationMeta
+        ? {
+            ...conversationMeta,
+            settings: { provider: providerName, model },
+          }
+        : undefined;
+
+      ConversationService.appendMessages(
+        conversationId,
+        req.project,
+        req.username,
+        messagesToAppend,
+        meta,
+      )
+        .then(() =>
+          ConversationService.setGenerating(
+            conversationId,
+            req.project,
+            req.username,
+            false,
+          ),
+        )
+        .catch((err) =>
+          logger.error(
+            `Failed to append messages to conversation ${conversationId}: ${err.message}`,
+          ),
+        );
+    }
 
     res.json({
       text: result.text,
       usage: result.usage || {},
+      estimatedCost,
+      totalTime: parseFloat(totalSec.toFixed(3)),
     });
   } catch (error) {
+    // Clear isGenerating flag on error
+    if (conversationId) {
+      ConversationService.setGenerating(
+        conversationId,
+        req.project,
+        req.username,
+        false,
+      ).catch((err) =>
+        logger.error(`Failed to clear isGenerating on error: ${err.message}`),
+      );
+    }
     const totalSec = (performance.now() - requestStart) / 1000;
     RequestLogger.log({
       requestId,
@@ -346,6 +496,7 @@ router.post("/", async (req, res, next) => {
       clientIp: req.clientIp,
       provider: providerName,
       model: model || null,
+      conversationId,
       success: false,
       errorMessage: error.message,
       totalTime: totalSec,
