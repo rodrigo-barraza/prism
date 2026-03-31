@@ -145,6 +145,58 @@ function formatBytes(bytes) {
   return `${(bytes / 1024).toFixed(0)} KB`;
 }
 
+// ── Model capability detection patterns ─────────────────────────
+// Used by getLmStudioModelOptions, getVllmModelOptions, getOllamaModelOptions
+
+const THINKING_PATTERNS = ["qwen3", "deepseek-r1", "deepseek-v3", "gpt-oss"];
+
+const FC_PATTERNS = [
+  "qwen", "deepseek", "llama", "mistral", "gemma",
+  "phi", "command", "hermes", "functionary",
+];
+
+const VISION_PATTERNS = [
+  "vl", "vision", "llava", "pixtral", "minicpm-v",
+  "internvl", "cogvlm", "qwen2.5-vl", "qwen2-vl", "qwen3-vl",
+  "molmo", "paligemma", "llama-3.2-vision", "llama-vision",
+  "idefics", "phi-3-vision", "phi-3.5-vision", "phi-4-vision",
+  "phi4mm", "minicpmv", "ovis", "deepseek-vl",
+];
+
+const VIDEO_PATTERNS = [
+  "qwen2.5-vl", "qwen2-vl", "qwen3-vl",
+  "llava-next-video", "llava-onevision",
+  "internvl", "phi4mm",
+];
+
+const AUDIO_PATTERNS = [
+  "qwen2-audio", "qwen-audio", "salmonn",
+  "ultravox", "phi4mm", "minicpmo",
+  "whisper", "granite-speech", "kimi-audio",
+  "qwen2.5-omni", "qwen3-omni",
+];
+
+/** Check if a lowercased model name matches any pattern in a list. */
+function matchesAny(nameLower, patterns) {
+  return patterns.some((p) => nameLower.includes(p));
+}
+
+/**
+ * Merge dynamic models into the static models map for a provider.
+ * Skips models whose name already exists in the static list.
+ */
+function mergeDynamicModels(modelsMap, providerKey, dynamicModels) {
+  if (!dynamicModels || dynamicModels.length === 0) return;
+  const existing = modelsMap[providerKey] || [];
+  const existingKeys = new Set(existing.map((m) => m.name));
+  for (const m of dynamicModels) {
+    if (!existingKeys.has(m.name)) {
+      existing.push(m);
+    }
+  }
+  modelsMap[providerKey] = existing;
+}
+
 /**
  * Fetch LM Studio models and convert them to the config model format.
  * Returns an array of model option objects for the 'lm-studio' provider.
@@ -167,15 +219,7 @@ async function getLmStudioModelOptions() {
         const nameLower = (m.key || "").toLowerCase();
 
         // Detect thinking-capable models by name/family
-        const THINKING_PATTERNS = [
-          "qwen3",
-          "deepseek-r1",
-          "deepseek-v3",
-          "gpt-oss",
-        ];
-        const supportsThinking = THINKING_PATTERNS.some((p) =>
-          nameLower.includes(p),
-        );
+        const supportsThinking = matchesAny(nameLower, THINKING_PATTERNS);
 
         // Detect function calling support — LM Studio API: capabilities.trained_for_tool_use
         const supportsFunctionCalling = !!m.capabilities?.trained_for_tool_use;
@@ -253,64 +297,22 @@ async function getVllmModelOptions() {
         const nameLower = (m.key || "").toLowerCase();
 
         // Detect thinking-capable models by name/family
-        const THINKING_PATTERNS = [
-          "qwen3",
-          "deepseek-r1",
-          "deepseek-v3",
-          "gpt-oss",
-        ];
-        const supportsThinking = THINKING_PATTERNS.some((p) =>
-          nameLower.includes(p),
-        );
+        const supportsThinking = matchesAny(nameLower, THINKING_PATTERNS);
 
         // Detect function calling support — vLLM supports tool use for
         // most chat models when launched with --enable-auto-tool-choice.
         // We enable it broadly since vLLM silently ignores tools when the
         // model doesn't support them rather than erroring.
-        const FC_PATTERNS = [
-          "qwen", "deepseek", "llama", "mistral", "gemma",
-          "phi", "command", "hermes", "functionary",
-        ];
-        const supportsFunctionCalling = FC_PATTERNS.some((p) =>
-          nameLower.includes(p),
-        );
+        const supportsFunctionCalling = matchesAny(nameLower, FC_PATTERNS);
 
         const tools = [];
         if (supportsThinking) tools.push("Thinking");
         if (supportsFunctionCalling) tools.push("Function Calling");
 
-        // Detect vision/multimodal models by name patterns
-        const VISION_PATTERNS = [
-          "vl", "vision", "llava", "pixtral", "minicpm-v",
-          "internvl", "cogvlm", "qwen2.5-vl", "qwen2-vl", "qwen3-vl",
-          "molmo", "paligemma", "llama-3.2-vision", "llama-vision",
-          "idefics", "phi-3-vision", "phi-3.5-vision", "phi-4-vision",
-          "phi4mm", "minicpmv", "ovis", "deepseek-vl",
-        ];
-        const supportsVision = VISION_PATTERNS.some((p) =>
-          nameLower.includes(p),
-        );
-
-        // Detect video-capable models (subset of vision models)
-        const VIDEO_PATTERNS = [
-          "qwen2.5-vl", "qwen2-vl", "qwen3-vl",
-          "llava-next-video", "llava-onevision",
-          "internvl", "phi4mm",
-        ];
-        const supportsVideo = VIDEO_PATTERNS.some((p) =>
-          nameLower.includes(p),
-        );
-
-        // Detect audio-capable models
-        const AUDIO_PATTERNS = [
-          "qwen2-audio", "qwen-audio", "salmonn",
-          "ultravox", "phi4mm", "minicpmo",
-          "whisper", "granite-speech", "kimi-audio",
-          "qwen2.5-omni", "qwen3-omni",
-        ];
-        const supportsAudio = AUDIO_PATTERNS.some((p) =>
-          nameLower.includes(p),
-        );
+        // Detect multimodal capabilities by name patterns
+        const supportsVision = matchesAny(nameLower, VISION_PATTERNS);
+        const supportsVideo = matchesAny(nameLower, VIDEO_PATTERNS);
+        const supportsAudio = matchesAny(nameLower, AUDIO_PATTERNS);
 
         // Build input types
         const inputTypes = [TYPES.TEXT];
@@ -364,15 +366,7 @@ async function getOllamaModelOptions() {
       const nameLower = name.toLowerCase();
 
       // Detect thinking-capable models by name/family
-      const THINKING_PATTERNS = [
-        "qwen3",
-        "deepseek-r1",
-        "deepseek-v3",
-        "gpt-oss",
-      ];
-      const supportsThinking = THINKING_PATTERNS.some((p) =>
-        nameLower.includes(p),
-      );
+      const supportsThinking = matchesAny(nameLower, THINKING_PATTERNS);
 
       const tools = [];
       if (supportsThinking) tools.push("Thinking");
@@ -419,60 +413,19 @@ router.get("/", async (_req, res) => {
   let textToTextModels = getModelOptions(TYPES.TEXT, TYPES.TEXT);
   let textToImageModels = getModelOptions(TYPES.TEXT, TYPES.IMAGE);
 
-  // Merge dynamic LM Studio models into lm-studio provider (only if configured)
-  if (AVAILABLE_PROVIDERS.has(PROVIDERS.LM_STUDIO)) {
-    try {
-      const lmModels = await getLmStudioModelOptions();
-      if (lmModels.length > 0) {
-        const staticLmModels = textToTextModels["lm-studio"] || [];
-        const staticKeys = new Set(staticLmModels.map((m) => m.name));
-        for (const m of lmModels) {
-          if (!staticKeys.has(m.name)) {
-            staticLmModels.push(m);
-          }
-        }
-        textToTextModels["lm-studio"] = staticLmModels;
+  // Merge dynamic models from local/self-hosted providers
+  const dynamicProviders = [
+    { key: PROVIDERS.LM_STUDIO, fetch: getLmStudioModelOptions },
+    { key: PROVIDERS.VLLM, fetch: getVllmModelOptions },
+    { key: PROVIDERS.OLLAMA, fetch: getOllamaModelOptions },
+  ];
+  for (const { key, fetch } of dynamicProviders) {
+    if (AVAILABLE_PROVIDERS.has(key)) {
+      try {
+        mergeDynamicModels(textToTextModels, key, await fetch());
+      } catch {
+        // Ignore — use static models only
       }
-    } catch {
-      // Ignore — use static models only
-    }
-  }
-
-  // Merge dynamic vLLM models into vllm provider (only if configured)
-  if (AVAILABLE_PROVIDERS.has(PROVIDERS.VLLM)) {
-    try {
-      const vllmModels = await getVllmModelOptions();
-      if (vllmModels.length > 0) {
-        const staticVllmModels = textToTextModels["vllm"] || [];
-        const staticKeys = new Set(staticVllmModels.map((m) => m.name));
-        for (const m of vllmModels) {
-          if (!staticKeys.has(m.name)) {
-            staticVllmModels.push(m);
-          }
-        }
-        textToTextModels["vllm"] = staticVllmModels;
-      }
-    } catch {
-      // Ignore — use static models only
-    }
-  }
-
-  // Merge dynamic Ollama models into ollama provider (only if configured)
-  if (AVAILABLE_PROVIDERS.has(PROVIDERS.OLLAMA)) {
-    try {
-      const ollamaModels = await getOllamaModelOptions();
-      if (ollamaModels.length > 0) {
-        const staticOllamaModels = textToTextModels["ollama"] || [];
-        const staticKeys = new Set(staticOllamaModels.map((m) => m.name));
-        for (const m of ollamaModels) {
-          if (!staticKeys.has(m.name)) {
-            staticOllamaModels.push(m);
-          }
-        }
-        textToTextModels["ollama"] = staticOllamaModels;
-      }
-    } catch {
-      // Ignore — use static models only
     }
   }
 

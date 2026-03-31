@@ -552,8 +552,9 @@ function handleWsLive(ws, project, username, _clientIp) {
                 }
               }
 
-              // Turn complete — build WAV + upload, then emit with audioRef and usage
-              if (msg.serverContent?.turnComplete) {
+              // Shared helper — handles logging, emitting, resetting, and
+              // clearing isGenerating for both turnComplete and interrupted.
+              function finalizeTurn(eventType) {
                 finalizeUsage();
                 buildAndUploadAudio().then((audioRef) => {
                   const modelDef = getModelByName(model);
@@ -561,7 +562,7 @@ function handleWsLive(ws, project, username, _clientIp) {
                     turnUsage,
                     modelDef?.pricing,
                   );
-                  
+
                   const totalSec = (performance.now() - turnStart) / 1000;
                   const timeToGenerationSec = passFirstTokenTime ? (passFirstTokenTime - turnStart) / 1000 : null;
                   const generationSec = passFirstTokenTime ? totalSec - timeToGenerationSec : null;
@@ -593,21 +594,20 @@ function handleWsLive(ws, project, username, _clientIp) {
                     toolCalls: turnToolCalls,
                     outputCharacters: turnText.length,
                     ...(audioRef ? { audioRef } : {})
-                  }).catch(err => logger.error(`[Live API] Failed to log request: ${err.message}`));
+                  }).catch(err => logger.error(`[Live API] Failed to log ${eventType} request: ${err.message}`));
 
                   emit({
-                    type: "turnComplete",
+                    type: eventType,
                     ...(audioRef ? { audioRef } : {}),
                     usage: { ...turnUsage },
                     ...(estimatedCost !== null ? { estimatedCost } : {}),
                   });
+
                   // Reset per-turn accumulators
                   turnAudioChunks = [];
                   userInputAudioChunks.length = 0;
                   userAudioUploading = false;
                   turnUsage = { inputTokens: 0, outputTokens: 0 };
-                  
-                  // Reset logger vars
                   turnStart = performance.now();
                   passFirstTokenTime = null;
                   turnText = "";
@@ -616,89 +616,26 @@ function handleWsLive(ws, project, username, _clientIp) {
                   turnInputText = "";
                   turnUserAudioRef = null;
 
-                  // Clear isGenerating flag after each completed turn
+                  // Clear isGenerating flag
                   if (activeConversationId) {
                     ConversationService.setGenerating(
                       activeConversationId, project, username, false,
                     ).catch((err) =>
-                      logger.error(`[Live API] Failed to clear isGenerating: ${err.message}`),
+                      logger.error(`[Live API] Failed to clear isGenerating on ${eventType}: ${err.message}`),
                     );
                   }
                 });
-                return; // Don't emit turnComplete synchronously
+              }
+
+              // Turn complete — build WAV + upload, then emit with audioRef and usage
+              if (msg.serverContent?.turnComplete) {
+                finalizeTurn("turnComplete");
+                return;
               }
 
               // Interrupted (model was cut off by user speech)
               if (msg.serverContent?.interrupted) {
-                finalizeUsage();
-                buildAndUploadAudio().then((audioRef) => {
-                  const modelDef = getModelByName(model);
-                  const estimatedCost = calculateLiveCost(
-                    turnUsage,
-                    modelDef?.pricing,
-                  );
-                  
-                  const totalSec = (performance.now() - turnStart) / 1000;
-                  const timeToGenerationSec = passFirstTokenTime ? (passFirstTokenTime - turnStart) / 1000 : null;
-                  const generationSec = passFirstTokenTime ? totalSec - timeToGenerationSec : null;
-
-                  RequestLogger.logChatGeneration({
-                    requestId: `live-${crypto.randomUUID()}`,
-                    endpoint: "live",
-                    project,
-                    username,
-                    clientIp: _clientIp,
-                    provider: "google",
-                    model: activeModel,
-                    conversationId: activeConversationId || null,
-                    success: true,
-                    usage: { ...turnUsage },
-                    estimatedCost,
-                    tokensPerSec: generationSec > 0 && turnUsage.outputTokens > 0 ? parseFloat((turnUsage.outputTokens / generationSec).toFixed(1)) : null,
-                    timeToGenerationSec,
-                    generationSec,
-                    totalSec,
-                    options: activeConfig,
-                    messages: [{
-                      role: "user",
-                      content: turnInputText.trim() || "[Voice Input]",
-                      ...(turnUserAudioRef ? { audio: [turnUserAudioRef], liveTranscription: true } : {})
-                    }],
-                    text: turnText,
-                    thinking: turnThinking,
-                    toolCalls: turnToolCalls,
-                    outputCharacters: turnText.length,
-                    ...(audioRef ? { audioRef } : {})
-                  }).catch(err => logger.error(`[Live API] Failed to log interrupted request: ${err.message}`));
-
-                  emit({
-                    type: "interrupted",
-                    ...(audioRef ? { audioRef } : {}),
-                    usage: { ...turnUsage },
-                    ...(estimatedCost !== null ? { estimatedCost } : {}),
-                  });
-                  turnAudioChunks = [];
-                  userInputAudioChunks.length = 0;
-                  userAudioUploading = false;
-                  turnUsage = { inputTokens: 0, outputTokens: 0 };
-                  
-                  turnStart = performance.now();
-                  passFirstTokenTime = null;
-                  turnText = "";
-                  turnThinking = "";
-                  turnToolCalls = [];
-                  turnInputText = "";
-                  turnUserAudioRef = null;
-
-                  // Clear isGenerating flag after interrupted turn
-                  if (activeConversationId) {
-                    ConversationService.setGenerating(
-                      activeConversationId, project, username, false,
-                    ).catch((err) =>
-                      logger.error(`[Live API] Failed to clear isGenerating on interrupt: ${err.message}`),
-                    );
-                  }
-                });
+                finalizeTurn("interrupted");
                 return;
               }
             },
