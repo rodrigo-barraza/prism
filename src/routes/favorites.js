@@ -18,7 +18,7 @@ router.get("/", async (req, res, next) => {
     }
 
     const project = req.project || "default";
-    const username = req.username || "default";
+    const username = req.username;
     const filter = { project, username };
     if (req.query.type) filter.type = req.query.type;
 
@@ -51,7 +51,7 @@ router.post("/", async (req, res, next) => {
     }
 
     const project = req.project || "default";
-    const username = req.username || "default";
+    const username = req.username;
     const { type, key, meta } = req.body;
 
     if (!type || !key) {
@@ -96,7 +96,7 @@ router.delete("/", async (req, res, next) => {
     }
 
     const project = req.project || "default";
-    const username = req.username || "default";
+    const username = req.username;
     const { type, key } = req.query;
 
     if (!type || !key) {

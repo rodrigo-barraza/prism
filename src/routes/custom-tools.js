@@ -19,7 +19,7 @@ router.get("/", async (req, res, next) => {
     }
 
     const project = req.query.project || req.project || "default";
-    const username = req.username || "default";
+    const username = req.username;
 
     const tools = await client
       .db(MONGO_DB_NAME)
@@ -46,7 +46,7 @@ router.post("/", async (req, res, next) => {
     }
 
     const project = req.body.project || req.project || "default";
-    const username = req.username || "default";
+    const username = req.username;
 
     const doc = {
       project,

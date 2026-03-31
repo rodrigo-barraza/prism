@@ -23,7 +23,7 @@ router.get("/", async (req, res, next) => {
     }
 
     const project = req.query.project || req.project || "default";
-    const username = req.username || "default";
+    const username = req.username;
     const conversations = await client
       .db(MONGO_DB_NAME)
       .collection(COLLECTION)
@@ -50,7 +50,7 @@ router.get("/:id", async (req, res, next) => {
     }
 
     const project = req.query.project || req.project || "default";
-    const username = req.username || "default";
+    const username = req.username;
     const conversation = await client
       .db(MONGO_DB_NAME)
       .collection(COLLECTION)
@@ -99,7 +99,7 @@ router.get("/:id/workflows", async (req, res, next) => {
 router.post("/:id/messages", async (req, res, next) => {
   try {
     const project = req.query.project || req.project || "default";
-    const username = req.username || "default";
+    const username = req.username;
     const { messages, conversationMeta } = req.body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
@@ -136,7 +136,7 @@ router.patch("/:id", async (req, res, next) => {
     }
 
     const project = req.query.project || req.project || "default";
-    const username = req.username || "default";
+    const username = req.username;
     const { title, messages, systemPrompt, settings } = req.body;
 
     const setFields = { updatedAt: new Date().toISOString() };
@@ -186,7 +186,7 @@ router.delete("/:id", async (req, res, next) => {
     }
 
     const project = req.query.project || req.project || "default";
-    const username = req.username || "default";
+    const username = req.username;
     const result = await client
       .db(MONGO_DB_NAME)
       .collection(COLLECTION)

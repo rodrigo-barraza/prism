@@ -1202,6 +1202,7 @@ router.get("/conversations", async (req, res, next) => {
       search,
       provider,
       model,
+      session,
       from,
       to,
       sort = "updatedAt",
@@ -1209,6 +1210,7 @@ router.get("/conversations", async (req, res, next) => {
     } = req.query;
 
     const filter = {};
+    if (session) filter.sessionId = session;
     if (project) filter.project = project;
     if (username) filter.username = username;
     if (search) filter.title = { $regex: search, $options: "i" };

@@ -28,13 +28,13 @@ export function setupWebSocket(wss) {
 
     const project =
       req.headers["x-project"] || url.searchParams.get("project") || "unknown";
-    const username =
-      req.headers["x-username"] ||
-      url.searchParams.get("username") ||
-      "unknown";
     const clientIp =
       req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
       req.socket.remoteAddress;
+    const username =
+      req.headers["x-username"] ||
+      url.searchParams.get("username") ||
+      clientIp;
     logger.info(
       `WebSocket connection on ${pathname} (project: ${project}, user: ${username})`,
     );
