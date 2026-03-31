@@ -281,8 +281,108 @@ async function getLmStudioModelOptions() {
   }
 }
 
+// ── HuggingFace Hub metadata cache ──────────────────────────────
+// TTL-based in-memory cache so we don't hit HF on every /config request.
+const _hfCache = new Map(); // key → { data, timestamp }
+const HF_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+/**
+ * Fetch model metadata from HuggingFace Hub API.
+ * Returns null on any failure (gated models, network errors, etc.).
+ * Results are cached in-memory with a 30-minute TTL.
+ */
+async function fetchHuggingFaceMetadata(modelId) {
+  // Check cache first
+  const cached = _hfCache.get(modelId);
+  if (cached && Date.now() - cached.timestamp < HF_CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  try {
+    const res = await fetch(`https://huggingface.co/api/models/${modelId}`, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(5000), // 5s timeout
+    });
+    if (!res.ok) {
+      _hfCache.set(modelId, { data: null, timestamp: Date.now() });
+      return null;
+    }
+    const data = await res.json();
+    const meta = {
+      architectures: data.config?.architectures || [],
+      modelType: data.config?.model_type || null,
+      pipelineTag: data.pipeline_tag || null,
+      tags: data.tags || [],
+      author: data.author || null,
+      totalParams: data.safetensors?.total || null,
+      totalSize: data.usedStorage || null,
+      paramsByDtype: data.safetensors?.parameters || null,
+    };
+    _hfCache.set(modelId, { data: meta, timestamp: Date.now() });
+    return meta;
+  } catch {
+    _hfCache.set(modelId, { data: null, timestamp: Date.now() });
+    return null;
+  }
+}
+
+// ── Name-based model attribute parsing ──────────────────────────
+
+/** Extract parameter count from model name (e.g. "qwen3-8b" → "8B"). */
+function parseParamsFromName(name) {
+  // Match patterns like "8b", "70b", "1.6b", "0.5b", "8x7b" (MoE)
+  const match = name.match(/[-_](\d+(?:\.\d+)?[bB])\b/);
+  if (match) return match[1].toUpperCase();
+  // MoE pattern: "8x7b"
+  const moeMatch = name.match(/[-_](\d+x\d+(?:\.\d+)?[bB])\b/);
+  if (moeMatch) return moeMatch[1].toUpperCase();
+  return null;
+}
+
+/** Extract quantization from model name (e.g. "model-AWQ" → "AWQ"). */
+function parseQuantFromName(name) {
+  // Common quantization suffixes
+  const quantPatterns = [
+    /[-_](AWQ)\b/i,
+    /[-_](GPTQ)\b/i,
+    /[-_](GGUF)\b/i,
+    /[-_](EXL2)\b/i,
+    /[-_](FP8)\b/i,
+    /[-_](FP16)\b/i,
+    /[-_](BF16)\b/i,
+    /[-_](INT8)\b/i,
+    /[-_](INT4)\b/i,
+    /[@](q\d+_k(?:_[sml])?)\b/i, // LM Studio style: @q4_k_m
+  ];
+  for (const pattern of quantPatterns) {
+    const match = name.match(pattern);
+    if (match) return match[1].toUpperCase();
+  }
+  return null;
+}
+
+/** Extract publisher/org from a namespaced model ID (e.g. "Qwen/Qwen3-8B" → "Qwen"). */
+function parsePublisherFromName(name) {
+  if (name.includes("/")) return name.split("/")[0];
+  return null;
+}
+
+/** Format a total parameter count into a human-readable string. */
+function formatParams(totalParams) {
+  if (!totalParams) return null;
+  if (totalParams >= 1_000_000_000) {
+    const b = totalParams / 1_000_000_000;
+    return b % 1 === 0 ? `${b}B` : `${b.toFixed(1)}B`;
+  }
+  if (totalParams >= 1_000_000) {
+    return `${(totalParams / 1_000_000).toFixed(0)}M`;
+  }
+  return `${totalParams}`;
+}
+
 /**
  * Fetch vLLM models and convert them to the config model format.
+ * Enriches with name-parsed attributes and HuggingFace Hub metadata.
  * Returns an array of model option objects for the 'vllm' provider.
  */
 async function getVllmModelOptions() {
@@ -291,18 +391,27 @@ async function getVllmModelOptions() {
     const { models } = await provider.listModels();
     if (!models || !Array.isArray(models)) return [];
 
-    return models
+    // Fetch HF metadata for all models in parallel (best-effort)
+    const hfPromises = models
       .filter((m) => m.type === "llm")
       .map((m) => {
+        // vLLM model IDs are often HF-style: "org/model-name"
+        const modelId = m.key || "";
+        return fetchHuggingFaceMetadata(modelId).catch(() => null);
+      });
+    const hfResults = await Promise.allSettled(hfPromises);
+
+    return models
+      .filter((m) => m.type === "llm")
+      .map((m, idx) => {
         const nameLower = (m.key || "").toLowerCase();
+        const hf =
+          hfResults[idx]?.status === "fulfilled"
+            ? hfResults[idx].value
+            : null;
 
-        // Detect thinking-capable models by name/family
+        // ── Layer 1: Name-based detection ──────────────────
         const supportsThinking = matchesAny(nameLower, THINKING_PATTERNS);
-
-        // Detect function calling support — vLLM supports tool use for
-        // most chat models when launched with --enable-auto-tool-choice.
-        // We enable it broadly since vLLM silently ignores tools when the
-        // model doesn't support them rather than erroring.
         const supportsFunctionCalling = matchesAny(nameLower, FC_PATTERNS);
 
         const tools = [];
@@ -310,9 +419,38 @@ async function getVllmModelOptions() {
         if (supportsFunctionCalling) tools.push("Function Calling");
 
         // Detect multimodal capabilities by name patterns
-        const supportsVision = matchesAny(nameLower, VISION_PATTERNS);
-        const supportsVideo = matchesAny(nameLower, VIDEO_PATTERNS);
-        const supportsAudio = matchesAny(nameLower, AUDIO_PATTERNS);
+        let supportsVision = matchesAny(nameLower, VISION_PATTERNS);
+        let supportsVideo = matchesAny(nameLower, VIDEO_PATTERNS);
+        let supportsAudio = matchesAny(nameLower, AUDIO_PATTERNS);
+
+        // Name-parsed attributes
+        const parsedParams = parseParamsFromName(m.key || "");
+        const parsedQuant = parseQuantFromName(m.key || "");
+        const parsedPublisher = parsePublisherFromName(m.key || "");
+
+        // ── Layer 2: HuggingFace enrichment ────────────────
+        if (hf) {
+          // HF pipeline_tag is authoritative for multimodal detection
+          if (
+            hf.pipelineTag === "image-text-to-text" ||
+            hf.tags.includes("multimodal") ||
+            hf.tags.includes("vision")
+          ) {
+            supportsVision = true;
+          }
+          if (
+            hf.pipelineTag === "video-text-to-text" ||
+            hf.tags.includes("video")
+          ) {
+            supportsVideo = true;
+          }
+          if (
+            hf.pipelineTag === "audio-text-to-text" ||
+            hf.tags.includes("audio")
+          ) {
+            supportsAudio = true;
+          }
+        }
 
         // Build input types
         const inputTypes = [TYPES.TEXT];
@@ -320,9 +458,15 @@ async function getVllmModelOptions() {
         if (supportsVideo) inputTypes.push(TYPES.VIDEO);
         if (supportsAudio) inputTypes.push(TYPES.AUDIO);
 
+        // Build label with quantization suffix
+        let label = m.display_name || m.key;
+        if (parsedQuant) {
+          label += ` (${parsedQuant})`;
+        }
+
         const entry = {
           name: m.key,
-          label: m.display_name || m.key,
+          label,
           modelType: "conversation",
           inputTypes,
           outputTypes: [TYPES.TEXT],
@@ -331,15 +475,33 @@ async function getVllmModelOptions() {
           defaultTemperature: 0.7,
           pricing: { inputPerMillion: 0, outputPerMillion: 0 },
         };
-        if (tools.length > 0) {
-          entry.tools = tools;
+
+        // Capability flags
+        if (tools.length > 0) entry.tools = tools;
+        if (supportsThinking) entry.thinking = true;
+        if (supportsVision) entry.vision = true;
+
+        // Name-parsed metadata
+        if (parsedParams) entry.params = parsedParams;
+        if (parsedQuant) entry.quantization = parsedQuant;
+        if (parsedPublisher) entry.publisher = parsedPublisher;
+
+        // HF-enriched metadata (overrides name-based where available)
+        if (hf) {
+          if (hf.totalParams) {
+            entry.params = formatParams(hf.totalParams);
+          }
+          if (hf.totalSize) {
+            entry.size = formatBytes(hf.totalSize);
+          }
+          if (hf.architectures?.length > 0) {
+            entry.architecture = hf.architectures[0];
+          }
+          if (hf.author) {
+            entry.publisher = hf.author;
+          }
         }
-        if (supportsThinking) {
-          entry.thinking = true;
-        }
-        if (supportsVision) {
-          entry.vision = true;
-        }
+
         return entry;
       });
   } catch (err) {
