@@ -317,6 +317,14 @@ const vllmProvider = {
       const tools = convertToolsToOpenAI(options.tools);
       if (tools) payload.tools = tools;
 
+      // Thinking hard switch — vLLM extension for Qwen3/reasoning models
+      // Uses chat_template_kwargs to control <think> token generation
+      if (options.thinkingEnabled !== undefined) {
+        payload.chat_template_kwargs = {
+          enable_thinking: options.thinkingEnabled,
+        };
+      }
+
       const response = await fetch(`${baseUrl}/v1/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -412,6 +420,13 @@ const vllmProvider = {
       // Function calling tools
       const tools = convertToolsToOpenAI(options.tools);
       if (tools) payload.tools = tools;
+
+      // Thinking hard switch — vLLM extension for Qwen3/reasoning models
+      if (options.thinkingEnabled !== undefined) {
+        payload.chat_template_kwargs = {
+          enable_thinking: options.thinkingEnabled,
+        };
+      }
 
       const response = await fetch(`${baseUrl}/v1/chat/completions`, {
         method: "POST",
