@@ -1219,39 +1219,106 @@ router.get("/conversations", async (req, res, next) => {
               },
             ],
           },
-          model: {
-            $ifNull: [
-              "$settings.model",
-              {
-                $let: {
-                  vars: {
-                    assistantMsgs: {
-                      $filter: {
-                        input: { $ifNull: ["$messages", []] },
-                        as: "m",
-                        cond: {
-                          $and: [
-                            { $eq: ["$$m.role", "assistant"] },
-                            { $ne: [{ $ifNull: ["$$m.model", null] }, null] },
-                          ],
-                        },
-                      },
-                    },
-                  },
-                  in: {
-                    $arrayElemAt: [
-                      "$$assistantMsgs.model",
-                      { $subtract: [{ $size: "$$assistantMsgs" }, 1] },
-                    ],
-                  },
-                },
-              },
-            ],
-          },
         },
       },
       { $skip: skip },
       { $limit: lim },
+      // Join requests for telemetry rollup
+      {
+        $lookup: {
+          from: REQUESTS_COL,
+          localField: "id",
+          foreignField: "conversationId",
+          as: "_requests",
+          pipeline: [
+            {
+              $project: {
+                inputTokens: 1,
+                outputTokens: 1,
+                model: 1,
+                tokensPerSec: 1,
+                totalTime: 1,
+                toolNames: 1,
+              },
+            },
+          ],
+        },
+      },
+      {
+        $addFields: {
+          requestCount: { $size: "$_requests" },
+          inputTokens: {
+            $reduce: {
+              input: "$_requests",
+              initialValue: 0,
+              in: { $add: ["$$value", { $ifNull: ["$$this.inputTokens", 0] }] },
+            },
+          },
+          outputTokens: {
+            $reduce: {
+              input: "$_requests",
+              initialValue: 0,
+              in: { $add: ["$$value", { $ifNull: ["$$this.outputTokens", 0] }] },
+            },
+          },
+          models: {
+            $setUnion: {
+              $filter: {
+                input: "$_requests.model",
+                cond: { $ne: ["$$this", null] },
+              },
+            },
+          },
+          toolNames: {
+            $setUnion: {
+              $reduce: {
+                input: "$_requests",
+                initialValue: [],
+                in: {
+                  $concatArrays: [
+                    "$$value",
+                    { $ifNull: ["$$this.toolNames", []] },
+                  ],
+                },
+              },
+            },
+          },
+          avgTokensPerSec: {
+            $cond: [
+              { $gt: [{ $size: "$_requests" }, 0] },
+              {
+                $avg: {
+                  $filter: {
+                    input: "$_requests.tokensPerSec",
+                    as: "tps",
+                    cond: {
+                      $and: [
+                        { $ne: ["$$tps", null] },
+                        { $gt: ["$$tps", 0] },
+                      ],
+                    },
+                  },
+                },
+              },
+              null,
+            ],
+          },
+          totalLatency: {
+            $reduce: {
+              input: "$_requests",
+              initialValue: 0,
+              in: {
+                $add: [
+                  "$$value",
+                  { $ifNull: ["$$this.totalTime", 0] },
+                ],
+              },
+            },
+          },
+        },
+      },
+      // Drop raw request docs from response
+      { $project: { _requests: 0 } },
     ];
 
     const [docs, total] = await Promise.all([
