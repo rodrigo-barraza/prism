@@ -216,11 +216,17 @@ const googleProvider = {
       if (options.maxTokens !== undefined) {
         config.maxOutputTokens = options.maxTokens;
       }
+
+      // Resolve model definition early — needed for thinking and image checks
+      const modelDef = Object.values(MODELS).find((m) => m.name === model);
+
       if (options.thinkingLevel || options.thinkingBudget !== undefined) {
         config.thinkingConfig = {
           includeThoughts: true,
         };
-        if (options.thinkingLevel) {
+        // Only send thinkingLevel if the model explicitly supports it
+        // (image models support thinking but reject thinkingLevel)
+        if (options.thinkingLevel && modelDef?.thinkingLevels) {
           config.thinkingConfig.thinkingLevel = options.thinkingLevel;
         }
         if (
@@ -243,7 +249,6 @@ const googleProvider = {
       }
 
       // For models that output images, enable multimodal response
-      const modelDef = Object.values(MODELS).find((m) => m.name === model);
       if (modelDef?.outputTypes?.includes(TYPES.IMAGE)) {
         config.responseModalities = ["TEXT", "IMAGE"];
       }
@@ -258,6 +263,7 @@ const googleProvider = {
       const toolCalls = [];
       const textParts = [];
       const images = [];
+      const maxImages = options.imageCount || 1;
       for (const part of response.candidates?.[0]?.content?.parts || []) {
         if (part.functionCall) {
           toolCalls.push({
@@ -268,7 +274,7 @@ const googleProvider = {
           });
         } else if (part.text) {
           textParts.push(part.text);
-        } else if (part.inlineData) {
+        } else if (part.inlineData && images.length < maxImages) {
           images.push({
             data: part.inlineData.data,
             mimeType: part.inlineData.mimeType || "image/png",
@@ -321,11 +327,16 @@ const googleProvider = {
       if (options.maxTokens !== undefined) {
         config.maxOutputTokens = options.maxTokens;
       }
+
+      // Resolve model definition early — needed for thinking and image checks
+      const modelDef = Object.values(MODELS).find((m) => m.name === model);
+
       if (options.thinkingLevel || options.thinkingBudget !== undefined) {
         config.thinkingConfig = {
           includeThoughts: true,
         };
-        if (options.thinkingLevel) {
+        // Only send thinkingLevel if the model explicitly supports it
+        if (options.thinkingLevel && modelDef?.thinkingLevels) {
           config.thinkingConfig.thinkingLevel = options.thinkingLevel;
         }
         if (
@@ -350,7 +361,6 @@ const googleProvider = {
       if (tools.length > 0) config.tools = tools;
 
       // For models that output images, enable multimodal response
-      const modelDef = Object.values(MODELS).find((m) => m.name === model);
       if (modelDef?.outputTypes?.includes(TYPES.IMAGE)) {
         config.responseModalities = ["TEXT", "IMAGE"];
       }
@@ -365,6 +375,8 @@ const googleProvider = {
         config: streamConfig,
       });
       let usage = null;
+      const maxImages = options.imageCount || 1;
+      let imageCount = 0;
       for await (const chunk of responseStream) {
         if (options.signal?.aborted) break;
         // Process all parts in the chunk
@@ -382,7 +394,8 @@ const googleProvider = {
               yield { type: "thinking", content: part.text };
             } else if (part.text) {
               yield part.text;
-            } else if (part.inlineData) {
+            } else if (part.inlineData && imageCount < maxImages) {
+              imageCount++;
               yield {
                 type: "image",
                 data: part.inlineData.data,
