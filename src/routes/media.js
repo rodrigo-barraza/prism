@@ -57,6 +57,7 @@ router.get("/", async (req, res, next) => {
           audio: "$messages.audio",
           timestamp: { $ifNull: ["$messages.timestamp", "$updatedAt"] },
           model: "$messages.model",
+          provider: "$messages.provider",
         },
       },
       {
@@ -74,6 +75,7 @@ router.get("/", async (req, res, next) => {
                 role: 1,
                 timestamp: 1,
                 model: 1,
+                provider: 1,
               },
             },
           ],
@@ -90,6 +92,7 @@ router.get("/", async (req, res, next) => {
                 role: 1,
                 timestamp: 1,
                 model: 1,
+                provider: 1,
               },
             },
           ],
@@ -114,20 +117,7 @@ router.get("/", async (req, res, next) => {
       pipeline.push({ $match: { role: "assistant" } });
     }
     if (provider) {
-      // Models may be stored as flat names (e.g. "gemini-3-pro") or with prefix ("google/gemini-3-pro")
-      const PROVIDER_MODEL_PREFIXES = {
-        google: "gemini",
-        openai: "gpt|dall-e|o1|o3|o4",
-        anthropic: "claude",
-        inworld: "inworld",
-        elevenlabs: "eleven",
-      };
-      const modelPrefix = PROVIDER_MODEL_PREFIXES[provider];
-      const conditions = [{ model: { $regex: `^${provider}/`, $options: "i" } }];
-      if (modelPrefix) {
-        conditions.push({ model: { $regex: `^(${modelPrefix})`, $options: "i" } });
-      }
-      pipeline.push({ $match: conditions.length > 1 ? { $or: conditions } : conditions[0] });
+      pipeline.push({ $match: { provider } });
     }
     if (model) {
       pipeline.push({ $match: { model } });
@@ -157,17 +147,18 @@ router.get("/", async (req, res, next) => {
           images: { $ifNull: ["$messages.images", []] },
           audio: "$messages.audio",
           model: "$messages.model",
+          provider: "$messages.provider",
         },
       },
       {
         $facet: {
           imageModels: [
             { $unwind: "$images" },
-            { $project: { mediaType: "image", role: 1, model: 1 } },
+            { $project: { mediaType: "image", role: 1, model: 1, provider: 1 } },
           ],
           audioModels: [
             { $match: { audio: { $ne: null, $exists: true } } },
-            { $project: { mediaType: "audio", role: 1, model: 1 } },
+            { $project: { mediaType: "audio", role: 1, model: 1, provider: 1 } },
           ],
         },
       },
@@ -189,9 +180,7 @@ router.get("/", async (req, res, next) => {
     filterPipeline.push({
       $group: {
         _id: null,
-        allProviders: {
-          $addToSet: { $arrayElemAt: [{ $split: ["$model", "/"] }, 0] },
-        },
+        allProviders: { $addToSet: "$provider" },
         allModels: { $addToSet: "$model" },
       },
     });
@@ -214,6 +203,7 @@ router.get("/", async (req, res, next) => {
       project: item.project,
       username: item.username,
       model: item.model,
+      provider: item.provider,
       timestamp: item.timestamp,
     }));
 
