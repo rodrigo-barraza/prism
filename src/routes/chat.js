@@ -210,6 +210,7 @@ export async function handleChat(params, emit, { signal } = {}) {
     reasoningSummary,
     functionCallingEnabled,
     enabledTools,
+    forceImageGeneration,
     // systemPrompt arrives in two places by design:
     //  - messages[0] with role:"system" → what the LLM actually sees
     //  - conversationMeta.systemPrompt → stored as top-level DB field for quick UI access
@@ -284,6 +285,7 @@ export async function handleChat(params, emit, { signal } = {}) {
     ...(reasoningSummary && { reasoningSummary }),
     ...(functionCallingEnabled !== undefined && { functionCallingEnabled }),
     ...(enabledTools && { enabledTools }),
+    ...(forceImageGeneration && { forceImageGeneration }),
     ...(extraParams.systemPrompt && { systemPrompt: extraParams.systemPrompt }),
   };
 

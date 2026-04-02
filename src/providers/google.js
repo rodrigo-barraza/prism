@@ -19,6 +19,24 @@ function getClient() {
 }
 
 /**
+ * Detect content safety block errors from the Google GenAI SDK.
+ * These occur when Gemini refuses to generate content due to content policy.
+ * Returns true for errors that should be handled gracefully (empty result)
+ * rather than propagated as 500 server errors.
+ */
+function isSafetyBlockError(error) {
+  const msg = (error?.message || "").toLowerCase();
+  return (
+    msg.includes("prohibited_content") ||
+    msg.includes("image_safety") ||
+    msg.includes("safety") ||
+    msg.includes("blocked") ||
+    msg.includes("content filter") ||
+    msg.includes("response was blocked")
+  );
+}
+
+/**
  * Add a WAV header to raw PCM audio data.
  */
 function addWavHeader(buffer, sampleRate = 24000, numChannels = 1) {
@@ -250,7 +268,12 @@ const googleProvider = {
 
       // For models that output images, enable multimodal response
       if (modelDef?.outputTypes?.includes(TYPES.IMAGE)) {
-        config.responseModalities = ["TEXT", "IMAGE"];
+        // forceImageGeneration: consumers (e.g. Lupos) can request image-only
+        // output so the model is forced to generate an image instead of
+        // silently falling back to text.
+        config.responseModalities = options.forceImageGeneration
+          ? ["IMAGE"]
+          : ["TEXT", "IMAGE"];
       }
 
       const response = await getClient().models.generateContent({
@@ -293,6 +316,17 @@ const googleProvider = {
       if (images.length > 0) result.images = images;
       return result;
     } catch (error) {
+      // Content safety blocks (PROHIBITED_CONTENT, SAFETY, IMAGE_SAFETY)
+      // should return an empty result, not a 500. This lets consumers
+      // handle "no image generated" gracefully and preserves the conversation.
+      if (isSafetyBlockError(error)) {
+        logger.error(`[Google] Content safety block: ${error.message}`);
+        return {
+          text: "",
+          usage: { inputTokens: 0, outputTokens: 0 },
+          safetyBlock: true,
+        };
+      }
       throw new ProviderError("google", error.message, 500, error);
     }
   },
@@ -362,7 +396,9 @@ const googleProvider = {
 
       // For models that output images, enable multimodal response
       if (modelDef?.outputTypes?.includes(TYPES.IMAGE)) {
-        config.responseModalities = ["TEXT", "IMAGE"];
+        config.responseModalities = options.forceImageGeneration
+          ? ["IMAGE"]
+          : ["TEXT", "IMAGE"];
       }
 
       const streamConfig = { ...config };
@@ -432,6 +468,11 @@ const googleProvider = {
       }
     } catch (error) {
       if (error.name === "AbortError") return;
+      if (isSafetyBlockError(error)) {
+        logger.error(`[Google] Content safety block (stream): ${error.message}`);
+        yield { type: "usage", usage: { inputTokens: 0, outputTokens: 0 }, safetyBlock: true };
+        return;
+      }
       throw new ProviderError("google", error.message, 500, error);
     }
   },
