@@ -102,10 +102,12 @@ export function computeModalities(messages) {
     const isUser = m.role === "user";
     const isAssistant = m.role === "assistant";
     if (m.content && (isUser || isAssistant)) {
-      // liveTranscription = the content is a speech-to-text transcript
-      // from the Live API, not typed text — don't count as textIn.
       if (isUser && !m.liveTranscription) mod.textIn = true;
       if (isAssistant) mod.textOut = true;
+    }
+    // Tool calls are structured text output
+    if (isAssistant && m.toolCalls?.length > 0) {
+      mod.textOut = true;
     }
     if (m.images?.length > 0 || m.image) {
       if (isUser) mod.imageIn = true;

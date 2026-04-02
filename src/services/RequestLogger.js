@@ -190,12 +190,6 @@ const RequestLogger = {
     ];
     const modalities = computeModalities(syntheticMessages);
 
-    // If the model produced output tokens but computeModalities didn't detect
-    // textOut (e.g. tool-call-only iterations in agentic loops), infer it
-    if (outputTokens > 0 && !modalities.textOut) {
-      modalities.textOut = true;
-    }
-
     return this.log({
       requestId,
       endpoint,
