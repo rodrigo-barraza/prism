@@ -181,21 +181,8 @@ function matchesAny(nameLower, patterns) {
   return patterns.some((p) => nameLower.includes(p));
 }
 
-/**
- * Merge dynamic models into the static models map for a provider.
- * Skips models whose name already exists in the static list.
- */
-function mergeDynamicModels(modelsMap, providerKey, dynamicModels) {
-  if (!dynamicModels || dynamicModels.length === 0) return;
-  const existing = modelsMap[providerKey] || [];
-  const existingKeys = new Set(existing.map((m) => m.name));
-  for (const m of dynamicModels) {
-    if (!existingKeys.has(m.name)) {
-      existing.push(m);
-    }
-  }
-  modelsMap[providerKey] = existing;
-}
+
+
 
 /**
  * Fetch LM Studio models and convert them to the config model format.
@@ -566,30 +553,32 @@ async function getOllamaModelOptions() {
     return [];
   }
 }
+// Local/self-hosted providers that require network discovery.
+// Separated from the main /config so cloud providers resolve instantly.
+const LOCAL_PROVIDERS = [
+  { key: PROVIDERS.LM_STUDIO, fetch: getLmStudioModelOptions },
+  { key: PROVIDERS.VLLM, fetch: getVllmModelOptions },
+  { key: PROVIDERS.OLLAMA, fetch: getOllamaModelOptions },
+];
+
+/** Race a promise against a timeout. Resolves to fallback on timeout. */
+function withTimeout(promise, ms, fallback = []) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
+
 /**
  * GET /config
  * Returns the full catalog of providers, models, voices, and capabilities.
+ * Cloud providers resolve instantly; local providers are excluded here
+ * and served via GET /config/local-models for progressive loading.
  */
 router.get("/", async (_req, res) => {
-  // Get static model options
+  // Get static model options (cloud-only — no network calls)
   let textToTextModels = getModelOptions(TYPES.TEXT, TYPES.TEXT);
   let textToImageModels = getModelOptions(TYPES.TEXT, TYPES.IMAGE);
-
-  // Merge dynamic models from local/self-hosted providers
-  const dynamicProviders = [
-    { key: PROVIDERS.LM_STUDIO, fetch: getLmStudioModelOptions },
-    { key: PROVIDERS.VLLM, fetch: getVllmModelOptions },
-    { key: PROVIDERS.OLLAMA, fetch: getOllamaModelOptions },
-  ];
-  for (const { key, fetch } of dynamicProviders) {
-    if (AVAILABLE_PROVIDERS.has(key)) {
-      try {
-        mergeDynamicModels(textToTextModels, key, await fetch());
-      } catch {
-        // Ignore — use static models only
-      }
-    }
-  }
 
   // Enrich ALL model lists with arena scores from the scraped leaderboard data
   enrichModelsWithArenaScores(textToTextModels);
@@ -626,11 +615,17 @@ Guidelines:
 - For questions that don't require API data, respond naturally without tool calls.
 - The current local date/time is: {{CURRENT_DATE_TIME}}`;
 
+  // Flag which local providers are configured so the client knows to poll
+  const localProviders = LOCAL_PROVIDERS
+    .filter(({ key }) => AVAILABLE_PROVIDERS.has(key))
+    .map(({ key }) => key);
+
   res.json({
     fcSystemPrompt,
     providers: availableProviderMap,
     providerList: availableProviderList,
     availableProviders: availableProviderList,
+    localProviders,
     textToText: {
       models: textToTextModels,
       defaults: filterDefaults(getDefaultModels(TYPES.TEXT, TYPES.TEXT)),
@@ -667,6 +662,42 @@ Guidelines:
     },
   });
 });
+
+/**
+ * GET /config-local
+ * Fetches models from local/self-hosted providers (LM Studio, vLLM, Ollama)
+ * with a 3-second timeout per provider so unreachable services fail fast.
+ * Returns { models: { [provider]: [...] } } for the client to merge.
+ * Mounted at /config-local (top-level, not under /config).
+ */
+const localConfigRouter = express.Router();
+localConfigRouter.get("/", async (_req, res) => {
+  const LOCAL_TIMEOUT_MS = 3000;
+  const models = {};
+
+  const results = await Promise.allSettled(
+    LOCAL_PROVIDERS
+      .filter(({ key }) => AVAILABLE_PROVIDERS.has(key))
+      .map(async ({ key, fetch: fetchFn }) => {
+        const fetched = await withTimeout(fetchFn(), LOCAL_TIMEOUT_MS);
+        return { key, models: fetched };
+      }),
+  );
+
+  for (const result of results) {
+    if (result.status === "fulfilled" && result.value.models.length > 0) {
+      const { key, models: providerModels } = result.value;
+      // Enrich with arena scores before sending
+      const wrapped = { [key]: providerModels };
+      enrichModelsWithArenaScores(wrapped);
+      models[key] = wrapped[key];
+    }
+  }
+
+  res.json({ models });
+});
+
+export { localConfigRouter };
 
 /**
  * GET /config/tools

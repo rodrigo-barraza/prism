@@ -26,7 +26,7 @@ import MinioWrapper from "./wrappers/MinioWrapper.js";
 import chatRouter from "./routes/chat.js";
 import audioRouter from "./routes/audio.js";
 import embedRouter from "./routes/embed.js";
-import configRouter from "./routes/config.js";
+import configRouter, { localConfigRouter } from "./routes/config.js";
 import conversationsRouter from "./routes/conversations.js";
 import filesRouter from "./routes/files.js";
 import memoryRouter from "./routes/memory.js";
@@ -53,6 +53,7 @@ app.use(requestLoggerMiddleware);
 const ENDPOINTS = {
   rest: [
     "/config",
+    "/config-local",
     "/chat",
     "/text-to-audio",
     "/audio-to-text",
@@ -94,6 +95,7 @@ app.use(authMiddleware);
 
 // REST routes
 app.use("/config", configRouter);
+app.use("/config-local", localConfigRouter);
 app.use("/chat", chatRouter);
 app.use("/text-to-audio", audioRouter);
 app.use("/audio-to-text", audioRouter);
