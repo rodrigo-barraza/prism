@@ -39,6 +39,7 @@ import lmStudioRouter from "./routes/lm-studio.js";
 import customToolsRouter from "./routes/custom-tools.js";
 import favoritesRouter from "./routes/favorites.js";
 import sessionsRouter from "./routes/sessions.js";
+import statsRouter from "./routes/stats.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -66,6 +67,7 @@ const ENDPOINTS = {
     "/custom-tools",
     "/favorites",
     "/sessions",
+    "/stats",
   ],
   websocket: ["/ws/chat", "/ws/text-to-audio"],
   admin: ["/admin", "/admin/lm-studio", "/admin/sessions"],
@@ -105,6 +107,7 @@ app.use("/lm-studio", lmStudioRouter);
 app.use("/custom-tools", customToolsRouter);
 app.use("/favorites", favoritesRouter);
 app.use("/sessions", sessionsRouter);
+app.use("/stats", statsRouter);
 
 // Error handler (must be last)
 app.use(errorHandler);
