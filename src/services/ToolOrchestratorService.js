@@ -228,6 +228,112 @@ export default class ToolOrchestratorService {
     return executeToolGeneric(name, args);
   }
 
+  /**
+   * Map of tool names to their streaming SSE endpoint paths.
+   * Only process-based tools that spawn subprocesses benefit from streaming.
+   */
+  static STREAMABLE_TOOLS = {
+    execute_shell: "/compute/shell/stream",
+    execute_python: "/utility/python/stream",
+    execute_javascript: "/compute/js/stream",
+  };
+
+  static isStreamable(toolName) {
+    return toolName in ToolOrchestratorService.STREAMABLE_TOOLS;
+  }
+
+  /**
+   * Execute a tool using the streaming SSE endpoint.
+   * Calls `onChunk(event, data)` for each stdout/stderr chunk.
+   * Returns the full result as a JSON object (same shape as executeTool).
+   *
+   * @param {string} name - tool name (must be in STREAMABLE_TOOLS)
+   * @param {object} args - tool arguments (code, command, etc.)
+   * @param {function} onChunk - (event: "stdout"|"stderr"|"start"|"exit", data?: string, meta?: object) => void
+   * @returns {Promise<object>} final result
+   */
+  static async executeToolStreaming(name, args = {}, onChunk) {
+    const streamPath = ToolOrchestratorService.STREAMABLE_TOOLS[name];
+    if (!streamPath) {
+      return ToolOrchestratorService.executeTool(name, args);
+    }
+
+    const remaps = ARG_REMAPS[name];
+    let resolvedArgs = args;
+    if (remaps) {
+      resolvedArgs = { ...args };
+      for (const [from, to] of Object.entries(remaps)) {
+        if (resolvedArgs[from] !== undefined) {
+          resolvedArgs[to] = resolvedArgs[from];
+          delete resolvedArgs[from];
+        }
+      }
+    }
+
+    const url = `${TOOLS_API_URL}${streamPath}`;
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 65_000); // generous timeout
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(resolvedArgs),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (!res.ok) {
+        return { error: `API returned ${res.status}: ${res.statusText}` };
+      }
+
+      // Parse the SSE stream
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let finalResult = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop(); // keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+
+            if (event.event === "stdout" || event.event === "stderr") {
+              onChunk?.(event.event, event.data);
+            } else if (event.event === "exit") {
+              finalResult = {
+                success: event.success,
+                exitCode: event.exitCode,
+                executionTimeMs: event.executionTimeMs,
+                timedOut: event.timedOut || false,
+                ...(event.error && { error: event.error }),
+              };
+              onChunk?.("exit", null, finalResult);
+            } else if (event.event === "start") {
+              onChunk?.("start", null, event);
+            }
+          } catch {
+            // Skip malformed SSE lines
+          }
+        }
+      }
+
+      // If we never got an exit event, return a generic result
+      return finalResult || { error: "Stream ended without exit event" };
+    } catch (err) {
+      return { error: `Streaming failed: ${err.message}` };
+    }
+  }
+
   static async executeToolCalls(toolCalls) {
     return Promise.all(
       toolCalls.map(async (tc) => ({

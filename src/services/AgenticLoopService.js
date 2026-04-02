@@ -285,13 +285,29 @@ export default class AgenticLoopService {
         if (passPendingToolCalls.length > 0) {
           hasCalledTools = true;
 
-          // Execute tools in parallel
+          // Execute tools in parallel — use streaming for supported tools
           const results = await Promise.all(
             passPendingToolCalls.map(async (tc) => {
                const customDef = customToolMap.get(tc.name);
                if (customDef) {
                    return { name: tc.name, id: tc.id, result: await ToolOrchestratorService.executeCustomTool(customDef, tc.args) };
                }
+
+               // Streamable tools (shell, python, js) — emit real-time output chunks
+               if (ToolOrchestratorService.isStreamable(tc.name)) {
+                   const result = await ToolOrchestratorService.executeToolStreaming(tc.name, tc.args, (event, data, meta) => {
+                       emit({
+                           type: "tool_output",
+                           toolCallId: tc.id,
+                           name: tc.name,
+                           event,
+                           data: data || undefined,
+                           meta: meta || undefined,
+                       });
+                   });
+                   return { name: tc.name, id: tc.id, result };
+               }
+
                return { name: tc.name, id: tc.id, result: await ToolOrchestratorService.executeTool(tc.name, tc.args) };
             })
           );
