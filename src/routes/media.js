@@ -114,9 +114,20 @@ router.get("/", async (req, res, next) => {
       pipeline.push({ $match: { role: "assistant" } });
     }
     if (provider) {
-      pipeline.push({
-        $match: { model: { $regex: `^${provider}/`, $options: "i" } },
-      });
+      // Models may be stored as flat names (e.g. "gemini-3-pro") or with prefix ("google/gemini-3-pro")
+      const PROVIDER_MODEL_PREFIXES = {
+        google: "gemini",
+        openai: "gpt|dall-e|o1|o3|o4",
+        anthropic: "claude",
+        inworld: "inworld",
+        elevenlabs: "eleven",
+      };
+      const modelPrefix = PROVIDER_MODEL_PREFIXES[provider];
+      const conditions = [{ model: { $regex: `^${provider}/`, $options: "i" } }];
+      if (modelPrefix) {
+        conditions.push({ model: { $regex: `^(${modelPrefix})`, $options: "i" } });
+      }
+      pipeline.push({ $match: conditions.length > 1 ? { $or: conditions } : conditions[0] });
     }
     if (model) {
       pipeline.push({ $match: { model } });
