@@ -36,7 +36,6 @@ router.get("/", async (req, res, next) => {
 
     // Always scope to the caller's project
     const preMatch = { project: req.project };
-    if (search) preMatch.title = { $regex: search, $options: "i" };
     if (from || to) {
       preMatch.updatedAt = {};
       if (from) preMatch.updatedAt.$gte = from;
@@ -53,6 +52,7 @@ router.get("/", async (req, res, next) => {
           project: 1,
           username: 1,
           role: "$messages.role",
+          content: "$messages.content",
           images: { $ifNull: ["$messages.images", []] },
           audio: "$messages.audio",
           timestamp: { $ifNull: ["$messages.timestamp", "$updatedAt"] },
@@ -60,6 +60,19 @@ router.get("/", async (req, res, next) => {
           provider: "$messages.provider",
         },
       },
+      // Search across conversation title AND message content
+      ...(search
+        ? [
+            {
+              $match: {
+                $or: [
+                  { convTitle: { $regex: search, $options: "i" } },
+                  { content: { $regex: search, $options: "i" } },
+                ],
+              },
+            },
+          ]
+        : []),
       {
         $facet: {
           imageItems: [

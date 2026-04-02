@@ -1876,7 +1876,6 @@ router.get("/media", async (req, res, next) => {
 
     // Use aggregation to unwind messages and extract media in one query
     const preMatch = {};
-    if (search) preMatch.title = { $regex: search, $options: "i" };
     if (project) preMatch.project = project;
     if (username) preMatch.username = username;
     if (from || to) {
@@ -1895,12 +1894,26 @@ router.get("/media", async (req, res, next) => {
           project: 1,
           username: 1,
           role: "$messages.role",
+          content: "$messages.content",
           images: { $ifNull: ["$messages.images", []] },
           audio: "$messages.audio",
           timestamp: { $ifNull: ["$messages.timestamp", "$updatedAt"] },
           model: "$messages.model",
         },
       },
+      // Search across conversation title AND message content
+      ...(search
+        ? [
+            {
+              $match: {
+                $or: [
+                  { convTitle: { $regex: search, $options: "i" } },
+                  { content: { $regex: search, $options: "i" } },
+                ],
+              },
+            },
+          ]
+        : []),
       // Expand images array into individual items
       {
         $facet: {
