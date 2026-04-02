@@ -797,12 +797,22 @@ const googleProvider = {
       const parts = [{ text: prompt }];
       if (images.length) {
         for (const image of images) {
-          parts.push({
-            inlineData: {
-              data: image.imageData,
-              mimeType: image.mimeType || "image/jpeg",
-            },
-          });
+          // Support both data URL strings and { imageData, mimeType } objects
+          if (typeof image === "string") {
+            const match = image.match(/^data:([\w-]+\/[\w.+-]+);base64,(.+)$/);
+            if (match) {
+              parts.push({
+                inlineData: { mimeType: match[1], data: match[2] },
+              });
+            }
+          } else {
+            parts.push({
+              inlineData: {
+                data: image.imageData,
+                mimeType: image.mimeType || "image/jpeg",
+              },
+            });
+          }
         }
       }
 
