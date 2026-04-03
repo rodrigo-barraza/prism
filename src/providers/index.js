@@ -6,6 +6,7 @@ import inworldProvider from "./inworld.js";
 import lmStudioProvider from "./lm-studio.js";
 import vllmProvider from "./vllm.js";
 import ollamaProvider from "./ollama.js";
+import llamaCppProvider from "./llama-cpp.js";
 
 const providers = {
   openai: openaiProvider,
@@ -16,6 +17,7 @@ const providers = {
   "lm-studio": lmStudioProvider,
   vllm: vllmProvider,
   ollama: ollamaProvider,
+  "llama-cpp": llamaCppProvider,
 };
 
 export function getProvider(name) {

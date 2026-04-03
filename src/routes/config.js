@@ -21,6 +21,7 @@ import {
   LM_STUDIO_BASE_URL,
   VLLM_BASE_URL,
   OLLAMA_BASE_URL,
+  LLAMA_CPP_BASE_URL,
 } from "../../secrets.js";
 
 const router = express.Router();
@@ -35,6 +36,7 @@ const PROVIDER_SECRETS = {
   [PROVIDERS.LM_STUDIO]: LM_STUDIO_BASE_URL,
   [PROVIDERS.VLLM]: VLLM_BASE_URL,
   [PROVIDERS.OLLAMA]: OLLAMA_BASE_URL,
+  [PROVIDERS.LLAMA_CPP]: LLAMA_CPP_BASE_URL,
 };
 
 const AVAILABLE_PROVIDERS = new Set(
@@ -553,12 +555,141 @@ async function getOllamaModelOptions() {
     return [];
   }
 }
+/**
+ * Fetch llama.cpp models and convert them to the config model format.
+ * Uses GET /v1/models (OpenAI-compatible) and GET /health (native).
+ * Returns an array of model option objects for the 'llama-cpp' provider.
+ */
+async function getLlamaCppModelOptions() {
+  try {
+    const provider = getProvider("llama-cpp");
+    const { models } = await provider.listModels();
+    if (!models || !Array.isArray(models)) return [];
+
+    // Fetch HF metadata for all models in parallel (best-effort)
+    const hfPromises = models
+      .filter((m) => m.type === "llm")
+      .map((m) => {
+        const modelId = m.key || "";
+        return fetchHuggingFaceMetadata(modelId).catch(() => null);
+      });
+    const hfResults = await Promise.allSettled(hfPromises);
+
+    return models
+      .filter((m) => m.type === "llm")
+      .map((m, idx) => {
+        const nameLower = (m.key || "").toLowerCase();
+        const hf =
+          hfResults[idx]?.status === "fulfilled"
+            ? hfResults[idx].value
+            : null;
+
+        // ── Layer 1: Name-based detection ──────────────────
+        const supportsThinking = matchesAny(nameLower, THINKING_PATTERNS);
+        const supportsFunctionCalling = matchesAny(nameLower, FC_PATTERNS);
+
+        const tools = [];
+        if (supportsThinking) tools.push("Thinking");
+        if (supportsFunctionCalling) tools.push("Function Calling");
+
+        // Detect multimodal capabilities by name patterns
+        let supportsVision = matchesAny(nameLower, VISION_PATTERNS);
+        let supportsVideo = matchesAny(nameLower, VIDEO_PATTERNS);
+        let supportsAudio = matchesAny(nameLower, AUDIO_PATTERNS);
+
+        // Name-parsed attributes
+        const parsedParams = parseParamsFromName(m.key || "");
+        const parsedQuant = parseQuantFromName(m.key || "");
+        const parsedPublisher = parsePublisherFromName(m.key || "");
+
+        // ── Layer 2: HuggingFace enrichment ────────────────
+        if (hf) {
+          if (
+            hf.pipelineTag === "image-text-to-text" ||
+            hf.tags.includes("multimodal") ||
+            hf.tags.includes("vision")
+          ) {
+            supportsVision = true;
+          }
+          if (
+            hf.pipelineTag === "video-text-to-text" ||
+            hf.tags.includes("video")
+          ) {
+            supportsVideo = true;
+          }
+          if (
+            hf.pipelineTag === "audio-text-to-text" ||
+            hf.tags.includes("audio")
+          ) {
+            supportsAudio = true;
+          }
+        }
+
+        // Build input types
+        const inputTypes = [TYPES.TEXT];
+        if (supportsVision) inputTypes.push(TYPES.IMAGE);
+        if (supportsVideo) inputTypes.push(TYPES.VIDEO);
+        if (supportsAudio) inputTypes.push(TYPES.AUDIO);
+
+        // Build label with quantization suffix
+        let label = m.display_name || m.key;
+        if (parsedQuant) {
+          label += ` (${parsedQuant})`;
+        }
+
+        const entry = {
+          name: m.key,
+          label,
+          modelType: "conversation",
+          inputTypes,
+          outputTypes: [TYPES.TEXT],
+          supportsSystemPrompt: true,
+          streaming: true,
+          defaultTemperature: 0.7,
+          pricing: { inputPerMillion: 0, outputPerMillion: 0 },
+        };
+
+        // Capability flags
+        if (tools.length > 0) entry.tools = tools;
+        if (supportsThinking) entry.thinking = true;
+        if (supportsVision) entry.vision = true;
+
+        // Name-parsed metadata
+        if (parsedParams) entry.params = parsedParams;
+        if (parsedQuant) entry.quantization = parsedQuant;
+        if (parsedPublisher) entry.publisher = parsedPublisher;
+
+        // HF-enriched metadata (overrides name-based where available)
+        if (hf) {
+          if (hf.totalParams) {
+            entry.params = formatParams(hf.totalParams);
+          }
+          if (hf.totalSize) {
+            entry.size = formatBytes(hf.totalSize);
+          }
+          if (hf.architectures?.length > 0) {
+            entry.architecture = hf.architectures[0];
+          }
+          if (hf.author) {
+            entry.publisher = hf.author;
+          }
+        }
+
+        return entry;
+      });
+  } catch (err) {
+    logger.warn(`Could not fetch llama.cpp models for config: ${err.message}`);
+    return [];
+  }
+}
+
 // Local/self-hosted providers that require network discovery.
 // Separated from the main /config so cloud providers resolve instantly.
 const LOCAL_PROVIDERS = [
   { key: PROVIDERS.LM_STUDIO, fetch: getLmStudioModelOptions },
   { key: PROVIDERS.VLLM, fetch: getVllmModelOptions },
   { key: PROVIDERS.OLLAMA, fetch: getOllamaModelOptions },
+  { key: PROVIDERS.LLAMA_CPP, fetch: getLlamaCppModelOptions },
 ];
 
 /** Race a promise against a timeout. Resolves to fallback on timeout. */

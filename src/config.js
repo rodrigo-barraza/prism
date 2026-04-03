@@ -12,6 +12,7 @@ const PROVIDERS = {
   LM_STUDIO: "lm-studio",
   VLLM: "vllm",
   OLLAMA: "ollama",
+  LLAMA_CPP: "llama-cpp",
 };
 
 const PROVIDER_LIST = Object.values(PROVIDERS);
