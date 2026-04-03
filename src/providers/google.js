@@ -238,7 +238,7 @@ const googleProvider = {
       // Resolve model definition early — needed for thinking and image checks
       const modelDef = Object.values(MODELS).find((m) => m.name === model);
 
-      if (options.thinkingLevel || options.thinkingBudget !== undefined) {
+      if (options.thinkingEnabled !== false && (options.thinkingLevel || options.thinkingBudget !== undefined)) {
         config.thinkingConfig = {
           includeThoughts: true,
         };
@@ -365,7 +365,7 @@ const googleProvider = {
       // Resolve model definition early — needed for thinking and image checks
       const modelDef = Object.values(MODELS).find((m) => m.name === model);
 
-      if (options.thinkingLevel || options.thinkingBudget !== undefined) {
+      if (options.thinkingEnabled !== false && (options.thinkingLevel || options.thinkingBudget !== undefined)) {
         config.thinkingConfig = {
           includeThoughts: true,
         };
@@ -511,7 +511,7 @@ const googleProvider = {
       if (options.maxTokens !== undefined) {
         liveConfig.maxOutputTokens = options.maxTokens;
       }
-      if (options.thinkingLevel || options.thinkingBudget !== undefined) {
+      if (options.thinkingEnabled !== false && (options.thinkingLevel || options.thinkingBudget !== undefined)) {
         liveConfig.thinkingConfig = { includeThoughts: true };
         if (options.thinkingLevel) {
           liveConfig.thinkingConfig.thinkingLevel = options.thinkingLevel;

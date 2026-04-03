@@ -292,6 +292,14 @@ export async function handleChat(params, emit, { signal } = {}) {
     ...(extraParams.systemPrompt && { systemPrompt: extraParams.systemPrompt }),
   };
 
+  // When thinking is explicitly disabled, strip all thinking sub-params
+  // so providers don't inadvertently enable thinking by detecting them.
+  if (thinkingEnabled === false) {
+    delete options.reasoningEffort;
+    delete options.thinkingLevel;
+    delete options.thinkingBudget;
+  }
+
   // LM Studio models inherently produce thinking tokens — always enable
   if (providerName === "lm-studio") {
     options.thinkingEnabled = true;
