@@ -49,15 +49,16 @@ export async function handleVoice(params, emitBinary, emitJSON) {
     conversationMeta: incomingConversationMeta,
     sessionId: incomingSessionId,
     createSession: incomingCreateSession,
+    skipConversation,
     project = "unknown",
     username = "unknown",
     clientIp = null,
   } = params;
 
   // ── Auto-conversation: every AI request gets tracked ────────────
-  let conversationId = incomingConversationId;
-  let conversationMeta = incomingConversationMeta;
-  if (!conversationId) {
+  let conversationId = skipConversation ? null : incomingConversationId;
+  let conversationMeta = skipConversation ? null : incomingConversationMeta;
+  if (!skipConversation && !conversationId) {
     conversationId = crypto.randomUUID();
     const titleSnippet = (text || "").slice(0, 100).trim() || "TTS Request";
     conversationMeta = conversationMeta || { title: titleSnippet };
@@ -356,12 +357,13 @@ router.post("/", async (req, res, next) => {
     conversationMeta: incomingConversationMeta,
     sessionId: incomingSessionId,
     createSession: incomingCreateSession,
+    skipConversation,
   } = req.body;
 
   // Auto-generate conversationId when caller omits it (mirrors chat route)
-  let conversationId = incomingConversationId || null;
-  let conversationMeta = incomingConversationMeta || null;
-  if (!conversationId) {
+  let conversationId = skipConversation ? null : (incomingConversationId || null);
+  let conversationMeta = skipConversation ? null : (incomingConversationMeta || null);
+  if (!skipConversation && !conversationId) {
     conversationId = crypto.randomUUID();
     conversationMeta = conversationMeta || { title: "Audio Transcription" };
   }
