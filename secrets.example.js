@@ -38,7 +38,7 @@ export const OLLAMA_BASE_URL = 'http://localhost:11434';
 export const LLAMA_CPP_BASE_URL = 'http://localhost:8080';
 
 // Mongo
-export const MONGO_URI = 'mongodb://127.0.0.1:27017';
+export const MONGO_URI = 'mongodb://127.0.0.1:27017/?directConnection=true';
 export const MONGO_DB_NAME = '';
 
 // MinIO (Optional — files stored inline in MongoDB if not set)

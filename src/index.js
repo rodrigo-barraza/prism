@@ -21,6 +21,7 @@ import {
 } from "../secrets.js";
 import MongoWrapper from "./wrappers/MongoWrapper.js";
 import MinioWrapper from "./wrappers/MinioWrapper.js";
+import ChangeStreamService from "./services/ChangeStreamService.js";
 
 // Routes
 import chatRouter from "./routes/chat.js";
@@ -137,6 +138,9 @@ setupWebSocket(wss);
   } catch (err) {
     logger.error(`Failed to clear stale isGenerating flags: ${err.message}`);
   }
+
+  // Initialize Change Streams (requires replica set — graceful fallback)
+  await ChangeStreamService.init();
 
   // Initialize MinIO if all secrets are configured
   if (

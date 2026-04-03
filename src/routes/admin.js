@@ -2,6 +2,7 @@ import express from "express";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import { getProvider } from "../providers/index.js";
+import ChangeStreamService from "../services/ChangeStreamService.js";
 import logger from "../utils/logger.js";
 import os from "os";
 
@@ -1500,6 +1501,67 @@ router.get("/conversations/stream", async (req, res) => {
     clearInterval(interval);
     clearInterval(keepAlive);
   });
+});
+
+// ============================================================
+// GET /admin/changes/stream — SSE for real-time collection changes
+// Powered by MongoDB Change Streams when available (replica set),
+// otherwise clients should fall back to polling.
+// ============================================================
+router.get("/changes/stream", async (req, res) => {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+
+  // Immediately tell the client whether change streams are active
+  res.write(
+    `data: ${JSON.stringify({ type: "status", changeStreams: ChangeStreamService.available })}\n\n`,
+  );
+
+  if (ChangeStreamService.available) {
+    // Push change events as they arrive from MongoDB
+    const onEvent = (event) => {
+      try {
+        res.write(`data: ${JSON.stringify({ type: "change", ...event })}\n\n`);
+      } catch {
+        // Client disconnected
+      }
+    };
+
+    ChangeStreamService.subscribe(onEvent);
+
+    // Keep-alive ping every 30s
+    const keepAlive = setInterval(() => {
+      try {
+        res.write(": ping\n\n");
+      } catch {
+        // ignore
+      }
+    }, 30000);
+
+    req.on("close", () => {
+      ChangeStreamService.unsubscribe(onEvent);
+      clearInterval(keepAlive);
+    });
+  } else {
+    // No Change Streams — just keep the connection alive.
+    // The client will detect changeStreams: false from the status event
+    // and fall back to polling.
+    const keepAlive = setInterval(() => {
+      try {
+        res.write(": ping\n\n");
+      } catch {
+        // ignore
+      }
+    }, 30000);
+
+    req.on("close", () => {
+      clearInterval(keepAlive);
+    });
+  }
 });
 
 // ============================================================
