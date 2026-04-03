@@ -1100,17 +1100,44 @@ router.get("/stats/timeline", async (req, res, next) => {
     }
 
     const spanMs = (untilDate || new Date()) - sinceDate;
-    const spanDays = spanMs / (1000 * 60 * 60 * 24);
+    const spanMinutes = spanMs / (1000 * 60);
+    const spanHours = spanMinutes / 60;
+    const spanDays = spanHours / 24;
 
-    // Three-tier granularity
+    // Six-tier granularity for sub-day through yearly ranges
     let granularity, groupId;
-    if (spanDays <= 1) {
+    if (spanMinutes <= 2) {
+      // ≤ 2 minutes → 1-second bins  ("2026-04-02T22:05:31")
+      granularity = "1s";
+      groupId = { $dateToString: { format: "%Y-%m-%dT%H:%M:%S", date: { $toDate: "$timestamp" }, timezone: "UTC" } };
+    } else if (spanMinutes <= 10) {
+      // ≤ 10 minutes → 30-second bins ("2026-04-02T22:05:30")
+      granularity = "30s";
+      groupId = {
+        $concat: [
+          { $dateToString: { format: "%Y-%m-%dT%H:%M:", date: { $toDate: "$timestamp" }, timezone: "UTC" } },
+          { $toString: { $multiply: [{ $floor: { $divide: [{ $second: { $toDate: "$timestamp" } }, 30] } }, 30] } },
+        ],
+      };
+    } else if (spanHours <= 2) {
+      // ≤ 2 hours → 1-minute bins ("2026-04-02T22:05")
+      granularity = "1min";
+      groupId = { $dateToString: { format: "%Y-%m-%dT%H:%M", date: { $toDate: "$timestamp" }, timezone: "UTC" } };
+    } else if (spanHours <= 8) {
+      // ≤ 8 hours → 30-minute bins
+      granularity = "30min";
+      groupId = {
+        $concat: [
+          { $dateToString: { format: "%Y-%m-%dT%H:", date: { $toDate: "$timestamp" }, timezone: "UTC" } },
+          { $toString: { $multiply: [{ $floor: { $divide: [{ $minute: { $toDate: "$timestamp" } }, 30] } }, 30] } },
+        ],
+      };
+    } else if (spanDays <= 1) {
       // ≤ 1 day → 10-minute bins
-      // Bucket key: "2026-03-21T14:10", "2026-03-21T14:20", etc.
       granularity = "10min";
       groupId = {
         $concat: [
-          { $substr: ["$timestamp", 0, 14] },        // "2026-03-21T14:" 
+          { $substr: ["$timestamp", 0, 14] },
           {
             $toString: {
               $multiply: [
