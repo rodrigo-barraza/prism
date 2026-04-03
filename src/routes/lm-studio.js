@@ -1,6 +1,7 @@
 import express from "express";
 import { getProvider } from "../providers/index.js";
 import logger from "../utils/logger.js";
+import { resolveArchParams, estimateMemory } from "../utils/gguf-arch.js";
 
 const router = express.Router();
 
@@ -26,7 +27,7 @@ router.get("/models", async (_req, res, next) => {
  */
 router.post("/load", async (req, res, next) => {
   try {
-    const { model } = req.body;
+    const { model, context_length, flash_attention, offload_kv_cache_to_gpu } = req.body;
     if (!model) {
       return res
         .status(400)
@@ -52,7 +53,13 @@ router.post("/load", async (req, res, next) => {
       logger.warn(`Could not list models before loading: ${listErr.message}`);
     }
 
-    const data = await provider.loadModel(model);
+    // Build load options from request body
+    const loadOptions = {};
+    if (context_length != null) loadOptions.context_length = context_length;
+    if (flash_attention != null) loadOptions.flash_attention = flash_attention;
+    if (offload_kv_cache_to_gpu != null) loadOptions.offload_kv_cache_to_gpu = offload_kv_cache_to_gpu;
+
+    const data = await provider.loadModel(model, loadOptions);
     res.json(data);
   } catch (error) {
     logger.error(`POST /lm-studio/load error: ${error.message}`);
@@ -80,6 +87,58 @@ router.post("/unload", async (req, res, next) => {
     res.json(data);
   } catch (error) {
     logger.error(`POST /lm-studio/unload error: ${error.message}`);
+    next(error);
+  }
+});
+
+/**
+ * POST /lm-studio/estimate
+ * Estimate VRAM usage for a model with given configuration.
+ * Body: { model, contextLength, gpuLayers, flashAttention, offloadKvCache }
+ */
+router.post("/estimate", async (req, res, next) => {
+  try {
+    const { model, contextLength, gpuLayers, flashAttention, offloadKvCache } = req.body;
+    if (!model) {
+      return res.status(400).json({ error: true, message: "Missing 'model' in request body" });
+    }
+
+    // Fetch model metadata from LM Studio
+    const provider = getProvider("lm-studio");
+    const result = await provider.listModels();
+    const allModels = result?.data || result?.models || [];
+    const modelData = allModels.find((m) => m.id === model || m.path === model || m.key === model);
+
+    if (!modelData) {
+      return res.status(404).json({ error: true, message: `Model '${model}' not found` });
+    }
+
+    const sizeBytes = modelData.size_bytes || 0;
+    const bpw = modelData.quantization?.bits_per_weight || 4;
+    const archParams = resolveArchParams(
+      modelData.architecture,
+      modelData.params_string,
+      sizeBytes,
+      bpw,
+    );
+    const totalLayers = archParams.layers;
+
+    const memory = estimateMemory({
+      sizeBytes,
+      archParams,
+      gpuLayers: gpuLayers ?? totalLayers,
+      contextLength: contextLength ?? 4096,
+      offloadKvCache: offloadKvCache ?? true,
+      flashAttention: flashAttention ?? true,
+    });
+
+    res.json({
+      ...memory,
+      archParams,
+      totalLayers,
+    });
+  } catch (error) {
+    logger.error(`POST /lm-studio/estimate error: ${error.message}`);
     next(error);
   }
 });

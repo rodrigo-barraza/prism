@@ -4,6 +4,7 @@ import { MONGO_DB_NAME } from "../../secrets.js";
 import { getProvider } from "../providers/index.js";
 import ChangeStreamService from "../services/ChangeStreamService.js";
 import logger from "../utils/logger.js";
+import { resolveArchParams, estimateMemory } from "../utils/gguf-arch.js";
 import os from "os";
 
 const router = express.Router();
@@ -1835,6 +1836,57 @@ router.post("/lm-studio/unload", async (req, res, next) => {
     res.json(data);
   } catch (error) {
     logger.error(`Admin /lm-studio/unload error: ${error.message}`);
+    next(error);
+  }
+});
+
+/**
+ * POST /admin/lm-studio/estimate
+ * Estimate VRAM usage for a model with given configuration.
+ * Body: { model, contextLength, gpuLayers, flashAttention, offloadKvCache }
+ */
+router.post("/lm-studio/estimate", async (req, res, next) => {
+  try {
+    const { model, contextLength, gpuLayers, flashAttention, offloadKvCache } = req.body;
+    if (!model) {
+      return res.status(400).json({ error: true, message: "Missing 'model' in request body" });
+    }
+
+    const provider = getProvider("lm-studio");
+    const result = await provider.listModels();
+    const allModels = result?.data || result?.models || [];
+    const modelData = allModels.find((m) => m.id === model || m.path === model || m.key === model);
+
+    if (!modelData) {
+      return res.status(404).json({ error: true, message: `Model '${model}' not found` });
+    }
+
+    const sizeBytes = modelData.size_bytes || 0;
+    const bpw = modelData.quantization?.bits_per_weight || 4;
+    const archParams = resolveArchParams(
+      modelData.architecture,
+      modelData.params_string,
+      sizeBytes,
+      bpw,
+    );
+    const totalLayers = archParams.layers;
+
+    const memory = estimateMemory({
+      sizeBytes,
+      archParams,
+      gpuLayers: gpuLayers ?? totalLayers,
+      contextLength: contextLength ?? 4096,
+      offloadKvCache: offloadKvCache ?? true,
+      flashAttention: flashAttention ?? true,
+    });
+
+    res.json({
+      ...memory,
+      archParams,
+      totalLayers,
+    });
+  } catch (error) {
+    logger.error(`Admin /lm-studio/estimate error: ${error.message}`);
     next(error);
   }
 });

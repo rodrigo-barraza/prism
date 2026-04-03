@@ -8,6 +8,7 @@
 
 import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
+import { resolveArchParams } from "../utils/gguf-arch.js";
 import { LM_STUDIO_BASE_URL } from "../../secrets.js";
 import { TYPES, getDefaultModels } from "../config.js";
 import { writeFileSync } from "node:fs";
@@ -672,7 +673,20 @@ const lmStudioProvider = {
         throw new Error(`API error: ${response.status} ${errorText}`);
       }
 
-      return response.json();
+      const data = await response.json();
+
+      // Enrich each model with resolved architecture params for VRAM estimation
+      if (data?.data) {
+        for (const model of data.data) {
+          const arch = model.architecture;
+          const params = model.params_string;
+          const sizeBytes = model.size_bytes || 0;
+          const bpw = model.quantization?.bits_per_weight || 4;
+          model.archParams = resolveArchParams(arch, params, sizeBytes, bpw);
+        }
+      }
+
+      return data;
     } catch (error) {
       if (error instanceof ProviderError) throw error;
       throw new ProviderError("lm-studio", error.message, 500, error);
@@ -682,14 +696,19 @@ const lmStudioProvider = {
   /**
    * Load a model into LM Studio memory.
    */
-  async loadModel(model) {
+  async loadModel(model, options = {}) {
     const baseUrl = getBaseUrl();
     logger.provider("LM Studio", `loadModel model=${model}`);
     try {
+      const payload = { model, echo_load_config: true };
+      if (options.context_length != null) payload.context_length = options.context_length;
+      if (options.flash_attention != null) payload.flash_attention = options.flash_attention;
+      if (options.offload_kv_cache_to_gpu != null) payload.offload_kv_cache_to_gpu = options.offload_kv_cache_to_gpu;
+
       const response = await fetch(`${baseUrl}/api/v1/models/load`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model, context_length: 32768 }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
