@@ -124,6 +124,33 @@ setupWebSocket(wss);
   await MongoWrapper.createClient(MONGO_DB_NAME, MONGO_URI);
   await MemoryService.ensureIndexes();
 
+  // ── Ensure collection indexes ──────────────────────────────────
+  // Critical for $lookup aggregation performance (conversations ↔ requests).
+  // Without these, $lookup does full collection scans per document.
+  try {
+    const db = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
+    if (db) {
+      await Promise.all([
+        // requests — used by $lookup from conversations and session joins
+        db.collection("requests").createIndex({ conversationId: 1 }),
+        db.collection("requests").createIndex({ timestamp: -1 }),
+        db.collection("requests").createIndex({ project: 1, timestamp: -1 }),
+        // conversations — used by findOne lookups and list queries
+        db.collection("conversations").createIndex({ id: 1 }, { unique: true }),
+        db.collection("conversations").createIndex({ updatedAt: -1 }),
+        db.collection("conversations").createIndex({ project: 1, username: 1, updatedAt: -1 }),
+        db.collection("conversations").createIndex({ sessionId: 1 }),
+        // sessions — used by findOne and list queries
+        db.collection("sessions").createIndex({ id: 1 }, { unique: true }),
+        // workflows — used by conversationIds lookup
+        db.collection("workflows").createIndex({ id: 1 }, { unique: true }),
+      ]);
+      logger.success("Database indexes ensured");
+    }
+  } catch (err) {
+    logger.error(`Failed to ensure indexes: ${err.message}`);
+  }
+
   // Clear any stale isGenerating flags left over from a previous crash/restart
   try {
     const db = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);

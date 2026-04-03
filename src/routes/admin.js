@@ -2293,10 +2293,17 @@ router.get("/sessions", async (req, res, next) => {
           pipeline: [
             {
               $project: {
+                requestId: 1,
                 conversationId: 1,
                 inputTokens: 1,
                 outputTokens: 1,
                 model: 1,
+                provider: 1,
+                project: 1,
+                endpoint: 1,
+                estimatedCost: 1,
+                success: 1,
+                modalities: 1,
                 messageCount: 1,
                 tokensPerSec: 1,
                 totalTime: 1,
@@ -2547,7 +2554,8 @@ router.get("/sessions", async (req, res, next) => {
           finishedAt: { $max: "$_requests.timestamp" },
         },
       },
-      // Drop raw request docs from response
+      // Rename _requests to requests for the frontend
+      { $addFields: { requests: "$_requests" } },
       { $project: { _requests: 0 } },
       // Apply project filter after conversations are joined and project is derived
       ...(project ? [{ $match: { project } }] : []),
