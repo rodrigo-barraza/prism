@@ -120,7 +120,11 @@ router.get("/requests/:id/associations", async (req, res, next) => {
       conversations = await db
         .collection(CONVERSATIONS_COL)
         .find({ id: request.conversationId })
-        .project({ id: 1, title: 1, project: 1, sessionId: 1 })
+        .project({
+          id: 1, title: 1, project: 1, sessionId: 1,
+          model: 1, totalCost: 1, modalities: 1, providers: 1,
+          updatedAt: 1, createdAt: 1, username: 1,
+        })
         .toArray();
 
       // Find workflows that contain this conversationId
