@@ -442,7 +442,9 @@ const lmStudioProvider = {
       const ts = Date.now();
       try {
         writeFileSync(`/tmp/lm-studio-payload-${ts}.json`, payloadStr);
-      } catch {}
+      } catch {
+        /* ignore */
+      }
 
       // Pass abort signal so client disconnection cancels the upstream request
       const response = await fetch(`${baseUrl}/v1/chat/completions`, {
