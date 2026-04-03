@@ -44,7 +44,7 @@ import { execSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { MongoClient } from "mongodb";
 import { resolveArchParams, estimateMemory } from "../src/utils/gguf-arch.js";
-import { MONGO_URI, MONGO_DB_NAME } from "../src/secrets.js";
+import { MONGO_URI, MONGO_DB_NAME } from "../secrets.js";
 
 // ── CLI Argument Parsing ─────────────────────────────────────
 
@@ -524,7 +524,7 @@ async function saveResult(entry) {
 }
 
 /** Load all existing results from MongoDB for this provider */
-async function loadExistingResults() {
+async function _loadExistingResults() {
   if (!_db) return [];
   return _db.collection(BENCH_COLLECTION).find({ provider: PROVIDER }).toArray();
 }
