@@ -403,29 +403,37 @@ const llamaCppProvider = {
       const { thinking: tagThinking, text } = extractThinkTags(rawText);
       const thinking = nativeThinking || tagThinking;
 
-      const result = {
-        text,
-        thinking,
-        usage: {
-          inputTokens: data.usage?.prompt_tokens ?? 0,
-          outputTokens: data.usage?.completion_tokens ?? 0,
-        },
+      const usage = {
+        inputTokens: data.usage?.prompt_tokens ?? 0,
+        outputTokens: data.usage?.completion_tokens ?? 0,
       };
 
+      // Extract timings for tok/s reporting (llama.cpp extension)
+      if (data.timings?.predicted_per_second) {
+        usage.tokensPerSec = parseFloat(
+          data.timings.predicted_per_second.toFixed(1),
+        );
+      }
+
+      const result = { text, thinking, usage };
+
       // Extract tool calls if present
-      // llama.cpp returns tool_calls in the standard OpenAI format:
-      //   [{ id, type: "function", function: { name, arguments } }]
+      // llama.cpp returns tool_calls in a FLAT structure (name/arguments
+      // at top level), unlike OpenAI's nested { function: { name, arguments } }.
+      // We handle both formats for forward compatibility.
       if (message?.tool_calls && message.tool_calls.length > 0) {
         result.toolCalls = message.tool_calls.map((tc) => {
+          const fnName = tc.function?.name || tc.name || "";
+          const fnArgs = tc.function?.arguments || tc.arguments || "{}";
           let args = {};
           try {
-            args = JSON.parse(tc.function.arguments || "{}");
+            args = JSON.parse(fnArgs);
           } catch {
             /* ignore */
           }
           return {
             id: tc.id,
-            name: tc.function.name,
+            name: fnName,
             args,
           };
         });
@@ -549,6 +557,13 @@ const llamaCppProvider = {
               };
             }
 
+            // Extract timings for tok/s reporting (llama.cpp extension)
+            if (json.timings?.predicted_per_second && usage) {
+              usage.tokensPerSec = parseFloat(
+                json.timings.predicted_per_second.toFixed(1),
+              );
+            }
+
             const delta = json.choices?.[0]?.delta;
 
             // Native reasoning fields (model-dependent, e.g. DeepSeek-R1)
@@ -572,28 +587,30 @@ const llamaCppProvider = {
             }
 
             // Accumulate tool call deltas
-            // llama.cpp streams tool_calls incrementally per OpenAI spec:
-            //   delta.tool_calls: [{ index, id?, function: { name?, arguments? } }]
+            // llama.cpp may use flat structure (name/arguments at top level)
+            // or nested OpenAI structure ({ function: { name, arguments } }).
+            // We handle both formats.
             if (delta?.tool_calls) {
               for (const tc of delta.tool_calls) {
                 const idx = tc.index;
                 if (!pendingToolCalls[idx]) {
                   pendingToolCalls[idx] = {
                     id: tc.id || "",
-                    name: tc.function?.name || "",
+                    name: tc.function?.name || tc.name || "",
                     args: "",
                   };
                 }
                 if (tc.id) pendingToolCalls[idx].id = tc.id;
-                if (tc.function?.name)
-                  pendingToolCalls[idx].name = tc.function.name;
-                if (tc.function?.arguments)
-                  pendingToolCalls[idx].args += tc.function.arguments;
+                const chunkName = tc.function?.name || tc.name;
+                if (chunkName) pendingToolCalls[idx].name = chunkName;
+                const chunkArgs = tc.function?.arguments || tc.arguments;
+                if (chunkArgs) pendingToolCalls[idx].args += chunkArgs;
               }
             }
 
             // If finish_reason is "tool_calls", yield accumulated tool calls
-            if (json.choices?.[0]?.finish_reason === "tool_calls") {
+            const finishReason = json.choices?.[0]?.finish_reason;
+            if (finishReason === "tool" || finishReason === "tool_calls") {
               for (const tc of Object.values(pendingToolCalls)) {
                 let args = {};
                 try {
@@ -748,9 +765,13 @@ const llamaCppProvider = {
         signal: AbortSignal.timeout(3000),
       });
       const data = await response.json();
+      // Normalize: newer llama.cpp returns { error: { message } } on 503,
+      // older versions returned { status: "loading model" }.
       return {
         ok: response.ok,
-        status: data.status,
+        status: response.ok
+          ? (data.status || "ok")
+          : (data.status || data.error?.message || "error"),
         slotsIdle: data.slots_idle ?? null,
         slotsProcessing: data.slots_processing ?? null,
       };
