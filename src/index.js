@@ -41,6 +41,7 @@ import customToolsRouter from "./routes/custom-tools.js";
 import favoritesRouter from "./routes/favorites.js";
 import sessionsRouter from "./routes/sessions.js";
 import statsRouter from "./routes/stats.js";
+import benchmarkRouter from "./routes/benchmark.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -70,6 +71,7 @@ const ENDPOINTS = {
     "/favorites",
     "/sessions",
     "/stats",
+    "/benchmark",
   ],
   websocket: ["/ws/chat", "/ws/text-to-audio"],
   admin: ["/admin", "/admin/lm-studio", "/admin/sessions"],
@@ -111,6 +113,7 @@ app.use("/custom-tools", customToolsRouter);
 app.use("/favorites", favoritesRouter);
 app.use("/sessions", sessionsRouter);
 app.use("/stats", statsRouter);
+app.use("/benchmark", benchmarkRouter);
 
 // Error handler (must be last)
 app.use(errorHandler);
@@ -144,6 +147,11 @@ setupWebSocket(wss);
         db.collection("sessions").createIndex({ id: 1 }, { unique: true }),
         // workflows — used by conversationIds lookup
         db.collection("workflows").createIndex({ id: 1 }, { unique: true }),
+        // benchmarks
+        db.collection("benchmarks").createIndex({ id: 1 }, { unique: true }),
+        db.collection("benchmarks").createIndex({ project: 1, updatedAt: -1 }),
+        db.collection("benchmark_runs").createIndex({ id: 1 }, { unique: true }),
+        db.collection("benchmark_runs").createIndex({ benchmarkId: 1, project: 1, startedAt: -1 }),
       ]);
       logger.success("Database indexes ensured");
     }

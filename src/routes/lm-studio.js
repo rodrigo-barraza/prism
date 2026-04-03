@@ -130,6 +130,7 @@ router.post("/estimate", async (req, res, next) => {
       contextLength: contextLength ?? 4096,
       offloadKvCache: offloadKvCache ?? true,
       flashAttention: flashAttention ?? true,
+      vision: modelData.capabilities?.vision || false,
     });
 
     res.json({

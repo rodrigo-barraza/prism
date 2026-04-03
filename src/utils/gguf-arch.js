@@ -182,6 +182,16 @@ const GiB = 1024 ** 3;
 /**
  * Estimate VRAM usage for a GGUF model.
  *
+ * Overhead constants calibrated against real RTX 4090 benchmark data
+ * (38 models, flash_attention=true, offload_kv_cache=true, 4096 ctx).
+ *
+ * Key findings from calibration (2026-04-03):
+ *   - CUDA context + compute buffers ≈ 0.8 GiB (was 0.5)
+ *   - Small models (<3GB file) have ~0.4 GiB extra proportional overhead
+ *   - Vision models carry an encoder surcharge (~0.7–1.0 GiB)
+ *   - Models near VRAM limits get partially CPU-offloaded by LM Studio
+ *     silently, so raw estimate can exceed actual usage by 1–3 GiB
+ *
  * @param {object} opts
  * @param {number} opts.sizeBytes — model file size in bytes
  * @param {object} opts.archParams — resolved architecture params { layers, kvHeads, headDim, attnRatio }
@@ -189,7 +199,10 @@ const GiB = 1024 ** 3;
  * @param {number} opts.contextLength — context length in tokens
  * @param {boolean} [opts.offloadKvCache=true] — whether KV cache is on GPU
  * @param {boolean} [opts.flashAttention=true] — flash attention enabled (Q8_0 KV vs FP32)
- * @returns {{ gpuGiB: number, totalGiB: number }}
+ * @param {boolean} [opts.vision=false] — model includes a vision encoder
+ * @param {number} [opts.gpuTotalGiB] — total GPU VRAM in GiB (for auto-offload clamping)
+ * @param {number} [opts.gpuBaselineGiB=0] — VRAM already used (displays, desktop, etc.)
+ * @returns {{ gpuGiB: number, totalGiB: number, cpuOffloaded: boolean }}
  */
 export function estimateMemory({
   sizeBytes,
@@ -198,8 +211,11 @@ export function estimateMemory({
   contextLength,
   offloadKvCache = true,
   flashAttention = true,
+  vision = false,
+  gpuTotalGiB,
+  gpuBaselineGiB = 0,
 }) {
-  if (!sizeBytes || !archParams) return { gpuGiB: 0, totalGiB: 0 };
+  if (!sizeBytes || !archParams) return { gpuGiB: 0, totalGiB: 0, cpuOffloaded: false };
 
   const { layers, kvHeads, headDim, attnRatio } = archParams;
   const fileSizeGiB = sizeBytes / GiB;
@@ -215,14 +231,50 @@ export function estimateMemory({
   const kvCacheGiB =
     (2 * effectiveKvLayers * kvHeads * headDim * bytesPerElement * contextLength) / GiB;
 
-  // CUDA context + compute buffer overhead
-  const overhead = gpuLayers > 0 ? 0.5 : 0;
+  // ── CUDA context + compute buffer overhead ────────────────
+  // Calibrated: 0.8 GiB base (benchmarked: avg Δ minimized at 0.8–0.9).
+  // Small models (<3 GiB file) carry proportionally more overhead from
+  // CUDA context, scratch buffers, and the llama.cpp compute graph.
+  let overhead = 0;
+  if (gpuLayers > 0) {
+    overhead = 0.8;
+    // Small-model surcharge: below 3 GB file size, add up to 0.4 GiB extra
+    // (benchmarked: 0.6B model had +0.69G Δ with 0.5G overhead → needs ~1.2G)
+    if (fileSizeGiB < 3) {
+      overhead += 0.4 * (1 - fileSizeGiB / 3);
+    }
+  }
 
-  const gpuGiB = weightsOnGPU + (offloadKvCache ? kvCacheGiB : 0) + overhead;
+  // ── Vision encoder surcharge ──────────────────────────────
+  // Vision models (qwen3vl, gemma3-12b, llava, etc.) carry a vision
+  // encoder that isn't captured by the GGUF weights-only file size.
+  // Benchmarked: +0.7 to +1.7 GiB extra, scales roughly with model size.
+  let visionOverhead = 0;
+  if (vision && gpuLayers > 0) {
+    // ~0.7 GiB base + ~2.5% of file size for larger encoders
+    visionOverhead = 0.7 + fileSizeGiB * 0.025;
+  }
+
+  let gpuGiB = weightsOnGPU + (offloadKvCache ? kvCacheGiB : 0) + overhead + visionOverhead;
   const totalGiB = gpuGiB + weightsOnCPU + (!offloadKvCache ? kvCacheGiB : 0);
+
+  // ── Auto-offload clamping ─────────────────────────────────
+  // LM Studio silently CPU-offloads layers when a model exceeds
+  // available VRAM. If we know the GPU budget, clamp the GPU estimate.
+  // (benchmarked: 20.6 GB qwen2 q4_1 estimated 20.2G but actual was 18.5G
+  //  because ~2G of weights were silently moved to CPU)
+  let cpuOffloaded = false;
+  if (gpuTotalGiB && gpuTotalGiB > 0) {
+    const availableGiB = gpuTotalGiB - gpuBaselineGiB;
+    if (gpuGiB > availableGiB) {
+      gpuGiB = availableGiB;
+      cpuOffloaded = true;
+    }
+  }
 
   return {
     gpuGiB: Math.max(0, gpuGiB),
     totalGiB: Math.max(0, totalGiB),
+    cpuOffloaded,
   };
 }
