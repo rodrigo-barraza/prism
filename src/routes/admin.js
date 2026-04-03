@@ -1431,6 +1431,7 @@ router.get("/conversations/stats", async (req, res, next) => {
 
 // ============================================================
 // GET /admin/conversations/stream — SSE for real-time stats
+// Powered by Change Streams when available; polls otherwise.
 // ============================================================
 router.get("/conversations/stream", async (req, res) => {
   const db = getDb();
@@ -1489,18 +1490,35 @@ router.get("/conversations/stream", async (req, res) => {
   // Initial send
   await sendStats();
 
-  // Poll every 2 seconds
-  const interval = setInterval(sendStats, 2000);
+  if (ChangeStreamService.available) {
+    // Change Stream-driven: re-query stats only when conversations change
+    const onEvent = (event) => {
+      if (event.collection === "conversations") {
+        sendStats();
+      }
+    };
+    ChangeStreamService.subscribe(onEvent);
 
-  // Keep-alive ping every 30s
-  const keepAlive = setInterval(() => {
-    res.write(": ping\n\n");
-  }, 30000);
+    const keepAlive = setInterval(() => {
+      try { res.write(": ping\n\n"); } catch { /* ignore */ }
+    }, 30000);
 
-  req.on("close", () => {
-    clearInterval(interval);
-    clearInterval(keepAlive);
-  });
+    req.on("close", () => {
+      ChangeStreamService.unsubscribe(onEvent);
+      clearInterval(keepAlive);
+    });
+  } else {
+    // Fallback: poll every 2 seconds
+    const interval = setInterval(sendStats, 2000);
+    const keepAlive = setInterval(() => {
+      res.write(": ping\n\n");
+    }, 30000);
+
+    req.on("close", () => {
+      clearInterval(interval);
+      clearInterval(keepAlive);
+    });
+  }
 });
 
 // ============================================================

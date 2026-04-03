@@ -18,6 +18,7 @@ const listeners = new Set();
 const streams = new Map();
 
 let available = false;
+let staleGeneratingInterval = null;
 
 // Collections to watch
 const WATCHED_COLLECTIONS = ["conversations", "sessions"];
@@ -43,6 +44,15 @@ function openStream(db, collectionName) {
           : null,
         timestamp: new Date().toISOString(),
       };
+
+      // Enrich with isGenerating state for conversations
+      if (collectionName === "conversations") {
+        if (event.updateDescription?.updatedFields?.isGenerating !== undefined) {
+          payload.isGenerating = event.updateDescription.updatedFields.isGenerating;
+        } else if (event.fullDocument?.isGenerating !== undefined) {
+          payload.isGenerating = event.fullDocument.isGenerating;
+        }
+      }
 
       // Broadcast to all registered listeners
       for (const listener of listeners) {
@@ -128,6 +138,25 @@ const ChangeStreamService = {
     logger.success(
       `Change Streams active on ${streams.size} collection(s): ${[...streams.keys()].join(", ")}`,
     );
+
+    // Periodic stale isGenerating cleanup (every 60s)
+    // Catches flags left behind by crashed requests or dropped connections
+    staleGeneratingInterval = setInterval(async () => {
+      try {
+        const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        const { modifiedCount } = await db
+          .collection("conversations")
+          .updateMany(
+            { isGenerating: true, updatedAt: { $lt: fiveMinAgo } },
+            { $set: { isGenerating: false } },
+          );
+        if (modifiedCount > 0) {
+          logger.info(`Auto-cleared ${modifiedCount} stale isGenerating flag(s)`);
+        }
+      } catch {
+        // ignore
+      }
+    }, 60000);
   },
 
   /**
@@ -160,6 +189,10 @@ const ChangeStreamService = {
     }
     streams.clear();
     listeners.clear();
+    if (staleGeneratingInterval) {
+      clearInterval(staleGeneratingInterval);
+      staleGeneratingInterval = null;
+    }
     available = false;
   },
 };
