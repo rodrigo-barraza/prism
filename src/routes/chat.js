@@ -211,6 +211,7 @@ export async function handleChat(params, emit, { signal } = {}) {
     functionCallingEnabled,
     enabledTools,
     forceImageGeneration,
+    skipConversation,
     // systemPrompt arrives in two places by design:
     //  - messages[0] with role:"system" → what the LLM actually sees
     //  - conversationMeta.systemPrompt → stored as top-level DB field for quick UI access
@@ -223,9 +224,11 @@ export async function handleChat(params, emit, { signal } = {}) {
   // If the caller didn't provide a conversationId, auto-generate one
   // so that all projects (Stickers, Lupos, etc.) get conversations
   // persisted without needing to explicitly manage IDs.
-  let conversationId = incomingConversationId;
-  let conversationMeta = incomingConversationMeta;
-  if (!conversationId) {
+  // When skipConversation is set, skip all conversation persistence
+  // (used by synthesis user-simulation turns that only need generation).
+  let conversationId = skipConversation ? null : incomingConversationId;
+  let conversationMeta = skipConversation ? null : incomingConversationMeta;
+  if (!skipConversation && !conversationId) {
     conversationId = crypto.randomUUID();
     const firstUserMsg = messages?.filter((m) => m.role === "user").pop();
     const titleSnippet =
