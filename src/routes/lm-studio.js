@@ -68,6 +68,116 @@ router.post("/load", async (req, res, next) => {
 });
 
 /**
+ * POST /lm-studio/load-stream
+ * Load a model into LM Studio with SSE progress streaming.
+ * Fires the blocking load in the background and emits progress events.
+ *
+ * SSE events:
+ *   { type: "start", model }
+ *   { type: "unloading", model: "previous-model-key" }
+ *   { type: "progress", progress: 0.0–1.0 }
+ *   { type: "complete" }
+ *   { type: "error", message: "..." }
+ */
+router.post("/load-stream", async (req, res) => {
+  const { model, context_length, flash_attention, offload_kv_cache_to_gpu } = req.body;
+  if (!model) {
+    return res
+      .status(400)
+      .json({ error: true, message: "Missing 'model' in request body" });
+  }
+
+  // Set up SSE
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+
+  const send = (data) => {
+    if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    }
+  };
+
+  let aborted = false;
+  req.on("close", () => { aborted = true; });
+
+  try {
+    const provider = getProvider("lm-studio");
+
+    send({ type: "start", model });
+
+    // Enforce single model — unload anything currently loaded
+    try {
+      const { models } = await provider.listModels();
+      for (const m of models || []) {
+        for (const instance of m.loaded_instances || []) {
+          if (instance.id !== model) {
+            send({ type: "unloading", model: instance.id });
+            logger.info(`Auto-unloading ${instance.id} before loading ${model}`);
+            await provider.unloadModel(instance.id);
+          }
+        }
+      }
+    } catch (listErr) {
+      logger.warn(`Could not list models before loading: ${listErr.message}`);
+    }
+
+    if (aborted) return res.end();
+
+    // Build load options
+    const loadOptions = {};
+    if (context_length != null) loadOptions.context_length = context_length;
+    if (flash_attention != null) loadOptions.flash_attention = flash_attention;
+    if (offload_kv_cache_to_gpu != null) loadOptions.offload_kv_cache_to_gpu = offload_kv_cache_to_gpu;
+
+    send({ type: "progress", progress: 0 });
+
+    // Fire load (blocking) in background, poll for progress
+    let loadDone = false;
+    let loadError = null;
+    const loadPromise = provider.loadModel(model, loadOptions)
+      .then(() => { loadDone = true; })
+      .catch((err) => { loadDone = true; loadError = err; });
+
+    const startTime = Date.now();
+    const EXPECTED_LOAD_MS = 15_000; // asymptotic constant
+    let lastPct = 0;
+
+    while (!loadDone && !aborted) {
+      await new Promise((r) => setTimeout(r, 300));
+      if (loadDone || aborted) break;
+
+      const elapsed = Date.now() - startTime;
+      // Asymptotic progress: approaches 95% as time → ∞
+      const pct = Math.min(0.95, elapsed / (elapsed + EXPECTED_LOAD_MS));
+      if (pct > lastPct + 0.005) {
+        lastPct = pct;
+        send({ type: "progress", progress: parseFloat(pct.toFixed(3)) });
+      }
+    }
+
+    await loadPromise;
+
+    if (aborted) return res.end();
+
+    if (loadError) {
+      send({ type: "error", message: loadError.message });
+    } else {
+      send({ type: "progress", progress: 1 });
+      send({ type: "complete" });
+    }
+  } catch (error) {
+    logger.error(`POST /lm-studio/load-stream error: ${error.message}`);
+    send({ type: "error", message: error.message });
+  } finally {
+    res.end();
+  }
+});
+
+/**
  * POST /lm-studio/unload
  * Unload a model from LM Studio memory.
  * Body: { instance_id: "model-instance-id" }
