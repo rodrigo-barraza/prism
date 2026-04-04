@@ -211,6 +211,7 @@ export async function handleChat(params, emit, { signal } = {}) {
     functionCallingEnabled,
     enabledTools,
     forceImageGeneration,
+    textOnly,
     skipConversation,
     // systemPrompt arrives in two places by design:
     //  - messages[0] with role:"system" → what the LLM actually sees
@@ -289,6 +290,7 @@ export async function handleChat(params, emit, { signal } = {}) {
     ...(functionCallingEnabled !== undefined && { functionCallingEnabled }),
     ...(enabledTools && { enabledTools }),
     ...(forceImageGeneration && { forceImageGeneration }),
+    ...(textOnly && { textOnly }),
     ...(extraParams.systemPrompt && { systemPrompt: extraParams.systemPrompt }),
   };
 

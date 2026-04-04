@@ -227,7 +227,7 @@ const MODELS = {
     label: "GPT 5.3 Codex",
     provider: PROVIDERS.OPENAI,
     modelType: MODEL_TYPES.CONVERSATION,
-    codex: true,
+    responsesAPI: true,
     year: 2026,
     defaultTemperature: 1.0,
     pricing: {

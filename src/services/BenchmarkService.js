@@ -85,8 +85,6 @@ function getConversationModels() {
     if (!m.outputTypes?.includes("text")) continue;
     // Skip image API models (generate images, not text completions)
     if (m.imageAPI) continue;
-    // Skip codex models (use completions endpoint, not chat)
-    if (m.codex) continue;
 
     results.push({
       provider: m.provider,
@@ -145,6 +143,10 @@ async function runSingleModel(benchmark, model, project, username) {
 
   messages.push({ role: "user", content: benchmark.prompt });
 
+  logger.info(
+    `[benchmark] ▶ Running ${model.provider}/${model.model}`,
+  );
+
   try {
     const events = [];
     await handleChat(
@@ -158,15 +160,45 @@ async function runSingleModel(benchmark, model, project, username) {
         username,
         skipConversation: true,
         thinkingEnabled: false,
+        textOnly: true,
       },
-      (event) => events.push(event),
+      (event) => {
+        events.push(event);
+        // Log every event for debugging
+        if (event.type === "chunk") {
+          logger.info(
+            `[benchmark]   📦 ${model.model} chunk (${event.content?.length || 0} chars)`,
+          );
+        } else if (event.type === "error") {
+          logger.error(
+            `[benchmark]   ❌ ${model.model} error: ${event.message}`,
+          );
+        } else if (event.type === "done") {
+          logger.info(
+            `[benchmark]   ✅ ${model.model} done — usage: ${JSON.stringify(event.usage || null)}, cost: ${event.estimatedCost ?? "N/A"}`,
+          );
+        } else {
+          logger.info(
+            `[benchmark]   📨 ${model.model} event: ${event.type}`,
+          );
+        }
+      },
     );
 
     const latency = (performance.now() - start) / 1000;
 
+    // Log all event types received
+    const eventTypes = events.map((e) => e.type);
+    logger.info(
+      `[benchmark] ◀ ${model.model} finished in ${latency.toFixed(2)}s — events: [${eventTypes.join(", ")}]`,
+    );
+
     // Check for errors
     const errorEvent = events.find((e) => e.type === "error");
     if (errorEvent) {
+      logger.warn(
+        `[benchmark]   ⚠ ${model.model} returned error event: ${errorEvent.message}`,
+      );
       return {
         provider: model.provider,
         model: model.model,
@@ -187,6 +219,12 @@ async function runSingleModel(benchmark, model, project, username) {
       .map((e) => e.content)
       .join("");
 
+    if (!text) {
+      logger.warn(
+        `[benchmark]   ⚠ ${model.model} produced NO text — chunk count: ${events.filter((e) => e.type === "chunk").length}, all events: ${JSON.stringify(eventTypes)}`,
+      );
+    }
+
     const doneEvent = events.find((e) => e.type === "done") || {};
     const matchMode = benchmark.matchMode || MATCH_MODES.CONTAINS;
     const passed = evaluate(text, benchmark.expectedValue, matchMode);
@@ -205,6 +243,9 @@ async function runSingleModel(benchmark, model, project, username) {
     };
   } catch (err) {
     const latency = (performance.now() - start) / 1000;
+    logger.error(
+      `[benchmark]   💥 ${model.model} threw: ${err.message}`,
+    );
     return {
       provider: model.provider,
       model: model.model,
@@ -272,24 +313,29 @@ const BenchmarkService = {
       `[benchmark] Starting run ${runId} — "${benchmark.name}" against ${models.length} model(s)`,
     );
 
-    // ── Smart concurrency: cloud parallel, local sequential ──
-    // Cloud providers can all run at the same time (different API endpoints).
-    // Local providers share a single GPU — must run one at a time.
+    // ── Sequential execution with staggered delay ──────────────
+    // Run all models sequentially with a 1s delay between calls
+    // to avoid rate-limiting / contention issues.
     const cloudModels = models.filter((m) => !LOCAL_PROVIDERS.has(m.provider));
     const localModels = models.filter((m) => LOCAL_PROVIDERS.has(m.provider));
 
-    // Phase 1: Run all cloud models in parallel
-    const cloudResults = await Promise.all(
-      cloudModels.map((model) =>
-        runSingleModel(benchmark, model, project, username),
-      ),
-    );
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-    // Phase 2: Run local models sequentially (shared GPU)
+    // Phase 1: Cloud models — sequential with 1s stagger
+    const cloudResults = [];
+    for (let i = 0; i < cloudModels.length; i++) {
+      if (i > 0) await sleep(1000);
+      cloudResults.push(
+        await runSingleModel(benchmark, cloudModels[i], project, username),
+      );
+    }
+
+    // Phase 2: Local models — sequential (shared GPU), 1s stagger
     const localResults = [];
-    for (const model of localModels) {
+    for (let i = 0; i < localModels.length; i++) {
+      if (i > 0) await sleep(1000);
       localResults.push(
-        await runSingleModel(benchmark, model, project, username),
+        await runSingleModel(benchmark, localModels[i], project, username),
       );
     }
 
