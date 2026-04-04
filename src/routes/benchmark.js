@@ -61,6 +61,17 @@ router.get("/models", (_req, res) => {
 });
 
 // ============================================================
+// GET /benchmark/active-list — List all benchmarks with active runs
+// ============================================================
+// Returns an array of benchmark IDs that currently have in-progress runs.
+// Used by the benchmark list page to show running indicators on cards.
+
+router.get("/active-list", (_req, res) => {
+  const activeIds = [...runStates.keys()];
+  res.json({ activeIds });
+});
+
+// ============================================================
 // POST /benchmark — Create a new benchmark test
 // ============================================================
 
@@ -319,6 +330,7 @@ router.post("/:id/abort", (req, res) => {
     res.json({ aborted: false, message: "No active run found for this benchmark" });
   }
 });
+
 
 // ============================================================
 // GET /benchmark/:id/active — Check if a benchmark has an active run
