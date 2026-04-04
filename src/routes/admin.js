@@ -3,6 +3,7 @@ import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import { getProvider } from "../providers/index.js";
 import ChangeStreamService from "../services/ChangeStreamService.js";
+import BenchmarkService from "../services/BenchmarkService.js";
 import logger from "../utils/logger.js";
 import { resolveArchParams, estimateMemory } from "../utils/gguf-arch.js";
 import os from "os";
@@ -1450,7 +1451,7 @@ router.get("/conversations/stats", async (req, res, next) => {
         .countDocuments({ ...filter, updatedAt: { $gte: oneHourAgo } }),
     ]);
 
-    res.json({ generatingCount, recentCount });
+    res.json({ generatingCount: generatingCount + BenchmarkService.activeGenerationCount, recentCount });
   } catch (error) {
     logger.error(`Admin /conversations/stats error: ${error.message}`);
     next(error);
@@ -1504,7 +1505,7 @@ router.get("/conversations/stream", async (req, res) => {
         })
         .catch(() => {});
 
-      const payload = JSON.stringify({ generatingCount, recentCount });
+      const payload = JSON.stringify({ generatingCount: generatingCount + BenchmarkService.activeGenerationCount, recentCount });
       // Only send if data changed
       if (payload !== lastPayload) {
         lastPayload = payload;
@@ -1527,12 +1528,23 @@ router.get("/conversations/stream", async (req, res) => {
     };
     ChangeStreamService.subscribe(onEvent);
 
+    // Secondary poll: catch benchmark generation activity (not tracked
+    // via Change Streams since benchmarks skip conversation persistence).
+    // Tracks previous count to push one final update when benchmarks end.
+    let prevBenchmarkCount = 0;
+    const benchmarkPoll = setInterval(() => {
+      const count = BenchmarkService.activeGenerationCount;
+      if (count > 0 || prevBenchmarkCount > 0) sendStats();
+      prevBenchmarkCount = count;
+    }, 1000);
+
     const keepAlive = setInterval(() => {
       try { res.write(": ping\n\n"); } catch { /* ignore */ }
     }, 30000);
 
     req.on("close", () => {
       ChangeStreamService.unsubscribe(onEvent);
+      clearInterval(benchmarkPoll);
       clearInterval(keepAlive);
     });
   } else {

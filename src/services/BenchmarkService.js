@@ -19,6 +19,9 @@ import logger from "../utils/logger.js";
 const BENCHMARKS_COL = "benchmarks";
 const RUNS_COL = "benchmark_runs";
 
+// In-memory counter: how many benchmark model calls are actively generating
+let activeGenerationCount = 0;
+
 // Providers that run on local GPU — must execute sequentially
 const LOCAL_PROVIDERS = new Set(["lm-studio", "vllm", "ollama", "llama-cpp"]);
 
@@ -271,6 +274,11 @@ const BenchmarkService = {
 
   getConversationModels,
 
+  /** Number of benchmark model calls currently in-flight. */
+  get activeGenerationCount() {
+    return activeGenerationCount;
+  },
+
   /**
    * Run a benchmark test against the specified models (or all available).
    * @param {Object}   benchmark   The benchmark definition document
@@ -344,7 +352,13 @@ const BenchmarkService = {
           if (onModelStart) {
             try { onModelStart(model); } catch { /* noop */ }
           }
-          const result = await runSingleModel(benchmark, model, project, username);
+          activeGenerationCount++;
+          let result;
+          try {
+            result = await runSingleModel(benchmark, model, project, username);
+          } finally {
+            activeGenerationCount = Math.max(0, activeGenerationCount - 1);
+          }
           if (onModelComplete) {
             try { onModelComplete(result); } catch { /* noop */ }
           }
