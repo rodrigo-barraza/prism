@@ -16,14 +16,15 @@ import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 
+// Providers that run on local GPU — grouped into a single sequential bucket
+const LOCAL_PROVIDERS = new Set(["lm-studio", "vllm", "ollama", "llama-cpp"]);
+
 const BENCHMARKS_COL = "benchmarks";
 const RUNS_COL = "benchmark_runs";
 
 // In-memory counter: how many benchmark model calls are actively generating
 let activeGenerationCount = 0;
 
-// Providers that run on local GPU — must execute sequentially
-const LOCAL_PROVIDERS = new Set(["lm-studio", "vllm", "ollama", "llama-cpp"]);
 
 // ============================================================
 // Match Modes — evaluate model response against expected value
@@ -342,7 +343,9 @@ const BenchmarkService = {
       `[benchmark] Executing across ${buckets.size} provider bucket(s): ${[...buckets.keys()].join(", ")}`,
     );
 
-    // Each bucket runs its models sequentially; all buckets run concurrently
+    // Each bucket runs its models sequentially; all buckets run concurrently.
+    // NOTE: The process-level GPU mutex lives in handleChat() (via LocalModelQueue),
+    // so concurrent benchmark runs and chat requests are globally serialized there.
     const bucketPromises = [...buckets.entries()].map(
       async ([_key, bucketModels]) => {
         const bucketResults = [];

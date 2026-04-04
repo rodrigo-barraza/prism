@@ -18,6 +18,7 @@ import RequestLogger from "../services/RequestLogger.js";
 import ConversationService from "../services/ConversationService.js";
 import FileService from "../services/FileService.js";
 import AgenticLoopService from "../services/AgenticLoopService.js";
+import localModelQueue from "../services/LocalModelQueue.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 
@@ -355,48 +356,21 @@ export async function handleChat(params, emit, { signal } = {}) {
     //  2. Standard text/multimodal → provider.generateTextStream() or generateText()
     const isImageAPIModel = modelDef?.imageAPI && provider.generateImage;
 
-    if (isImageAPIModel) {
-      await handleImageAPIModel({
-        provider,
-        providerName,
-        resolvedModel,
-        modelDef,
-        messages: providerMessages,
-        originalMessages: activeMessages,
-        options,
-        conversationId,
-        userMessage,
-        conversationMeta,
-        sessionId,
-        project,
-        username,
-        clientIp,
-        requestId,
-        requestStart,
-        emit,
-      });
-      return;
-    }
-
-    // ── Standard text/multimodal streaming ───────────────────────
-    if (!provider.generateTextStream && !provider.generateText) {
-      throw new ProviderError(
-        providerName,
-        `Provider "${providerName}" does not support text generation`,
-        400,
+    // ── Local GPU mutex: serialize local model requests ─────────
+    // Acquire the process-level lock if this is a local provider so
+    // concurrent chat + benchmark requests don't collide on the GPU.
+    let localRelease;
+    if (localModelQueue.isLocal(providerName)) {
+      localRelease = await localModelQueue.acquire();
+      logger.info(
+        `[chat] 🔒 Acquired local GPU lock for ${resolvedModel}` +
+        (localModelQueue.pending > 0 ? ` (${localModelQueue.pending} queued)` : ""),
       );
     }
 
-    // Prefer streaming; fall back to non-streaming.
-    // Models with streaming: false (e.g. Gemini image models) should use
-    // non-streaming generateText to get a clean single-response result.
-    const useStreaming =
-      provider.generateTextStream &&
-      modelDef?.streaming !== false;
-
-    if (useStreaming) {
-      if (options.functionCallingEnabled) {
-        await AgenticLoopService.runAgenticLoop({
+    try {
+      if (isImageAPIModel) {
+        await handleImageAPIModel({
           provider,
           providerName,
           resolvedModel,
@@ -414,10 +388,72 @@ export async function handleChat(params, emit, { signal } = {}) {
           requestId,
           requestStart,
           emit,
-          signal,
         });
+        return;
+      }
+
+      // ── Standard text/multimodal streaming ───────────────────────
+      if (!provider.generateTextStream && !provider.generateText) {
+        throw new ProviderError(
+          providerName,
+          `Provider "${providerName}" does not support text generation`,
+          400,
+        );
+      }
+
+      // Prefer streaming; fall back to non-streaming.
+      // Models with streaming: false (e.g. Gemini image models) should use
+      // non-streaming generateText to get a clean single-response result.
+      const useStreaming =
+        provider.generateTextStream &&
+        modelDef?.streaming !== false;
+
+      if (useStreaming) {
+        if (options.functionCallingEnabled) {
+          await AgenticLoopService.runAgenticLoop({
+            provider,
+            providerName,
+            resolvedModel,
+            modelDef,
+            messages: providerMessages,
+            originalMessages: activeMessages,
+            options,
+            conversationId,
+            userMessage,
+            conversationMeta,
+            sessionId,
+            project,
+            username,
+            clientIp,
+            requestId,
+            requestStart,
+            emit,
+            signal,
+          });
+        } else {
+          await handleStreamingText({
+            provider,
+            providerName,
+            resolvedModel,
+            modelDef,
+            messages: providerMessages,
+            originalMessages: activeMessages,
+            options,
+            conversationId,
+            userMessage,
+            conversationMeta,
+            sessionId,
+            project,
+            username,
+            clientIp,
+            requestId,
+            requestStart,
+            emit,
+            signal,
+          });
+        }
       } else {
-        await handleStreamingText({
+        await handleNonStreamingText({
           provider,
           providerName,
           resolvedModel,
@@ -435,29 +471,13 @@ export async function handleChat(params, emit, { signal } = {}) {
           requestId,
           requestStart,
           emit,
-          signal,
         });
       }
-    } else {
-      await handleNonStreamingText({
-        provider,
-        providerName,
-        resolvedModel,
-        modelDef,
-        messages: providerMessages,
-        originalMessages: activeMessages,
-        options,
-        conversationId,
-        userMessage,
-        conversationMeta,
-        sessionId,
-        project,
-        username,
-        clientIp,
-        requestId,
-        requestStart,
-        emit,
-      });
+    } finally {
+      if (localRelease) {
+        localRelease();
+        logger.info(`[chat] 🔓 Released local GPU lock for ${resolvedModel}`);
+      }
     }
   } catch (error) {
     // Clear generating flag on error
