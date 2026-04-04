@@ -31,6 +31,7 @@
 //   --out=<path>                Output JSON path (default: /tmp/vram-bench-<ts>.json)
 //   --settle=<ms>               GPU settle time after load (default: 3000)
 //   --sample=<ms>               GPU sample window duration (default: 5000)
+//   --backfill                  Backfill existing entries with system profile
 //
 // LM Studio Load Settings (tested per model):
 //   flash_attention       true/false — Q8_0 vs FP32 KV cache
@@ -42,6 +43,7 @@
 
 import { execSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { MongoClient } from "mongodb";
 import { resolveArchParams, estimateMemory } from "../src/utils/gguf-arch.js";
 import { MONGO_URI, MONGO_DB_NAME } from "../secrets.js";
@@ -70,11 +72,15 @@ const SKIP_EXISTING = hasFlag("skip-existing");
 const REWRITE = hasFlag("rewrite");
 const NO_DB = hasFlag("no-db");
 const JSON_ONLY = hasFlag("json-only");
+const BACKFILL = hasFlag("backfill");
 const OUT_PATH = getArg("out", `/tmp/vram-bench-${Date.now()}.json`);
 const SETTLE_MS = parseInt(getArg("settle", "3000"));
 const SAMPLE_MS = parseInt(getArg("sample", "5000"));
 
 const BENCH_COLLECTION = "vram_benchmarks";
+
+// Unique run ID — groups all entries from a single benchmark session
+const RUN_ID = randomUUID();
 
 // Prompt used for generation — short enough to keep focus on VRAM, not gen time
 const BENCH_PROMPT =
@@ -360,6 +366,106 @@ const PROVIDERS = {
   },
 };
 
+// ── System Profile ───────────────────────────────────────────
+// Collects hardware fingerprint for cross-machine comparisons.
+// Works across bare-metal Linux, WSL2, and native Windows.
+
+function collectSystemProfile() {
+  const profile = {
+    hostname: null,
+    os: null,
+    gpu: {},
+    cpu: {},
+    ram: {},
+    collectedAt: new Date().toISOString(),
+  };
+
+  // ── Hostname ────────────────────────────────────────────
+  try {
+    profile.hostname = execSync("hostname", { encoding: "utf-8", timeout: 3000 }).trim();
+  } catch { /* ignore */ }
+
+  // ── OS ──────────────────────────────────────────────────
+  try {
+    const release = execSync("cat /etc/os-release 2>/dev/null || echo ''", { encoding: "utf-8", timeout: 3000 }).trim();
+    const name = release.match(/^PRETTY_NAME="?(.+?)"?$/m)?.[1] || null;
+    const isWSL = release.includes("WSL") || execSync("uname -r", { encoding: "utf-8", timeout: 2000 }).includes("microsoft");
+    profile.os = {
+      name,
+      kernel: execSync("uname -r", { encoding: "utf-8", timeout: 2000 }).trim(),
+      platform: isWSL ? "wsl2" : "linux",
+    };
+  } catch { /* ignore */ }
+
+  // ── GPU (nvidia-smi) ───────────────────────────────────
+  try {
+    const raw = execSync(
+      "nvidia-smi --query-gpu=name,driver_version,memory.total,pci.bus_id,uuid --format=csv,noheader,nounits",
+      { encoding: "utf-8", timeout: 5000 },
+    ).trim();
+    const parts = raw.split(",").map((s) => s.trim());
+    profile.gpu = {
+      name: parts[0],
+      driver: parts[1],
+      totalMiB: parseInt(parts[2]),
+      pciBusId: parts[3],
+      uuid: parts[4],
+    };
+  } catch { /* ignore */ }
+
+  // ── CPU (lscpu) ────────────────────────────────────────
+  try {
+    const lscpu = execSync("lscpu", { encoding: "utf-8", timeout: 3000 });
+    const field = (key) => lscpu.match(new RegExp(`^${key}:\\s*(.+)$`, "m"))?.[1]?.trim() || null;
+    profile.cpu = {
+      model: field("Model name"),
+      cores: parseInt(field("Core\\(s\\) per socket") || "0"),
+      threads: parseInt(field("CPU\\(s\\)") || "0"),
+      sockets: parseInt(field("Socket\\(s\\)") || "1"),
+      bogoMIPS: parseFloat(field("BogoMIPS") || "0"),
+    };
+  } catch { /* ignore */ }
+
+  // ── RAM ─────────────────────────────────────────────────
+  try {
+    const meminfo = execSync("cat /proc/meminfo", { encoding: "utf-8", timeout: 2000 });
+    const totalKB = parseInt(meminfo.match(/MemTotal:\s*(\d+)/)?.[1] || "0");
+    profile.ram.totalMiB = Math.round(totalKB / 1024);
+    profile.ram.totalGiB = +(totalKB / 1024 / 1024).toFixed(1);
+  } catch { /* ignore */ }
+
+  // ── RAM speed + manufacturer (via PowerShell on WSL2, or dmidecode on bare metal)
+  try {
+    const psOutput = execSync(
+      "powershell.exe -NoProfile -Command 'Get-CimInstance Win32_PhysicalMemory | Select-Object Speed, ConfiguredClockSpeed, Capacity, Manufacturer | ConvertTo-Json' 2>/dev/null",
+      { encoding: "utf-8", timeout: 10000 },
+    ).trim();
+    const dimms = JSON.parse(psOutput);
+    const dimmList = Array.isArray(dimms) ? dimms : [dimms];
+    if (dimmList.length > 0) {
+      profile.ram.speedMHz = dimmList[0].ConfiguredClockSpeed || dimmList[0].Speed || null;
+      profile.ram.jedecSpeedMHz = dimmList[0].Speed || null;
+      profile.ram.manufacturer = dimmList[0].Manufacturer || null;
+      profile.ram.dimms = dimmList.length;
+      profile.ram.totalPhysicalGiB = +(dimmList.reduce((sum, d) => sum + (d.Capacity || 0), 0) / 1024 ** 3).toFixed(1);
+    }
+  } catch {
+    // Fallback: try dmidecode (bare-metal Linux)
+    try {
+      const dmi = execSync(
+        "sudo dmidecode -t memory 2>/dev/null | grep -E 'Speed|Size|Manufacturer' | head -12",
+        { encoding: "utf-8", timeout: 5000 },
+      );
+      const speed = dmi.match(/Configured Memory Speed:\s*(\d+)/)?.[1];
+      if (speed) profile.ram.speedMHz = parseInt(speed);
+      const mfg = dmi.match(/Manufacturer:\s*(.+)/)?.[1]?.trim();
+      if (mfg && mfg !== "Unknown") profile.ram.manufacturer = mfg;
+    } catch { /* ignore */ }
+  }
+
+  return profile;
+}
+
 // ── GPU Monitoring ───────────────────────────────────────────
 
 function queryGPU() {
@@ -465,19 +571,43 @@ function logKV(key, value, indent = 4) {
 // ── MongoDB Persistence ──────────────────────────────────────
 
 let _db = null;
+let _mongoClient = null;
 
 async function connectDB() {
   if (NO_DB || !MONGO_URI || !MONGO_DB_NAME) return null;
   try {
-    const client = new MongoClient(MONGO_URI);
-    await client.connect();
-    _db = client.db(MONGO_DB_NAME);
+    _mongoClient = new MongoClient(MONGO_URI);
+    await _mongoClient.connect();
+    _db = _mongoClient.db(MONGO_DB_NAME);
 
-    // Ensure indexes on the benchmark collection
+    // Drop the legacy unique index if it exists (we now allow multiple runs)
+    try {
+      await _db.collection(BENCH_COLLECTION).dropIndex(
+        "provider_1_model_1_contextLength_1_settings.label_1",
+      );
+      log(`${C.dim}    Dropped legacy unique index${C.reset}`);
+    } catch {
+      // Index doesn't exist — that's fine
+    }
+
+    // Create non-unique compound index for query performance
     await _db.collection(BENCH_COLLECTION).createIndex(
       { provider: 1, model: 1, contextLength: 1, "settings.label": 1 },
-      { unique: true },
+      { unique: false, name: "bench_lookup" },
     );
+
+    // Index on runId for grouping entries from the same session
+    await _db.collection(BENCH_COLLECTION).createIndex(
+      { runId: 1 },
+      { name: "bench_runId" },
+    );
+
+    // Index on system hostname for cross-machine queries
+    await _db.collection(BENCH_COLLECTION).createIndex(
+      { "system.hostname": 1 },
+      { name: "bench_hostname" },
+    );
+
     log(`${C.dim}    Connected to MongoDB (${MONGO_DB_NAME})${C.reset}`);
     return _db;
   } catch (err) {
@@ -498,35 +628,38 @@ async function existsInDB(provider, model, contextLength, settingsLabel) {
   return !!doc;
 }
 
-/** Upsert a benchmark result into MongoDB */
+/** Insert a new benchmark result into MongoDB (each run = new entry) */
 async function saveResult(entry) {
   if (!_db) return;
-  const filter = {
+  await _db.collection(BENCH_COLLECTION).insertOne({
+    ...entry,
     provider: PROVIDER,
-    model: entry.model,
-    contextLength: entry.contextLength,
-    "settings.label": entry.settings.label,
-  };
-  await _db.collection(BENCH_COLLECTION).updateOne(
-    filter,
-    {
-      $set: {
-        ...entry,
-        provider: PROVIDER,
-        updatedAt: new Date().toISOString(),
-      },
-      $setOnInsert: {
-        createdAt: new Date().toISOString(),
-      },
-    },
-    { upsert: true },
-  );
+    createdAt: new Date().toISOString(),
+  });
 }
 
 /** Load all existing results from MongoDB for this provider */
 async function _loadExistingResults() {
   if (!_db) return [];
   return _db.collection(BENCH_COLLECTION).find({ provider: PROVIDER }).toArray();
+}
+
+/**
+ * Backfill existing entries with system profile data.
+ * Updates any documents missing the `system` field.
+ */
+async function backfillSystemProfile(systemProfile) {
+  if (!_db) return 0;
+  const result = await _db.collection(BENCH_COLLECTION).updateMany(
+    { system: { $exists: false } },
+    {
+      $set: {
+        system: systemProfile,
+        backfilledAt: new Date().toISOString(),
+      },
+    },
+  );
+  return result.modifiedCount;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -548,9 +681,48 @@ async function main() {
   // ── Step 0: Connect to MongoDB ───────────────────────────
   await connectDB();
 
+  // ── Step 0.5: Collect System Profile ─────────────────────
+  logSection("System Profile");
+  const systemProfile = collectSystemProfile();
+
+  logKV("Hostname", `${C.bold}${systemProfile.hostname || "unknown"}${C.reset}`);
+  logKV("OS", `${systemProfile.os?.name || "unknown"} (${systemProfile.os?.platform || "?"})`);
+  logKV("Kernel", systemProfile.os?.kernel || "unknown");
+  logKV("CPU", `${C.bold}${systemProfile.cpu?.model || "unknown"}${C.reset}`);
+  logKV("Cores/Threads", `${systemProfile.cpu?.cores || "?"}C / ${systemProfile.cpu?.threads || "?"}T`);
+  logKV("GPU", `${C.bold}${systemProfile.gpu?.name || "unknown"}${C.reset}`);
+  logKV("GPU Driver", systemProfile.gpu?.driver || "unknown");
+  logKV("GPU VRAM", systemProfile.gpu?.totalMiB ? fmtMiB(systemProfile.gpu.totalMiB) : "unknown");
+  logKV("GPU UUID", `${C.dim}${systemProfile.gpu?.uuid || "unknown"}${C.reset}`);
+  logKV("RAM Total", systemProfile.ram?.totalPhysicalGiB
+    ? `${systemProfile.ram.totalPhysicalGiB} GiB (physical) / ${systemProfile.ram.totalGiB} GiB (visible to OS)`
+    : `${systemProfile.ram?.totalGiB || "?"} GiB`);
+  logKV("RAM Speed", systemProfile.ram?.speedMHz
+    ? `${systemProfile.ram.speedMHz} MHz (JEDEC: ${systemProfile.ram.jedecSpeedMHz || "?"})`
+    : "unknown");
+  logKV("RAM Mfg", systemProfile.ram?.manufacturer || "unknown");
+  logKV("RAM DIMMs", systemProfile.ram?.dimms ?? "unknown");
+  logKV("Run ID", `${C.dim}${RUN_ID}${C.reset}`);
+
+  // ── Handle --backfill mode ──────────────────────────────
+  if (BACKFILL) {
+    logSection("Backfilling Existing Entries");
+    if (_db) {
+      const backfilled = await backfillSystemProfile(systemProfile);
+      log(`    ${C.green}✓ Backfilled ${backfilled} entries with system profile${C.reset}`);
+    } else {
+      log(`    ${C.red}✗ MongoDB not connected — cannot backfill${C.reset}`);
+    }
+    // Close and exit if --backfill is the only action
+    if (!SINGLE_MODEL && !hasFlag("run")) {
+      if (_mongoClient) try { await _mongoClient.close(); } catch { /* ignore */ }
+      return;
+    }
+  }
+
   // ── Step 1: GPU Baseline ─────────────────────────────────
 
-  logSection("GPU Baseline (idle + 5× 4K displays)");
+  logSection("GPU Baseline (idle)");
 
   log(
     `${C.dim}    Unloading all models for baseline measurement…${C.reset}`,
@@ -571,7 +743,7 @@ async function main() {
   logKV("GPU", `${C.bold}${baselineGPU.name}${C.reset}`);
   logKV("Total VRAM", fmtMiB(totalVramMiB));
   logKV(
-    "Idle VRAM (5× 4K displays)",
+    "Baseline VRAM (pre-load)",
     `${C.yellow}${fmtMiB(baselineVramMiB)}${C.reset} (${fmtGiB(mibToGiB(baselineVramMiB))})`,
   );
   logKV(
@@ -720,6 +892,7 @@ async function main() {
     );
 
     const entry = {
+      runId: RUN_ID,
       model: model.key,
       displayName: model.displayName,
       architecture: model.architecture,
@@ -738,6 +911,9 @@ async function main() {
         eval_batch_size: settings.eval_batch_size,
         parallel: settings.parallel,
       },
+
+      // System profile (hardware fingerprint)
+      system: systemProfile,
 
       // Measurements (to be filled)
       baselineVramMiB,
@@ -1075,9 +1251,11 @@ async function main() {
   // ── Step 6: Write JSON Report ────────────────────────────
 
   const report = {
+    runId: RUN_ID,
     timestamp: new Date().toISOString(),
     durationMs: Date.now() - startTime,
     provider: PROVIDER,
+    system: systemProfile,
     gpu: {
       name: baselineGPU.name,
       totalMiB: totalVramMiB,
@@ -1087,7 +1265,7 @@ async function main() {
       availableMiB: availableForModelsMiB,
       availableGiB: +mibToGiB(availableForModelsMiB).toFixed(2),
       baselineNote:
-        "Includes 5× 4K display compositing overhead",
+        "Pre-load baseline VRAM (desktop compositor, displays, etc.)",
     },
     settings: {
       contextLengths: CONTEXT_LIST,
@@ -1123,12 +1301,20 @@ async function main() {
     log(`${C.green}${C.bold}  ✓ MongoDB:${C.reset} ${dbCount} total benchmark results for ${PROVIDER}`);
   }
 
+  // Backfill any remaining entries without system profile
+  if (_db) {
+    const backfilled = await backfillSystemProfile(systemProfile);
+    if (backfilled > 0) {
+      log(`${C.green}${C.bold}  ✓ Backfilled ${backfilled} older entries with system profile${C.reset}`);
+    }
+  }
+
   // Final cleanup
   await provider.unloadAll();
 
   // Close MongoDB
-  if (_db) {
-    try { await _db.client.close(); } catch { /* ignore */ }
+  if (_mongoClient) {
+    try { await _mongoClient.close(); } catch { /* ignore */ }
   }
 }
 
