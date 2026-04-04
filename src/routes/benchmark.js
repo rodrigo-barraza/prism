@@ -180,8 +180,19 @@ router.post("/:id/run", async (req, res) => {
       "X-Accel-Buffering": "no",
     });
 
+    // Abort controller — wired to client disconnect (Stop button)
+    const abortController = new AbortController();
+    let clientClosed = false;
+    req.on("close", () => {
+      clientClosed = true;
+      abortController.abort();
+    });
+
     const send = (type, data) => {
-      res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
+      if (clientClosed) return;
+      try {
+        res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
+      } catch { /* client already gone */ }
     };
 
     const { models: modelTargets } = req.body || {};
@@ -192,11 +203,13 @@ router.post("/:id/run", async (req, res) => {
       req.project,
       req.username,
       {
+        signal: abortController.signal,
         onModelStart: (model) => {
           send("model_start", {
             provider: model.provider,
             model: model.model,
             label: model.label,
+            isLocal: !!model.isLocal,
           });
         },
         onModelComplete: (result) => {
@@ -206,13 +219,15 @@ router.post("/:id/run", async (req, res) => {
     );
 
     send("run_complete", run);
-    res.end();
+    if (!clientClosed) res.end();
   } catch (error) {
     logger.error(`POST /benchmark/:id/run error: ${error.message}`);
     // If headers already sent as SSE, send error event
     if (res.headersSent) {
-      res.write(`data: ${JSON.stringify({ type: "error", message: error.message })}\n\n`);
-      res.end();
+      try {
+        res.write(`data: ${JSON.stringify({ type: "error", message: error.message })}\n\n`);
+        res.end();
+      } catch { /* client already gone */ }
     } else {
       res.status(500).json({ error: error.message });
     }

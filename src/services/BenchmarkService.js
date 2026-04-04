@@ -293,7 +293,7 @@ const BenchmarkService = {
     modelTargets,
     project,
     username,
-    { onModelStart, onModelComplete } = {},
+    { onModelStart, onModelComplete, signal } = {},
   ) {
     // Resolve target models
     let models;
@@ -346,14 +346,20 @@ const BenchmarkService = {
     // Each bucket runs its models sequentially; all buckets run concurrently.
     // NOTE: The process-level GPU mutex lives in handleChat() (via LocalModelQueue),
     // so concurrent benchmark runs and chat requests are globally serialized there.
+    let aborted = false;
     const bucketPromises = [...buckets.entries()].map(
       async ([_key, bucketModels]) => {
         const bucketResults = [];
         for (let i = 0; i < bucketModels.length; i++) {
+          // Check abort signal before each model
+          if (signal?.aborted || aborted) {
+            logger.info(`[benchmark] Aborting bucket — signal received`);
+            break;
+          }
           if (i > 0) await sleep(INTRA_PROVIDER_DELAY_MS);
           const model = bucketModels[i];
           if (onModelStart) {
-            try { onModelStart(model); } catch { /* noop */ }
+            try { onModelStart({ ...model, isLocal: LOCAL_PROVIDERS.has(model.provider) }); } catch { /* noop */ }
           }
           activeGenerationCount++;
           let result;
@@ -361,6 +367,15 @@ const BenchmarkService = {
             result = await runSingleModel(benchmark, model, project, username);
           } finally {
             activeGenerationCount = Math.max(0, activeGenerationCount - 1);
+          }
+          if (signal?.aborted || aborted) {
+            logger.info(`[benchmark] Aborting after model ${model.model} completed`);
+            // Still record this model's result even though we're stopping
+            if (onModelComplete) {
+              try { onModelComplete(result); } catch { /* noop */ }
+            }
+            bucketResults.push(result);
+            break;
           }
           if (onModelComplete) {
             try { onModelComplete(result); } catch { /* noop */ }
@@ -371,10 +386,16 @@ const BenchmarkService = {
       },
     );
 
+    // Listen for abort signal to propagate to all buckets
+    if (signal) {
+      signal.addEventListener("abort", () => { aborted = true; }, { once: true });
+    }
+
     const bucketOutputs = await Promise.all(bucketPromises);
     const results = bucketOutputs.flat();
 
     const completedAt = new Date().toISOString();
+    const wasAborted = signal?.aborted || aborted;
     const passed = results.filter((r) => r.passed).length;
     const failed = results.filter((r) => !r.passed && !r.error).length;
     const errored = results.filter((r) => r.error).length;
@@ -388,6 +409,7 @@ const BenchmarkService = {
       benchmarkId: benchmark.id,
       project,
       models: results,
+      aborted: wasAborted || false,
       summary: {
         total: results.length,
         passed,
@@ -399,14 +421,16 @@ const BenchmarkService = {
       completedAt,
     };
 
-    // Persist run
-    const db = getDb();
-    if (db) {
-      await db.collection(RUNS_COL).insertOne(run);
+    // Persist run (even partial / aborted runs)
+    if (results.length > 0) {
+      const db = getDb();
+      if (db) {
+        await db.collection(RUNS_COL).insertOne(run);
+      }
     }
 
     logger.success(
-      `[benchmark] Run ${runId} complete — ${passed}/${results.length} passed` +
+      `[benchmark] Run ${runId} ${wasAborted ? "ABORTED" : "complete"} — ${passed}/${results.length} passed` +
         (errored > 0 ? `, ${errored} error(s)` : ""),
     );
 
