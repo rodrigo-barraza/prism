@@ -311,7 +311,7 @@ const BenchmarkService = {
     modelTargets,
     project,
     username,
-    { onModelStart, onModelComplete, signal } = {},
+    { onRunStart, onModelStart, onModelComplete, signal } = {},
   ) {
     // Resolve target models
     let models;
@@ -331,6 +331,11 @@ const BenchmarkService = {
 
     if (models.length === 0) {
       throw new Error("No models available for benchmarking");
+    }
+
+    // Notify caller of total model count (used for live reconnection state)
+    if (onRunStart) {
+      try { onRunStart({ totalModels: models.length }); } catch { /* noop */ }
     }
 
     const runId = crypto.randomUUID();

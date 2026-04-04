@@ -412,6 +412,16 @@ const lmStudioProvider = {
           yield { type: "status", message: "Loading model… 100%" };
         }
       } catch (loadCheckErr) {
+        // If model load explicitly failed, re-throw so the generator exits
+        // cleanly. runSingleModel will catch it and record an error result,
+        // allowing the benchmark to continue to the next model.
+        // Only swallow errors from listModels/connectivity checks where
+        // the model might already be loaded.
+        if (loadCheckErr?.cause?.type === "model_load_failed" ||
+            loadCheckErr.message?.includes("Failed to load") ||
+            loadCheckErr.message?.includes("API error")) {
+          throw loadCheckErr;
+        }
         logger.warn(
           `Could not check/load model before streaming: ${loadCheckErr.message}`,
         );

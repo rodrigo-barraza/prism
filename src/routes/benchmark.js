@@ -1,4 +1,5 @@
 import express from "express";
+import { EventEmitter } from "node:events";
 import BenchmarkService from "../services/BenchmarkService.js";
 import logger from "../utils/logger.js";
 
@@ -7,6 +8,11 @@ const router = express.Router();
 // Process-level registry of in-flight benchmark runs → AbortControllers
 // Used by the explicit POST /benchmark/abort/:runId endpoint.
 const activeRuns = new Map();
+
+// Pub/sub for live benchmark progress — allows reconnecting clients
+// to receive events from an already-running benchmark.
+const runEmitters = new Map();   // benchmarkId → EventEmitter
+const runStates = new Map();     // benchmarkId → { completedResults, activeModel, startedAt }
 
 // ============================================================
 // GET /benchmark — List all benchmark tests for the caller's project
@@ -164,7 +170,6 @@ router.delete("/:id", async (req, res, next) => {
 // If models is omitted, all available conversation models are tested.
 //
 // Streams SSE events:
-//   run_start     { totalModels }
 //   model_start   { provider, model, label }
 //   model_complete { ...result }
 //   run_complete  { ...run }
@@ -192,11 +197,19 @@ router.post("/:id/run", async (req, res) => {
     const abortController = new AbortController();
     let clientClosed = false;
 
-    // Generate a unique runId early so we can register the controller
-    // The actual BenchmarkService will generate its own runId internally,
-    // but we use the benchmark ID as the registry key (one active run per benchmark).
     const registryKey = req.params.id;
     activeRuns.set(registryKey, abortController);
+
+    // Set up pub/sub emitter and state for live reconnection
+    const emitter = new EventEmitter();
+    emitter.setMaxListeners(20);
+    runEmitters.set(registryKey, emitter);
+    runStates.set(registryKey, {
+      completedResults: [],
+      activeModel: null,
+      totalModels: 0,
+      startedAt: new Date().toISOString(),
+    });
 
     // Keepalive: send SSE comment ping every 15s to prevent proxy/browser timeouts
     const keepalive = setInterval(() => {
@@ -210,6 +223,8 @@ router.post("/:id/run", async (req, res) => {
       clientClosed = true;
       clearInterval(keepalive);
       activeRuns.delete(registryKey);
+      runEmitters.delete(registryKey);
+      runStates.delete(registryKey);
     };
 
     req.on("close", () => {
@@ -233,26 +248,51 @@ router.post("/:id/run", async (req, res) => {
       req.username,
       {
         signal: abortController.signal,
+        onRunStart: (info) => {
+          // Store total model count for reconnecting clients
+          const state = runStates.get(registryKey);
+          if (state) state.totalModels = info.totalModels;
+          emitter.emit("event", { type: "run_info", totalModels: info.totalModels });
+          send("run_info", { totalModels: info.totalModels });
+        },
         onModelStart: (model) => {
-          send("model_start", {
+          const data = {
             provider: model.provider,
             model: model.model,
             label: model.label,
             isLocal: !!model.isLocal,
-          });
+          };
+          // Update live state for followers
+          const state = runStates.get(registryKey);
+          if (state) state.activeModel = data;
+          // Emit to followers
+          emitter.emit("event", { type: "model_start", ...data });
+          // Send to original connection
+          send("model_start", data);
         },
         onModelComplete: (result) => {
+          // Update live state for followers
+          const state = runStates.get(registryKey);
+          if (state) {
+            state.completedResults.push(result);
+            state.activeModel = null;
+          }
+          // Emit to followers
+          emitter.emit("event", { type: "model_complete", ...result });
+          // Send to original connection
           send("model_complete", result);
         },
       },
     );
+
+    // Emit run_complete to followers before cleanup
+    emitter.emit("event", { type: "run_complete", ...run });
 
     cleanup();
     send("run_complete", run);
     if (!clientClosed) res.end();
   } catch (error) {
     logger.error(`POST /benchmark/:id/run error: ${error.message}`);
-    // If headers already sent as SSE, send error event
     if (res.headersSent) {
       try {
         res.write(`data: ${JSON.stringify({ type: "error", message: error.message })}\n\n`);
@@ -267,8 +307,6 @@ router.post("/:id/run", async (req, res) => {
 // ============================================================
 // POST /benchmark/:id/abort — Explicitly cancel a running benchmark
 // ============================================================
-// Called by the frontend "Stop" button as a reliable alternative
-// to relying on TCP connection close detection (req.on('close')).
 
 router.post("/:id/abort", (req, res) => {
   const controller = activeRuns.get(req.params.id);
@@ -280,6 +318,85 @@ router.post("/:id/abort", (req, res) => {
   } else {
     res.json({ aborted: false, message: "No active run found for this benchmark" });
   }
+});
+
+// ============================================================
+// GET /benchmark/:id/active — Check if a benchmark has an active run
+// ============================================================
+// Returns the current live state (completed results, active model)
+// so reconnecting clients can catch up immediately.
+
+router.get("/:id/active", (req, res) => {
+  const state = runStates.get(req.params.id);
+  if (!state) {
+    return res.json({ active: false });
+  }
+  res.json({
+    active: true,
+    totalModels: state.totalModels,
+    completedResults: state.completedResults,
+    activeModel: state.activeModel,
+    startedAt: state.startedAt,
+  });
+});
+
+// ============================================================
+// GET /benchmark/:id/follow — Reconnect to an in-progress run (SSE)
+// ============================================================
+// Replays completed results, then streams live events from the
+// running benchmark. Allows clients that navigated away and
+// returned to see live progress without starting a new run.
+
+router.get("/:id/follow", (req, res) => {
+  const state = runStates.get(req.params.id);
+  const emitter = runEmitters.get(req.params.id);
+  if (!state || !emitter) {
+    return res.status(404).json({ error: "No active run for this benchmark" });
+  }
+
+  // Disable timeouts
+  req.setTimeout(0);
+  if (req.socket) req.socket.setTimeout(0);
+
+  // SSE headers
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+
+  // Send total model count first so the client knows the denominator
+  res.write(`data: ${JSON.stringify({ type: "run_info", totalModels: state.totalModels })}\n\n`);
+
+  // Replay completed results
+  for (const result of state.completedResults) {
+    res.write(`data: ${JSON.stringify({ type: "model_complete", ...result })}\n\n`);
+  }
+
+  // Send active model if one is currently running
+  if (state.activeModel) {
+    res.write(`data: ${JSON.stringify({ type: "model_start", ...state.activeModel })}\n\n`);
+  }
+
+  // Subscribe to live events going forward
+  const handler = (event) => {
+    try {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    } catch { /* follower disconnected */ }
+  };
+  emitter.on("event", handler);
+
+  // Keepalive
+  const keepalive = setInterval(() => {
+    try { res.write(":keepalive\n\n"); }
+    catch { /* gone */ }
+  }, 15_000);
+
+  req.on("close", () => {
+    emitter.off("event", handler);
+    clearInterval(keepalive);
+  });
 });
 
 // ============================================================
