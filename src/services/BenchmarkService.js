@@ -284,6 +284,7 @@ const BenchmarkService = {
     modelTargets,
     project,
     username,
+    { onModelStart, onModelComplete } = {},
   ) {
     // Resolve target models
     let models;
@@ -339,9 +340,15 @@ const BenchmarkService = {
         const bucketResults = [];
         for (let i = 0; i < bucketModels.length; i++) {
           if (i > 0) await sleep(INTRA_PROVIDER_DELAY_MS);
-          bucketResults.push(
-            await runSingleModel(benchmark, bucketModels[i], project, username),
-          );
+          const model = bucketModels[i];
+          if (onModelStart) {
+            try { onModelStart(model); } catch { /* noop */ }
+          }
+          const result = await runSingleModel(benchmark, model, project, username);
+          if (onModelComplete) {
+            try { onModelComplete(result); } catch { /* noop */ }
+          }
+          bucketResults.push(result);
         }
         return bucketResults;
       },

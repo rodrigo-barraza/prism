@@ -12,12 +12,21 @@ router.get("/", async (req, res, next) => {
   try {
     const benchmarks = await BenchmarkService.list(req.project);
 
-    // Attach latest run summary to each benchmark for the card view
+    // Attach latest run summary + cumulative cost across ALL runs
     const enriched = await Promise.all(
       benchmarks.map(async (b) => {
-        const latestRun = await BenchmarkService.getLatestRun(b.id, req.project);
+        const [latestRun, allRuns] = await Promise.all([
+          BenchmarkService.getLatestRun(b.id, req.project),
+          BenchmarkService.getRuns(b.id, req.project),
+        ]);
+        const cumulativeCost = allRuns.reduce(
+          (sum, r) => sum + (r.summary?.totalCost || 0),
+          0,
+        );
         return {
           ...b,
+          cumulativeCost,
+          runCount: allRuns.length,
           latestRun: latestRun
             ? { id: latestRun.id, summary: latestRun.summary, completedAt: latestRun.completedAt }
             : null,
@@ -144,18 +153,36 @@ router.delete("/:id", async (req, res, next) => {
 });
 
 // ============================================================
-// POST /benchmark/:id/run — Execute a benchmark against models
+// POST /benchmark/:id/run — Execute a benchmark against models (SSE)
 // ============================================================
 // Body (optional):
-//   { models: [{ provider: "openai", model: "gpt-5.4" }, ...], concurrency: 3 }
+//   { models: [{ provider: "openai", model: "gpt-5.4" }, ...] }
 // If models is omitted, all available conversation models are tested.
+//
+// Streams SSE events:
+//   run_start     { totalModels }
+//   model_start   { provider, model, label }
+//   model_complete { ...result }
+//   run_complete  { ...run }
 
-router.post("/:id/run", async (req, res, next) => {
+router.post("/:id/run", async (req, res) => {
   try {
     const benchmark = await BenchmarkService.getById(req.params.id, req.project);
     if (!benchmark) {
       return res.status(404).json({ error: "Benchmark not found" });
     }
+
+    // Set up SSE headers
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+
+    const send = (type, data) => {
+      res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
+    };
 
     const { models: modelTargets } = req.body || {};
 
@@ -164,12 +191,31 @@ router.post("/:id/run", async (req, res, next) => {
       modelTargets,
       req.project,
       req.username,
+      {
+        onModelStart: (model) => {
+          send("model_start", {
+            provider: model.provider,
+            model: model.model,
+            label: model.label,
+          });
+        },
+        onModelComplete: (result) => {
+          send("model_complete", result);
+        },
+      },
     );
 
-    res.json(run);
+    send("run_complete", run);
+    res.end();
   } catch (error) {
     logger.error(`POST /benchmark/:id/run error: ${error.message}`);
-    next(error);
+    // If headers already sent as SSE, send error event
+    if (res.headersSent) {
+      res.write(`data: ${JSON.stringify({ type: "error", message: error.message })}\n\n`);
+      res.end();
+    } else {
+      res.status(500).json({ error: error.message });
+    }
   }
 });
 
