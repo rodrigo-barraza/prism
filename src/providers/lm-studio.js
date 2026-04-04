@@ -362,13 +362,14 @@ const lmStudioProvider = {
           // Start load (non-blocking) and poll for progress
           let loadDone = false;
           let loadError = null;
-          const loadPromise = this.loadModel(model)
+          const loadPromise = this.loadModel(model, {}, options.signal)
             .then(() => {
               loadDone = true;
             })
             .catch((err) => {
               loadDone = true;
-              loadError = err;
+              // Don't treat AbortError as a load failure
+              if (err.name !== "AbortError") loadError = err;
             });
 
           const startTime = Date.now();
@@ -379,6 +380,10 @@ const lmStudioProvider = {
             await sleep(500);
             if (options.signal?.aborted) {
               logger.info(`[LM-Studio] Aborted during model load for ${model}`);
+              // Schedule background unload to free VRAM
+              this.unloadModelByKey(model).catch((e) =>
+                logger.warn(`[LM-Studio] Failed to unload ${model} after abort: ${e.message}`),
+              );
               return;
             }
             if (loadDone) break;
@@ -395,6 +400,14 @@ const lmStudioProvider = {
           }
 
           await loadPromise;
+          if (options.signal?.aborted) {
+            // Model finished loading but we're aborting — unload it
+            logger.info(`[LM-Studio] Model ${model} loaded but benchmark aborted — unloading`);
+            this.unloadModelByKey(model).catch((e) =>
+              logger.warn(`[LM-Studio] Failed to unload ${model} after abort: ${e.message}`),
+            );
+            return;
+          }
           if (loadError) throw loadError;
           yield { type: "status", message: "Loading model… 100%" };
         }
@@ -708,7 +721,7 @@ const lmStudioProvider = {
   /**
    * Load a model into LM Studio memory.
    */
-  async loadModel(model, options = {}) {
+  async loadModel(model, options = {}, signal) {
     const baseUrl = getBaseUrl();
     logger.provider("LM Studio", `loadModel model=${model}`);
     try {
@@ -721,6 +734,7 @@ const lmStudioProvider = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
+        ...(signal && { signal }),
       });
 
       if (!response.ok) {
@@ -730,8 +744,28 @@ const lmStudioProvider = {
 
       return response.json();
     } catch (error) {
+      if (error.name === "AbortError") throw error; // Let AbortError propagate
       if (error instanceof ProviderError) throw error;
       throw new ProviderError("lm-studio", error.message, 500, error);
+    }
+  },
+
+  /**
+   * Unload a model from LM Studio by its model key.
+   * Looks up the loaded instance ID and unloads it.
+   */
+  async unloadModelByKey(modelKey) {
+    try {
+      const { models } = await this.listModels();
+      for (const m of models || []) {
+        if (m.key !== modelKey) continue;
+        for (const inst of m.loaded_instances || []) {
+          logger.info(`[LM-Studio] Unloading ${inst.id} (cleanup after abort)`);
+          await this.unloadModel(inst.id);
+        }
+      }
+    } catch (err) {
+      logger.warn(`[LM-Studio] unloadModelByKey(${modelKey}) failed: ${err.message}`);
     }
   },
 
