@@ -11,7 +11,21 @@ const router = express.Router();
 router.get("/", async (req, res, next) => {
   try {
     const benchmarks = await BenchmarkService.list(req.project);
-    res.json({ benchmarks, count: benchmarks.length });
+
+    // Attach latest run summary to each benchmark for the card view
+    const enriched = await Promise.all(
+      benchmarks.map(async (b) => {
+        const latestRun = await BenchmarkService.getLatestRun(b.id, req.project);
+        return {
+          ...b,
+          latestRun: latestRun
+            ? { id: latestRun.id, summary: latestRun.summary, completedAt: latestRun.completedAt }
+            : null,
+        };
+      }),
+    );
+
+    res.json({ benchmarks: enriched, count: enriched.length });
   } catch (error) {
     logger.error(`GET /benchmark error: ${error.message}`);
     next(error);

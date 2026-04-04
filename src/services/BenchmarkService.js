@@ -155,12 +155,11 @@ async function runSingleModel(benchmark, model, project, username) {
         model: model.model,
         messages,
         temperature: benchmark.temperature ?? 0,
-        maxTokens: benchmark.maxTokens ?? 256,
+        maxTokens: benchmark.maxTokens ?? 2048,
         project,
         username,
         skipConversation: true,
         thinkingEnabled: false,
-        textOnly: true,
       },
       (event) => {
         events.push(event);
@@ -313,38 +312,52 @@ const BenchmarkService = {
       `[benchmark] Starting run ${runId} — "${benchmark.name}" against ${models.length} model(s)`,
     );
 
-    // ── Sequential execution with staggered delay ──────────────
-    // Run all models sequentially with a 1s delay between calls
-    // to avoid rate-limiting / contention issues.
-    const cloudModels = models.filter((m) => !LOCAL_PROVIDERS.has(m.provider));
-    const localModels = models.filter((m) => LOCAL_PROVIDERS.has(m.provider));
+    // ── Provider-bucketed concurrent execution ──────────────────
+    // Different providers run concurrently (parallel Promise.all).
+    // Models within the same provider run sequentially with a
+    // 100ms stagger to avoid rate-limiting.
+    // Local GPU providers share a single sequential bucket.
 
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const INTRA_PROVIDER_DELAY_MS = 100;
 
-    // Phase 1: Cloud models — sequential with 1s stagger
-    const cloudResults = [];
-    for (let i = 0; i < cloudModels.length; i++) {
-      if (i > 0) await sleep(1000);
-      cloudResults.push(
-        await runSingleModel(benchmark, cloudModels[i], project, username),
-      );
+    // Group models by provider; collapse all local providers into one bucket
+    const buckets = new Map();
+    for (const m of models) {
+      const key = LOCAL_PROVIDERS.has(m.provider) ? "__local__" : m.provider;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key).push(m);
     }
 
-    // Phase 2: Local models — sequential (shared GPU), 1s stagger
-    const localResults = [];
-    for (let i = 0; i < localModels.length; i++) {
-      if (i > 0) await sleep(1000);
-      localResults.push(
-        await runSingleModel(benchmark, localModels[i], project, username),
-      );
-    }
+    logger.info(
+      `[benchmark] Executing across ${buckets.size} provider bucket(s): ${[...buckets.keys()].join(", ")}`,
+    );
 
-    const results = [...cloudResults, ...localResults];
+    // Each bucket runs its models sequentially; all buckets run concurrently
+    const bucketPromises = [...buckets.entries()].map(
+      async ([_key, bucketModels]) => {
+        const bucketResults = [];
+        for (let i = 0; i < bucketModels.length; i++) {
+          if (i > 0) await sleep(INTRA_PROVIDER_DELAY_MS);
+          bucketResults.push(
+            await runSingleModel(benchmark, bucketModels[i], project, username),
+          );
+        }
+        return bucketResults;
+      },
+    );
+
+    const bucketOutputs = await Promise.all(bucketPromises);
+    const results = bucketOutputs.flat();
 
     const completedAt = new Date().toISOString();
     const passed = results.filter((r) => r.passed).length;
     const failed = results.filter((r) => !r.passed && !r.error).length;
     const errored = results.filter((r) => r.error).length;
+    const totalCost = results.reduce(
+      (sum, r) => sum + (r.estimatedCost || 0),
+      0,
+    );
 
     const run = {
       id: runId,
@@ -356,6 +369,7 @@ const BenchmarkService = {
         passed,
         failed,
         errored,
+        totalCost,
       },
       startedAt,
       completedAt,
