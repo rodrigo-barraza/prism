@@ -155,7 +155,7 @@ async function runSingleModel(benchmark, model, project, username) {
         model: model.model,
         messages,
         temperature: benchmark.temperature ?? 0,
-        maxTokens: benchmark.maxTokens ?? 2048,
+        maxTokens: Math.max(benchmark.maxTokens ?? 2048, 2048),
         project,
         username,
         skipConversation: true,

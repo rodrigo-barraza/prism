@@ -266,12 +266,9 @@ const googleProvider = {
         config.tools = [...(config.tools || []), ...customTools];
       }
 
-      // For models that output images, enable multimodal response
-      // (unless textOnly is set — e.g. benchmarks only need text)
-      if (!options.textOnly && modelDef?.outputTypes?.includes(TYPES.IMAGE)) {
-        // forceImageGeneration: consumers (e.g. Lupos) can request image-only
-        // output so the model is forced to generate an image instead of
-        // silently falling back to text.
+      // For models that output images, set responseModalities explicitly.
+      // These models REQUIRE ["TEXT", "IMAGE"] — ["TEXT"] alone returns 0 tokens.
+      if (modelDef?.outputTypes?.includes(TYPES.IMAGE)) {
         config.responseModalities = options.forceImageGeneration
           ? ["IMAGE"]
           : ["TEXT", "IMAGE"];
@@ -395,9 +392,9 @@ const googleProvider = {
 
       if (tools.length > 0) config.tools = tools;
 
-      // For models that output images, enable multimodal response
-      // (unless textOnly is set — e.g. benchmarks only need text)
-      if (!options.textOnly && modelDef?.outputTypes?.includes(TYPES.IMAGE)) {
+      // For models that output images, set responseModalities explicitly.
+      // These models REQUIRE ["TEXT", "IMAGE"] — ["TEXT"] alone returns 0 tokens.
+      if (modelDef?.outputTypes?.includes(TYPES.IMAGE)) {
         config.responseModalities = options.forceImageGeneration
           ? ["IMAGE"]
           : ["TEXT", "IMAGE"];
