@@ -150,6 +150,7 @@ async function runSingleModel(benchmark, model, project, username, { signal } = 
       usage: null,
       estimatedCost: null,
       error: "Aborted",
+      completedAt: new Date().toISOString(),
     };
   }
 
@@ -231,6 +232,7 @@ async function runSingleModel(benchmark, model, project, username, { signal } = 
         usage: null,
         estimatedCost: null,
         error: errorEvent.message,
+        completedAt: new Date().toISOString(),
       };
     }
 
@@ -261,6 +263,7 @@ async function runSingleModel(benchmark, model, project, username, { signal } = 
       usage: doneEvent.usage || null,
       estimatedCost: doneEvent.estimatedCost ?? null,
       error: null,
+      completedAt: new Date().toISOString(),
     };
   } catch (err) {
     const latency = (performance.now() - start) / 1000;
@@ -278,6 +281,7 @@ async function runSingleModel(benchmark, model, project, username, { signal } = 
       usage: null,
       estimatedCost: null,
       error: err.message,
+      completedAt: new Date().toISOString(),
     };
   }
 }
