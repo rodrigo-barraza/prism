@@ -83,6 +83,10 @@ function getConversationModels() {
     if (m.listed === false) continue;
     // Skip image-only output models (no text output)
     if (!m.outputTypes?.includes("text")) continue;
+    // Skip image API models (generate images, not text completions)
+    if (m.imageAPI) continue;
+    // Skip codex models (use completions endpoint, not chat)
+    if (m.codex) continue;
 
     results.push({
       provider: m.provider,
