@@ -87,13 +87,12 @@ router.post("/load-stream", async (req, res) => {
       .json({ error: true, message: "Missing 'model' in request body" });
   }
 
-  // Set up SSE
-  res.writeHead(200, {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    Connection: "keep-alive",
-    "X-Accel-Buffering": "no",
-  });
+  // Set up SSE — use setHeader pattern (not writeHead) to match /chat endpoint
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
 
   const send = (data) => {
     if (!res.writableEnded) {
@@ -106,26 +105,7 @@ router.post("/load-stream", async (req, res) => {
 
   try {
     const provider = getProvider("lm-studio");
-
     send({ type: "start", model });
-
-    // Enforce single model — unload anything currently loaded
-    try {
-      const { models } = await provider.listModels();
-      for (const m of models || []) {
-        for (const instance of m.loaded_instances || []) {
-          if (instance.id !== model) {
-            send({ type: "unloading", model: instance.id });
-            logger.info(`Auto-unloading ${instance.id} before loading ${model}`);
-            await provider.unloadModel(instance.id);
-          }
-        }
-      }
-    } catch (listErr) {
-      logger.warn(`Could not list models before loading: ${listErr.message}`);
-    }
-
-    if (aborted) return res.end();
 
     // Build load options
     const loadOptions = {};
@@ -133,9 +113,11 @@ router.post("/load-stream", async (req, res) => {
     if (flash_attention != null) loadOptions.flash_attention = flash_attention;
     if (offload_kv_cache_to_gpu != null) loadOptions.offload_kv_cache_to_gpu = offload_kv_cache_to_gpu;
 
+    if (aborted) return res.end();
+
     send({ type: "progress", progress: 0 });
 
-    // Fire load (blocking) in background, poll for progress
+    // Fire load in background, poll for synthetic progress
     let loadDone = false;
     let loadError = null;
     const loadPromise = provider.loadModel(model, loadOptions)
@@ -143,7 +125,7 @@ router.post("/load-stream", async (req, res) => {
       .catch((err) => { loadDone = true; loadError = err; });
 
     const startTime = Date.now();
-    const EXPECTED_LOAD_MS = 15_000; // asymptotic constant
+    const EXPECTED_LOAD_MS = 15_000;
     let lastPct = 0;
 
     while (!loadDone && !aborted) {
@@ -151,7 +133,6 @@ router.post("/load-stream", async (req, res) => {
       if (loadDone || aborted) break;
 
       const elapsed = Date.now() - startTime;
-      // Asymptotic progress: approaches 95% as time → ∞
       const pct = Math.min(0.95, elapsed / (elapsed + EXPECTED_LOAD_MS));
       if (pct > lastPct + 0.005) {
         lastPct = pct;
@@ -164,16 +145,18 @@ router.post("/load-stream", async (req, res) => {
     if (aborted) return res.end();
 
     if (loadError) {
+      logger.error(`[load-stream] loadModel failed: ${loadError.message}`);
       send({ type: "error", message: loadError.message });
     } else {
       send({ type: "progress", progress: 1 });
       send({ type: "complete" });
+      logger.info(`[load-stream] Model ${model} loaded successfully`);
     }
   } catch (error) {
     logger.error(`POST /lm-studio/load-stream error: ${error.message}`);
     send({ type: "error", message: error.message });
   } finally {
-    res.end();
+    if (!res.writableEnded) res.end();
   }
 });
 
