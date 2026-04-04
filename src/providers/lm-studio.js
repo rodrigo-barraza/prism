@@ -339,12 +339,15 @@ const lmStudioProvider = {
     try {
       // Auto-load the model if not currently loaded
       try {
+        if (options.signal?.aborted) return;
         const { models } = await this.listModels();
+        if (options.signal?.aborted) return;
         const modelEntry = (models || []).find((m) => m.key === model);
         const isLoaded = modelEntry?.loaded_instances?.length > 0;
         if (!isLoaded) {
           // Unload any other loaded models first (single-model enforcement)
           for (const m of models || []) {
+            if (options.signal?.aborted) return;
             for (const inst of m.loaded_instances || []) {
               yield { type: "status", message: "Unloading previous model…" };
               logger.info(`Auto-unloading ${inst.id} before loading ${model}`);
@@ -352,6 +355,7 @@ const lmStudioProvider = {
             }
           }
 
+          if (options.signal?.aborted) return;
           logger.info(`Auto-loading model ${model} for streaming`);
           yield { type: "status", message: "Loading model… 0%" };
 
@@ -373,6 +377,10 @@ const lmStudioProvider = {
 
           while (!loadDone) {
             await sleep(500);
+            if (options.signal?.aborted) {
+              logger.info(`[LM-Studio] Aborted during model load for ${model}`);
+              return;
+            }
             if (loadDone) break;
 
             const elapsed = Date.now() - startTime;
@@ -395,6 +403,8 @@ const lmStudioProvider = {
           `Could not check/load model before streaming: ${loadCheckErr.message}`,
         );
       }
+
+      if (options.signal?.aborted) return;
 
       const prepared = prepareMessages(messages);
 

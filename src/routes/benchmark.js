@@ -4,6 +4,10 @@ import logger from "../utils/logger.js";
 
 const router = express.Router();
 
+// Process-level registry of in-flight benchmark runs → AbortControllers
+// Used by the explicit POST /benchmark/abort/:runId endpoint.
+const activeRuns = new Map();
+
 // ============================================================
 // GET /benchmark — List all benchmark tests for the caller's project
 // ============================================================
@@ -172,6 +176,10 @@ router.post("/:id/run", async (req, res) => {
       return res.status(404).json({ error: "Benchmark not found" });
     }
 
+    // Disable Node's default socket/request timeout for long-running SSE streams
+    req.setTimeout(0);
+    if (req.socket) req.socket.setTimeout(0);
+
     // Set up SSE headers
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
@@ -180,11 +188,32 @@ router.post("/:id/run", async (req, res) => {
       "X-Accel-Buffering": "no",
     });
 
-    // Abort controller — wired to client disconnect (Stop button)
+    // Abort controller — wired to client disconnect AND explicit abort endpoint
     const abortController = new AbortController();
     let clientClosed = false;
-    req.on("close", () => {
+
+    // Generate a unique runId early so we can register the controller
+    // The actual BenchmarkService will generate its own runId internally,
+    // but we use the benchmark ID as the registry key (one active run per benchmark).
+    const registryKey = req.params.id;
+    activeRuns.set(registryKey, abortController);
+
+    // Keepalive: send SSE comment ping every 15s to prevent proxy/browser timeouts
+    const keepalive = setInterval(() => {
+      if (clientClosed) return;
+      try {
+        res.write(":keepalive\n\n");
+      } catch { /* client already gone */ }
+    }, 15_000);
+
+    const cleanup = () => {
       clientClosed = true;
+      clearInterval(keepalive);
+      activeRuns.delete(registryKey);
+    };
+
+    req.on("close", () => {
+      cleanup();
       abortController.abort();
     });
 
@@ -218,6 +247,7 @@ router.post("/:id/run", async (req, res) => {
       },
     );
 
+    cleanup();
     send("run_complete", run);
     if (!clientClosed) res.end();
   } catch (error) {
@@ -231,6 +261,24 @@ router.post("/:id/run", async (req, res) => {
     } else {
       res.status(500).json({ error: error.message });
     }
+  }
+});
+
+// ============================================================
+// POST /benchmark/:id/abort — Explicitly cancel a running benchmark
+// ============================================================
+// Called by the frontend "Stop" button as a reliable alternative
+// to relying on TCP connection close detection (req.on('close')).
+
+router.post("/:id/abort", (req, res) => {
+  const controller = activeRuns.get(req.params.id);
+  if (controller) {
+    logger.info(`[benchmark] Explicit abort requested for benchmark ${req.params.id}`);
+    controller.abort();
+    activeRuns.delete(req.params.id);
+    res.json({ aborted: true });
+  } else {
+    res.json({ aborted: false, message: "No active run found for this benchmark" });
   }
 });
 

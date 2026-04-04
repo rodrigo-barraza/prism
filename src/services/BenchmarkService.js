@@ -135,7 +135,24 @@ function getDb() {
 // Run a single model against a benchmark prompt
 // ============================================================
 
-async function runSingleModel(benchmark, model, project, username) {
+async function runSingleModel(benchmark, model, project, username, { signal } = {}) {
+  // Bail immediately if already aborted
+  if (signal?.aborted) {
+    logger.info(`[benchmark] ⏭ Skipping ${model.provider}/${model.model} — already aborted`);
+    return {
+      provider: model.provider,
+      model: model.model,
+      label: model.label,
+      response: null,
+      passed: false,
+      matchMode: benchmark.matchMode || MATCH_MODES.CONTAINS,
+      latency: 0,
+      usage: null,
+      estimatedCost: null,
+      error: "Aborted",
+    };
+  }
+
   const start = performance.now();
 
   const messages = [];
@@ -186,6 +203,7 @@ async function runSingleModel(benchmark, model, project, username) {
           );
         }
       },
+      { signal },
     );
 
     const latency = (performance.now() - start) / 1000;
@@ -364,7 +382,7 @@ const BenchmarkService = {
           activeGenerationCount++;
           let result;
           try {
-            result = await runSingleModel(benchmark, model, project, username);
+            result = await runSingleModel(benchmark, model, project, username, { signal });
           } finally {
             activeGenerationCount = Math.max(0, activeGenerationCount - 1);
           }
