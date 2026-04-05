@@ -124,12 +124,15 @@ export function expandMessagesForFC(messages, { filterDeleted = true } = {}) {
       ];
     }
 
-    // Standard message — include images if present
+    // Standard message — include all media fields (images, video, audio, pdf)
     return [
       {
         role: m.role,
         ...(m.content?.trim() ? { content: m.content } : { content: " " }),
         ...(m.images?.length > 0 ? { images: m.images } : {}),
+        ...(m.video?.length > 0 ? { video: m.video } : {}),
+        ...(m.audio?.length > 0 ? { audio: m.audio } : {}),
+        ...(m.pdf?.length > 0 ? { pdf: m.pdf } : {}),
       },
     ];
   });
