@@ -299,6 +299,7 @@ export default class AgenticLoopService {
           provider: providerName,
           model: resolvedModel,
           conversationId,
+          sessionId: ctx.sessionId || null,
           success: true,
           usage: passUsage,
           estimatedCost: passEstimatedCost,

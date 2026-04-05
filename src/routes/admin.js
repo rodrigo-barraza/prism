@@ -2342,23 +2342,26 @@ router.get("/sessions", async (req, res, next) => {
           ],
         },
       },
-      // Look up requests for token/model/request aggregation
+      // Look up requests by sessionId (works for all projects, including
+      // those using skipConversation like Lupos where conversationId is null)
       {
         $lookup: {
           from: "requests",
-          localField: "conversationIds",
-          foreignField: "conversationId",
+          localField: "id",
+          foreignField: "sessionId",
           as: "_requests",
           pipeline: [
             {
               $project: {
                 requestId: 1,
                 conversationId: 1,
+                sessionId: 1,
                 inputTokens: 1,
                 outputTokens: 1,
                 model: 1,
                 provider: 1,
                 project: 1,
+                username: 1,
                 endpoint: 1,
                 estimatedCost: 1,
                 success: 1,
@@ -2491,15 +2494,38 @@ router.get("/sessions", async (req, res, next) => {
         $addFields: {
           conversationCount: { $size: "$conversations" },
           totalCost: {
-            $reduce: {
-              input: "$conversations",
-              initialValue: 0,
-              in: { $add: ["$$value", { $ifNull: ["$$this.totalCost", 0] }] },
-            },
+            $cond: [
+              { $gt: [{ $size: "$conversations" }, 0] },
+              {
+                $reduce: {
+                  input: "$conversations",
+                  initialValue: 0,
+                  in: { $add: ["$$value", { $ifNull: ["$$this.totalCost", 0] }] },
+                },
+              },
+              {
+                $reduce: {
+                  input: "$_requests",
+                  initialValue: 0,
+                  in: { $add: ["$$value", { $ifNull: ["$$this.estimatedCost", 0] }] },
+                },
+              },
+            ],
           },
-          // Derive session-level project and username from first conversation
-          project: { $arrayElemAt: ["$conversations.project", 0] },
-          username: { $arrayElemAt: ["$conversations.username", 0] },
+          // Derive session-level project and username — prefer conversations,
+          // fall back to first request (for skipConversation callers like Lupos)
+          project: {
+            $ifNull: [
+              { $arrayElemAt: ["$conversations.project", 0] },
+              { $arrayElemAt: ["$_requests.project", 0] },
+            ],
+          },
+          username: {
+            $ifNull: [
+              { $arrayElemAt: ["$conversations.username", 0] },
+              { $arrayElemAt: ["$_requests.username", 0] },
+            ],
+          },
           source: { $arrayElemAt: ["$conversations.source", 0] },
           // Aggregate stats from requests
           requestCount: { $size: "$_requests" },
@@ -2532,32 +2558,46 @@ router.get("/sessions", async (req, res, next) => {
               },
             },
           },
-          // Roll up providers from conversations
+          // Roll up providers — from conversations when available,
+          // otherwise derive from requests
           providers: {
-            $setUnion: {
-              $reduce: {
-                input: "$conversations",
-                initialValue: [],
-                in: {
-                  $concatArrays: [
-                    "$$value",
-                    {
-                      $cond: [
-                        { $isArray: "$$this.providers" },
-                        "$$this.providers",
+            $cond: [
+              { $gt: [{ $size: "$conversations" }, 0] },
+              {
+                $setUnion: {
+                  $reduce: {
+                    input: "$conversations",
+                    initialValue: [],
+                    in: {
+                      $concatArrays: [
+                        "$$value",
                         {
                           $cond: [
-                            { $ne: ["$$this.providers", null] },
-                            ["$$this.providers"],
-                            [],
+                            { $isArray: "$$this.providers" },
+                            "$$this.providers",
+                            {
+                              $cond: [
+                                { $ne: ["$$this.providers", null] },
+                                ["$$this.providers"],
+                                [],
+                              ],
+                            },
                           ],
                         },
                       ],
                     },
-                  ],
+                  },
                 },
               },
-            },
+              {
+                $setUnion: {
+                  $filter: {
+                    input: "$_requests.provider",
+                    cond: { $ne: ["$$this", null] },
+                  },
+                },
+              },
+            ],
           },
           // Roll up unique tool names from requests
           toolNames: {

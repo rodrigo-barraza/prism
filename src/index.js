@@ -139,6 +139,7 @@ setupWebSocket(wss);
       await Promise.all([
         // requests — used by $lookup from conversations and session joins
         db.collection("requests").createIndex({ conversationId: 1 }),
+        db.collection("requests").createIndex({ sessionId: 1 }),
         db.collection("requests").createIndex({ timestamp: -1 }),
         db.collection("requests").createIndex({ project: 1, timestamp: -1 }),
         // conversations — used by findOne lookups and list queries

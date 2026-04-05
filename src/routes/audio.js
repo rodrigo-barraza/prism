@@ -65,10 +65,10 @@ export async function handleVoice(params, emitBinary, emitJSON) {
   }
 
   // ── Session: create or reuse ────────────────────────────────
-  // Sessions group conversations — skip creation when skipConversation
-  // is set, since there will be no conversation to link.
+  // Sessions group requests across a single interaction cycle,
+  // even when skipConversation is set.
   let sessionId = incomingSessionId || null;
-  if (!skipConversation && !sessionId && incomingCreateSession) {
+  if (!sessionId && incomingCreateSession) {
     sessionId = crypto.randomUUID();
     try {
       const sessionDb = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
@@ -170,6 +170,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
       provider: providerName,
       model: model || null,
       conversationId: conversationId || null,
+      sessionId: sessionId || null,
       success: true,
       inputCharacters: text.length,
       totalTime: parseFloat(totalSec.toFixed(3)),
@@ -281,6 +282,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
       clientIp,
       provider: providerName,
       model: model || null,
+      sessionId: sessionId || null,
       success: false,
       errorMessage: error.message,
       totalTime: totalSec,
@@ -371,10 +373,10 @@ router.post("/", async (req, res, next) => {
   }
 
   // ── Session: create or reuse ────────────────────────────────
-  // Sessions group conversations — skip creation when skipConversation
-  // is set, since there will be no conversation to link.
+  // Sessions group requests across a single interaction cycle,
+  // even when skipConversation is set.
   let sessionId = incomingSessionId || null;
-  if (!skipConversation && !sessionId && incomingCreateSession) {
+  if (!sessionId && incomingCreateSession) {
     sessionId = crypto.randomUUID();
     try {
       const sessionDb = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
@@ -484,6 +486,7 @@ router.post("/", async (req, res, next) => {
       provider: providerName,
       model: model || null,
       conversationId,
+      sessionId: sessionId || null,
       success: true,
       inputTokens: result.usage?.inputTokens || 0,
       outputTokens: result.usage?.outputTokens || 0,
@@ -604,6 +607,7 @@ router.post("/", async (req, res, next) => {
       provider: providerName,
       model: model || null,
       conversationId,
+      sessionId: sessionId || null,
       success: false,
       errorMessage: error.message,
       totalTime: totalSec,

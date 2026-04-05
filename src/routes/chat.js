@@ -243,10 +243,10 @@ export async function handleChat(params, emit, { signal } = {}) {
   // Pass createSession: true on the first call → Prism creates a
   // minimal session doc and returns the sessionId.
   // Subsequent calls pass the returned sessionId to join the session.
-  // Sessions group conversations — skip creation when skipConversation
-  // is set, since there will be no conversation to link.
+  // Sessions group requests across a single interaction cycle (e.g.
+  // a Discord message in Lupos), even when skipConversation is set.
   let sessionId = incomingSessionId || null;
-  if (!skipConversation && !sessionId && incomingCreateSession) {
+  if (!sessionId && incomingCreateSession) {
     sessionId = crypto.randomUUID();
     try {
       const sessionDb = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
@@ -528,6 +528,7 @@ export async function handleChat(params, emit, { signal } = {}) {
       clientIp,
       provider: providerName,
       model: resolvedModel,
+      sessionId: sessionId || null,
       success: false,
       errorMessage: error.message,
       messageCount: messages ? messages.length : 0,
@@ -644,6 +645,7 @@ async function handleImageAPIModel(ctx) {
     provider: providerName,
     model: resolvedModel,
     conversationId: conversationId || null,
+    sessionId: sessionId || null,
     success: true,
     inputTokens: estimatedInputTokens,
     outputTokens: outputImgTokens,
@@ -921,6 +923,7 @@ export async function finalizeTextGeneration(
       provider: providerName,
       model: resolvedModel,
       conversationId: conversationId || null,
+      sessionId: sessionId || null,
       success: true,
       usage,
       estimatedCost,
