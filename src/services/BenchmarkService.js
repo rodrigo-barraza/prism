@@ -73,6 +73,40 @@ function evaluate(response, expected, matchMode = MATCH_MODES.CONTAINS) {
   }
 }
 
+/**
+ * Evaluate a response against multiple assertions using AND/OR logic.
+ * Falls back to single evaluate() for legacy benchmarks without assertions.
+ *
+ * @param {string} response          The raw model output
+ * @param {Object} benchmark         The benchmark definition
+ * @param {Array}  benchmark.assertions       Array of { expectedValue, matchMode }
+ * @param {string} benchmark.assertionOperator "AND" or "OR"
+ * @param {string} benchmark.expectedValue     Legacy single expected value
+ * @param {string} benchmark.matchMode         Legacy single match mode
+ * @returns {boolean}
+ */
+function evaluateAssertions(response, benchmark) {
+  const assertions = benchmark.assertions;
+  if (!assertions || assertions.length === 0) {
+    // Legacy: fall back to single expectedValue/matchMode
+    return evaluate(response, benchmark.expectedValue, benchmark.matchMode || MATCH_MODES.CONTAINS);
+  }
+
+  const operator = benchmark.assertionOperator || "AND";
+
+  if (operator === "OR") {
+    // Disjunction: ANY assertion must pass
+    return assertions.some((a) =>
+      evaluate(response, a.expectedValue, a.matchMode || MATCH_MODES.CONTAINS),
+    );
+  }
+
+  // Conjunction (AND): ALL assertions must pass
+  return assertions.every((a) =>
+    evaluate(response, a.expectedValue, a.matchMode || MATCH_MODES.CONTAINS),
+  );
+}
+
 // ============================================================
 // Model Discovery — list available conversation models
 // ============================================================
@@ -251,7 +285,7 @@ async function runSingleModel(benchmark, model, project, username, { signal } = 
 
     const doneEvent = events.find((e) => e.type === "done") || {};
     const matchMode = benchmark.matchMode || MATCH_MODES.CONTAINS;
-    const passed = evaluate(text, benchmark.expectedValue, matchMode);
+    const passed = evaluateAssertions(text, benchmark);
 
     return {
       provider: model.provider,
@@ -480,6 +514,8 @@ const BenchmarkService = {
       systemPrompt: data.systemPrompt || null,
       expectedValue: data.expectedValue,
       matchMode: data.matchMode || MATCH_MODES.CONTAINS,
+      assertions: data.assertions || [],
+      assertionOperator: data.assertionOperator || "AND",
       temperature: data.temperature ?? 0,
       maxTokens: data.maxTokens ?? 256,
       tags: data.tags || [],

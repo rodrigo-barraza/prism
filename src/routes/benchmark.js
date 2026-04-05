@@ -77,7 +77,7 @@ router.get("/active-list", (_req, res) => {
 
 router.post("/", async (req, res, next) => {
   try {
-    const { name, prompt, systemPrompt, expectedValue, matchMode, temperature, maxTokens, tags } =
+    const { name, prompt, systemPrompt, expectedValue, matchMode, temperature, maxTokens, tags, assertions, assertionOperator } =
       req.body;
 
     if (!name || !prompt || !expectedValue) {
@@ -87,14 +87,33 @@ router.post("/", async (req, res, next) => {
     }
 
     const validModes = Object.values(BenchmarkService.MATCH_MODES);
+
+    // Validate top-level matchMode (backward compat)
     if (matchMode && !validModes.includes(matchMode)) {
       return res.status(400).json({
         error: `Invalid matchMode. Must be one of: ${validModes.join(", ")}`,
       });
     }
 
+    // Validate assertions array if provided
+    if (assertions && Array.isArray(assertions)) {
+      for (const a of assertions) {
+        if (a.matchMode && !validModes.includes(a.matchMode)) {
+          return res.status(400).json({
+            error: `Invalid matchMode in assertion. Must be one of: ${validModes.join(", ")}`,
+          });
+        }
+      }
+    }
+
+    if (assertionOperator && !["AND", "OR"].includes(assertionOperator)) {
+      return res.status(400).json({
+        error: "Invalid assertionOperator. Must be AND or OR.",
+      });
+    }
+
     const benchmark = await BenchmarkService.create(
-      { name, prompt, systemPrompt, expectedValue, matchMode, temperature, maxTokens, tags },
+      { name, prompt, systemPrompt, expectedValue, matchMode, temperature, maxTokens, tags, assertions, assertionOperator },
       req.project,
       req.username,
     );
@@ -105,6 +124,7 @@ router.post("/", async (req, res, next) => {
     next(error);
   }
 });
+
 
 // ============================================================
 // GET /benchmark/:id — Get a single benchmark test + latest run
