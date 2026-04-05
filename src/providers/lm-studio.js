@@ -100,6 +100,7 @@ async function* parseNativeSSEStream(reader, options = {}) {
               name: json.tool_name || "unknown",
               args: {},
               status: "calling",
+              native: true, // MCP-executed, skip agentic loop re-execution
             };
           } else if (type === "tool_call.arguments") {
             // Arguments arrive as a parsed object, not a streamed string
@@ -121,6 +122,7 @@ async function* parseNativeSSEStream(reader, options = {}) {
               args: typeof args === "object" ? args : safeParseJSON(args),
               result: json.output ? safeParseJSON(json.output) : json.output,
               status: "done",
+              native: true,
             };
             currentToolCall = null;
           } else if (type === "tool_call.failure") {
@@ -131,6 +133,7 @@ async function* parseNativeSSEStream(reader, options = {}) {
               args: currentToolCall?.arguments || {},
               result: { error: json.reason || "Tool call failed" },
               status: "error",
+              native: true,
             };
             currentToolCall = null;
           }

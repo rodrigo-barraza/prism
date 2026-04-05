@@ -85,9 +85,9 @@ export default class AgenticLoopService {
       finalTools = finalTools.filter((t) => enabledSet.has(t.name));
     }
 
-    // If the model is local (e.g. LM Studio / Ollama), we only feed it tools for the first pass
+    // If the model is local (e.g. LM Studio / vLLM / Ollama), we only feed it tools for the first pass
     // to force an eventual text response and avoid infinite loops.
-    const isLocalProvider = providerName === "lm-studio" || providerName === "ollama";
+    const isLocalProvider = providerName === "lm-studio" || providerName === "vllm" || providerName === "ollama";
     let hasCalledTools = false;
 
     let iterations = 0;
@@ -167,6 +167,40 @@ export default class AgenticLoopService {
           }
 
           if (chunk && typeof chunk === "object" && chunk.type === "toolCall") {
+            // Native MCP tool calls (e.g. LM Studio): already executed by provider,
+            // pass through directly as toolCall events — do NOT re-execute.
+            if (chunk.native) {
+              // Track for finalization but don't add to pending execution queue
+              if (chunk.status === "calling") {
+                streamedToolCalls.push({
+                  id: chunk.id || null,
+                  name: chunk.name,
+                  args: chunk.args || {},
+                });
+              } else if (chunk.status === "done" || chunk.status === "error") {
+                // Update existing entry with result
+                const existing = streamedToolCalls.find(
+                  (tc) => (chunk.id && tc.id === chunk.id) || (!chunk.id && tc.name === chunk.name),
+                );
+                if (existing) {
+                  existing.result = chunk.result;
+                  existing.status = chunk.status;
+                  if (chunk.args && Object.keys(chunk.args).length > 0) {
+                    existing.args = chunk.args;
+                  }
+                }
+              }
+              emit({
+                type: "toolCall",
+                id: chunk.id || null,
+                name: chunk.name,
+                args: chunk.args || {},
+                result: chunk.result || undefined,
+                status: chunk.status || "calling",
+              });
+              continue;
+            }
+
             passPendingToolCalls.push({
               id: chunk.id || null,
               name: chunk.name,

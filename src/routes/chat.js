@@ -1207,14 +1207,31 @@ async function handleStreamingText(ctx) {
     }
     // Tool call chunks (custom function calling or MCP native tool events)
     if (chunk && typeof chunk === "object" && chunk.type === "toolCall") {
-      streamedToolCalls.push({
-        id: chunk.id || null,
-        name: chunk.name,
-        args: chunk.args || {},
-        result: chunk.result || undefined,
-        status: chunk.status || undefined,
-        thoughtSignature: chunk.thoughtSignature || undefined,
-      });
+      if (chunk.status === "done" || chunk.status === "error") {
+        // Update existing entry with result (don't create a new one)
+        const existing = streamedToolCalls.find(
+          (tc) =>
+            (chunk.id && tc.id === chunk.id) ||
+            (!chunk.id && tc.name === chunk.name && !tc.result),
+        );
+        if (existing) {
+          existing.result = chunk.result || undefined;
+          existing.status = chunk.status;
+          if (chunk.args && Object.keys(chunk.args).length > 0) {
+            existing.args = chunk.args;
+          }
+        }
+      } else {
+        // New tool call (status: "calling")
+        streamedToolCalls.push({
+          id: chunk.id || null,
+          name: chunk.name,
+          args: chunk.args || {},
+          result: chunk.result || undefined,
+          status: chunk.status || undefined,
+          thoughtSignature: chunk.thoughtSignature || undefined,
+        });
+      }
       emit({
         type: "toolCall",
         id: chunk.id || null,
