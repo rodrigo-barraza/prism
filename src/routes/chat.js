@@ -304,9 +304,11 @@ export async function handleChat(params, emit, { signal } = {}) {
     delete options.thinkingBudget;
   }
 
-  // LM Studio models emit thinking tokens by default. Force thinkingEnabled
-  // ON unless the user explicitly toggled it OFF via the UI.
-  if (providerName === "lm-studio" && thinkingEnabled !== false) {
+  // LM Studio models emit thinking tokens by default. Default thinkingEnabled
+  // ON only when the client didn't send a value (undefined). When the client
+  // explicitly sends false (thinking toggle off), respect it — models can
+  // use tools without thinking.
+  if (providerName === "lm-studio" && thinkingEnabled === undefined) {
     options.thinkingEnabled = true;
   }
 
