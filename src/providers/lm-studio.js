@@ -1,9 +1,9 @@
 // ─────────────────────────────────────────────────────────────
 // LM Studio provider
-// Models with explicit reasoning capability (capabilities.reasoning)
-// support toggling via chat_template_kwargs.enable_thinking.
-// Models WITHOUT it always emit <think> tags, so the parser runs
-// regardless and the Retina UI locks the toggle on.
+// Thinking-capable models use the native /api/v1/chat endpoint
+// which supports the `reasoning` parameter ("on"/"off"/"low"/
+// "medium"/"high"). The OpenAI-compat endpoint (/v1/chat/
+// completions) silently ignores this parameter.
 // ─────────────────────────────────────────────────────────────
 
 import { ProviderError } from "../utils/errors.js";
@@ -25,6 +25,95 @@ import {
 
 function getBaseUrl() {
   return LM_STUDIO_BASE_URL;
+}
+
+// ── Native /api/v1/chat SSE stream parser ────────────────────
+// The native endpoint emits named SSE events: reasoning.start/delta/end,
+// message.start/delta/end, content.start/delta/end, chat.end.
+// This generator yields the same event types as parseSSEStream so both
+// paths integrate seamlessly with the rest of the pipeline.
+async function* parseNativeSSEStream(reader, options = {}) {
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let usage = null;
+
+  try {
+    while (true) {
+      if (options.signal?.aborted) {
+        reader.cancel();
+        break;
+      }
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith(":")) continue;
+        if (!trimmed.startsWith("data: ")) continue;
+
+        try {
+          const json = JSON.parse(trimmed.slice(6));
+          const type = json.type;
+
+          if (type === "reasoning.delta" && json.content) {
+            yield { type: "thinking", content: json.content };
+          } else if ((type === "content.delta" || type === "message.delta") && json.content) {
+            yield json.content;
+          } else if (type === "chat.end") {
+            const stats = json.result?.stats || json.stats;
+            if (stats) {
+              usage = {
+                inputTokens: stats.input_tokens || 0,
+                outputTokens: stats.total_output_tokens || 0,
+              };
+            }
+          }
+        } catch {
+          // skip malformed JSON
+        }
+      }
+    }
+
+    if (usage) {
+      yield { type: "usage", usage };
+    } else {
+      yield { type: "usage", usage: { inputTokens: 0, outputTokens: 0 } };
+    }
+  } finally {
+    // reader released
+  }
+}
+
+// Build the native /api/v1/chat input from OpenAI-style messages.
+// The native API's `reasoning` param only works when input is a string.
+// For multi-part input (images), we use the array format with type: "text"|"image".
+function buildNativeInput(messages) {
+  // Find last user message
+  const userMessages = messages.filter((m) => m.role === "user");
+  const lastUser = userMessages[userMessages.length - 1];
+  if (!lastUser) return "";
+
+  // Simple text-only message → use string input (enables reasoning)
+  if (typeof lastUser.content === "string") return lastUser.content;
+
+  // Multi-part (images + text) → use array format
+  if (Array.isArray(lastUser.content)) {
+    const parts = [];
+    for (const c of lastUser.content) {
+      if (c.type === "text") {
+        parts.push({ type: "text", content: c.text });
+      } else if (c.type === "image_url" && c.image_url?.url) {
+        parts.push({ type: "image", data_url: c.image_url.url });
+      }
+    }
+    return parts;
+  }
+
+  return "";
 }
 
 const lmStudioProvider = {
@@ -55,11 +144,6 @@ const lmStudioProvider = {
       // Function calling tools
       const tools = convertToolsToOpenAI(options.tools);
       if (tools) payload.tools = tools;
-
-      // Thinking toggle — pass to LM Studio via chat_template_kwargs
-      if (options.thinkingEnabled === false) {
-        payload.chat_template_kwargs = { enable_thinking: false };
-      }
 
       const response = await fetchOpenAICompat(
         `${baseUrl}/v1/chat/completions`,
@@ -197,9 +281,50 @@ const lmStudioProvider = {
       const tools = convertToolsToOpenAI(options.tools);
       if (tools) payload.tools = tools;
 
-      // Thinking toggle — pass to LM Studio via chat_template_kwargs
-      if (options.thinkingEnabled === false) {
-        payload.chat_template_kwargs = { enable_thinking: false };
+      // ── Thinking-capable models: use native /api/v1/chat endpoint ──
+      // The native endpoint is the only way to control the reasoning
+      // toggle in LM Studio. The OpenAI-compat endpoint ignores it.
+      if (options.thinkingEnabled !== undefined) {
+        const nativePayload = {
+          model,
+          input: buildNativeInput(prepared),
+          temperature: payload.temperature,
+          max_output_tokens: payload.max_tokens > 0 ? payload.max_tokens : undefined,
+          reasoning: options.thinkingEnabled === false ? "off" : "on",
+          stream: true,
+          store: false,
+        };
+        // Extract system prompt from messages
+        const systemMsg = prepared.find((m) => m.role === "system");
+        if (systemMsg?.content) {
+          nativePayload.system_prompt = systemMsg.content;
+        }
+
+        const nativePayloadStr = JSON.stringify(nativePayload, null, 2);
+        logger.info(
+          `[LM-Studio] Native API payload: reasoning=${nativePayload.reasoning}, ${nativePayloadStr.length} chars`,
+        );
+        const ts = Date.now();
+        try {
+          writeFileSync(`/tmp/lm-studio-payload-${ts}.json`, nativePayloadStr);
+        } catch { /* ignore */ }
+
+        const nativeResponse = await fetch(`${baseUrl}/api/v1/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(nativePayload),
+          ...(options.signal && { signal: options.signal }),
+        });
+
+        if (!nativeResponse.ok) {
+          const errorText = await nativeResponse.text();
+          throw new Error(`API error: ${nativeResponse.status} ${errorText}`);
+        }
+
+        logger.info(`[LM-Studio] Native response status: ${nativeResponse.status}`);
+        const nativeReader = nativeResponse.body.getReader();
+        yield* parseNativeSSEStream(nativeReader, { signal: options.signal });
+        return;
       }
 
       const payloadStr = JSON.stringify(payload, null, 2);
