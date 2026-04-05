@@ -44,7 +44,10 @@ const vllmProvider = {
 
       // Function calling tools
       const tools = convertToolsToOpenAI(options.tools);
-      if (tools) payload.tools = tools;
+      if (tools) {
+        payload.tools = tools;
+        payload.tool_choice = "auto";
+      }
 
       // Thinking hard switch — vLLM extension for Qwen3/reasoning models
       // Uses chat_template_kwargs to control <think> token generation
@@ -98,7 +101,10 @@ const vllmProvider = {
 
       // Function calling tools
       const tools = convertToolsToOpenAI(options.tools);
-      if (tools) payload.tools = tools;
+      if (tools) {
+        payload.tools = tools;
+        payload.tool_choice = "auto";
+      }
 
       // Thinking hard switch — vLLM extension for Qwen3/reasoning models
       if (options.thinkingEnabled !== undefined) {

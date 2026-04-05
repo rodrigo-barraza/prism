@@ -154,7 +154,7 @@ const THINKING_PATTERNS = ["qwen3", "deepseek-r1", "deepseek-v3", "gpt-oss", "ge
 
 const FC_PATTERNS = [
   "qwen", "deepseek", "llama", "mistral", "gemma",
-  "phi", "command", "hermes", "functionary",
+  "phi", "command", "hermes", "functionary", "gpt-oss",
 ];
 
 const VISION_PATTERNS = [

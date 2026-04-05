@@ -82,7 +82,10 @@ const llamaCppProvider = {
 
       // Function calling tools — standard OpenAI tool schema
       const tools = convertToolsToOpenAI(options.tools);
-      if (tools) payload.tools = tools;
+      if (tools) {
+        payload.tools = tools;
+        payload.tool_choice = "auto";
+      }
 
       const response = await fetchOpenAICompat(
         `${baseUrl}/v1/chat/completions`,
@@ -138,7 +141,10 @@ const llamaCppProvider = {
 
       // Function calling tools
       const tools = convertToolsToOpenAI(options.tools);
-      if (tools) payload.tools = tools;
+      if (tools) {
+        payload.tools = tools;
+        payload.tool_choice = "auto";
+      }
 
       const response = await fetchOpenAICompat(
         `${baseUrl}/v1/chat/completions`,

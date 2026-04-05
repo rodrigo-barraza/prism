@@ -79,7 +79,6 @@ router.post("/", async (req, res, next) => {
       id,
       title,
       systemPrompt,
-      assistantPersona,
       userPersona,
       category,
       targetTurns,
@@ -99,7 +98,7 @@ router.post("/", async (req, res, next) => {
       username,
       title: title || "Untitled Synthesis",
       systemPrompt: systemPrompt || "",
-      assistantPersona: assistantPersona || "",
+
       userPersona: userPersona || "",
       category: category || "Chat",
       targetTurns: targetTurns || 4,
