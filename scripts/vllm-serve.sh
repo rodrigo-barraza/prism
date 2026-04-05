@@ -11,16 +11,21 @@
 #                               decide when to call tools
 #   --tool-call-parser          Must match the model's chat template
 #
-# Supported parsers (match to model family):
-#   hermes        — NousResearch Hermes, Gemma (function calling)
-#   llama3_json   — Llama 3/4 Instruct models
+# Supported parsers (match to model family) — vLLM v0.19.0:
+#   hermes        — NousResearch Hermes, Qwen 3 models
+#   llama3_json   — Llama 3 Instruct models
+#   llama4_json   — Llama 4 Instruct models
 #   mistral       — Mistral/Mixtral models
 #   internlm      — InternLM models
 #   jamba         — Jamba models
-#   qwen25        — Qwen 2.5/3 models (auto-detected usually)
+#   gemma4        — Gemma 4 models
 #   deepseek_v3   — DeepSeek V3
 #   deepseek_v31  — DeepSeek V3.1
+#   deepseek_v32  — DeepSeek V3.2
 #   functiongemma — Gemma function calling fine-tunes
+#   qwen3_coder   — Qwen 3 Coder models
+#   qwen3_xml     — Qwen 3 XML format
+#   granite       — IBM Granite models
 #   xlam          — xLAM models
 #
 # Usage:
