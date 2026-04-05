@@ -126,33 +126,6 @@ router.get("/:id", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// PUT /benchmark/:id — Update a benchmark test
-// ============================================================
-
-router.put("/:id", async (req, res, next) => {
-  try {
-    const existing = await BenchmarkService.getById(req.params.id, req.project);
-    if (!existing) {
-      return res.status(404).json({ error: "Benchmark not found" });
-    }
-
-    if (req.body.matchMode) {
-      const validModes = Object.values(BenchmarkService.MATCH_MODES);
-      if (!validModes.includes(req.body.matchMode)) {
-        return res.status(400).json({
-          error: `Invalid matchMode. Must be one of: ${validModes.join(", ")}`,
-        });
-      }
-    }
-
-    const updated = await BenchmarkService.update(req.params.id, req.project, req.body);
-    res.json(updated);
-  } catch (error) {
-    logger.error(`PUT /benchmark/:id error: ${error.message}`);
-    next(error);
-  }
-});
 
 // ============================================================
 // DELETE /benchmark/:id — Delete a benchmark test and its runs

@@ -509,33 +509,6 @@ const BenchmarkService = {
     return db.collection(BENCHMARKS_COL).findOne({ id, project });
   },
 
-  async update(id, project, updates) {
-    const db = getDb();
-    if (!db) throw new Error("Database not available");
-
-    const allowed = [
-      "name",
-      "prompt",
-      "systemPrompt",
-      "expectedValue",
-      "matchMode",
-      "temperature",
-      "maxTokens",
-      "tags",
-    ];
-    const $set = { updatedAt: new Date().toISOString() };
-    for (const key of allowed) {
-      if (updates[key] !== undefined) {
-        $set[key] = updates[key];
-      }
-    }
-
-    const result = await db
-      .collection(BENCHMARKS_COL)
-      .findOneAndUpdate({ id, project }, { $set }, { returnDocument: "after" });
-
-    return result;
-  },
 
   async remove(id, project) {
     const db = getDb();
