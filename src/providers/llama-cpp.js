@@ -35,6 +35,7 @@ import {
   convertToolsToOpenAI,
   buildPayloadParams,
   prepareOpenAICompatMessages,
+  expandVideoToFrames,
   processNonStreamingResponse,
   parseSSEStream,
   fetchOpenAICompat,
@@ -67,6 +68,9 @@ const llamaCppProvider = {
       `generateText model=${model} baseUrl=${baseUrl}`,
     );
     try {
+      // Expand video attachments to image frames (ffmpeg) before message prep
+      await expandVideoToFrames(messages);
+
       const prepared = prepareOpenAICompatMessages(messages, {
         mediaStrategy: MEDIA_STRATEGIES.TEXT_FALLBACK,
       });
@@ -124,6 +128,9 @@ const llamaCppProvider = {
       `generateTextStream model=${model} baseUrl=${baseUrl}`,
     );
     try {
+      // Expand video attachments to image frames (ffmpeg) before message prep
+      await expandVideoToFrames(messages);
+
       const prepared = prepareOpenAICompatMessages(messages, {
         mediaStrategy: MEDIA_STRATEGIES.TEXT_FALLBACK,
       });

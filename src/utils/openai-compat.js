@@ -116,6 +116,70 @@ export const MEDIA_STRATEGIES = {
 };
 
 /**
+ * Pre-process messages to expand video attachments into image frames.
+ *
+ * For providers that don't support raw video data URLs (e.g. LM Studio),
+ * this extracts frames from each video using ffmpeg and adds them to the
+ * message's `images` array. The original `video` array is removed so
+ * downstream processing never sees it.
+ *
+ * Call this BEFORE prepareOpenAICompatMessages() for providers that need
+ * video-as-frames support.
+ *
+ * @param {Array} messages - The message array (mutated in-place)
+ * @param {object} [options]
+ * @param {number} [options.fps=1] - Frames per second to extract
+ * @param {number} [options.maxFrames=30] - Maximum frames per video
+ * @returns {Promise<Array>} The same messages array with videos expanded
+ */
+export async function expandVideoToFrames(messages, options = {}) {
+  const { extractVideoFrames, getDataUrlMimeType } = await import("./media.js");
+
+  for (const msg of messages) {
+    // Collect video data URLs from both `video` and `images` arrays.
+    // The frontend may place video files in `images` if it doesn't
+    // categorize by MIME type (backwards compatibility).
+    const videoUrls = [];
+    const keptImages = [];
+
+    // Check explicit video field
+    if (msg.video && Array.isArray(msg.video)) {
+      videoUrls.push(...msg.video);
+      delete msg.video;
+    }
+
+    // Check images field for misclassified video data URLs
+    if (msg.images && Array.isArray(msg.images)) {
+      for (const dataUrl of msg.images) {
+        const mime = getDataUrlMimeType(dataUrl);
+        if (mime && mime.startsWith("video/")) {
+          videoUrls.push(dataUrl);
+        } else {
+          keptImages.push(dataUrl);
+        }
+      }
+      msg.images = keptImages;
+    }
+
+    if (videoUrls.length === 0) continue;
+
+    const allFrames = [];
+    for (const videoDataUrl of videoUrls) {
+      const frames = await extractVideoFrames(videoDataUrl, options);
+      allFrames.push(...frames);
+    }
+
+    if (allFrames.length > 0) {
+      // Prepend frames to images array (model card recommends media before text)
+      msg.images = [...allFrames, ...(msg.images || [])];
+    }
+  }
+
+  return messages;
+}
+
+
+/**
  * Convert messages with media to OpenAI-compatible multipart content format.
  * Handles images, tool results, assistant tool calls, and optionally
  * audio/video/PDF based on the media strategy.

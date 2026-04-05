@@ -16,6 +16,7 @@ import {
   convertToolsToOpenAI,
   buildPayloadParams,
   prepareOpenAICompatMessages,
+  expandVideoToFrames,
   processNonStreamingResponse,
   fetchOpenAICompat,
   MEDIA_STRATEGIES,
@@ -220,6 +221,9 @@ const lmStudioProvider = {
       `generateText model=${model} baseUrl=${baseUrl}`,
     );
     try {
+      // Expand video attachments to image frames (ffmpeg) before message prep
+      await expandVideoToFrames(messages);
+
       const prepared = prepareOpenAICompatMessages(messages, {
         mediaStrategy: MEDIA_STRATEGIES.IMAGES_ONLY,
       });
@@ -368,6 +372,15 @@ const lmStudioProvider = {
 
       if (options.signal?.aborted) return;
 
+      // Expand video attachments to image frames (ffmpeg) before message prep.
+      // This lets the model analyze video content as a sequence of frames,
+      // which is the standard approach for Gemma 4 and other VLMs.
+      const hasVideo = messages.some((m) => m.video?.length > 0);
+      if (hasVideo) {
+        yield { type: "status", message: "Extracting video frames…" };
+        await expandVideoToFrames(messages);
+      }
+
       const prepared = prepareOpenAICompatMessages(messages, {
         mediaStrategy: MEDIA_STRATEGIES.IMAGES_ONLY,
       });
@@ -445,8 +458,11 @@ const lmStudioProvider = {
       }
 
       const nativePayloadStr = JSON.stringify(nativePayload, null, 2);
+      const inputShape = Array.isArray(nativePayload.input)
+        ? `array[${nativePayload.input.length}]: ${nativePayload.input.map((p) => p.type).join(", ")}`
+        : `string[${(nativePayload.input || "").length}]`;
       logger.info(
-        `[LM-Studio] Native API: reasoning=${nativePayload.reasoning || "default"}, tools=${nativePayload.integrations ? "mcp" : "none"}, ${nativePayloadStr.length} chars`,
+        `[LM-Studio] Native API: reasoning=${nativePayload.reasoning || "default"}, tools=${nativePayload.integrations ? "mcp" : "none"}, input=${inputShape}, ${nativePayloadStr.length} chars`,
       );
 
       const nativeResponse = await fetch(`${baseUrl}/api/v1/chat`, {

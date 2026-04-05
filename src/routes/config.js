@@ -163,12 +163,14 @@ const VISION_PATTERNS = [
   "molmo", "paligemma", "llama-3.2-vision", "llama-vision",
   "idefics", "phi-3-vision", "phi-3.5-vision", "phi-4-vision",
   "phi4mm", "minicpmv", "ovis", "deepseek-vl",
+  "gemma-4",
 ];
 
 const VIDEO_PATTERNS = [
   "qwen2.5-vl", "qwen2-vl", "qwen3-vl",
   "llava-next-video", "llava-onevision",
   "internvl", "phi4mm",
+  "gemma-4",
 ];
 
 const AUDIO_PATTERNS = [
@@ -176,6 +178,7 @@ const AUDIO_PATTERNS = [
   "ultravox", "phi4mm", "minicpmo",
   "whisper", "granite-speech", "kimi-audio",
   "qwen2.5-omni", "qwen3-omni",
+  "gemma-4-e2b", "gemma-4-e4b",
 ];
 
 /** Check if a lowercased model name matches any pattern in a list. */
@@ -224,11 +227,24 @@ async function getLmStudioModelOptions() {
         if (supportsThinking) tools.push("Thinking");
         if (supportsFunctionCalling) tools.push("Function Calling");
 
+        // Detect multimodal capabilities:
+        // 1. Vision: LM Studio API capabilities.vision (authoritative), or name-based fallback
+        // 2. Video/Audio: name-based patterns (LM Studio API doesn't expose these flags)
+        const supportsVision = !!m.capabilities?.vision || matchesAny(nameLower, VISION_PATTERNS);
+        const supportsVideo = matchesAny(nameLower, VIDEO_PATTERNS);
+        const supportsAudio = matchesAny(nameLower, AUDIO_PATTERNS);
+
+        // Build input types
+        const inputTypes = [TYPES.TEXT];
+        if (supportsVision) inputTypes.push(TYPES.IMAGE);
+        if (supportsVideo) inputTypes.push(TYPES.VIDEO);
+        if (supportsAudio) inputTypes.push(TYPES.AUDIO);
+
         const entry = {
           name: m.key,
           label,
           modelType: "conversation",
-          inputTypes: [TYPES.TEXT],
+          inputTypes,
           outputTypes: [TYPES.TEXT],
           supportsSystemPrompt: true,
           streaming: true,
@@ -241,9 +257,8 @@ async function getLmStudioModelOptions() {
         if (supportsThinking) {
           entry.thinking = true;
         }
-        if (m.capabilities?.vision) {
+        if (supportsVision) {
           entry.vision = true;
-          entry.inputTypes = [TYPES.TEXT, TYPES.IMAGE];
         }
         if (m.max_context_length) {
           entry.contextLength = m.max_context_length;
