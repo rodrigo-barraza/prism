@@ -42,6 +42,7 @@ import favoritesRouter from "./routes/favorites.js";
 import sessionsRouter from "./routes/sessions.js";
 import statsRouter from "./routes/stats.js";
 import benchmarkRouter from "./routes/benchmark.js";
+import synthesisRouter from "./routes/synthesis.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -72,6 +73,7 @@ const ENDPOINTS = {
     "/sessions",
     "/stats",
     "/benchmark",
+    "/synthesis",
   ],
   websocket: ["/ws/chat", "/ws/text-to-audio"],
   admin: ["/admin", "/admin/lm-studio", "/admin/sessions"],
@@ -114,6 +116,7 @@ app.use("/favorites", favoritesRouter);
 app.use("/sessions", sessionsRouter);
 app.use("/stats", statsRouter);
 app.use("/benchmark", benchmarkRouter);
+app.use("/synthesis", synthesisRouter);
 
 // Error handler (must be last)
 app.use(errorHandler);
@@ -152,6 +155,9 @@ setupWebSocket(wss);
         db.collection("benchmarks").createIndex({ project: 1, updatedAt: -1 }),
         db.collection("benchmark_runs").createIndex({ id: 1 }, { unique: true }),
         db.collection("benchmark_runs").createIndex({ benchmarkId: 1, project: 1, startedAt: -1 }),
+        // synthesis
+        db.collection("synthesis").createIndex({ id: 1 }, { unique: true }),
+        db.collection("synthesis").createIndex({ project: 1, username: 1, updatedAt: -1 }),
       ]);
       logger.success("Database indexes ensured");
     }

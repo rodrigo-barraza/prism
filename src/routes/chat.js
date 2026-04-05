@@ -243,8 +243,10 @@ export async function handleChat(params, emit, { signal } = {}) {
   // Pass createSession: true on the first call → Prism creates a
   // minimal session doc and returns the sessionId.
   // Subsequent calls pass the returned sessionId to join the session.
+  // Sessions group conversations — skip creation when skipConversation
+  // is set, since there will be no conversation to link.
   let sessionId = incomingSessionId || null;
-  if (!sessionId && incomingCreateSession) {
+  if (!skipConversation && !sessionId && incomingCreateSession) {
     sessionId = crypto.randomUUID();
     try {
       const sessionDb = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);

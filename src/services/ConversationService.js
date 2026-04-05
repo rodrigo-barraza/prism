@@ -261,6 +261,7 @@ const ConversationService = {
         providers: extractProviders([], metaSettings),
         totalCost: 0,
         isGenerating: true,
+        ...(conversationMeta?.synthetic && { synthetic: true }),
         ...(sessionId && { sessionId }),
 
         createdAt: now,
