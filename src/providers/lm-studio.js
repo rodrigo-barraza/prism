@@ -1,9 +1,9 @@
 // ─────────────────────────────────────────────────────────────
-// NOTE: LM Studio models have thinking ALWAYS ON by default.
-// The thinkingEnabled toggle is ignored for this provider —
-// <think> tags and native reasoning_content fields are always
-// parsed and emitted. chat.js forces thinkingEnabled=true for
-// lm-studio, and the Retina UI shows the toggle as locked.
+// LM Studio provider
+// Models with explicit reasoning capability (capabilities.reasoning)
+// support toggling via chat_template_kwargs.enable_thinking.
+// Models WITHOUT it always emit <think> tags, so the parser runs
+// regardless and the Retina UI locks the toggle on.
 // ─────────────────────────────────────────────────────────────
 
 import { ProviderError } from "../utils/errors.js";
@@ -55,6 +55,11 @@ const lmStudioProvider = {
       // Function calling tools
       const tools = convertToolsToOpenAI(options.tools);
       if (tools) payload.tools = tools;
+
+      // Thinking toggle — pass to LM Studio via chat_template_kwargs
+      if (options.thinkingEnabled === false) {
+        payload.chat_template_kwargs = { enable_thinking: false };
+      }
 
       const response = await fetchOpenAICompat(
         `${baseUrl}/v1/chat/completions`,
@@ -191,6 +196,11 @@ const lmStudioProvider = {
       // Function calling tools
       const tools = convertToolsToOpenAI(options.tools);
       if (tools) payload.tools = tools;
+
+      // Thinking toggle — pass to LM Studio via chat_template_kwargs
+      if (options.thinkingEnabled === false) {
+        payload.chat_template_kwargs = { enable_thinking: false };
+      }
 
       const payloadStr = JSON.stringify(payload, null, 2);
       logger.info(

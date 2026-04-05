@@ -303,8 +303,11 @@ export async function handleChat(params, emit, { signal } = {}) {
     delete options.thinkingBudget;
   }
 
-  // LM Studio models inherently produce thinking tokens — always enable
-  if (providerName === "lm-studio") {
+  // LM Studio models without explicit reasoning capability always emit
+  // <think> tags regardless — keep thinkingEnabled=true so the parser runs.
+  // Models WITH reasoning capability (e.g. Gemma 4 with capabilities.reasoning)
+  // respect the toggle via chat_template_kwargs.enable_thinking.
+  if (providerName === "lm-studio" && thinkingEnabled !== false) {
     options.thinkingEnabled = true;
   }
 

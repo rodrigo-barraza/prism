@@ -150,7 +150,7 @@ function formatBytes(bytes) {
 // ── Model capability detection patterns ─────────────────────────
 // Used by getLmStudioModelOptions, getVllmModelOptions, getOllamaModelOptions
 
-const THINKING_PATTERNS = ["qwen3", "deepseek-r1", "deepseek-v3", "gpt-oss"];
+const THINKING_PATTERNS = ["qwen3", "deepseek-r1", "deepseek-v3", "gpt-oss", "gemma-4"];
 
 const FC_PATTERNS = [
   "qwen", "deepseek", "llama", "mistral", "gemma",
@@ -207,11 +207,18 @@ async function getLmStudioModelOptions() {
 
         const nameLower = (m.key || "").toLowerCase();
 
-        // Detect thinking-capable models by name/family
-        const supportsThinking = matchesAny(nameLower, THINKING_PATTERNS);
+        // Detect thinking-capable models:
+        // 1. LM Studio API: capabilities.reasoning (new field, authoritative)
+        // 2. Name-based fallback via THINKING_PATTERNS
+        const hasReasoningCapability = !!m.capabilities?.reasoning;
+        const supportsThinking = hasReasoningCapability || matchesAny(nameLower, THINKING_PATTERNS);
 
-        // Detect function calling support — LM Studio API: capabilities.trained_for_tool_use
-        const supportsFunctionCalling = !!m.capabilities?.trained_for_tool_use;
+        // Detect function calling support:
+        // 1. LM Studio API: capabilities.trained_for_tool_use (authoritative)
+        // 2. Name-based fallback via FC_PATTERNS (some models like Gemma 4
+        //    report trained_for_tool_use=false despite native FC support)
+        const supportsFunctionCalling =
+          !!m.capabilities?.trained_for_tool_use || matchesAny(nameLower, FC_PATTERNS);
 
         const tools = [];
         if (supportsThinking) tools.push("Thinking");
