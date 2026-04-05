@@ -180,31 +180,59 @@ function safeParseJSON(str) {
 }
 
 // Build the native /api/v1/chat input from OpenAI-style messages.
-// The native API's `reasoning` param only works when input is a string.
-// For multi-part input (images), we use the array format with type: "text"|"image".
+// The native API only accepts `input` (current turn) + `system_prompt` — it has
+// no built-in multi-turn message array. We serialize prior conversation turns
+// as formatted text context so the model retains conversational memory.
+// For the last user turn with images, we use the array format with type: "text"|"image".
 function buildNativeInput(messages) {
-  // Find last user message
-  const userMessages = messages.filter((m) => m.role === "user");
-  const lastUser = userMessages[userMessages.length - 1];
+  // Separate system, conversation history, and the last user message
+  const nonSystemMessages = messages.filter((m) => m.role !== "system");
+  if (nonSystemMessages.length === 0) return "";
+
+  const lastUser = [...nonSystemMessages].reverse().find((m) => m.role === "user");
   if (!lastUser) return "";
 
-  // Simple text-only message → use string input (enables reasoning)
-  if (typeof lastUser.content === "string") return lastUser.content;
+  // Find the index of the last user message to separate history from current turn
+  const lastUserIdx = nonSystemMessages.lastIndexOf(lastUser);
+  const historyMessages = nonSystemMessages.slice(0, lastUserIdx);
 
-  // Multi-part (images + text) → use array format
+  // Build conversation history prefix (prior turns only)
+  let historyPrefix = "";
+  if (historyMessages.length > 0) {
+    const lines = [];
+    for (const msg of historyMessages) {
+      const role = msg.role === "user" ? "User" : "Assistant";
+      const text = typeof msg.content === "string"
+        ? msg.content
+        : Array.isArray(msg.content)
+          ? msg.content.filter((c) => c.type === "text").map((c) => c.text).join("\n")
+          : "";
+      if (text) lines.push(`[${role}]: ${text}`);
+    }
+    if (lines.length > 0) {
+      historyPrefix = "[Conversation History]\n" + lines.join("\n") + "\n\n[Current Message]\n";
+    }
+  }
+
+  // Check if the last user message has images (multi-part)
   if (Array.isArray(lastUser.content)) {
     const parts = [];
+    // Prepend history as a text part if present
+    let textContent = lastUser.content.filter((c) => c.type === "text").map((c) => c.text).join("\n");
+    if (historyPrefix) textContent = historyPrefix + textContent;
+    if (textContent) parts.push({ type: "text", content: textContent });
+    // Add images
     for (const c of lastUser.content) {
-      if (c.type === "text") {
-        parts.push({ type: "text", content: c.text });
-      } else if (c.type === "image_url" && c.image_url?.url) {
+      if (c.type === "image_url" && c.image_url?.url) {
         parts.push({ type: "image", data_url: c.image_url.url });
       }
     }
     return parts;
   }
 
-  return "";
+  // Simple text-only message → use string input (enables reasoning)
+  const currentText = typeof lastUser.content === "string" ? lastUser.content : "";
+  return historyPrefix ? historyPrefix + currentText : currentText;
 }
 
 const lmStudioProvider = {
@@ -415,11 +443,16 @@ const lmStudioProvider = {
       if (options.minP !== undefined) nativePayload.min_p = options.minP;
       if (options.repeatPenalty !== undefined && options.repeatPenalty !== 1) nativePayload.repeat_penalty = options.repeatPenalty;
 
-      // Reasoning toggle
+      // Reasoning toggle — may be rejected by models that don't support it.
+      // We'll try first, and retry without reasoning if it fails.
+      let useReasoning = null;
       if (options.thinkingEnabled === false) {
-        nativePayload.reasoning = "off";
+        useReasoning = "off";
       } else if (options.thinkingEnabled === true) {
-        nativePayload.reasoning = "on";
+        useReasoning = "on";
+      }
+      if (useReasoning) {
+        nativePayload.reasoning = useReasoning;
       }
 
       // ── MCP integrations for function calling ──
@@ -466,20 +499,45 @@ const lmStudioProvider = {
         }
       }
 
-      const nativePayloadStr = JSON.stringify(nativePayload, null, 2);
-      const inputShape = Array.isArray(nativePayload.input)
-        ? `array[${nativePayload.input.length}]: ${nativePayload.input.map((p) => p.type).join(", ")}`
-        : `string[${(nativePayload.input || "").length}]`;
-      logger.info(
-        `[LM-Studio] Native API: reasoning=${nativePayload.reasoning || "default"}, tools=${nativePayload.integrations ? "mcp" : "none"}, input=${inputShape}, ${nativePayloadStr.length} chars`,
-      );
+      // ── Send request (with reasoning fallback) ──
+      // Some models (e.g. DeepSeek R1 Distill) don't expose reasoning config.
+      // If the request fails with a reasoning-related error, retry without it.
+      const makeRequest = async (payload) => {
+        const payloadStr = JSON.stringify(payload, null, 2);
+        const inputShape = Array.isArray(payload.input)
+          ? `array[${payload.input.length}]: ${payload.input.map((p) => p.type).join(", ")}`
+          : `string[${(payload.input || "").length}]`;
+        logger.info(
+          `[LM-Studio] Native API: reasoning=${payload.reasoning || "default"}, tools=${payload.integrations ? "mcp" : "none"}, input=${inputShape}, ${payloadStr.length} chars`,
+        );
 
-      const nativeResponse = await fetch(`${baseUrl}/api/v1/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(nativePayload),
-        ...(options.signal && { signal: options.signal }),
-      });
+        const response = await fetch(`${baseUrl}/api/v1/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          ...(options.signal && { signal: options.signal }),
+        });
+        return response;
+      };
+
+      let nativeResponse = await makeRequest(nativePayload);
+
+      // If reasoning param was rejected, retry without it
+      if (!nativeResponse.ok && useReasoning) {
+        const errorText = await nativeResponse.text();
+        if (
+          nativeResponse.status === 400 &&
+          (errorText.includes("reasoning") || errorText.includes("does not expose"))
+        ) {
+          logger.warn(
+            `[LM-Studio] Model ${model} does not support reasoning config, retrying without it`,
+          );
+          delete nativePayload.reasoning;
+          nativeResponse = await makeRequest(nativePayload);
+        } else {
+          throw new Error(`API error: ${nativeResponse.status} ${errorText}`);
+        }
+      }
 
       if (!nativeResponse.ok) {
         const errorText = await nativeResponse.text();
