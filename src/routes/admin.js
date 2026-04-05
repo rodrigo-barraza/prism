@@ -1794,7 +1794,7 @@ router.get("/lm-studio/models", async (_req, res, next) => {
  */
 router.post("/lm-studio/load", async (req, res, next) => {
   try {
-    const { model } = req.body;
+    const { model, context_length, flash_attention, offload_kv_cache_to_gpu } = req.body;
     if (!model) {
       return res
         .status(400)
@@ -1803,25 +1803,19 @@ router.post("/lm-studio/load", async (req, res, next) => {
 
     const provider = getProvider("lm-studio");
 
-    // Enforce single model — unload anything currently loaded that isn't the requested model
-    try {
-      const { models } = await provider.listModels();
-      for (const m of models || []) {
-        for (const instance of m.loaded_instances || []) {
-          if (instance.id !== model) {
-            logger.info(
-              `Auto-unloading ${instance.id} before loading ${model}`,
-            );
-            await provider.unloadModel(instance.id);
-          }
-        }
-      }
-    } catch (listErr) {
-      logger.warn(`Could not list models before loading: ${listErr.message}`);
+    // Build load options from request body
+    const loadOptions = {};
+    if (context_length != null) loadOptions.context_length = context_length;
+    if (flash_attention != null) loadOptions.flash_attention = flash_attention;
+    if (offload_kv_cache_to_gpu != null) loadOptions.offload_kv_cache_to_gpu = offload_kv_cache_to_gpu;
+
+    // ensureModelLoaded handles: skip if already loaded, unload others, then load
+    const { alreadyLoaded } = await provider.ensureModelLoaded(model, loadOptions);
+    if (alreadyLoaded) {
+      logger.info(`[admin/lm-studio/load] Model ${model} already loaded — skipping`);
     }
 
-    const data = await provider.loadModel(model);
-    res.json(data);
+    res.json({ model, alreadyLoaded });
   } catch (error) {
     logger.error(`Admin /lm-studio/load error: ${error.message}`);
     next(error);

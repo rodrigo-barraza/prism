@@ -1,27 +1,28 @@
 // ─────────────────────────────────────────────────────────────
-// LM Studio provider
-// Thinking-capable models use the native /api/v1/chat endpoint
-// which supports the `reasoning` parameter ("on"/"off"/"low"/
-// "medium"/"high"). The OpenAI-compat endpoint (/v1/chat/
-// completions) silently ignores this parameter.
+// LM Studio provider — Fully native /api/v1/chat
+// Uses the native REST API for all streaming, with:
+//   - `reasoning` parameter for thinking toggle
+//   - `integrations[]` for MCP-based function calling via tools-api
+// Non-streaming + captionImage still use OpenAI-compat.
 // ─────────────────────────────────────────────────────────────
 
 import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
 import { resolveArchParams } from "../utils/gguf-arch.js";
-import { LM_STUDIO_BASE_URL } from "../../secrets.js";
+import { LM_STUDIO_BASE_URL, TOOLS_API_URL } from "../../secrets.js";
 import { TYPES, getDefaultModels } from "../config.js";
 import { sleep } from "../utils/media.js";
-import { writeFileSync } from "node:fs";
 import {
   convertToolsToOpenAI,
   buildPayloadParams,
   prepareOpenAICompatMessages,
   processNonStreamingResponse,
-  parseSSEStream,
   fetchOpenAICompat,
   MEDIA_STRATEGIES,
 } from "../utils/openai-compat.js";
+
+// MCP server URL for ephemeral tool integrations
+const MCP_SERVER_URL = TOOLS_API_URL || "http://localhost:5590";
 
 function getBaseUrl() {
   return LM_STUDIO_BASE_URL;
@@ -36,6 +37,8 @@ async function* parseNativeSSEStream(reader, options = {}) {
   const decoder = new TextDecoder();
   let buffer = "";
   let usage = null;
+  // Accumulate tool call arguments for streaming tool events
+  let currentToolCall = null;
 
   try {
     while (true) {
@@ -59,11 +62,87 @@ async function* parseNativeSSEStream(reader, options = {}) {
           const json = JSON.parse(trimmed.slice(6));
           const type = json.type;
 
+          // ── Reasoning events ──
           if (type === "reasoning.delta" && json.content) {
             yield { type: "thinking", content: json.content };
-          } else if ((type === "content.delta" || type === "message.delta") && json.content) {
+          }
+          // ── Message content events ──
+          else if ((type === "content.delta" || type === "message.delta") && json.content) {
             yield json.content;
-          } else if (type === "chat.end") {
+          }
+          // ── Model loading events ──
+          else if (type === "model_load.start") {
+            yield { type: "status", message: "Loading model… 0%" };
+          } else if (type === "model_load.progress") {
+            const pct = json.progress != null ? Math.round(json.progress * 100) : 0;
+            yield { type: "status", message: `Loading model… ${pct}%` };
+          } else if (type === "model_load.end") {
+            yield { type: "status", message: "Loading model… 100%" };
+          }
+          // ── Prompt processing events ──
+          else if (type === "prompt_processing.start") {
+            yield { type: "status", message: "Processing prompt…" };
+          }
+          // ── Tool call events (MCP) ──
+          else if (type === "tool_call.start") {
+            currentToolCall = {
+              tool: "unknown",
+              arguments: {},
+            };
+          } else if (type === "tool_call.name") {
+            // Separate event with the tool name
+            if (currentToolCall) {
+              currentToolCall.tool = json.tool_name || "unknown";
+            }
+            yield {
+              type: "toolCall",
+              id: json.tool_call_id || null,
+              name: json.tool_name || "unknown",
+              args: {},
+              status: "calling",
+            };
+          } else if (type === "tool_call.arguments") {
+            // Arguments arrive as a parsed object, not a streamed string
+            if (currentToolCall && json.arguments) {
+              currentToolCall.arguments = typeof json.arguments === "object"
+                ? json.arguments
+                : safeParseJSON(json.arguments);
+            }
+            if (currentToolCall && json.tool) {
+              currentToolCall.tool = json.tool;
+            }
+          } else if (type === "tool_call.success") {
+            const toolName = json.tool || currentToolCall?.tool || "unknown";
+            const args = json.arguments || currentToolCall?.arguments || {};
+            yield {
+              type: "toolCall",
+              id: json.tool_call_id || null,
+              name: toolName,
+              args: typeof args === "object" ? args : safeParseJSON(args),
+              result: json.output ? safeParseJSON(json.output) : json.output,
+              status: "done",
+            };
+            currentToolCall = null;
+          } else if (type === "tool_call.failure") {
+            yield {
+              type: "toolCall",
+              id: json.tool_call_id || null,
+              name: json.tool || currentToolCall?.tool || "unknown",
+              args: currentToolCall?.arguments || {},
+              result: { error: json.reason || "Tool call failed" },
+              status: "error",
+            };
+            currentToolCall = null;
+          }
+          // ── Error event ──
+          else if (type === "error") {
+            const errMsg = json.error?.message || JSON.stringify(json.error);
+            logger.warn(`[LM-Studio] Stream error: ${errMsg}`);
+            // Yield as text so the client sees the error
+            yield `\n\n⚠️ **LM Studio Error:** ${errMsg}`;
+          }
+          // ── Chat end with stats ──
+          else if (type === "chat.end") {
             const stats = json.result?.stats || json.stats;
             if (stats) {
               usage = {
@@ -85,6 +164,14 @@ async function* parseNativeSSEStream(reader, options = {}) {
     }
   } finally {
     // reader released
+  }
+}
+
+function safeParseJSON(str) {
+  try {
+    return JSON.parse(str);
+  } catch {
+    return str;
   }
 }
 
@@ -175,13 +262,18 @@ const lmStudioProvider = {
       `generateTextStream model=${model} baseUrl=${baseUrl}`,
     );
     try {
-      // Auto-load the model if not currently loaded
+      // Auto-load the model if not currently loaded (with streaming progress)
       try {
         if (options.signal?.aborted) return;
         const { models } = await this.listModels();
         if (options.signal?.aborted) return;
         const modelEntry = (models || []).find((m) => m.key === model);
         const isLoaded = modelEntry?.loaded_instances?.length > 0;
+        // Capture loaded context for tool cap calculation
+        if (isLoaded) {
+          const loadedCtx = modelEntry.loaded_instances[0]?.config?.context_length;
+          if (loadedCtx) options._loadedContextLength = loadedCtx;
+        }
         if (!isLoaded) {
           // Unload any other loaded models first (single-model enforcement)
           for (const m of models || []) {
@@ -248,6 +340,14 @@ const lmStudioProvider = {
           }
           if (loadError) throw loadError;
           yield { type: "status", message: "Loading model… 100%" };
+
+          // Re-fetch to get the loaded context length
+          try {
+            const refreshed = await this.listModels();
+            const entry = (refreshed.models || []).find((m) => m.key === model);
+            const ctx = entry?.loaded_instances?.[0]?.config?.context_length;
+            if (ctx) options._loadedContextLength = ctx;
+          } catch { /* ignore */ }
         }
       } catch (loadCheckErr) {
         // If model load explicitly failed, re-throw so the generator exits
@@ -269,95 +369,97 @@ const lmStudioProvider = {
         mediaStrategy: MEDIA_STRATEGIES.IMAGES_ONLY,
       });
 
-      const payload = {
-        messages: prepared,
+      // ── Always use native /api/v1/chat endpoint ──────────────
+      // The native API supports reasoning toggle, MCP tool calling,
+      // model load events, and structured stats — all in one path.
+      const nativePayload = {
         model,
-        ...buildPayloadParams(options),
+        input: buildNativeInput(prepared),
         stream: true,
-        stream_options: { include_usage: true },
+        store: false,
       };
 
-      // Function calling tools
-      const tools = convertToolsToOpenAI(options.tools);
-      if (tools) payload.tools = tools;
-
-      // ── Thinking-capable models: use native /api/v1/chat endpoint ──
-      // The native endpoint is the only way to control the reasoning
-      // toggle in LM Studio. The OpenAI-compat endpoint ignores it.
-      if (options.thinkingEnabled !== undefined) {
-        const nativePayload = {
-          model,
-          input: buildNativeInput(prepared),
-          temperature: payload.temperature,
-          max_output_tokens: payload.max_tokens > 0 ? payload.max_tokens : undefined,
-          reasoning: options.thinkingEnabled === false ? "off" : "on",
-          stream: true,
-          store: false,
-        };
-        // Extract system prompt from messages
-        const systemMsg = prepared.find((m) => m.role === "system");
-        if (systemMsg?.content) {
-          nativePayload.system_prompt = systemMsg.content;
-        }
-
-        const nativePayloadStr = JSON.stringify(nativePayload, null, 2);
-        logger.info(
-          `[LM-Studio] Native API payload: reasoning=${nativePayload.reasoning}, ${nativePayloadStr.length} chars`,
-        );
-        const ts = Date.now();
-        try {
-          writeFileSync(`/tmp/lm-studio-payload-${ts}.json`, nativePayloadStr);
-        } catch { /* ignore */ }
-
-        const nativeResponse = await fetch(`${baseUrl}/api/v1/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(nativePayload),
-          ...(options.signal && { signal: options.signal }),
-        });
-
-        if (!nativeResponse.ok) {
-          const errorText = await nativeResponse.text();
-          throw new Error(`API error: ${nativeResponse.status} ${errorText}`);
-        }
-
-        logger.info(`[LM-Studio] Native response status: ${nativeResponse.status}`);
-        const nativeReader = nativeResponse.body.getReader();
-        yield* parseNativeSSEStream(nativeReader, { signal: options.signal });
-        return;
+      // Extract system prompt from messages
+      const systemMsg = prepared.find((m) => m.role === "system");
+      if (systemMsg?.content) {
+        nativePayload.system_prompt = systemMsg.content;
       }
 
-      const payloadStr = JSON.stringify(payload, null, 2);
+      // Temperature & max tokens from options
+      const params = buildPayloadParams(options);
+      if (params.temperature != null) nativePayload.temperature = params.temperature;
+      if (params.max_tokens > 0) nativePayload.max_output_tokens = params.max_tokens;
+
+      // Reasoning toggle
+      if (options.thinkingEnabled === false) {
+        nativePayload.reasoning = "off";
+      } else if (options.thinkingEnabled === true) {
+        nativePayload.reasoning = "on";
+      }
+
+      // ── MCP integrations for function calling ──
+      // When tools are requested, attach tools-api as an ephemeral MCP server.
+      // LM Studio handles the agentic loop — calls tools, re-prompts, streams.
+      // NOTE: Each MCP tool schema averages ~500 tokens. We cap the tool count
+      // to prevent context overflow. The model's loaded context determines the cap.
+      if (options.tools && options.tools.length > 0) {
+        let toolNames = options.tools.map((t) => t.name);
+
+        // Cap tool count based on loaded model context
+        // ~500 tokens/tool; reserve 50% of context for conversation
+        const contextLength = options._loadedContextLength || options.contextLength || 8192;
+        const maxTools = Math.max(1, Math.floor((contextLength * 0.5) / 500));
+        let skipMcp = false;
+
+        // If context is too small for even 1 tool, skip MCP entirely
+        if (contextLength < 4096) {
+          logger.warn(
+            `[LM-Studio] Context (${contextLength}) too small for MCP tools. Minimum 4096 recommended. Skipping tools.`,
+          );
+          yield `⚠️ **Context too small for function calling.** Loaded context is ${contextLength} tokens — each tool requires ~500 tokens. Increase model context to at least **4,096** (8,192+ recommended) to use tools.`;
+          skipMcp = true;
+        } else if (toolNames.length > maxTools) {
+          logger.warn(
+            `[LM-Studio] Tool count (${toolNames.length}) exceeds safe limit for ctx=${contextLength}. Capping at ${maxTools}.`,
+          );
+          toolNames = toolNames.slice(0, maxTools);
+          yield { type: "status", message: `Context limit (${contextLength}) — using ${maxTools} of ${options.tools.length} tools` };
+        }
+
+        if (!skipMcp) {
+          nativePayload.integrations = [
+            {
+              type: "ephemeral_mcp",
+              server_label: "tools",
+              server_url: `${MCP_SERVER_URL}/mcp/sse`,
+              allowed_tools: toolNames,
+            },
+          ];
+          logger.info(
+            `[LM-Studio] MCP integration: ${toolNames.length} tools via ${MCP_SERVER_URL}/mcp/sse`,
+          );
+        }
+      }
+
+      const nativePayloadStr = JSON.stringify(nativePayload, null, 2);
       logger.info(
-        `[LM-Studio] Payload: ${prepared.length} msgs, ${tools ? tools.length : 0} tools, ${payloadStr.length} chars total`,
+        `[LM-Studio] Native API: reasoning=${nativePayload.reasoning || "default"}, tools=${nativePayload.integrations ? "mcp" : "none"}, ${nativePayloadStr.length} chars`,
       );
-      for (const m of prepared) {
-        const contentLen =
-          typeof m.content === "string"
-            ? m.content.length
-            : JSON.stringify(m.content || "").length;
-        logger.info(
-          `[LM-Studio]   ${m.role}${m.tool_calls ? ` (${m.tool_calls.length} tool_calls)` : ""}: ${contentLen} chars`,
-        );
-      }
-      // Write diagnostic payload to file
-      const ts = Date.now();
-      try {
-        writeFileSync(`/tmp/lm-studio-payload-${ts}.json`, payloadStr);
-      } catch {
-        /* ignore */
+
+      const nativeResponse = await fetch(`${baseUrl}/api/v1/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nativePayload),
+        ...(options.signal && { signal: options.signal }),
+      });
+
+      if (!nativeResponse.ok) {
+        const errorText = await nativeResponse.text();
+        throw new Error(`API error: ${nativeResponse.status} ${errorText}`);
       }
 
-      // Pass abort signal so client disconnection cancels the upstream request
-      const response = await fetchOpenAICompat(
-        `${baseUrl}/v1/chat/completions`,
-        payload,
-        { signal: options.signal },
-      );
-      logger.info(`[LM-Studio] Response status: ${response.status}`);
-
-      const reader = response.body.getReader();
-      yield* parseSSEStream(reader, { signal: options.signal });
+      const nativeReader = nativeResponse.body.getReader();
+      yield* parseNativeSSEStream(nativeReader, { signal: options.signal });
     } catch (error) {
       if (error.name === "AbortError") return; // Client disconnected
       if (error instanceof ProviderError) throw error;
@@ -415,6 +517,63 @@ const lmStudioProvider = {
   },
 
   // ── Model Management ─────────────────────────────────────
+
+  /**
+   * Ensure exactly one model is loaded in LM Studio.
+   * - If the requested model is already loaded, returns immediately with its context info.
+   * - If a different model is loaded, unloads it first.
+   * - If no model is loaded, loads the requested one.
+   *
+   * @param {string} modelKey - The model key to ensure is loaded.
+   * @param {object} [loadOptions={}] - Options forwarded to loadModel (context_length, etc.).
+   * @param {AbortSignal} [signal] - Optional abort signal.
+   * @param {function} [onStatus] - Optional callback for status messages (loading progress, unloading, etc.).
+   * @returns {{ alreadyLoaded: boolean, contextLength: number|null }} - Info about the loaded model.
+   */
+  async ensureModelLoaded(modelKey, loadOptions = {}, signal, onStatus) {
+    if (signal?.aborted) return { alreadyLoaded: false, contextLength: null };
+
+    const { models } = await this.listModels();
+    if (signal?.aborted) return { alreadyLoaded: false, contextLength: null };
+
+    // Check if the requested model is already loaded
+    const modelEntry = (models || []).find((m) => m.key === modelKey);
+    const isLoaded = modelEntry?.loaded_instances?.length > 0;
+
+    if (isLoaded) {
+      const loadedCtx = modelEntry.loaded_instances[0]?.config?.context_length || null;
+      logger.info(`[LM-Studio] Model ${modelKey} already loaded (ctx=${loadedCtx})`);
+      return { alreadyLoaded: true, contextLength: loadedCtx };
+    }
+
+    // Unload any other loaded models first (single-model enforcement)
+    for (const m of models || []) {
+      if (signal?.aborted) return { alreadyLoaded: false, contextLength: null };
+      for (const inst of m.loaded_instances || []) {
+        onStatus?.("Unloading previous model…");
+        logger.info(`[LM-Studio] Auto-unloading ${inst.id} before loading ${modelKey}`);
+        await this.unloadModel(inst.id);
+      }
+    }
+
+    if (signal?.aborted) return { alreadyLoaded: false, contextLength: null };
+
+    // Load the requested model
+    logger.info(`[LM-Studio] Loading model ${modelKey}`);
+    onStatus?.("Loading model… 0%");
+    await this.loadModel(modelKey, loadOptions, signal);
+    onStatus?.("Loading model… 100%");
+
+    // Re-fetch to get the loaded context length
+    try {
+      const refreshed = await this.listModels();
+      const entry = (refreshed.models || []).find((m) => m.key === modelKey);
+      const ctx = entry?.loaded_instances?.[0]?.config?.context_length || null;
+      return { alreadyLoaded: false, contextLength: ctx };
+    } catch {
+      return { alreadyLoaded: false, contextLength: null };
+    }
+  },
 
   /**
    * List all models available in LM Studio.

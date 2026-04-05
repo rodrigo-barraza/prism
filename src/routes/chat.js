@@ -18,6 +18,7 @@ import RequestLogger from "../services/RequestLogger.js";
 import ConversationService from "../services/ConversationService.js";
 import FileService from "../services/FileService.js";
 import AgenticLoopService from "../services/AgenticLoopService.js";
+import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
 import localModelQueue from "../services/LocalModelQueue.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
@@ -410,7 +411,29 @@ export async function handleChat(params, emit, { signal } = {}) {
         modelDef?.streaming !== false;
 
       if (useStreaming) {
-        if (options.functionCallingEnabled) {
+        // LM Studio's native API handles tool calling via MCP internally —
+        // no need for Prism's AgenticLoopService. Tool events are part of
+        // the SSE stream and get forwarded directly to the client.
+        const useLmStudioNativeMcp = providerName === "lm-studio";
+
+        // For LM Studio MCP: populate options.tools with the allowed tool names
+        // so the provider can pass them as `allowed_tools` in the MCP integration.
+        // The MCP server discovers full schemas — Prism only supplies the filter list.
+        if (useLmStudioNativeMcp && options.functionCallingEnabled) {
+          const builtInTools = ToolOrchestratorService.getToolSchemas();
+          let tools = builtInTools;
+          if (options.enabledTools && Array.isArray(options.enabledTools)) {
+            const enabledSet = new Set(options.enabledTools);
+            tools = tools.filter((t) => enabledSet.has(t.name));
+          }
+          options.tools = tools;
+          // Pass model context for provider-side tool cap
+          if (modelDef?.contextLength) {
+            options.contextLength = modelDef.contextLength;
+          }
+        }
+
+        if (options.functionCallingEnabled && !useLmStudioNativeMcp) {
           await AgenticLoopService.runAgenticLoop({
             provider,
             providerName,
@@ -1182,12 +1205,14 @@ async function handleStreamingText(ctx) {
       }
       continue;
     }
-    // Tool call chunks (custom function calling)
+    // Tool call chunks (custom function calling or MCP native tool events)
     if (chunk && typeof chunk === "object" && chunk.type === "toolCall") {
       streamedToolCalls.push({
         id: chunk.id || null,
         name: chunk.name,
         args: chunk.args || {},
+        result: chunk.result || undefined,
+        status: chunk.status || undefined,
         thoughtSignature: chunk.thoughtSignature || undefined,
       });
       emit({
@@ -1195,6 +1220,8 @@ async function handleStreamingText(ctx) {
         id: chunk.id || null,
         name: chunk.name,
         args: chunk.args || {},
+        result: chunk.result || undefined,
+        status: chunk.status || undefined,
         thoughtSignature: chunk.thoughtSignature || undefined,
       });
       continue;

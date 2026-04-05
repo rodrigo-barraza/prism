@@ -36,31 +36,20 @@ router.post("/load", async (req, res, next) => {
 
     const provider = getProvider("lm-studio");
 
-    // Enforce single model — unload anything currently loaded that isn't the requested model
-    try {
-      const { models } = await provider.listModels();
-      for (const m of models || []) {
-        for (const instance of m.loaded_instances || []) {
-          if (instance.id !== model) {
-            logger.info(
-              `Auto-unloading ${instance.id} before loading ${model}`,
-            );
-            await provider.unloadModel(instance.id);
-          }
-        }
-      }
-    } catch (listErr) {
-      logger.warn(`Could not list models before loading: ${listErr.message}`);
-    }
-
     // Build load options from request body
     const loadOptions = {};
     if (context_length != null) loadOptions.context_length = context_length;
     if (flash_attention != null) loadOptions.flash_attention = flash_attention;
     if (offload_kv_cache_to_gpu != null) loadOptions.offload_kv_cache_to_gpu = offload_kv_cache_to_gpu;
 
-    const data = await provider.loadModel(model, loadOptions);
-    res.json(data);
+    // ensureModelLoaded handles: skip if already loaded, unload others, then load
+    const { alreadyLoaded } = await provider.ensureModelLoaded(model, loadOptions);
+    if (alreadyLoaded) {
+      logger.info(`[/lm-studio/load] Model ${model} already loaded — skipping`);
+      return res.json({ model, alreadyLoaded: true });
+    }
+
+    res.json({ model, alreadyLoaded: false });
   } catch (error) {
     logger.error(`POST /lm-studio/load error: ${error.message}`);
     next(error);
@@ -114,6 +103,38 @@ router.post("/load-stream", async (req, res) => {
     if (offload_kv_cache_to_gpu != null) loadOptions.offload_kv_cache_to_gpu = offload_kv_cache_to_gpu;
 
     if (aborted) return res.end();
+
+    // Check if model is already loaded and unload others if needed
+    // (non-streaming part — quick check + unload)
+    let needsLoad = true;
+    try {
+      const { models } = await provider.listModels();
+      const modelEntry = (models || []).find((m) => m.key === model);
+      const isLoaded = modelEntry?.loaded_instances?.length > 0;
+
+      if (isLoaded) {
+        // Already loaded — skip entirely
+        logger.info(`[load-stream] Model ${model} already loaded — skipping`);
+        send({ type: "progress", progress: 1 });
+        send({ type: "complete", alreadyLoaded: true });
+        needsLoad = false;
+      } else {
+        // Unload any other loaded models first (single-model enforcement)
+        for (const m of models || []) {
+          for (const inst of m.loaded_instances || []) {
+            send({ type: "unloading", model: m.key });
+            logger.info(`[load-stream] Auto-unloading ${inst.id} before loading ${model}`);
+            await provider.unloadModel(inst.id);
+          }
+        }
+      }
+    } catch (listErr) {
+      logger.warn(`[load-stream] Could not check models before loading: ${listErr.message}`);
+    }
+
+    if (!needsLoad || aborted) {
+      return res.end();
+    }
 
     send({ type: "progress", progress: 0 });
 
