@@ -59,30 +59,32 @@ export function sleep(ms) {
  * Extract frames from a video data URL using ffmpeg.
  * Returns an array of JPEG image data URLs (one per frame at 1fps).
  *
- * Per Gemma 4 model card, video supports max 60 seconds at 1fps.
- * Default maxFrames=30 keeps context manageable while providing
- * good temporal coverage.
+ * Each image frame costs ~256 tokens in vision models. Default maxFrames=8
+ * keeps total image tokens ~2K, leaving room for text generation in
+ * local models with limited context windows (4K-8K typical).
  *
  * @param {string} videoDataUrl - A data:video/...;base64,... URL
  * @param {object} [options]
  * @param {number} [options.fps=1] - Frames per second to extract
- * @param {number} [options.maxFrames=30] - Maximum frames to extract
+ * @param {number} [options.maxFrames=8] - Maximum frames to extract
  * @param {number} [options.quality=5] - JPEG quality (2=best, 31=worst)
  * @returns {Promise<string[]>} Array of data:image/jpeg;base64,... URLs
  */
 export async function extractVideoFrames(videoDataUrl, options = {}) {
-  const { fps = 1, maxFrames = 30, quality = 5 } = options;
+  const { fps = 1, maxFrames = 8, quality = 5 } = options;
   let tmpDir = null;
 
   try {
-    // Decode video data URL to a temp file
-    const match = videoDataUrl.match(/^data:([^;]+);base64,(.+)$/s);
-    if (!match) {
-      logger.warn("[media] extractVideoFrames: invalid data URL format");
-      return [];
+    // Decode video data URL to a temp file.
+    // Use string ops instead of regex — regex (.+) on multi-MB base64 causes OOM.
+    const b64Marker = ";base64,";
+    const markerIdx = videoDataUrl.indexOf(b64Marker);
+    if (markerIdx === -1 || !videoDataUrl.startsWith("data:")) {
+      throw new Error("Invalid video data URL format");
     }
 
-    const [, mime, base64Data] = match;
+    const mime = videoDataUrl.slice(5, markerIdx); // "data:" is 5 chars
+    const base64Data = videoDataUrl.slice(markerIdx + b64Marker.length);
     const ext = mime.split("/")[1]?.split(";")[0] || "mp4";
 
     tmpDir = await mkdtemp(join(tmpdir(), "prism-frames-"));
@@ -90,16 +92,13 @@ export async function extractVideoFrames(videoDataUrl, options = {}) {
     const outputPattern = join(tmpDir, "frame_%04d.jpg");
 
     // Write video to temp file
-    await writeFile(inputPath, Buffer.from(base64Data, "base64"));
+    const videoBuffer = Buffer.from(base64Data, "base64");
+    const fileSizeMB = (videoBuffer.length / (1024 * 1024)).toFixed(1);
+    logger.info(`[media] Writing ${fileSizeMB} MB video (${mime}) to ${inputPath}`);
+    await writeFile(inputPath, videoBuffer);
 
-    // Extract frames with ffmpeg:
-    //   -i input.mp4            — input video
-    //   -vf fps=1               — extract at 1 frame per second
-    //   -vframes 30             — maximum frames to extract
-    //   -q:v 5                  — JPEG quality (lower = better)
-    //   -f image2               — output as image sequence
-    //   frame_%04d.jpg          — output pattern
-    await new Promise((resolve, reject) => {
+    // Extract frames with ffmpeg
+    const ffmpegStderr = await new Promise((resolve, reject) => {
       execFile(
         "ffmpeg",
         [
@@ -110,13 +109,12 @@ export async function extractVideoFrames(videoDataUrl, options = {}) {
           "-f", "image2",
           outputPattern,
         ],
-        { timeout: 30_000 }, // 30s timeout
+        { timeout: 30_000 },
         (error, _stdout, stderr) => {
           if (error) {
-            logger.warn(`[media] ffmpeg frame extraction failed: ${stderr || error.message}`);
-            reject(error);
+            reject(new Error(`ffmpeg failed (${fileSizeMB} MB ${ext}): ${stderr?.slice(-200) || error.message}`));
           } else {
-            resolve();
+            resolve(stderr);
           }
         },
       );
@@ -131,18 +129,23 @@ export async function extractVideoFrames(videoDataUrl, options = {}) {
         const frameBase64 = frameBuffer.toString("base64");
         frames.push(`data:image/jpeg;base64,${frameBase64}`);
       } catch {
-        // No more frames — we've read all extracted frames
         break;
       }
     }
 
-    logger.info(`[media] Extracted ${frames.length} frames from video (${ext}, fps=${fps})`);
+    if (frames.length === 0) {
+      // ffmpeg ran but produced no frames — extract error details
+      const durationMatch = ffmpegStderr?.match(/Duration: ([^,]+)/);
+      const duration = durationMatch?.[1] || "unknown";
+      throw new Error(
+        `ffmpeg produced 0 frames from ${fileSizeMB} MB ${ext} video (duration: ${duration}). ` +
+        `The file may be corrupt, use an unsupported codec, or contain no video stream.`,
+      );
+    }
+
+    logger.info(`[media] Extracted ${frames.length} frames from video (${ext}, ${fileSizeMB} MB, fps=${fps})`);
     return frames;
-  } catch (err) {
-    logger.warn(`[media] Video frame extraction failed: ${err.message}`);
-    return [];
   } finally {
-    // Clean up temp directory
     if (tmpDir) {
       rm(tmpDir, { recursive: true, force: true }).catch(() => {});
     }

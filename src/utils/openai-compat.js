@@ -48,6 +48,8 @@ export function buildPayloadParams(options, { temperature = 0.7, maxTokens = -1 
     presence_penalty: options.presencePenalty !== undefined ? options.presencePenalty : undefined,
     stop: options.stopSequences !== undefined ? options.stopSequences : undefined,
     max_tokens: options.maxTokens || maxTokens,
+    // Reproducibility seed — supported by OpenAI-compat servers (vLLM, LM Studio, llama.cpp)
+    ...(options.seed !== undefined && options.seed !== "" && { seed: Number(options.seed) }),
   };
 }
 

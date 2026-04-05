@@ -39,6 +39,10 @@ const vllmProvider = {
         messages: prepared,
         model,
         ...buildPayloadParams(options),
+        // vLLM extensions: top_k, min_p, repetition_penalty
+        ...(options.topK > 0 && { top_k: options.topK }),
+        ...(options.minP !== undefined && { min_p: options.minP }),
+        ...(options.repeatPenalty !== undefined && options.repeatPenalty !== 1 && { repetition_penalty: options.repeatPenalty }),
         stream: false,
       };
 
@@ -95,6 +99,10 @@ const vllmProvider = {
         messages: prepared,
         model,
         ...buildPayloadParams(options),
+        // vLLM extensions: top_k, min_p, repetition_penalty
+        ...(options.topK > 0 && { top_k: options.topK }),
+        ...(options.minP !== undefined && { min_p: options.minP }),
+        ...(options.repeatPenalty !== undefined && options.repeatPenalty !== 1 && { repetition_penalty: options.repeatPenalty }),
         stream: true,
         stream_options: { include_usage: true },
       };

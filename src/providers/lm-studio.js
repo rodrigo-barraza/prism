@@ -232,6 +232,10 @@ const lmStudioProvider = {
         messages: prepared,
         model,
         ...buildPayloadParams(options),
+        // LM Studio extensions: top_k, min_p, repeat_penalty
+        ...(options.topK > 0 && { top_k: options.topK }),
+        ...(options.minP !== undefined && { min_p: options.minP }),
+        ...(options.repeatPenalty !== undefined && options.repeatPenalty !== 1 && { repeat_penalty: options.repeatPenalty }),
         stream: false,
       };
 
@@ -405,6 +409,11 @@ const lmStudioProvider = {
       const params = buildPayloadParams(options);
       if (params.temperature != null) nativePayload.temperature = params.temperature;
       if (params.max_tokens > 0) nativePayload.max_output_tokens = params.max_tokens;
+      // Extended sampling params for native API
+      if (params.seed != null) nativePayload.seed = params.seed;
+      if (options.topK > 0) nativePayload.top_k = options.topK;
+      if (options.minP !== undefined) nativePayload.min_p = options.minP;
+      if (options.repeatPenalty !== undefined && options.repeatPenalty !== 1) nativePayload.repeat_penalty = options.repeatPenalty;
 
       // Reasoning toggle
       if (options.thinkingEnabled === false) {

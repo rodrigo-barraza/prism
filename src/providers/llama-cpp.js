@@ -80,7 +80,11 @@ const llamaCppProvider = {
         model,
         ...buildPayloadParams(options),
         // llama.cpp extension: top_k
-        ...(options.topK !== undefined && { top_k: options.topK }),
+        ...(options.topK > 0 && { top_k: options.topK }),
+        // llama.cpp extension: min_p sampling
+        ...(options.minP !== undefined && { min_p: options.minP }),
+        // llama.cpp extension: repeat_penalty
+        ...(options.repeatPenalty !== undefined && options.repeatPenalty !== 1 && { repeat_penalty: options.repeatPenalty }),
         stream: false,
       };
 
@@ -140,7 +144,11 @@ const llamaCppProvider = {
         model,
         ...buildPayloadParams(options),
         // llama.cpp extension: top_k
-        ...(options.topK !== undefined && { top_k: options.topK }),
+        ...(options.topK > 0 && { top_k: options.topK }),
+        // llama.cpp extension: min_p sampling
+        ...(options.minP !== undefined && { min_p: options.minP }),
+        // llama.cpp extension: repeat_penalty
+        ...(options.repeatPenalty !== undefined && options.repeatPenalty !== 1 && { repeat_penalty: options.repeatPenalty }),
         stream: true,
         // Per OpenAI spec: request usage stats in the final SSE chunk
         stream_options: { include_usage: true },
