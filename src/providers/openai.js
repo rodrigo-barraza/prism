@@ -8,6 +8,8 @@ import {
   getDefaultModels,
   getModelByName,
 } from "../config.js";
+import { convertToolsToOpenAI } from "../utils/openai-compat.js";
+import { getDataUrlMimeType, getUrlType, inferMimeFromUrl } from "../utils/media.js";
 
 /**
  * Check if a model should use the Responses API.
@@ -30,23 +32,6 @@ function getClient() {
 }
 
 /**
- * Convert generic tool schemas to OpenAI Chat Completions format.
- * Input:  [{ name, description, parameters }]
- * Output: [{ type: "function", function: { name, description, parameters } }]
- */
-function convertToolsToOpenAI(tools) {
-  if (!tools || !Array.isArray(tools) || tools.length === 0) return null;
-  return tools.map((t) => ({
-    type: "function",
-    function: {
-      name: t.name,
-      description: t.description || "",
-      parameters: t.parameters || {},
-    },
-  }));
-}
-
-/**
  * Convert generic tool schemas to OpenAI Responses API format.
  * Input:  [{ name, description, parameters }]
  * Output: [{ type: "function", name, description, parameters }]
@@ -59,35 +44,6 @@ function convertToolsToResponsesAPI(tools) {
     description: t.description || "",
     parameters: t.parameters || {},
   }));
-}
-/**
- * Detect MIME category from a base64 data URL.
- */
-function getDataUrlMimeType(dataUrl) {
-  const match = dataUrl.match(/^data:([^;]+);base64,/);
-  return match ? match[1] : null;
-}
-
-/**
- * Check if a string is a valid data: URL, HTTP(S) URL, or other ref type.
- */
-function getUrlType(url) {
-  if (url.startsWith("data:")) return "data";
-  if (url.startsWith("http://") || url.startsWith("https://")) return "http";
-  return "unknown";
-}
-
-/**
- * Infer MIME type from a URL's file extension.
- */
-function inferMimeFromUrl(url) {
-  try {
-    const pathname = new URL(url).pathname.toLowerCase();
-    if (/\.(png|jpg|jpeg|gif|webp|bmp|svg|avif)$/i.test(pathname)) return "image";
-    if (/\.pdf$/i.test(pathname)) return "pdf";
-    if (/\.(txt|md|csv|json|xml|html|css|js|ts)$/i.test(pathname)) return "text";
-  } catch { /* ignore */ }
-  return "unknown";
 }
 
 /**

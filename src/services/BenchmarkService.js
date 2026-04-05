@@ -15,6 +15,7 @@ import { getProvider } from "../providers/index.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
+import { sleep } from "../utils/media.js";
 
 // Providers that run on local GPU — grouped into a single sequential bucket
 const LOCAL_PROVIDERS = new Set(["lm-studio", "vllm", "ollama", "llama-cpp"]);
@@ -355,7 +356,6 @@ const BenchmarkService = {
     // 100ms stagger to avoid rate-limiting.
     // Local GPU providers share a single sequential bucket.
 
-    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const INTRA_PROVIDER_DELAY_MS = 100;
 
     // Group models by provider; collapse all local providers into one bucket

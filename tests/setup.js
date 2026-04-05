@@ -16,6 +16,7 @@ vi.mock('../secrets.js', () => ({
     LM_STUDIO_BASE_URL: '',
     VLLM_BASE_URL: '',
     OLLAMA_BASE_URL: '',
+    LLAMA_CPP_BASE_URL: '',
     OPENAI_COMPATIBLE_BASE_URL: 'http://localhost:9999',
     MONGO_URI: 'mongodb://127.0.0.1:27017',
     MONGO_DB_NAME: 'prism-test',
@@ -107,6 +108,9 @@ vi.mock('../src/providers/index.js', () => {
         elevenlabs: mockProviderTtsOnly,
         inworld: mockProviderTtsOnly,
         'openai-compatible': mockProviderTextOnly,
+        'lm-studio': mockProviderTextOnly,
+        ollama: mockProviderTextOnly,
+        'llama-cpp': mockProviderTextOnly,
         vllm: mockProviderTextOnly,
     };
 

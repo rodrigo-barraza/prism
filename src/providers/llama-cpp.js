@@ -31,289 +31,20 @@ import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
 import { LLAMA_CPP_BASE_URL } from "../../secrets.js";
 import { TYPES, getDefaultModels } from "../config.js";
+import {
+  convertToolsToOpenAI,
+  buildPayloadParams,
+  prepareOpenAICompatMessages,
+  processNonStreamingResponse,
+  parseSSEStream,
+  fetchOpenAICompat,
+  MEDIA_STRATEGIES,
+} from "../utils/openai-compat.js";
 
 // ── Helpers ──────────────────────────────────────────────────
 
 function getBaseUrl() {
   return LLAMA_CPP_BASE_URL;
-}
-
-/**
- * Convert generic tool schemas to OpenAI Chat Completions format.
- * Input:  [{ name, description, parameters }]
- * Output: [{ type: "function", function: { name, description, parameters } }]
- *
- * llama.cpp /v1/chat/completions supports the standard OpenAI tool schema
- * when running models fine-tuned for tool use (Hermes, Qwen, Llama 3.x, etc.)
- * and when the server is started with --jinja for proper chat template formatting.
- */
-function convertToolsToOpenAI(tools) {
-  if (!tools || !Array.isArray(tools) || tools.length === 0) return null;
-  return tools.map((t) => ({
-    type: "function",
-    function: {
-      name: t.name,
-      description: t.description || "",
-      parameters: t.parameters || {},
-    },
-  }));
-}
-
-/**
- * Extract <think>…</think> blocks from a complete response string.
- * Returns { thinking, text } where thinking is the concatenated think content
- * and text is the remaining content with think tags removed.
- */
-function extractThinkTags(raw) {
-  const thinkRegex = /<think>([\s\S]*?)<\/think>/gi;
-  const thinkParts = [];
-  let match;
-  while ((match = thinkRegex.exec(raw)) !== null) {
-    thinkParts.push(match[1].trim());
-  }
-  const text = raw.replace(thinkRegex, "").trim();
-  return {
-    thinking: thinkParts.length > 0 ? thinkParts.join("\n\n") : null,
-    text,
-  };
-}
-
-/**
- * Stateful parser for streaming <think> tag detection.
- * Handles tags that arrive split across chunk boundaries.
- *
- * feed(chunk) returns an array of items:
- *   - { type: "thinking", content: string }
- *   - { type: "text", content: string }
- */
-class ThinkTagParser {
-  constructor() {
-    this.insideThink = false;
-    this.buffer = "";
-  }
-
-  feed(chunk) {
-    this.buffer += chunk;
-    const results = [];
-
-    while (this.buffer.length > 0) {
-      if (this.insideThink) {
-        const closeIdx = this.buffer.indexOf("</think>");
-        if (closeIdx !== -1) {
-          const thinkContent = this.buffer.slice(0, closeIdx);
-          if (thinkContent) {
-            results.push({ type: "thinking", content: thinkContent });
-          }
-          this.buffer = this.buffer.slice(closeIdx + "</think>".length);
-          this.insideThink = false;
-        } else {
-          const partialMatch = this._partialEndTag(this.buffer);
-          if (partialMatch > 0) {
-            const safe = this.buffer.slice(
-              0,
-              this.buffer.length - partialMatch,
-            );
-            if (safe) {
-              results.push({ type: "thinking", content: safe });
-            }
-            this.buffer = this.buffer.slice(this.buffer.length - partialMatch);
-          } else {
-            results.push({ type: "thinking", content: this.buffer });
-            this.buffer = "";
-          }
-          break;
-        }
-      } else {
-        const openIdx = this.buffer.indexOf("<think>");
-        if (openIdx !== -1) {
-          const textBefore = this.buffer.slice(0, openIdx);
-          if (textBefore) {
-            results.push({ type: "text", content: textBefore });
-          }
-          this.buffer = this.buffer.slice(openIdx + "<think>".length);
-          this.insideThink = true;
-        } else {
-          const partialMatch = this._partialStartTag(this.buffer);
-          if (partialMatch > 0) {
-            const safe = this.buffer.slice(
-              0,
-              this.buffer.length - partialMatch,
-            );
-            if (safe) {
-              results.push({ type: "text", content: safe });
-            }
-            this.buffer = this.buffer.slice(this.buffer.length - partialMatch);
-          } else {
-            results.push({ type: "text", content: this.buffer });
-            this.buffer = "";
-          }
-          break;
-        }
-      }
-    }
-    return results;
-  }
-
-  /** Check if the end of str is a partial match for "<think>" */
-  _partialStartTag(str) {
-    const tag = "<think>";
-    for (let len = Math.min(tag.length - 1, str.length); len >= 1; len--) {
-      if (str.endsWith(tag.slice(0, len))) {
-        return len;
-      }
-    }
-    return 0;
-  }
-
-  /** Check if the end of str is a partial match for "</think>" */
-  _partialEndTag(str) {
-    const tag = "</think>";
-    for (let len = Math.min(tag.length - 1, str.length); len >= 1; len--) {
-      if (str.endsWith(tag.slice(0, len))) {
-        return len;
-      }
-    }
-    return 0;
-  }
-
-  /** Flush any remaining buffered content. */
-  flush() {
-    if (!this.buffer) return [];
-    const type = this.insideThink ? "thinking" : "text";
-    const result = [{ type, content: this.buffer }];
-    this.buffer = "";
-    return result;
-  }
-}
-
-/**
- * Detect MIME category from a base64 data URL.
- */
-function getDataUrlMimeType(dataUrl) {
-  const match = dataUrl.match(/^data:([^;]+);base64,/);
-  return match ? match[1] : null;
-}
-
-/**
- * Convert messages with media to OpenAI-compatible multipart content format.
- * Handles images, audio, video, and PDFs via data URLs, plus tool result
- * messages and assistant messages with toolCalls.
- *
- * llama.cpp /v1/chat/completions uses the standard OpenAI content format:
- *  - Images → { type: "image_url", image_url: { url } }
- *  - Text   → { type: "text", text: string }
- *  - Tool results → { role: "tool", tool_call_id, content }
- *  - Assistant tool calls → { role: "assistant", tool_calls: [...] }
- *
- * Note: Audio/video support depends on the loaded model's capabilities.
- * Most llama.cpp models are text/image only. We handle all media types
- * gracefully, falling back to text descriptions for unsupported types.
- */
-function prepareMessages(messages) {
-  return messages.map((m) => {
-    const base = { role: m.role };
-    if (m.name) base.name = m.name;
-
-    // Tool result messages — include tool_call_id for correlation
-    // Per OpenAI spec: { role: "tool", tool_call_id: string, content: string }
-    if (m.role === "tool") {
-      return {
-        role: "tool",
-        tool_call_id: m.tool_call_id || m.id || "",
-        content:
-          typeof m.content === "string" ? m.content : JSON.stringify(m.content),
-      };
-    }
-
-    // Assistant messages with tool calls — include tool_calls in OpenAI format
-    // Per OpenAI spec: tool_calls array with { id, type: "function", function: { name, arguments } }
-    if (m.role === "assistant" && m.toolCalls && m.toolCalls.length > 0) {
-      const msg = {
-        ...base,
-        // Per OpenAI spec, content must be null when tool_calls are present
-        content: m.content?.trim() || null,
-        tool_calls: m.toolCalls.map((tc, i) => ({
-          id: tc.id || `call_${i}`,
-          type: "function",
-          function: {
-            name: tc.name,
-            arguments:
-              typeof tc.args === "string"
-                ? tc.args
-                : JSON.stringify(tc.args || {}),
-          },
-        })),
-      };
-      return msg;
-    }
-
-    // Collect all media from images, audio, video, pdf fields into multipart content
-    const content = [];
-
-    for (const field of ["images", "audio", "video", "pdf"]) {
-      const arr = m[field];
-      if (!arr || !Array.isArray(arr) || arr.length === 0) continue;
-
-      for (const dataUrl of arr) {
-        const mime = getDataUrlMimeType(dataUrl);
-
-        if (mime && mime.startsWith("image/")) {
-          // Standard image — use image_url (OpenAI-compatible)
-          // llama.cpp supports this for vision-capable models (LLaVA, etc.)
-          content.push({ type: "image_url", image_url: { url: dataUrl } });
-        } else if (mime && mime.startsWith("audio/")) {
-          // Audio — most llama.cpp models don't support audio input
-          // Provide a text fallback
-          content.push({
-            type: "text",
-            text: "[Attached audio file — audio input not supported by this model]",
-          });
-        } else if (mime && mime.startsWith("video/")) {
-          // Video — most llama.cpp models don't support video input
-          content.push({
-            type: "text",
-            text: "[Attached video file — video input not supported by this model]",
-          });
-        } else if (mime === "application/pdf") {
-          // PDFs — llama.cpp doesn't support file uploads
-          content.push({
-            type: "text",
-            text: "[Attached PDF document — PDF input not supported by this model]",
-          });
-        } else if (
-          mime &&
-          (mime.startsWith("text/") || mime === "application/json")
-        ) {
-          // Text-based files — decode and inline
-          try {
-            const base64 = dataUrl.split(";base64,")[1];
-            const decoded = Buffer.from(base64, "base64").toString("utf-8");
-            content.push({
-              type: "text",
-              text: `[Attached file (${mime})]:\n${decoded}`,
-            });
-          } catch {
-            content.push({
-              type: "text",
-              text: `[Attached file (${mime}): unable to decode]`,
-            });
-          }
-        } else {
-          // Fallback — try image_url passthrough for unknown types
-          content.push({ type: "image_url", image_url: { url: dataUrl } });
-        }
-      }
-    }
-
-    if (content.length > 0) {
-      if (m.content) {
-        content.push({ type: "text", text: m.content });
-      }
-      return { ...base, content };
-    }
-
-    return { ...base, content: m.content };
-  });
 }
 
 
@@ -324,23 +55,6 @@ const llamaCppProvider = {
 
   // ── Non-Streaming Text Generation ──────────────────────────
   // POST /v1/chat/completions with stream: false
-  //
-  // Request body (per OpenAI spec + llama.cpp extensions):
-  //   model       — string (model identifier, required)
-  //   messages    — array of { role, content } objects (required)
-  //   stream      — false
-  //   temperature — float 0.0–2.0 (default server-side: 0.8)
-  //   top_p       — float 0.0–1.0 (nucleus sampling)
-  //   top_k       — integer (llama.cpp extension, limits token pool)
-  //   frequency_penalty — float (penalizes frequent tokens)
-  //   presence_penalty  — float (penalizes already-used tokens)
-  //   max_tokens  — integer (-1 for unlimited, maps to n_predict)
-  //   stop        — array of strings (stop sequences)
-  //   tools       — array of tool definitions (OpenAI format)
-  //
-  // Response:
-  //   { choices: [{ message: { role, content, tool_calls? }, finish_reason }],
-  //     usage: { prompt_tokens, completion_tokens, total_tokens } }
 
   async generateText(
     messages,
@@ -353,28 +67,16 @@ const llamaCppProvider = {
       `generateText model=${model} baseUrl=${baseUrl}`,
     );
     try {
-      const prepared = prepareMessages(messages);
+      const prepared = prepareOpenAICompatMessages(messages, {
+        mediaStrategy: MEDIA_STRATEGIES.TEXT_FALLBACK,
+      });
 
       const payload = {
         messages: prepared,
         model,
-        temperature:
-          options.temperature !== undefined ? options.temperature : 0.7,
-        top_p: options.topP !== undefined ? options.topP : undefined,
-        top_k: options.topK !== undefined ? options.topK : undefined,
-        frequency_penalty:
-          options.frequencyPenalty !== undefined
-            ? options.frequencyPenalty
-            : undefined,
-        presence_penalty:
-          options.presencePenalty !== undefined
-            ? options.presencePenalty
-            : undefined,
-        stop:
-          options.stopSequences !== undefined
-            ? options.stopSequences
-            : undefined,
-        max_tokens: options.maxTokens || -1,
+        ...buildPayloadParams(options),
+        // llama.cpp extension: top_k
+        ...(options.topK !== undefined && { top_k: options.topK }),
         stream: false,
       };
 
@@ -382,31 +84,13 @@ const llamaCppProvider = {
       const tools = convertToolsToOpenAI(options.tools);
       if (tools) payload.tools = tools;
 
-      const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`API error: ${response.status} ${errorText}`);
-      }
-
+      const response = await fetchOpenAICompat(
+        `${baseUrl}/v1/chat/completions`,
+        payload,
+      );
       const data = await response.json();
-      const message = data.choices?.[0]?.message;
-      const rawText = message?.content || "";
-
-      // Check native reasoning fields first, fall back to <think> tag parsing
-      const nativeThinking =
-        message?.reasoning_content || message?.reasoning || null;
-      const { thinking: tagThinking, text } = extractThinkTags(rawText);
-      const thinking = nativeThinking || tagThinking;
-
-      const usage = {
-        inputTokens: data.usage?.prompt_tokens ?? 0,
-        outputTokens: data.usage?.completion_tokens ?? 0,
-      };
+      const { text, thinking, usage, toolCalls } =
+        processNonStreamingResponse(data);
 
       // Extract timings for tok/s reporting (llama.cpp extension)
       if (data.timings?.predicted_per_second) {
@@ -416,29 +100,7 @@ const llamaCppProvider = {
       }
 
       const result = { text, thinking, usage };
-
-      // Extract tool calls if present
-      // llama.cpp returns tool_calls in a FLAT structure (name/arguments
-      // at top level), unlike OpenAI's nested { function: { name, arguments } }.
-      // We handle both formats for forward compatibility.
-      if (message?.tool_calls && message.tool_calls.length > 0) {
-        result.toolCalls = message.tool_calls.map((tc) => {
-          const fnName = tc.function?.name || tc.name || "";
-          const fnArgs = tc.function?.arguments || tc.arguments || "{}";
-          let args = {};
-          try {
-            args = JSON.parse(fnArgs);
-          } catch {
-            /* ignore */
-          }
-          return {
-            id: tc.id,
-            name: fnName,
-            args,
-          };
-        });
-      }
-
+      if (toolCalls) result.toolCalls = toolCalls;
       return result;
     } catch (error) {
       if (error instanceof ProviderError) throw error;
@@ -447,22 +109,6 @@ const llamaCppProvider = {
   },
 
   // ── Streaming Text Generation (SSE) ──────────────────────
-  // POST /v1/chat/completions with stream: true
-  //
-  // Request body same as non-streaming, plus:
-  //   stream: true
-  //   stream_options: { include_usage: true }  — to get token counts in final chunk
-  //
-  // SSE format (per OpenAI spec):
-  //   data: {"choices":[{"delta":{"content":"..."}}]}
-  //   data: {"choices":[{"delta":{"tool_calls":[...]}}]}
-  //   data: {"choices":[{"finish_reason":"stop"}],"usage":{...}}
-  //   data: [DONE]
-  //
-  // Delta objects contain incremental content:
-  //   delta.content     — text content chunk
-  //   delta.tool_calls  — tool call deltas (streamed incrementally)
-  //   delta.reasoning_content — native reasoning (model-dependent)
 
   async *generateTextStream(
     messages,
@@ -475,28 +121,16 @@ const llamaCppProvider = {
       `generateTextStream model=${model} baseUrl=${baseUrl}`,
     );
     try {
-      const prepared = prepareMessages(messages);
+      const prepared = prepareOpenAICompatMessages(messages, {
+        mediaStrategy: MEDIA_STRATEGIES.TEXT_FALLBACK,
+      });
 
       const payload = {
         messages: prepared,
         model,
-        temperature:
-          options.temperature !== undefined ? options.temperature : 0.7,
-        top_p: options.topP !== undefined ? options.topP : undefined,
-        top_k: options.topK !== undefined ? options.topK : undefined,
-        frequency_penalty:
-          options.frequencyPenalty !== undefined
-            ? options.frequencyPenalty
-            : undefined,
-        presence_penalty:
-          options.presencePenalty !== undefined
-            ? options.presencePenalty
-            : undefined,
-        stop:
-          options.stopSequences !== undefined
-            ? options.stopSequences
-            : undefined,
-        max_tokens: options.maxTokens || -1,
+        ...buildPayloadParams(options),
+        // llama.cpp extension: top_k
+        ...(options.topK !== undefined && { top_k: options.topK }),
         stream: true,
         // Per OpenAI spec: request usage stats in the final SSE chunk
         stream_options: { include_usage: true },
@@ -506,147 +140,24 @@ const llamaCppProvider = {
       const tools = convertToolsToOpenAI(options.tools);
       if (tools) payload.tools = tools;
 
-      const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        ...(options.signal && { signal: options.signal }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`API error: ${response.status} ${errorText}`);
-      }
+      const response = await fetchOpenAICompat(
+        `${baseUrl}/v1/chat/completions`,
+        payload,
+        { signal: options.signal },
+      );
 
       const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let usage = null;
-      const thinkParser = new ThinkTagParser();
-      // Accumulate tool calls across chunks
-      const pendingToolCalls = {};
-
-      while (true) {
-        if (options.signal?.aborted) {
-          reader.cancel();
-          break;
-        }
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop();
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || trimmed.startsWith(":")) continue;
-          if (trimmed === "data: [DONE]") continue;
-          if (!trimmed.startsWith("data: ")) continue;
-
-          try {
-            const json = JSON.parse(trimmed.slice(6));
-
-            // Extract usage if present (sent on the final chunk)
-            // llama.cpp sends usage in the same format as OpenAI:
-            //   { prompt_tokens, completion_tokens, total_tokens }
-            if (json.usage) {
-              usage = {
-                inputTokens: json.usage.prompt_tokens ?? 0,
-                outputTokens: json.usage.completion_tokens ?? 0,
-              };
-            }
-
-            // Extract timings for tok/s reporting (llama.cpp extension)
-            if (json.timings?.predicted_per_second && usage) {
-              usage.tokensPerSec = parseFloat(
-                json.timings.predicted_per_second.toFixed(1),
-              );
-            }
-
-            const delta = json.choices?.[0]?.delta;
-
-            // Native reasoning fields (model-dependent, e.g. DeepSeek-R1)
-            const reasoning =
-              delta?.reasoning_content || delta?.reasoning || "";
-            if (reasoning) {
-              yield { type: "thinking", content: reasoning };
-            }
-
-            const content = delta?.content || "";
-            if (content) {
-              // Parse <think> tags from the streamed content
-              const parts = thinkParser.feed(content);
-              for (const part of parts) {
-                if (part.type === "thinking") {
-                  yield { type: "thinking", content: part.content };
-                } else {
-                  yield part.content;
-                }
-              }
-            }
-
-            // Accumulate tool call deltas
-            // llama.cpp may use flat structure (name/arguments at top level)
-            // or nested OpenAI structure ({ function: { name, arguments } }).
-            // We handle both formats.
-            if (delta?.tool_calls) {
-              for (const tc of delta.tool_calls) {
-                const idx = tc.index;
-                if (!pendingToolCalls[idx]) {
-                  pendingToolCalls[idx] = {
-                    id: tc.id || "",
-                    name: tc.function?.name || tc.name || "",
-                    args: "",
-                  };
-                }
-                if (tc.id) pendingToolCalls[idx].id = tc.id;
-                const chunkName = tc.function?.name || tc.name;
-                if (chunkName) pendingToolCalls[idx].name = chunkName;
-                const chunkArgs = tc.function?.arguments || tc.arguments;
-                if (chunkArgs) pendingToolCalls[idx].args += chunkArgs;
-              }
-            }
-
-            // If finish_reason is "tool_calls", yield accumulated tool calls
-            const finishReason = json.choices?.[0]?.finish_reason;
-            if (finishReason === "tool" || finishReason === "tool_calls") {
-              for (const tc of Object.values(pendingToolCalls)) {
-                let args = {};
-                try {
-                  args = JSON.parse(tc.args || "{}");
-                } catch {
-                  /* ignore */
-                }
-                yield {
-                  type: "toolCall",
-                  id: tc.id,
-                  name: tc.name,
-                  args,
-                };
-              }
-            }
-          } catch {
-            // skip malformed JSON lines
+      yield* parseSSEStream(reader, {
+        signal: options.signal,
+        // llama.cpp extension: extract timings for tok/s
+        onUsage: (json, usage) => {
+          if (json.timings?.predicted_per_second) {
+            usage.tokensPerSec = parseFloat(
+              json.timings.predicted_per_second.toFixed(1),
+            );
           }
-        }
-      }
-
-      // Flush any remaining buffered content from the think parser
-      const remaining = thinkParser.flush();
-      for (const part of remaining) {
-        if (part.type === "thinking") {
-          yield { type: "thinking", content: part.content };
-        } else {
-          yield part.content;
-        }
-      }
-
-      if (usage) {
-        yield { type: "usage", usage };
-      } else {
-        yield { type: "usage", usage: { inputTokens: 0, outputTokens: 0 } };
-      }
+        },
+      });
     } catch (error) {
       if (error.name === "AbortError") return; // Client disconnected
       if (error instanceof ProviderError) throw error;
@@ -683,22 +194,16 @@ const llamaCppProvider = {
       }
       messages.push({ role: "user", content });
 
-      const response = await fetch(`${baseUrl}/v1/chat/completions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const response = await fetchOpenAICompat(
+        `${baseUrl}/v1/chat/completions`,
+        {
           messages,
           model,
           temperature: 0.7,
           max_tokens: -1,
           stream: false,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`API error: ${response.status} ${errorText}`);
-      }
+        },
+      );
 
       const data = await response.json();
       const text = data.choices?.[0]?.message?.content || "";
@@ -715,9 +220,6 @@ const llamaCppProvider = {
 
   // ── Model Listing ────────────────────────────────────────
   // GET /v1/models
-  //
-  // Response (per OpenAI spec):
-  //   { object: "list", data: [{ id: string, object: "model", owned_by: string, created: number }] }
 
   async listModels() {
     const baseUrl = getBaseUrl();
@@ -748,13 +250,6 @@ const llamaCppProvider = {
 
   // ── Health Check ─────────────────────────────────────────
   // GET /health
-  //
-  // Response:
-  //   200 { status: "ok", slots_idle: N, slots_processing: M }
-  //   503 { status: "loading model" }
-  //   500 { status: "error" }
-  //
-  // This is a native llama.cpp endpoint (not OpenAI-compatible).
 
   async checkHealth() {
     const baseUrl = getBaseUrl();
@@ -765,8 +260,6 @@ const llamaCppProvider = {
         signal: AbortSignal.timeout(3000),
       });
       const data = await response.json();
-      // Normalize: newer llama.cpp returns { error: { message } } on 503,
-      // older versions returned { status: "loading model" }.
       return {
         ok: response.ok,
         status: response.ok
