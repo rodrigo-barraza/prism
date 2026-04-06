@@ -14,6 +14,12 @@
 //   ✓ vLLM    (planned)
 //   ✓ llama.cpp server (planned)
 //
+// Platforms:
+//   ✓ Linux (bare-metal + AMD ROCm)
+//   ✓ WSL2 (Windows Subsystem for Linux)
+//   ✓ macOS (Apple Silicon unified memory + Intel dGPU)
+//   ✓ Windows (native, NVIDIA via nvidia-smi)
+//
 // Usage:
 //   node scripts/vram-bench.js [options]
 //
@@ -37,6 +43,7 @@
 //   --skip-multi-turn           Skip multi-turn KV growth test
 //   --skip-concurrent           Skip concurrent slot stress test
 //   --multi-turns=<n>           Number of multi-turn exchanges (default: 4)
+//   --gpu-index=<n>             GPU index for multi-GPU systems (default: auto)
 //
 // LM Studio Load Settings (tested per model):
 //   flash_attention       true/false — Q8_0 vs FP32 KV cache
@@ -58,6 +65,7 @@
 
 import { execSync } from "node:child_process";
 import { writeFileSync, readFileSync } from "node:fs";
+import os from "node:os";
 import { randomUUID } from "node:crypto";
 import { MongoClient } from "mongodb";
 import { resolveArchParams, estimateMemory } from "../src/utils/gguf-arch.js";
@@ -102,8 +110,59 @@ const SKIP_SATURATION = hasFlag("skip-saturation") || SKIP_EXTENDED;
 const SKIP_MULTI_TURN = hasFlag("skip-multi-turn") || SKIP_EXTENDED;
 const SKIP_CONCURRENT = hasFlag("skip-concurrent") || SKIP_EXTENDED;
 const MULTI_TURN_COUNT = parseInt(getArg("multi-turns", "4"));
+const GPU_INDEX = getArg("gpu-index", null) != null ? parseInt(getArg("gpu-index", "0")) : null;
 
 const BENCH_COLLECTION = "vram_benchmarks";
+
+// ── Platform Detection ───────────────────────────────────────
+// Resolved once at startup — drives all platform-specific branches.
+
+const PLATFORM = (() => {
+  if (process.platform === "darwin") return "macos";
+  if (process.platform === "win32") return "windows";
+  if (process.platform === "linux") {
+    try {
+      const uname = execSync("uname -r", { encoding: "utf-8", timeout: 2000 });
+      if (uname.toLowerCase().includes("microsoft")) return "wsl";
+    } catch { /* ignore */ }
+    return "linux";
+  }
+  return process.platform;
+})();
+
+// ── Safe Exec Helper ─────────────────────────────────────────
+
+function tryExec(cmd, opts = {}) {
+  try {
+    return execSync(cmd, {
+      encoding: "utf-8",
+      timeout: opts.timeout || 5000,
+      stdio: ["pipe", "pipe", "pipe"],
+      ...opts,
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+// ── GPU Monitor Backend ──────────────────────────────────────
+// Probed once — queryGPU() dispatches based on this constant.
+// Priority: nvidia-smi → rocm-smi → Apple unified memory → Node.js os fallback
+
+let _cachedGpuName = null;
+
+const GPU_MONITOR = (() => {
+  const gpuIdx = GPU_INDEX != null ? ` --id=${GPU_INDEX}` : "";
+  if (tryExec(`nvidia-smi --query-gpu=name --format=csv,noheader${gpuIdx} 2>/dev/null`))
+    return "nvidia";
+  if (
+    (PLATFORM === "linux" || PLATFORM === "wsl") &&
+    tryExec("rocm-smi --showid 2>/dev/null")
+  )
+    return "rocm";
+  if (PLATFORM === "macos") return "apple";
+  return "os";
+})();
 
 // Unique run ID — groups all entries from a single benchmark session
 const RUN_ID = randomUUID();
@@ -550,173 +609,332 @@ const PROVIDERS = {
 
 // ── System Profile ───────────────────────────────────────────
 // Collects hardware fingerprint for cross-machine comparisons.
-// Works across bare-metal Linux, WSL2, and native Windows.
+// Works across bare-metal Linux, WSL2, native Windows, and macOS.
 
 function collectSystemProfile() {
   const profile = {
-    hostname: null,
-    os: null,
+    hostname: os.hostname(),
+    os: {
+      name: null,
+      kernel: os.release(),
+      platform: PLATFORM,
+      arch: os.arch(),
+    },
     gpu: {},
-    cpu: {},
-    ram: {},
+    cpu: {
+      model: os.cpus()[0]?.model?.trim() || null,
+      cores: null,
+      threads: os.cpus().length,
+      sockets: 1,
+      arch: os.arch(),
+      speedMHz: os.cpus()[0]?.speed || null,
+    },
+    ram: {
+      totalMiB: Math.round(os.totalmem() / (1024 * 1024)),
+      totalGiB: +(os.totalmem() / (1024 ** 3)).toFixed(1),
+    },
     motherboard: {},
     collectedAt: new Date().toISOString(),
   };
 
-  // ── Hostname ────────────────────────────────────────────
-  try {
-    profile.hostname = execSync("hostname", { encoding: "utf-8", timeout: 3000 }).trim();
-  } catch { /* ignore */ }
+  // ── OS enrichment ──────────────────────────────────────
+  if (PLATFORM === "macos") {
+    const swVers = tryExec("sw_vers");
+    if (swVers) {
+      const name = swVers.match(/ProductName:\s*(.+)/)?.[1]?.trim();
+      const version = swVers.match(/ProductVersion:\s*(.+)/)?.[1]?.trim();
+      const build = swVers.match(/BuildVersion:\s*(.+)/)?.[1]?.trim();
+      profile.os.name = `${name || "macOS"} ${version || ""} (${build || ""})`.trim();
+    }
+  } else if (PLATFORM === "windows") {
+    const psOut = tryExec(
+      'powershell.exe -NoProfile -Command "Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber | ConvertTo-Json"',
+      { timeout: 8000 },
+    );
+    if (psOut) {
+      try {
+        const info = JSON.parse(psOut);
+        profile.os.name = `${info.Caption || "Windows"} (${info.Version || ""})`;
+      } catch { /* ignore */ }
+    }
+  } else {
+    // Linux / WSL
+    const release = tryExec("cat /etc/os-release 2>/dev/null");
+    if (release) {
+      profile.os.name = release.match(/^PRETTY_NAME="?(.+?)"?$/m)?.[1] || null;
+    }
+    profile.os.kernel = tryExec("uname -r") || os.release();
+    if (PLATFORM === "wsl") profile.os.platform = "wsl2";
+  }
 
-  // ── OS ──────────────────────────────────────────────────
-  try {
-    const release = execSync("cat /etc/os-release 2>/dev/null || echo ''", { encoding: "utf-8", timeout: 3000 }).trim();
-    const name = release.match(/^PRETTY_NAME="?(.+?)"?$/m)?.[1] || null;
-    const isWSL = release.includes("WSL") || execSync("uname -r", { encoding: "utf-8", timeout: 2000 }).includes("microsoft");
-    profile.os = {
-      name,
-      kernel: execSync("uname -r", { encoding: "utf-8", timeout: 2000 }).trim(),
-      platform: isWSL ? "wsl2" : "linux",
-    };
-  } catch { /* ignore */ }
-
-  // ── GPU (nvidia-smi) ───────────────────────────────────
-  try {
-    const raw = execSync(
-      "nvidia-smi --query-gpu=name,driver_version,memory.total,pci.bus_id,uuid --format=csv,noheader,nounits",
-      { encoding: "utf-8", timeout: 5000 },
-    ).trim();
-    const parts = raw.split(",").map((s) => s.trim());
+  // ── GPU ────────────────────────────────────────────────
+  // Try nvidia-smi first (works on Windows, Linux, WSL)
+  const gpuIdx = GPU_INDEX != null ? ` --id=${GPU_INDEX}` : "";
+  const nvidiaGpu = tryExec(
+    `nvidia-smi --query-gpu=name,driver_version,memory.total,pci.bus_id,uuid --format=csv,noheader,nounits${gpuIdx}`,
+  );
+  if (nvidiaGpu) {
+    const lines = nvidiaGpu.split("\n");
+    const parts = (lines[0] || "").split(",").map((s) => s.trim());
     profile.gpu = {
       name: parts[0],
       driver: parts[1],
       totalMiB: parseInt(parts[2]),
       pciBusId: parts[3],
       uuid: parts[4],
+      vendor: "nvidia",
+      unifiedMemory: false,
     };
-  } catch { /* ignore */ }
-
-  // ── CPU (lscpu) ────────────────────────────────────────
-  try {
-    const lscpu = execSync("lscpu", { encoding: "utf-8", timeout: 3000 });
-    const field = (key) => lscpu.match(new RegExp(`^${key}:\\s*(.+)$`, "m"))?.[1]?.trim() || null;
-    profile.cpu = {
-      model: field("Model name"),
-      cores: parseInt(field("Core\\(s\\) per socket") || "0"),
-      threads: parseInt(field("CPU\\(s\\)") || "0"),
-      sockets: parseInt(field("Socket\\(s\\)") || "1"),
-      bogoMIPS: parseFloat(field("BogoMIPS") || "0"),
-      maxMHz: parseFloat(field("CPU max MHz") || "0") || null,
-      minMHz: parseFloat(field("CPU min MHz") || "0") || null,
-    };
-  } catch { /* ignore */ }
-
-  // ── CPU frequency + temp + load (PowerShell on WSL2, /sys on bare metal) ──
-  try {
-    const psOutput = execSync(
-      'powershell.exe -NoProfile -Command "Get-CimInstance Win32_Processor | Select-Object CurrentClockSpeed, MaxClockSpeed, LoadPercentage | ConvertTo-Json" 2>/dev/null',
-      { encoding: "utf-8", timeout: 8000 },
-    ).trim();
-    const cpuInfo = JSON.parse(psOutput);
-    const cpu = Array.isArray(cpuInfo) ? cpuInfo[0] : cpuInfo;
-    if (cpu) {
-      profile.cpu.currentMHz = cpu.CurrentClockSpeed || null;
-      profile.cpu.maxClockMHz = cpu.MaxClockSpeed || null;
-      profile.cpu.loadPct = cpu.LoadPercentage || null;
-    }
-  } catch {
-    // Fallback: bare-metal Linux thermal zone
-    try {
-      const temp = execSync(
-        "cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null",
-        { encoding: "utf-8", timeout: 2000 },
-      ).trim();
-      if (temp) profile.cpu.tempC = +(parseInt(temp) / 1000).toFixed(1);
-    } catch { /* ignore */ }
   }
 
-  // ── RAM ─────────────────────────────────────────────────
-  try {
-    const meminfo = execSync("cat /proc/meminfo", { encoding: "utf-8", timeout: 2000 });
-    const totalKB = parseInt(meminfo.match(/MemTotal:\s*(\d+)/)?.[1] || "0");
-    profile.ram.totalMiB = Math.round(totalKB / 1024);
-    profile.ram.totalGiB = +(totalKB / 1024 / 1024).toFixed(1);
-  } catch { /* ignore */ }
-
-  // ── RAM details (PowerShell on WSL2, dmidecode on bare metal) ──
-  try {
-    const psOutput = execSync(
-      "powershell.exe -NoProfile -Command 'Get-CimInstance Win32_PhysicalMemory | Select-Object Speed, ConfiguredClockSpeed, Capacity, Manufacturer, SMBIOSMemoryType, PartNumber | ConvertTo-Json' 2>/dev/null",
-      { encoding: "utf-8", timeout: 10000 },
-    ).trim();
-    const dimms = JSON.parse(psOutput);
-    const dimmList = Array.isArray(dimms) ? dimms : [dimms];
-    if (dimmList.length > 0) {
-      profile.ram.speedMHz = dimmList[0].ConfiguredClockSpeed || dimmList[0].Speed || null;
-      profile.ram.jedecSpeedMHz = dimmList[0].Speed || null;
-      profile.ram.manufacturer = dimmList[0].Manufacturer || null;
-      profile.ram.dimms = dimmList.length;
-      profile.ram.totalPhysicalGiB = +(dimmList.reduce((sum, d) => sum + (d.Capacity || 0), 0) / 1024 ** 3).toFixed(1);
-      profile.ram.partNumber = dimmList[0].PartNumber?.trim() || null;
-      // SMBIOSMemoryType: 24=DDR3, 26=DDR4, 34=DDR5
-      const memTypeMap = { 24: "DDR3", 26: "DDR4", 34: "DDR5" };
-      profile.ram.type = memTypeMap[dimmList[0].SMBIOSMemoryType] || `SMBIOS-${dimmList[0].SMBIOSMemoryType}`;
+  // Try rocm-smi for AMD (Linux/WSL only)
+  if (!profile.gpu.name && (PLATFORM === "linux" || PLATFORM === "wsl")) {
+    const rocmJson = tryExec("rocm-smi --showmeminfo vram --json 2>/dev/null");
+    if (rocmJson) {
+      try {
+        const data = JSON.parse(rocmJson);
+        const card = data[`card${GPU_INDEX || 0}`] || Object.values(data)[0];
+        if (card) {
+          const totalB = parseInt(card["VRAM Total Memory (B)"] || "0");
+          let gpuName = "AMD GPU";
+          const nameJson = tryExec("rocm-smi --showproductname --json 2>/dev/null");
+          if (nameJson) {
+            try {
+              const nd = JSON.parse(nameJson);
+              const nc = nd[`card${GPU_INDEX || 0}`] || Object.values(nd)[0];
+              gpuName = nc?.["Card Series"] || nc?.["Card Model"] || "AMD GPU";
+            } catch { /* ignore */ }
+          }
+          profile.gpu = {
+            name: gpuName,
+            driver: tryExec("cat /sys/module/amdgpu/version 2>/dev/null") || null,
+            totalMiB: Math.round(totalB / (1024 * 1024)),
+            vendor: "amd",
+            unifiedMemory: false,
+          };
+        }
+      } catch { /* ignore */ }
     }
-  } catch {
-    // Fallback: dmidecode (bare-metal Linux)
-    try {
-      const dmi = execSync(
-        "sudo dmidecode -t memory 2>/dev/null | grep -E 'Speed|Size|Manufacturer|Type:' | head -16",
-        { encoding: "utf-8", timeout: 5000 },
-      );
+  }
+
+  // macOS: system_profiler for Apple Silicon / AMD dGPU
+  if (!profile.gpu.name && PLATFORM === "macos") {
+    const spDisplay = tryExec("system_profiler SPDisplaysDataType 2>/dev/null");
+    if (spDisplay) {
+      const chipMatch = spDisplay.match(/Chipset Model:\s*(.+)/);
+      const vramMatch = spDisplay.match(/VRAM[^:]*:\s*(\d+)\s*(MB|GB)/i);
+      const isAppleSilicon = os.arch() === "arm64";
+      profile.gpu = {
+        name: chipMatch?.[1]?.trim() || "Apple GPU",
+        vendor: "apple",
+        unifiedMemory: isAppleSilicon,
+        // Apple Silicon: unified memory = system RAM; Intel Mac: dedicated VRAM
+        totalMiB: isAppleSilicon
+          ? profile.ram.totalMiB
+          : vramMatch
+            ? parseInt(vramMatch[1]) * (vramMatch[2].toUpperCase() === "GB" ? 1024 : 1)
+            : 0,
+      };
+    }
+    // Cache GPU name for fast queryGPU_apple() calls
+    _cachedGpuName = profile.gpu.name || null;
+  }
+
+  // Windows fallback: WMI for non-NVIDIA GPUs
+  if (!profile.gpu.name && PLATFORM === "windows") {
+    const psOut = tryExec(
+      'powershell.exe -NoProfile -Command "Get-CimInstance Win32_VideoController | Select-Object Name, AdapterRAM, DriverVersion | ConvertTo-Json"',
+      { timeout: 8000 },
+    );
+    if (psOut) {
+      try {
+        const gpuInfo = JSON.parse(psOut);
+        const g = Array.isArray(gpuInfo) ? gpuInfo[0] : gpuInfo;
+        profile.gpu = {
+          name: g.Name || "Unknown GPU",
+          driver: g.DriverVersion || null,
+          totalMiB: Math.round((g.AdapterRAM || 0) / (1024 * 1024)),
+          vendor: "unknown",
+          unifiedMemory: false,
+        };
+      } catch { /* ignore */ }
+    }
+  }
+
+  // ── CPU enrichment ─────────────────────────────────────
+  if (PLATFORM === "linux" || PLATFORM === "wsl") {
+    const lscpu = tryExec("lscpu");
+    if (lscpu) {
+      const field = (key) => lscpu.match(new RegExp(`^${key}:\\s*(.+)$`, "m"))?.[1]?.trim() || null;
+      profile.cpu.model = field("Model name") || profile.cpu.model;
+      profile.cpu.cores = parseInt(field("Core\\(s\\) per socket") || "0") || null;
+      profile.cpu.threads = parseInt(field("CPU\\(s\\)") || "0") || profile.cpu.threads;
+      profile.cpu.sockets = parseInt(field("Socket\\(s\\)") || "1");
+      profile.cpu.bogoMIPS = parseFloat(field("BogoMIPS") || "0");
+      profile.cpu.maxMHz = parseFloat(field("CPU max MHz") || "0") || null;
+      profile.cpu.minMHz = parseFloat(field("CPU min MHz") || "0") || null;
+    }
+  } else if (PLATFORM === "macos") {
+    const brandString = tryExec("sysctl -n machdep.cpu.brand_string 2>/dev/null");
+    if (brandString) profile.cpu.model = brandString;
+    const physCores = tryExec("sysctl -n hw.physicalcpu 2>/dev/null");
+    if (physCores) profile.cpu.cores = parseInt(physCores);
+    const logCores = tryExec("sysctl -n hw.logicalcpu 2>/dev/null");
+    if (logCores) profile.cpu.threads = parseInt(logCores);
+    const freq = tryExec("sysctl -n hw.cpufrequency_max 2>/dev/null");
+    if (freq) profile.cpu.maxMHz = Math.round(parseInt(freq) / 1e6);
+  } else if (PLATFORM === "windows") {
+    const psOut = tryExec(
+      'powershell.exe -NoProfile -Command "Get-CimInstance Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors, MaxClockSpeed | ConvertTo-Json"',
+      { timeout: 8000 },
+    );
+    if (psOut) {
+      try {
+        const cpuInfo = JSON.parse(psOut);
+        const cpu = Array.isArray(cpuInfo) ? cpuInfo[0] : cpuInfo;
+        if (cpu) {
+          profile.cpu.model = cpu.Name || profile.cpu.model;
+          profile.cpu.cores = cpu.NumberOfCores || null;
+          profile.cpu.threads = cpu.NumberOfLogicalProcessors || profile.cpu.threads;
+          profile.cpu.maxMHz = cpu.MaxClockSpeed || null;
+        }
+      } catch { /* ignore */ }
+    }
+  }
+
+  // CPU frequency + temp + load (PowerShell enrichment on WSL/Windows)
+  if (PLATFORM === "wsl" || PLATFORM === "windows") {
+    const psOut = tryExec(
+      'powershell.exe -NoProfile -Command "Get-CimInstance Win32_Processor | Select-Object CurrentClockSpeed, MaxClockSpeed, LoadPercentage | ConvertTo-Json" 2>/dev/null',
+      { timeout: 8000 },
+    );
+    if (psOut) {
+      try {
+        const cpuInfo = JSON.parse(psOut);
+        const cpu = Array.isArray(cpuInfo) ? cpuInfo[0] : cpuInfo;
+        if (cpu) {
+          profile.cpu.currentMHz = cpu.CurrentClockSpeed || null;
+          profile.cpu.maxClockMHz = cpu.MaxClockSpeed || null;
+          profile.cpu.loadPct = cpu.LoadPercentage || null;
+        }
+      } catch { /* ignore */ }
+    }
+  } else if (PLATFORM === "linux") {
+    // Bare-metal Linux thermal zone
+    const temp = tryExec("cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null");
+    if (temp) profile.cpu.tempC = +(parseInt(temp) / 1000).toFixed(1);
+  }
+
+  // ── RAM enrichment ─────────────────────────────────────
+  if (PLATFORM === "linux" || PLATFORM === "wsl") {
+    const meminfo = tryExec("cat /proc/meminfo");
+    if (meminfo) {
+      const totalKB = parseInt(meminfo.match(/MemTotal:\s*(\d+)/)?.[1] || "0");
+      profile.ram.totalMiB = Math.round(totalKB / 1024);
+      profile.ram.totalGiB = +(totalKB / 1024 / 1024).toFixed(1);
+    }
+  }
+
+  // DIMM details (PowerShell on WSL/Windows, dmidecode on bare-metal Linux, system_profiler on macOS)
+  if (PLATFORM === "wsl" || PLATFORM === "windows") {
+    const psOut = tryExec(
+      "powershell.exe -NoProfile -Command 'Get-CimInstance Win32_PhysicalMemory | Select-Object Speed, ConfiguredClockSpeed, Capacity, Manufacturer, SMBIOSMemoryType, PartNumber | ConvertTo-Json' 2>/dev/null",
+      { timeout: 10000 },
+    );
+    if (psOut) {
+      try {
+        const dimms = JSON.parse(psOut);
+        const dimmList = Array.isArray(dimms) ? dimms : [dimms];
+        if (dimmList.length > 0) {
+          profile.ram.speedMHz = dimmList[0].ConfiguredClockSpeed || dimmList[0].Speed || null;
+          profile.ram.jedecSpeedMHz = dimmList[0].Speed || null;
+          profile.ram.manufacturer = dimmList[0].Manufacturer || null;
+          profile.ram.dimms = dimmList.length;
+          profile.ram.totalPhysicalGiB = +(dimmList.reduce((sum, d) => sum + (d.Capacity || 0), 0) / 1024 ** 3).toFixed(1);
+          profile.ram.partNumber = dimmList[0].PartNumber?.trim() || null;
+          const memTypeMap = { 24: "DDR3", 26: "DDR4", 34: "DDR5" };
+          profile.ram.type = memTypeMap[dimmList[0].SMBIOSMemoryType] || `SMBIOS-${dimmList[0].SMBIOSMemoryType}`;
+        }
+      } catch { /* ignore */ }
+    }
+  } else if (PLATFORM === "linux") {
+    const dmi = tryExec(
+      "sudo dmidecode -t memory 2>/dev/null | grep -E 'Speed|Size|Manufacturer|Type:' | head -16",
+    );
+    if (dmi) {
       const speed = dmi.match(/Configured Memory Speed:\s*(\d+)/)?.[1];
       if (speed) profile.ram.speedMHz = parseInt(speed);
       const mfg = dmi.match(/Manufacturer:\s*(.+)/)?.[1]?.trim();
       if (mfg && mfg !== "Unknown") profile.ram.manufacturer = mfg;
       const memType = dmi.match(/Type:\s*(DDR\d)/)?.[1];
       if (memType) profile.ram.type = memType;
-    } catch { /* ignore */ }
+    }
+  } else if (PLATFORM === "macos") {
+    const spMem = tryExec("system_profiler SPMemoryDataType 2>/dev/null");
+    if (spMem) {
+      const typeMatch = spMem.match(/Type:\s*(\S+)/);
+      if (typeMatch) profile.ram.type = typeMatch[1];
+      const speedMatch = spMem.match(/Speed:\s*(\d+)\s*MHz/);
+      if (speedMatch) profile.ram.speedMHz = parseInt(speedMatch[1]);
+      const mfgMatch = spMem.match(/Manufacturer:\s*(.+)/);
+      if (mfgMatch) profile.ram.manufacturer = mfgMatch[1].trim();
+    }
+    profile.ram.unifiedMemory = os.arch() === "arm64";
   }
 
-  // ── Motherboard (PowerShell on WSL2, dmidecode on bare metal) ──
-  try {
-    const psOutput = execSync(
+  // ── Motherboard ────────────────────────────────────────
+  if (PLATFORM === "wsl" || PLATFORM === "windows") {
+    const psOut = tryExec(
       'powershell.exe -NoProfile -Command "Get-CimInstance Win32_BaseBoard | Select-Object Manufacturer, Product, SerialNumber | ConvertTo-Json" 2>/dev/null',
-      { encoding: "utf-8", timeout: 8000 },
-    ).trim();
-    const mb = JSON.parse(psOutput);
-    profile.motherboard = {
-      manufacturer: mb.Manufacturer || null,
-      product: mb.Product || null,
-      serial: mb.SerialNumber || null,
-    };
-  } catch {
-    // Fallback: dmidecode
-    try {
-      const dmi = execSync(
-        "sudo dmidecode -t baseboard 2>/dev/null | grep -E 'Manufacturer|Product Name|Serial Number' | head -3",
-        { encoding: "utf-8", timeout: 5000 },
-      );
+      { timeout: 8000 },
+    );
+    if (psOut) {
+      try {
+        const mb = JSON.parse(psOut);
+        profile.motherboard = {
+          manufacturer: mb.Manufacturer || null,
+          product: mb.Product || null,
+          serial: mb.SerialNumber || null,
+        };
+      } catch { /* ignore */ }
+    }
+  } else if (PLATFORM === "linux") {
+    const dmi = tryExec(
+      "sudo dmidecode -t baseboard 2>/dev/null | grep -E 'Manufacturer|Product Name|Serial Number' | head -3",
+    );
+    if (dmi) {
       profile.motherboard = {
         manufacturer: dmi.match(/Manufacturer:\s*(.+)/)?.[1]?.trim() || null,
         product: dmi.match(/Product Name:\s*(.+)/)?.[1]?.trim() || null,
         serial: dmi.match(/Serial Number:\s*(.+)/)?.[1]?.trim() || null,
       };
-    } catch { /* ignore */ }
+    }
+  } else if (PLATFORM === "macos") {
+    const spHw = tryExec("system_profiler SPHardwareDataType 2>/dev/null");
+    if (spHw) {
+      profile.motherboard = {
+        manufacturer: "Apple",
+        product: spHw.match(/Model Name:\s*(.+)/)?.[1]?.trim() || null,
+        serial: spHw.match(/Serial Number.*?:\s*(.+)/)?.[1]?.trim() || null,
+      };
+    }
   }
 
   return profile;
 }
 
 // ── GPU Monitoring ───────────────────────────────────────────
+// Dispatches to the appropriate backend detected at startup.
 
-function queryGPU() {
+function queryGPU_nvidia() {
   try {
+    const gpuIdx = GPU_INDEX != null ? ` --id=${GPU_INDEX}` : "";
     const raw = execSync(
-      "nvidia-smi --query-gpu=name,memory.total,memory.used,memory.free,utilization.gpu,temperature.gpu,power.draw --format=csv,noheader,nounits",
+      `nvidia-smi --query-gpu=name,memory.total,memory.used,memory.free,utilization.gpu,temperature.gpu,power.draw --format=csv,noheader,nounits${gpuIdx}`,
       { encoding: "utf-8", timeout: 5000 },
     ).trim();
-    const parts = raw.split(",").map((s) => s.trim());
+    const lines = raw.split("\n");
+    const parts = (lines[0] || "").split(",").map((s) => s.trim());
     return {
       name: parts[0],
       totalMiB: parseInt(parts[1]),
@@ -729,6 +947,98 @@ function queryGPU() {
     };
   } catch {
     return null;
+  }
+}
+
+function queryGPU_rocm() {
+  try {
+    const cardId = GPU_INDEX || 0;
+    const raw = execSync(
+      `rocm-smi --showmeminfo vram --json 2>/dev/null`,
+      { encoding: "utf-8", timeout: 5000 },
+    ).trim();
+    const data = JSON.parse(raw);
+    const card = data[`card${cardId}`] || Object.values(data)[0];
+    if (!card) return null;
+    const totalB = parseInt(card["VRAM Total Memory (B)"] || "0");
+    const usedB = parseInt(card["VRAM Total Used Memory (B)"] || "0");
+    const totalMiB = Math.round(totalB / (1024 * 1024));
+    const usedMiB = Math.round(usedB / (1024 * 1024));
+
+    // Get temp/power in a single additional call
+    let tempC = 0, powerW = 0;
+    const extraJson = tryExec(`rocm-smi --showtemp --showpower --json 2>/dev/null`);
+    if (extraJson) {
+      try {
+        const extra = JSON.parse(extraJson);
+        const ec = extra[`card${cardId}`] || Object.values(extra)[0] || {};
+        tempC = parseInt(ec["Temperature (Sensor edge) (C)"] || "0");
+        powerW = parseFloat(ec["Average Graphics Package Power (W)"] || "0");
+      } catch { /* ignore */ }
+    }
+
+    return {
+      name: _cachedGpuName || "AMD GPU",
+      totalMiB, usedMiB, freeMiB: totalMiB - usedMiB,
+      utilPct: 0, tempC, powerW,
+      timestamp: Date.now(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function queryGPU_apple() {
+  try {
+    const pageSize = parseInt(tryExec("sysctl -n hw.pagesize") || "16384");
+    const totalBytes = parseInt(tryExec("sysctl -n hw.memsize") || "0");
+    const totalMiB = Math.round(totalBytes / (1024 * 1024));
+
+    const vmstat = tryExec("vm_stat");
+    if (!vmstat) return null;
+
+    const pages = (key) => {
+      const match = vmstat.match(new RegExp(`"?${key}"?:\\s+(\\d+)`));
+      return parseInt(match?.[1] || "0");
+    };
+
+    const usedPages = pages("Pages active") + pages("Pages wired down") + pages("Pages speculative");
+    const usedMiB = Math.round((usedPages * pageSize) / (1024 * 1024));
+
+    return {
+      name: _cachedGpuName || "Apple Silicon",
+      totalMiB, usedMiB, freeMiB: totalMiB - usedMiB,
+      utilPct: 0, tempC: 0, powerW: 0,
+      timestamp: Date.now(),
+      unifiedMemory: true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function queryGPU_os() {
+  // Absolute fallback: Node.js os module for system memory delta tracking.
+  // Not GPU-specific, but model loads will show up as RAM deltas.
+  const totalMiB = Math.round(os.totalmem() / (1024 * 1024));
+  const freeMiB = Math.round(os.freemem() / (1024 * 1024));
+  return {
+    name: "System Memory (no GPU monitoring)",
+    totalMiB, usedMiB: totalMiB - freeMiB, freeMiB,
+    utilPct: 0, tempC: 0, powerW: 0,
+    timestamp: Date.now(),
+    unifiedMemory: true,
+    fallback: true,
+  };
+}
+
+function queryGPU() {
+  switch (GPU_MONITOR) {
+    case "nvidia": return queryGPU_nvidia();
+    case "rocm":   return queryGPU_rocm();
+    case "apple":  return queryGPU_apple();
+    case "os":     return queryGPU_os();
+    default:       return null;
   }
 }
 
@@ -772,18 +1082,27 @@ function fmtMiB(mib) {
 // ── CPU RAM Monitoring ──────────────────────────────────────
 
 function readCpuRam() {
-  try {
-    const meminfo = readFileSync("/proc/meminfo", "utf-8");
-    const available = parseInt(meminfo.match(/MemAvailable:\s*(\d+)/)?.[1] || "0");
-    const total = parseInt(meminfo.match(/MemTotal:\s*(\d+)/)?.[1] || "0");
-    return {
-      totalMiB: Math.round(total / 1024),
-      availableMiB: Math.round(available / 1024),
-      usedMiB: Math.round((total - available) / 1024),
-    };
-  } catch {
-    return null;
+  // /proc/meminfo is the most accurate on Linux (distinguishes available vs free)
+  if (PLATFORM === "linux" || PLATFORM === "wsl") {
+    try {
+      const meminfo = readFileSync("/proc/meminfo", "utf-8");
+      const available = parseInt(meminfo.match(/MemAvailable:\s*(\d+)/)?.[1] || "0");
+      const total = parseInt(meminfo.match(/MemTotal:\s*(\d+)/)?.[1] || "0");
+      return {
+        totalMiB: Math.round(total / 1024),
+        availableMiB: Math.round(available / 1024),
+        usedMiB: Math.round((total - available) / 1024),
+      };
+    } catch { /* fall through */ }
   }
+  // Cross-platform fallback via Node.js os module (macOS, Windows, etc.)
+  const totalMiB = Math.round(os.totalmem() / (1024 * 1024));
+  const freeMiB = Math.round(os.freemem() / (1024 * 1024));
+  return {
+    totalMiB,
+    availableMiB: freeMiB,
+    usedMiB: totalMiB - freeMiB,
+  };
 }
 
 // ── Concurrent GPU Sampler ──────────────────────────────────
@@ -812,15 +1131,28 @@ async function sampleGPUDuring(asyncFn) {
 // ── GPU Memory Bandwidth ────────────────────────────────────
 
 function queryGPUBandwidth() {
-  try {
-    const raw = execSync(
-      "nvidia-smi --query-gpu=utilization.memory --format=csv,noheader,nounits",
-      { encoding: "utf-8", timeout: 3000 },
-    ).trim();
-    return { memUtilPct: parseInt(raw) || 0 };
-  } catch {
-    return { memUtilPct: 0 };
+  if (GPU_MONITOR === "nvidia") {
+    try {
+      const gpuIdx = GPU_INDEX != null ? ` --id=${GPU_INDEX}` : "";
+      const raw = execSync(
+        `nvidia-smi --query-gpu=utilization.memory --format=csv,noheader,nounits${gpuIdx}`,
+        { encoding: "utf-8", timeout: 3000 },
+      ).trim();
+      return { memUtilPct: parseInt(raw) || 0 };
+    } catch { /* ignore */ }
   }
+  if (GPU_MONITOR === "rocm") {
+    const extraJson = tryExec(`rocm-smi --showmemuse --json 2>/dev/null`);
+    if (extraJson) {
+      try {
+        const data = JSON.parse(extraJson);
+        const card = data[`card${GPU_INDEX || 0}`] || Object.values(data)[0];
+        const pct = parseInt(card?.["GPU memory use (%)"] || "0");
+        return { memUtilPct: pct };
+      } catch { /* ignore */ }
+    }
+  }
+  return { memUtilPct: 0 };
 }
 
 // ── Prompt Saturation Generator ─────────────────────────────
@@ -1101,6 +1433,8 @@ async function main() {
   logKV("Motherboard", systemProfile.motherboard?.manufacturer && systemProfile.motherboard?.product
     ? `${systemProfile.motherboard.manufacturer} ${systemProfile.motherboard.product}`
     : "unknown");
+  logKV("Platform", `${C.bold}${PLATFORM}${C.reset} (${os.arch()})`);
+  logKV("GPU Monitor", `${C.bold}${GPU_MONITOR}${C.reset}${GPU_MONITOR === "os" ? ` ${C.yellow}(no GPU tool — using system RAM delta)${C.reset}` : ""}${GPU_MONITOR === "apple" ? ` ${C.yellow}(unified memory)${C.reset}` : ""}`);
   logKV("Run ID", `${C.dim}${RUN_ID}${C.reset}`);
 
   // ── Handle --backfill mode ──────────────────────────────
@@ -1131,8 +1465,16 @@ async function main() {
 
   const baselineGPU = await sampleGPU(4000, 500);
   if (!baselineGPU) {
-    console.error("Could not read GPU via nvidia-smi. Aborting.");
+    log(`${C.red}  ✗ Could not read GPU/memory. No monitoring backend available. Aborting.${C.reset}`);
     process.exit(1);
+  }
+  if (baselineGPU.unifiedMemory) {
+    log(`${C.yellow}  ⚠ Unified memory detected (${GPU_MONITOR}). VRAM numbers reflect total system memory usage.${C.reset}`);
+    log(`${C.yellow}    Deltas (loaded − baseline) still indicate per-model memory footprint.${C.reset}`);
+  }
+  if (baselineGPU.fallback) {
+    log(`${C.yellow}  ⚠ No GPU monitoring tool found. Using Node.js os.freemem() as fallback.${C.reset}`);
+    log(`${C.yellow}    VRAM figures will reflect system RAM, not dedicated GPU memory.${C.reset}`);
   }
 
   const baselineVramMiB = baselineGPU.usedMiB;
