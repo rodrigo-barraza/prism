@@ -221,6 +221,8 @@ export async function handleChat(params, emit, { signal } = {}) {
     serviceTier,
     textOnly,
     skipConversation,
+    autoApprove,
+    planFirst,
     // systemPrompt arrives in two places by design:
     //  - messages[0] with role:"system" → what the LLM actually sees
     //  - conversationMeta.systemPrompt → stored as top-level DB field for quick UI access
@@ -307,6 +309,8 @@ export async function handleChat(params, emit, { signal } = {}) {
     ...(responseFormat && { responseFormat }),
     ...(serviceTier && { serviceTier }),
     ...(textOnly && { textOnly }),
+    ...(autoApprove && { autoApprove }),
+    ...(planFirst && { planFirst }),
     ...(extraParams.systemPrompt && { systemPrompt: extraParams.systemPrompt }),
   };
 

@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VRAM Benchmark — Prism Model Profiler</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-deep: #0a0b10;
+      --bg-surface: #12141d;
+      --bg-card: rgba(22, 25, 38, 0.85);
+      --border-subtle: rgba(255, 255, 255, 0.06);
+      --border-glow: rgba(99, 102, 241, 0.25);
+      --text-primary: #e8eaf0;
+      --text-secondary: #8b8fa8;
+      --text-muted: #555872;
+      --accent-indigo: #6366f1;
+      --accent-violet: #8b5cf6;
+      --gradient-hero: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a78bfa 100%);
+      --gradient-card: linear-gradient(145deg, rgba(22, 25, 38, 0.9), rgba(15, 17, 26, 0.95));
+      --shadow-glow: 0 0 40px rgba(99, 102, 241, 0.08);
+      --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+      --radius: 16px;
+      --radius-sm: 10px;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-deep);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      top: -200px; left: 50%;
+      transform: translateX(-50%);
+      width: 900px; height: 600px;
+      background: radial-gradient(ellipse, rgba(99, 102, 241, 0.08) 0%, transparent 70%);
+      pointer-events: none; z-index: 0;
+    }
+
+    .container {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 40px 32px 60px;
+      position: relative; z-index: 1;
+    }
+
+    /* ─── Header ─── */
+    .header { text-align: center; margin-bottom: 40px; }
+
+    .header h1 {
+      font-size: 2.4rem; font-weight: 800; letter-spacing: -0.03em;
+      background: var(--gradient-hero);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text; margin-bottom: 8px;
+    }
+
+    .header p { color: var(--text-secondary); font-size: 1rem; }
+
+    .header .hw-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      margin-top: 14px; padding: 6px 16px; border-radius: 999px;
+      background: rgba(99, 102, 241, 0.1);
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      font-size: 0.8rem; font-weight: 500;
+      color: var(--accent-indigo); transition: all 0.3s ease;
+    }
+
+    .hw-badge svg { width: 14px; height: 14px; fill: currentColor; opacity: 0.8; }
+
+    /* ─── Stats strip ─── */
+    .stats-strip {
+      display: flex; gap: 16px; justify-content: center;
+      margin-bottom: 36px; flex-wrap: wrap;
+    }
+
+    .stat-pill {
+      display: flex; flex-direction: column; align-items: center;
+      padding: 14px 24px;
+      background: var(--gradient-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm); min-width: 130px;
+      backdrop-filter: blur(12px);
+      transition: border-color 0.3s, transform 0.2s;
+    }
+
+    .stat-pill:hover { border-color: var(--border-glow); transform: translateY(-1px); }
+    .stat-pill .value { font-size: 1.6rem; font-weight: 700; color: var(--text-primary); }
+    .stat-pill .label {
+      font-size: 0.72rem; font-weight: 500; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px;
+    }
+
+    /* ─── Controls ─── */
+    .controls {
+      display: flex; gap: 12px; justify-content: center;
+      margin-bottom: 32px; flex-wrap: wrap;
+    }
+
+    .control-group { display: flex; align-items: center; gap: 8px; }
+
+    .control-group label {
+      font-size: 0.78rem; font-weight: 500; color: var(--text-secondary);
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+
+    select {
+      appearance: none;
+      background: var(--bg-card); color: var(--text-primary);
+      border: 1px solid var(--border-subtle); border-radius: 8px;
+      padding: 8px 32px 8px 14px;
+      font-family: inherit; font-size: 0.85rem; font-weight: 500;
+      cursor: pointer; transition: border-color 0.2s, box-shadow 0.2s;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238b8fa8'%3E%3Cpath d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 12px center;
+    }
+
+    select:hover { border-color: var(--border-glow); }
+    select:focus { outline: none; border-color: var(--accent-indigo); box-shadow: 0 0 0 3px rgba(99,102,241,0.15); }
+
+    /* ─── Chart cards ─── */
+    .charts-grid { display: grid; grid-template-columns: 1fr; gap: 28px; }
+
+    .chart-card {
+      background: var(--gradient-card);
+      border: 1px solid var(--border-subtle); border-radius: var(--radius);
+      padding: 28px 28px 20px;
+      box-shadow: var(--shadow-card); backdrop-filter: blur(16px);
+      transition: border-color 0.3s, box-shadow 0.3s;
+      position: relative; overflow: hidden;
+    }
+
+    .chart-card::before {
+      content: ''; position: absolute;
+      top: 0; left: 0; right: 0; height: 2px;
+      background: var(--gradient-hero); opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .chart-card:hover::before { opacity: 1; }
+    .chart-card:hover { border-color: var(--border-glow); box-shadow: var(--shadow-glow), var(--shadow-card); }
+
+    .chart-card h2 { font-size: 1.15rem; font-weight: 700; margin-bottom: 4px; }
+    .chart-card .subtitle { font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 20px; }
+    .chart-wrapper { position: relative; width: 100%; }
+    .chart-wrapper canvas { width: 100% !important; }
+
+    /* ─── Loading state ─── */
+    .loading-msg {
+      text-align: center; padding: 80px 20px;
+      color: var(--text-muted); font-size: 0.9rem;
+    }
+
+    .loading-msg .spinner {
+      width: 32px; height: 32px; margin: 0 auto 16px;
+      border: 3px solid var(--border-subtle);
+      border-top-color: var(--accent-indigo);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 768px) {
+      .container { padding: 24px 16px 40px; }
+      .header h1 { font-size: 1.6rem; }
+      .chart-card { padding: 16px 14px; }
+      .stats-strip { gap: 10px; }
+      .stat-pill { min-width: 100px; padding: 10px 16px; }
+      .stat-pill .value { font-size: 1.2rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>VRAM Benchmark</h1>
+      <p>GPU memory profiling for locally-served models — measured vs. estimated</p>
+      <div class="hw-badge" id="hw-badge">
+        <svg viewBox="0 0 24 24"><path d="M4 6h16v10H4V6zm2 2v6h12V8H6zm-2 12h16v2H4v-2z"/></svg>
+        <span id="hw-label">Loading…</span>
+      </div>
+    </div>
+
+    <div class="stats-strip" id="stats-strip">
+      <div class="loading-msg"><div class="spinner"></div>Fetching benchmarks from Prism…</div>
+    </div>
+
+    <div class="controls">
+      <div class="control-group">
+        <label>Machine</label>
+        <select id="machine-select"><option value="all">Loading…</option></select>
+      </div>
+      <div class="control-group">
+        <label>Context</label>
+        <select id="ctx-select">
+          <option value="all">All Contexts</option>
+          <option value="2048">2K</option>
+          <option value="4096" selected>4K</option>
+          <option value="8192">8K</option>
+          <option value="16384">16K</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Sort By</label>
+        <select id="sort-select">
+          <option value="vram" selected>VRAM Usage</option>
+          <option value="tps">Tokens/sec</option>
+          <option value="efficiency">Efficiency (TPS/GiB)</option>
+          <option value="filesize">File Size</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="chart-card">
+        <h2>VRAM vs. Inference Speed</h2>
+        <p class="subtitle">Each dot is a model — size indicates file weight, position reveals the VRAM/throughput trade-off</p>
+        <div class="chart-wrapper"><canvas id="scatter-chart" height="420"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h2>VRAM Consumption by Model</h2>
+        <p class="subtitle">Measured GPU VRAM (solid) vs. estimated (outline) — default load settings</p>
+        <div class="chart-wrapper"><canvas id="bar-chart" height="600"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ═══════════════════════════════════════════════════════════
+    // Config — point to your running Prism instance
+    // ═══════════════════════════════════════════════════════════
+
+    const API_BASE = 'http://localhost:7777';
+
+    // ── State ────────────────────────────────────────────────
+
+    let RAW_DATA = [];
+    let MACHINES = {};
+
+    // ── Color palette ────────────────────────────────────────
+
+    const QUANT_COLORS = {
+      'Q4_0':   { bg: 'rgba(34,211,238,0.75)',  border: '#22d3ee' },
+      'Q4_K_M': { bg: 'rgba(99,102,241,0.75)',  border: '#6366f1' },
+      'Q4_K_S': { bg: 'rgba(139,92,246,0.75)',  border: '#8b5cf6' },
+      'Q4_1':   { bg: 'rgba(59,130,246,0.75)',   border: '#3b82f6' },
+      'Q5_K_S': { bg: 'rgba(16,185,129,0.75)',   border: '#10b981' },
+      'Q6_K_L': { bg: 'rgba(245,158,11,0.75)',   border: '#f59e0b' },
+      'Q8_0':   { bg: 'rgba(244,63,94,0.75)',     border: '#f43f5e' },
+      'Q3_K_L': { bg: 'rgba(249,115,22,0.75)',    border: '#f97316' },
+      'FP16':   { bg: 'rgba(236,72,153,0.75)',     border: '#ec4899' },
+      'F16':    { bg: 'rgba(236,72,153,0.75)',     border: '#ec4899' },
+    };
+
+    const GPU_COLORS = {
+      'NVIDIA GeForce RTX 4090':    { bg: 'rgba(99,102,241,0.75)',  border: '#6366f1' },
+      'NVIDIA GeForce RTX 5070 Ti': { bg: 'rgba(16,185,129,0.75)',  border: '#10b981' },
+    };
+
+    function getQuantColor(q) {
+      return QUANT_COLORS[q] || { bg: 'rgba(107,114,128,0.7)', border: '#6b7280' };
+    }
+
+    function getGPUColor(gpuName) {
+      return GPU_COLORS[gpuName] || { bg: 'rgba(107,114,128,0.7)', border: '#6b7280' };
+    }
+
+    function shortGPU(name) {
+      return (name || 'Unknown').replace('NVIDIA GeForce ', '').replace('NVIDIA ', '');
+    }
+
+    // ── Fetch data ───────────────────────────────────────────
+
+    async function fetchData() {
+      try {
+        const [benchRes, machinesRes] = await Promise.all([
+          fetch(`${API_BASE}/vram-benchmarks?settings=default`),
+          fetch(`${API_BASE}/vram-benchmarks/machines`),
+        ]);
+
+        if (!benchRes.ok) throw new Error(`Benchmarks: ${benchRes.status}`);
+        if (!machinesRes.ok) throw new Error(`Machines: ${machinesRes.status}`);
+
+        const benchData = await benchRes.json();
+        const machinesData = await machinesRes.json();
+
+        RAW_DATA = benchData.data;
+
+        // Build machine lookup
+        MACHINES = {};
+        for (const m of machinesData) {
+          MACHINES[m.hostname] = m;
+        }
+
+        // Populate machine dropdown
+        const machineSelect = document.getElementById('machine-select');
+        machineSelect.innerHTML = '<option value="all">All Machines</option>';
+        for (const m of machinesData) {
+          const opt = document.createElement('option');
+          opt.value = m.hostname;
+          opt.textContent = `${shortGPU(m.gpu)} (${m.benchmarkCount} runs)`;
+          machineSelect.appendChild(opt);
+        }
+
+        renderAll();
+      } catch (err) {
+        document.getElementById('stats-strip').innerHTML =
+          `<div class="loading-msg" style="color: #f43f5e;">
+            Failed to fetch: ${err.message}<br>
+            <span style="font-size:0.8rem;color:var(--text-muted)">Make sure Prism is running on ${API_BASE}</span>
+          </div>`;
+        console.error('Fetch error:', err);
+      }
+    }
+
+    // ── Process data ─────────────────────────────────────────
+
+    function processData(machineFilter, ctxFilter, sortBy) {
+      let filtered = RAW_DATA.filter(d => d.tokensPerSecond > 0 && d.modelVramGiB > 0);
+
+      if (machineFilter !== 'all') {
+        filtered = filtered.filter(d => (d.system?.hostname || 'unknown') === machineFilter);
+      }
+
+      if (ctxFilter !== 'all') {
+        filtered = filtered.filter(d => d.contextLength === parseInt(ctxFilter));
+      }
+
+      // Deduplicate: one entry per model (prefer higher context)
+      const byModel = {};
+      for (const d of filtered) {
+        const key = d.displayName;
+        if (!byModel[key] || d.contextLength > byModel[key].contextLength) {
+          byModel[key] = d;
+        }
+      }
+
+      let models = Object.values(byModel);
+
+      switch (sortBy) {
+        case 'tps': models.sort((a, b) => b.tokensPerSecond - a.tokensPerSecond); break;
+        case 'efficiency': models.sort((a, b) => (b.tokensPerSecond / b.modelVramGiB) - (a.tokensPerSecond / a.modelVramGiB)); break;
+        case 'filesize': models.sort((a, b) => a.fileSizeGB - b.fileSizeGB); break;
+        default: models.sort((a, b) => a.modelVramGiB - b.modelVramGiB);
+      }
+
+      return models;
+    }
+
+    // ── Update hardware badge ────────────────────────────────
+
+    function updateHWBadge(machineFilter) {
+      const label = document.getElementById('hw-label');
+      if (machineFilter === 'all') {
+        const gpus = Object.values(MACHINES).map(m => `${shortGPU(m.gpu)} ${m.gpuVramGB} GB`).join(' · ');
+        label.textContent = gpus || 'Multiple GPUs';
+      } else {
+        const m = MACHINES[machineFilter];
+        if (m) {
+          label.textContent = `${shortGPU(m.gpu)} ${m.gpuVramGB} GB`;
+        }
+      }
+    }
+
+    // ── Stats ────────────────────────────────────────────────
+
+    function renderStats(models) {
+      const strip = document.getElementById('stats-strip');
+      if (models.length === 0) {
+        strip.innerHTML = '<div class="stat-pill"><span class="value">—</span><span class="label">No Data</span></div>';
+        return;
+      }
+      const n = models.length;
+      const avgVram = (models.reduce((s, m) => s + m.modelVramGiB, 0) / n).toFixed(1);
+      const maxTps = Math.max(...models.map(m => m.tokensPerSecond)).toFixed(0);
+      const avgDelta = (models.reduce((s, m) => s + Math.abs(m.modelVramGiB - m.estimatedGiB), 0) / n).toFixed(2);
+      const fastest = models.reduce((best, m) => m.tokensPerSecond > best.tokensPerSecond ? m : best);
+
+      strip.innerHTML = `
+        <div class="stat-pill"><span class="value">${n}</span><span class="label">Models</span></div>
+        <div class="stat-pill"><span class="value">${avgVram}</span><span class="label">Avg VRAM (GiB)</span></div>
+        <div class="stat-pill"><span class="value">${maxTps}</span><span class="label">Peak TPS</span></div>
+        <div class="stat-pill"><span class="value">±${avgDelta}</span><span class="label">Avg Est. Error (GiB)</span></div>
+        <div class="stat-pill"><span class="value" style="font-size:0.95rem">${fastest.displayName.replace(/ /g, '\u00a0').slice(0, 22)}</span><span class="label">Fastest Model</span></div>
+      `;
+    }
+
+    // ── Chart.js defaults ────────────────────────────────────
+
+    Chart.defaults.color = '#8b8fa8';
+    Chart.defaults.borderColor = 'rgba(255,255,255,0.05)';
+    Chart.defaults.font.family = "'Inter', sans-serif";
+
+    const TOOLTIP_STYLE = {
+      backgroundColor: 'rgba(18, 20, 29, 0.95)',
+      titleColor: '#e8eaf0',
+      bodyColor: '#8b8fa8',
+      borderColor: 'rgba(99, 102, 241, 0.3)',
+      borderWidth: 1, padding: 14, cornerRadius: 10,
+      titleFont: { weight: '600', size: 13 },
+      bodyFont: { size: 12 },
+      displayColors: true, boxPadding: 4,
+    };
+
+    // ── Scatter chart ────────────────────────────────────────
+
+    let scatterChart = null;
+
+    function renderScatter(models, machineFilter) {
+      const ctx = document.getElementById('scatter-chart').getContext('2d');
+      if (scatterChart) scatterChart.destroy();
+
+      let datasets;
+
+      if (machineFilter === 'all') {
+        const gpuGroups = {};
+        for (const m of models) {
+          const gpu = m.system?.gpu?.name || 'Unknown';
+          if (!gpuGroups[gpu]) gpuGroups[gpu] = [];
+          gpuGroups[gpu].push(m);
+        }
+        datasets = Object.entries(gpuGroups).map(([gpu, items]) => {
+          const color = getGPUColor(gpu);
+          return {
+            label: shortGPU(gpu),
+            data: items.map(m => ({ x: m.modelVramGiB, y: m.tokensPerSecond, r: Math.max(5, Math.min(22, Math.sqrt(m.fileSizeGB) * 5)), model: m })),
+            backgroundColor: color.bg, borderColor: color.border,
+            borderWidth: 1.5, hoverBorderWidth: 3, hoverBorderColor: '#fff',
+          };
+        });
+      } else {
+        const quantGroups = {};
+        for (const m of models) {
+          const q = m.quantization || 'unknown';
+          if (!quantGroups[q]) quantGroups[q] = [];
+          quantGroups[q].push(m);
+        }
+        datasets = Object.entries(quantGroups).map(([q, items]) => {
+          const color = getQuantColor(q);
+          return {
+            label: q,
+            data: items.map(m => ({ x: m.modelVramGiB, y: m.tokensPerSecond, r: Math.max(5, Math.min(22, Math.sqrt(m.fileSizeGB) * 5)), model: m })),
+            backgroundColor: color.bg, borderColor: color.border,
+            borderWidth: 1.5, hoverBorderWidth: 3, hoverBorderColor: '#fff',
+          };
+        });
+      }
+
+      scatterChart = new Chart(ctx, {
+        type: 'bubble',
+        data: { datasets },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          animation: { duration: 600, easing: 'easeOutQuart' },
+          interaction: { mode: 'nearest', intersect: true },
+          scales: {
+            x: { title: { display: true, text: 'VRAM Usage (GiB)', font: { weight: '600', size: 12 }, color: '#8b8fa8' }, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { font: { size: 11 } }, min: 0 },
+            y: { title: { display: true, text: 'Tokens / sec',     font: { weight: '600', size: 12 }, color: '#8b8fa8' }, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { font: { size: 11 } }, min: 0 },
+          },
+          plugins: {
+            legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'circle', padding: 16, font: { size: 11.5, weight: '500' } } },
+            tooltip: { ...TOOLTIP_STYLE, callbacks: {
+              title: (items) => items[0]?.raw?.model?.displayName || '',
+              label: (item) => {
+                const m = item.raw.model;
+                return [
+                  `GPU: ${shortGPU(m.system?.gpu?.name)}`,
+                  `VRAM: ${m.modelVramGiB.toFixed(2)} GiB (est: ${m.estimatedGiB.toFixed(2)})`,
+                  `Speed: ${m.tokensPerSecond.toFixed(1)} tok/s`,
+                  `File: ${m.fileSizeGB.toFixed(1)} GB · ${m.quantization}`,
+                  `Context: ${(m.contextLength / 1024).toFixed(0)}K`,
+                  `Efficiency: ${(m.tokensPerSecond / m.modelVramGiB).toFixed(1)} TPS/GiB`,
+                ];
+              },
+            }},
+          },
+        },
+      });
+    }
+
+    // ── Bar chart ────────────────────────────────────────────
+
+    let barChart = null;
+
+    function renderBar(models) {
+      const ctx = document.getElementById('bar-chart').getContext('2d');
+      if (barChart) barChart.destroy();
+
+      const labels = models.map(m => {
+        let name = m.displayName;
+        return name.length > 30 ? name.slice(0, 28) + '…' : name;
+      });
+
+      barChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Measured VRAM (GiB)',
+              data: models.map(m => m.modelVramGiB),
+              backgroundColor: models.map(m => getQuantColor(m.quantization).bg),
+              borderColor: models.map(m => getQuantColor(m.quantization).border),
+              borderWidth: 1.5, borderRadius: 4,
+              hoverBorderWidth: 2.5, hoverBorderColor: '#fff',
+            },
+            {
+              label: 'Estimated VRAM (GiB)',
+              data: models.map(m => m.estimatedGiB),
+              backgroundColor: 'rgba(255,255,255,0.04)',
+              borderColor: 'rgba(255,255,255,0.2)',
+              borderWidth: 1.5, borderRadius: 4, borderDash: [4, 3],
+            },
+          ],
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true, maintainAspectRatio: false,
+          animation: { duration: 700, easing: 'easeOutQuart' },
+          interaction: { mode: 'index', intersect: false },
+          scales: {
+            x: { title: { display: true, text: 'VRAM (GiB)', font: { weight: '600', size: 12 }, color: '#8b8fa8' }, grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { font: { size: 11 } }, max: 24 },
+            y: { grid: { display: false }, ticks: { font: { size: 11, weight: '500' }, color: '#c0c4d8', padding: 8 } },
+          },
+          plugins: {
+            legend: { position: 'top', labels: { usePointStyle: true, pointStyle: 'rect', padding: 16, font: { size: 11.5, weight: '500' } } },
+            tooltip: { ...TOOLTIP_STYLE, callbacks: {
+              title: (items) => models[items[0]?.dataIndex]?.displayName || '',
+              afterTitle: (items) => {
+                const m = models[items[0]?.dataIndex];
+                if (!m) return '';
+                return `${m.quantization} · ${m.architecture} · ${(m.contextLength / 1024).toFixed(0)}K ctx · ${shortGPU(m.system?.gpu?.name)}`;
+              },
+              label: (item) => {
+                const m = models[item.dataIndex];
+                if (item.datasetIndex === 0) return ` Measured: ${m.modelVramGiB.toFixed(2)} GiB`;
+                const delta = m.modelVramGiB - m.estimatedGiB;
+                return ` Estimated: ${m.estimatedGiB.toFixed(2)} GiB (Δ ${delta >= 0 ? '+' : ''}${delta.toFixed(2)})`;
+              },
+              afterBody: (items) => {
+                const m = models[items[0]?.dataIndex];
+                if (!m) return '';
+                return ['', `Speed: ${m.tokensPerSecond.toFixed(1)} tok/s`, `File: ${m.fileSizeGB.toFixed(1)} GB`, `Efficiency: ${(m.tokensPerSecond / m.modelVramGiB).toFixed(1)} TPS/GiB`];
+              },
+            }},
+          },
+        },
+      });
+    }
+
+    // ── Render all ────────────────────────────────────────────
+
+    function renderAll() {
+      const machineFilter = document.getElementById('machine-select').value;
+      const ctxFilter = document.getElementById('ctx-select').value;
+      const sortBy = document.getElementById('sort-select').value;
+      const models = processData(machineFilter, ctxFilter, sortBy);
+
+      updateHWBadge(machineFilter);
+      renderStats(models);
+      renderScatter(models, machineFilter);
+      renderBar(models);
+
+      const barCanvas = document.getElementById('bar-chart');
+      barCanvas.parentElement.style.height = Math.max(400, models.length * 24 + 80) + 'px';
+    }
+
+    // ── Events ───────────────────────────────────────────────
+
+    document.getElementById('machine-select').addEventListener('change', renderAll);
+    document.getElementById('ctx-select').addEventListener('change', renderAll);
+    document.getElementById('sort-select').addEventListener('change', renderAll);
+
+    // ── Init ─────────────────────────────────────────────────
+    fetchData();
+  </script>
+</body>
+</html>

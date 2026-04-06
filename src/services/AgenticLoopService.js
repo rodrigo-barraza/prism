@@ -9,6 +9,11 @@ import { finalizeTextGeneration } from "../routes/chat.js";
 import RequestLogger from "./RequestLogger.js";
 import { TYPES, getPricing } from "../config.js";
 import { calculateTextCost } from "../utils/CostCalculator.js";
+import AgentHooks from "./AgentHooks.js";
+import AutoApprovalEngine from "./AutoApprovalEngine.js";
+import SystemPromptAssembler from "./SystemPromptAssembler.js";
+import PlanningModeService from "./PlanningModeService.js";
+import SessionSummarizer from "./SessionSummarizer.js";
 
 const MAX_TOOL_ITERATIONS = 10;
 
@@ -104,6 +109,80 @@ export default class AgenticLoopService {
     const streamedAudioChunks = [];
     let audioSampleRate = 24000;
 
+    // ── Initialize lifecycle hooks ──────────────────────────────
+    const hooks = new AgentHooks();
+
+    // Auto-Approval Engine
+    const approvalEngine = new AutoApprovalEngine({
+      fullAuto: options.autoApprove === true,
+    });
+    hooks.register("beforeToolCall", approvalEngine.createHook(), "AutoApprovalEngine");
+
+    // Dynamic System Prompt Assembly
+    const assembler = new SystemPromptAssembler();
+    hooks.register("beforePrompt", assembler.createHook(), "SystemPromptAssembler");
+
+    // Session Summarization (fire-and-forget on loop exit)
+    hooks.register("afterResponse", SessionSummarizer.createHook(), "SessionSummarizer");
+
+    // ── Planning Mode ─────────────────────────────────────────
+    if (options.planFirst) {
+      const { planningMessages, planningOptions } = PlanningModeService.preparePlanningPass(
+        { messages: currentMessages },
+        options,
+      );
+
+      // Run system prompt assembly on planning pass too
+      await hooks.run("beforePrompt", {
+        messages: planningMessages,
+        project,
+        enabledTools: options.enabledTools,
+      });
+
+      // Generate plan (single non-looping LLM call)
+      const expandedPlanMsgs = expandMessagesForFC(planningMessages, { filterDeleted: false });
+      let planText = "";
+
+      const planStream = modelDef?.liveAPI && provider.generateTextStreamLive
+        ? provider.generateTextStreamLive(expandedPlanMsgs, resolvedModel, { ...planningOptions, signal })
+        : provider.generateTextStream(expandedPlanMsgs, resolvedModel, { ...planningOptions, signal });
+
+      for await (const chunk of planStream) {
+        if (signal?.aborted) break;
+        if (chunk && typeof chunk === "object" && chunk.type === "thinking") {
+          emit({ type: "thinking", content: chunk.content });
+          continue;
+        }
+        const chunkStr = typeof chunk === "string" ? chunk : "";
+        planText += chunkStr;
+        emit({ type: "chunk", content: chunk });
+      }
+
+      // Emit plan for approval
+      emit({
+        type: "plan_proposal",
+        plan: planText,
+        steps: PlanningModeService.extractSteps(planText),
+      });
+
+      // Wait for approval via a Promise that resolves when client responds
+      const approved = await new Promise((resolve) => {
+        ctx._planApprovalResolve = resolve;
+        // If no approval mechanism is wired, auto-approve after 30s
+        setTimeout(() => resolve(true), 30_000);
+      });
+
+      if (!approved || signal?.aborted) {
+        emit({ type: "status", message: "Plan rejected — execution cancelled." });
+        emit({ type: "done", usage: overallUsage, totalTime: (performance.now() - requestStart) / 1000 });
+        return;
+      }
+
+      // Inject approved plan into messages for execution
+      currentMessages = PlanningModeService.buildExecutionMessages(currentMessages, planText);
+      emit({ type: "status", message: "Plan approved — executing..." });
+    }
+
     // Mark conversation as generating
     if (conversationId) {
       ConversationService.setGenerating(conversationId, project, username, true).catch((err) =>
@@ -114,6 +193,15 @@ export default class AgenticLoopService {
     try {
       while (iterations < MAX_TOOL_ITERATIONS) {
         iterations++;
+
+        // ── beforePrompt hook: inject dynamic context ─────────
+        if (iterations === 1) {
+          await hooks.run("beforePrompt", {
+            messages: currentMessages,
+            project,
+            enabledTools: options.enabledTools,
+          });
+        }
         
         let passStreamedText = "";
         let passStreamedThinking = "";
@@ -322,12 +410,45 @@ export default class AgenticLoopService {
         if (passPendingToolCalls.length > 0) {
           hasCalledTools = true;
 
+          // ── beforeToolCall hook: auto-approval gating ──────
+          const { autoApproved: _autoApproved, needsApproval } = approvalEngine.checkBatch(passPendingToolCalls);
+
+          // If tools need approval, emit event and wait
+          if (needsApproval.length > 0 && !options.autoApprove) {
+            for (const tc of needsApproval) {
+              emit({
+                type: "approval_required",
+                toolCall: { name: tc.name, args: tc.args, id: tc.id },
+                tier: tc._approval.tier,
+                tierLabel: tc._approval.tierLabel,
+              });
+            }
+
+            // Wait for approval responses (or auto-approve after timeout)
+            const approvalResult = await new Promise((resolve) => {
+              ctx._toolApprovalResolve = resolve;
+              // Default: auto-approve after 60s to prevent permanent stall
+              setTimeout(() => resolve({ approved: true, reason: "timeout" }), 60_000);
+            });
+
+            if (!approvalResult?.approved) {
+              // User rejected — skip these tool calls and break
+              emit({ type: "status", message: `Tool execution rejected: ${needsApproval.map((t) => t.name).join(", ")}` });
+              break;
+            }
+          }
+
           // Execute tools in parallel — use streaming for supported tools
           const results = await Promise.all(
             passPendingToolCalls.map(async (tc) => {
+               // Run afterToolCall hook (for logging/tracking)
+               await hooks.run("beforeToolCall", tc, ctx);
+
                const customDef = customToolMap.get(tc.name);
                if (customDef) {
-                   return { name: tc.name, id: tc.id, result: await ToolOrchestratorService.executeCustomTool(customDef, tc.args) };
+                   const result = await ToolOrchestratorService.executeCustomTool(customDef, tc.args);
+                   await hooks.run("afterToolCall", tc, result, ctx);
+                   return { name: tc.name, id: tc.id, result };
                }
 
                // Streamable tools (shell, python, js) — emit real-time output chunks
@@ -342,10 +463,13 @@ export default class AgenticLoopService {
                            meta: meta || undefined,
                        });
                    });
+                   await hooks.run("afterToolCall", tc, result, ctx);
                    return { name: tc.name, id: tc.id, result };
                }
 
-               return { name: tc.name, id: tc.id, result: await ToolOrchestratorService.executeTool(tc.name, tc.args) };
+               const result = await ToolOrchestratorService.executeTool(tc.name, tc.args);
+               await hooks.run("afterToolCall", tc, result, ctx);
+               return { name: tc.name, id: tc.id, result };
             })
           );
 
@@ -420,7 +544,22 @@ export default class AgenticLoopService {
           generationSec: overallFirstTokenTime && overallGenerationEnd ? (overallGenerationEnd - overallFirstTokenTime) / 1000 : null,
           totalSec: (now - requestStart) / 1000,
       }, currentMessages, true); // <--- pass true to skip the overall request logging so we don't duplicate
+
+      // ── afterResponse hook: session summarization ───────────
+      hooks.run("afterResponse", ctx, {
+        text: finalStreamedText,
+        thinking: streamedThinking,
+        toolCalls: streamedToolCalls,
+        messages: currentMessages,
+      }).catch((err) =>
+        logger.error(`[AgenticLoopService] afterResponse hooks failed: ${err.message}`),
+      );
     } catch (err) {
+      // ── onError hook ───────────────────────────────────────
+      hooks.run("onError", err, ctx).catch((hookErr) =>
+        logger.error(`[AgenticLoopService] onError hooks failed: ${hookErr.message}`),
+      );
+
       // Clear generating flag so the conversation doesn't stay stuck
       if (conversationId) {
         ConversationService.setGenerating(conversationId, project, username, false).catch((e) =>

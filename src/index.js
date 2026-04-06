@@ -43,6 +43,7 @@ import sessionsRouter from "./routes/sessions.js";
 import statsRouter from "./routes/stats.js";
 import benchmarkRouter from "./routes/benchmark.js";
 import synthesisRouter from "./routes/synthesis.js";
+import vramBenchmarksRouter from "./routes/vram-benchmarks.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -74,6 +75,7 @@ const ENDPOINTS = {
     "/stats",
     "/benchmark",
     "/synthesis",
+    "/vram-benchmarks",
   ],
   websocket: ["/ws/chat", "/ws/text-to-audio"],
   admin: ["/admin", "/admin/lm-studio", "/admin/sessions"],
@@ -117,6 +119,7 @@ app.use("/sessions", sessionsRouter);
 app.use("/stats", statsRouter);
 app.use("/benchmark", benchmarkRouter);
 app.use("/synthesis", synthesisRouter);
+app.use("/vram-benchmarks", vramBenchmarksRouter);
 
 // Error handler (must be last)
 app.use(errorHandler);
