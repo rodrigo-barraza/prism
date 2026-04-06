@@ -32,6 +32,11 @@
 //   --settle=<ms>               GPU settle time after load (default: 3000)
 //   --sample=<ms>               GPU sample window duration (default: 5000)
 //   --backfill                  Backfill existing entries with system profile
+//   --skip-extended             Skip all extended tests (saturation, multi-turn, concurrent)
+//   --skip-saturation           Skip prompt saturation test
+//   --skip-multi-turn           Skip multi-turn KV growth test
+//   --skip-concurrent           Skip concurrent slot stress test
+//   --multi-turns=<n>           Number of multi-turn exchanges (default: 4)
 //
 // LM Studio Load Settings (tested per model):
 //   flash_attention       true/false — Q8_0 vs FP32 KV cache
@@ -39,10 +44,20 @@
 //   eval_batch_size       128/512    — batch size for prompt eval
 //   parallel              1/4        — concurrent request slots
 //
+// Extended Tests (per model, after main benchmark):
+//   TTFT / Prefill        Time to first token via streaming (always on)
+//   CPU RAM               System memory delta from model load (always on)
+//   VRAM During Gen       Peak GPU VRAM sampled concurrently during generation (always on)
+//   GPU Bandwidth         Memory bus utilization % during generation (always on)
+//   Unload Hysteresis     VRAM leak detection after model unload (always on)
+//   Prompt Saturation     Context-filling prompt to measure true KV cache VRAM
+//   Multi-Turn Growth     N-turn conversation to detect KV cache memory growth
+//   Concurrent Slots      Parallel requests to measure per-slot VRAM overhead
+//
 // ═══════════════════════════════════════════════════════════════
 
 import { execSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { MongoClient } from "mongodb";
 import { resolveArchParams, estimateMemory } from "../src/utils/gguf-arch.js";
@@ -82,6 +97,11 @@ const BACKFILL = hasFlag("backfill");
 const OUT_PATH = getArg("out", `/tmp/vram-bench-${Date.now()}.json`);
 const SETTLE_MS = parseInt(getArg("settle", "3000"));
 const SAMPLE_MS = parseInt(getArg("sample", "5000"));
+const SKIP_EXTENDED = hasFlag("skip-extended");
+const SKIP_SATURATION = hasFlag("skip-saturation") || SKIP_EXTENDED;
+const SKIP_MULTI_TURN = hasFlag("skip-multi-turn") || SKIP_EXTENDED;
+const SKIP_CONCURRENT = hasFlag("skip-concurrent") || SKIP_EXTENDED;
+const MULTI_TURN_COUNT = parseInt(getArg("multi-turns", "4"));
 
 const BENCH_COLLECTION = "vram_benchmarks";
 
@@ -92,6 +112,16 @@ const RUN_ID = randomUUID();
 const BENCH_PROMPT =
   "Explain what a neural network is in exactly two sentences.";
 const BENCH_MAX_TOKENS = 128;
+
+// Multi-turn prompts for KV cache growth measurement
+const MULTI_TURN_PROMPTS = [
+  "Explain the concept of backpropagation in neural networks.",
+  "How does gradient descent optimize a loss function? Give a concrete example.",
+  "What are the differences between CNNs and RNNs? When would you use each?",
+  "Describe the transformer architecture and why self-attention is important.",
+  "What is the vanishing gradient problem and how do residual connections help?",
+  "Explain what batch normalization does and why it helps training.",
+];
 
 // ── Settings Matrix ──────────────────────────────────────────
 // These are the actual LM Studio load-time settings discovered via the API.
@@ -300,6 +330,94 @@ const PROVIDERS = {
         totalTokens: data.usage?.total_tokens || 0,
       };
     },
+
+    /** Streaming generation — measures TTFT (time to first token) */
+    async generateStreaming(key, prompt, maxTokens) {
+      const res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: key,
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: maxTokens,
+          temperature: 0.7,
+          stream: true,
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Stream failed: ${res.status} — ${text.slice(0, 200)}`);
+      }
+      const t0 = Date.now();
+      let ttftMs = null;
+      let fullText = "";
+      let inputTokens = 0;
+      let outputTokens = 0;
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() || "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const raw = line.slice(6).trim();
+          if (raw === "[DONE]") continue;
+          try {
+            const chunk = JSON.parse(raw);
+            const delta = chunk.choices?.[0]?.delta?.content;
+            if (delta && ttftMs === null) ttftMs = Date.now() - t0;
+            if (delta) fullText += delta;
+            if (chunk.usage) {
+              inputTokens = chunk.usage.prompt_tokens || 0;
+              outputTokens = chunk.usage.completion_tokens || 0;
+            }
+          } catch { /* skip malformed chunks */ }
+        }
+      }
+      const totalMs = Date.now() - t0;
+      // Approximate output tokens from chunk count if usage wasn't provided
+      if (!outputTokens && fullText.length > 0) outputTokens = Math.ceil(fullText.length / 4);
+      return {
+        text: fullText, inputTokens, outputTokens,
+        totalTokens: inputTokens + outputTokens,
+        ttftMs: ttftMs ?? totalMs,
+        totalMs,
+        decodeMs: ttftMs != null ? totalMs - ttftMs : 0,
+      };
+    },
+
+    /** Multi-turn generation for KV cache growth measurement */
+    async generateMultiTurn(key, turns, maxTokens) {
+      const messages = [];
+      const results = [];
+      for (const turn of turns) {
+        messages.push({ role: "user", content: turn });
+        const res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: key, messages: [...messages],
+            max_tokens: maxTokens, temperature: 0.7, stream: false,
+          }),
+        });
+        if (!res.ok) throw new Error(`Multi-turn failed: ${res.status}`);
+        const data = await res.json();
+        const reply = data.choices?.[0]?.message?.content || "";
+        messages.push({ role: "assistant", content: reply });
+        const gpu = await sampleGPU(2000, 250);
+        results.push({
+          turn: results.length + 1,
+          inputTokens: data.usage?.prompt_tokens || 0,
+          outputTokens: data.usage?.completion_tokens || 0,
+          vramMiB: gpu?.usedMiB || 0,
+        });
+      }
+      return results;
+    },
   },
 
   // ── Ollama Adapter ────────────────────────────────────────
@@ -368,6 +486,63 @@ const PROVIDERS = {
         totalTokens:
           (data.prompt_eval_count || 0) + (data.eval_count || 0),
       };
+    },
+
+    /** Streaming generation — Ollama exposes timing natively */
+    async generateStreaming(key, prompt, maxTokens) {
+      const t0 = Date.now();
+      const res = await fetch(`${this.baseUrl}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: key,
+          messages: [{ role: "user", content: prompt }],
+          options: { num_predict: maxTokens },
+          stream: false,
+        }),
+      });
+      if (!res.ok) throw new Error(`Generate streaming failed: ${res.status}`);
+      const data = await res.json();
+      const totalMs = Date.now() - t0;
+      const prefillNs = data.prompt_eval_duration || 0;
+      const decodeNs = data.eval_duration || 0;
+      return {
+        text: data.message?.content || "",
+        inputTokens: data.prompt_eval_count || 0,
+        outputTokens: data.eval_count || 0,
+        totalTokens: (data.prompt_eval_count || 0) + (data.eval_count || 0),
+        ttftMs: Math.round(prefillNs / 1e6),
+        totalMs,
+        decodeMs: Math.round(decodeNs / 1e6),
+      };
+    },
+
+    /** Multi-turn generation for KV cache growth measurement */
+    async generateMultiTurn(key, turns, maxTokens) {
+      const messages = [];
+      const results = [];
+      for (const turn of turns) {
+        messages.push({ role: "user", content: turn });
+        const res = await fetch(`${this.baseUrl}/api/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: key, messages: [...messages],
+            options: { num_predict: maxTokens }, stream: false,
+          }),
+        });
+        if (!res.ok) throw new Error(`Multi-turn failed: ${res.status}`);
+        const data = await res.json();
+        messages.push({ role: "assistant", content: data.message?.content || "" });
+        const gpu = await sampleGPU(2000, 250);
+        results.push({
+          turn: results.length + 1,
+          inputTokens: data.prompt_eval_count || 0,
+          outputTokens: data.eval_count || 0,
+          vramMiB: gpu?.usedMiB || 0,
+        });
+      }
+      return results;
     },
   },
 };
@@ -531,6 +706,73 @@ function fmtGiB(gib) {
 
 function fmtMiB(mib) {
   return `${mib} MiB`;
+}
+
+// ── CPU RAM Monitoring ──────────────────────────────────────
+
+function readCpuRam() {
+  try {
+    const meminfo = readFileSync("/proc/meminfo", "utf-8");
+    const available = parseInt(meminfo.match(/MemAvailable:\s*(\d+)/)?.[1] || "0");
+    const total = parseInt(meminfo.match(/MemTotal:\s*(\d+)/)?.[1] || "0");
+    return {
+      totalMiB: Math.round(total / 1024),
+      availableMiB: Math.round(available / 1024),
+      usedMiB: Math.round((total - available) / 1024),
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ── Concurrent GPU Sampler ──────────────────────────────────
+// Runs an async function while continuously sampling GPU VRAM.
+// Returns { result, peak, sampleCount }.
+
+async function sampleGPUDuring(asyncFn) {
+  const samples = [];
+  let running = true;
+  const sampler = (async () => {
+    while (running) {
+      const gpu = queryGPU();
+      if (gpu) samples.push(gpu);
+      await sleep(200);
+    }
+  })();
+  const result = await asyncFn();
+  running = false;
+  await sampler;
+  const peak = samples.length > 0
+    ? samples.reduce((max, s) => (s.usedMiB > max.usedMiB ? s : max))
+    : null;
+  return { result, peak, sampleCount: samples.length };
+}
+
+// ── GPU Memory Bandwidth ────────────────────────────────────
+
+function queryGPUBandwidth() {
+  try {
+    const raw = execSync(
+      "nvidia-smi --query-gpu=utilization.memory --format=csv,noheader,nounits",
+      { encoding: "utf-8", timeout: 3000 },
+    ).trim();
+    return { memUtilPct: parseInt(raw) || 0 };
+  } catch {
+    return { memUtilPct: 0 };
+  }
+}
+
+// ── Prompt Saturation Generator ─────────────────────────────
+// Creates a prompt that fills the context window to stress-test
+// real KV cache allocation (vs the tiny prompt used in main bench).
+
+function generateSaturationPrompt(targetTokens) {
+  const baseText = "The quick brown fox jumps over the lazy dog. A neural network processes data through layers of interconnected nodes. Machine learning algorithms learn patterns from training data. Deep learning uses multiple hidden layers for feature extraction. ";
+  const charsPerToken = 4; // conservative estimate for English text
+  const targetChars = Math.max(0, targetTokens - 256) * charsPerToken; // leave room for response
+  const repeats = Math.ceil(targetChars / baseText.length);
+  const filler = baseText.repeat(repeats).slice(0, targetChars);
+  return `Read the following text carefully and summarize it in one sentence:\n\n${filler}\n\nProvide a one-sentence summary:`;
 }
 
 // ── Logging ──────────────────────────────────────────────────
@@ -785,8 +1027,8 @@ async function main() {
     return sizeGB <= MAX_SIZE_GB;
   });
 
-  // Sort smallest → largest (fastest to bench first)
-  models.sort((a, b) => a.sizeBytes - b.sizeBytes);
+  // Sort largest → smallest (stress-test the biggest models first)
+  models.sort((a, b) => b.sizeBytes - a.sizeBytes);
 
   logKV("Models found", `${C.bold}${models.length}${C.reset}`);
   for (const m of models) {
@@ -947,6 +1189,13 @@ async function main() {
 
       gpu: { temp: 0, power: 0, utilization: 0 },
       loadConfig: null,
+
+      // ── New measurement fields ──
+      ttft: { ms: null, prefillTokPerSec: null, decodeTokPerSec: null },
+      cpuRam: { beforeLoadMiB: 0, afterLoadMiB: 0, deltaMiB: 0 },
+      vramDuringGen: { peakMiB: 0, peakGiB: 0 },
+      gpuBandwidth: { memUtilPct: 0 },
+      hysteresis: { postUnloadVramMiB: 0, leakedMiB: 0 },
     };
 
     try {
@@ -988,6 +1237,9 @@ async function main() {
         continue;
       }
 
+      // ── CPU RAM baseline ──
+      const cpuRamBefore = readCpuRam();
+
       // Load model with settings
       process.stdout.write(
         `    ${C.yellow}[${settings.label}]${C.reset} ctx=${ctx} → loading…`,
@@ -1006,6 +1258,14 @@ async function main() {
         ` ${C.dim}(${(entry.loadTimeMs / 1000).toFixed(1)}s)${C.reset}`,
       );
 
+      // ── CPU RAM after load ──
+      const cpuRamAfter = readCpuRam();
+      entry.cpuRam = {
+        beforeLoadMiB: cpuRamBefore?.usedMiB || 0,
+        afterLoadMiB: cpuRamAfter?.usedMiB || 0,
+        deltaMiB: (cpuRamAfter?.usedMiB || 0) - (cpuRamBefore?.usedMiB || 0),
+      };
+
       // Sample GPU VRAM after settling
       await sleep(1000);
       const loadedGPU = await sampleGPU(SAMPLE_MS, 250);
@@ -1019,25 +1279,45 @@ async function main() {
       entry.gpu.power = loadedGPU?.powerW || 0;
       entry.gpu.utilization = loadedGPU?.utilPct || 0;
 
-      // Generate to warm up KV cache + measure throughput
+      // ── Generate with TTFT measurement + concurrent VRAM sampling ──
       process.stdout.write(` gen…`);
-      const genStart = Date.now();
-      const gen = await provider.generate(
-        model.key,
-        BENCH_PROMPT,
-        BENCH_MAX_TOKENS,
+      const { result: genResult, peak: genPeakGPU } = await sampleGPUDuring(
+        () => provider.generateStreaming(model.key, BENCH_PROMPT, BENCH_MAX_TOKENS),
       );
-      const genMs = Date.now() - genStart;
       entry.generation = {
-        inputTokens: gen.inputTokens,
-        outputTokens: gen.outputTokens,
-        totalTokens: gen.totalTokens,
-        textLength: gen.text?.length || 0,
+        inputTokens: genResult.inputTokens,
+        outputTokens: genResult.outputTokens,
+        totalTokens: genResult.totalTokens,
+        textLength: genResult.text?.length || 0,
       };
       entry.tokensPerSecond =
-        gen.outputTokens > 0
-          ? +(gen.outputTokens / (genMs / 1000)).toFixed(1)
+        genResult.outputTokens > 0 && genResult.totalMs > 0
+          ? +(genResult.outputTokens / (genResult.totalMs / 1000)).toFixed(1)
           : 0;
+
+      // TTFT metrics
+      entry.ttft = {
+        ms: genResult.ttftMs || null,
+        prefillTokPerSec:
+          genResult.ttftMs > 0 && genResult.inputTokens > 0
+            ? +(genResult.inputTokens / (genResult.ttftMs / 1000)).toFixed(1)
+            : null,
+        decodeTokPerSec:
+          genResult.decodeMs > 0 && genResult.outputTokens > 0
+            ? +(genResult.outputTokens / (genResult.decodeMs / 1000)).toFixed(1)
+            : null,
+      };
+
+      // VRAM during generation (peak from concurrent sampling)
+      entry.vramDuringGen = {
+        peakMiB: genPeakGPU?.usedMiB || 0,
+        peakGiB: genPeakGPU
+          ? +mibToGiB(genPeakGPU.usedMiB - baselineVramMiB).toFixed(3)
+          : 0,
+      };
+
+      // GPU memory bandwidth sample
+      entry.gpuBandwidth = queryGPUBandwidth();
 
       // Post-generation GPU sample (KV cache is now warm)
       const postGenGPU = await sampleGPU(3000, 250);
@@ -1063,8 +1343,11 @@ async function main() {
           : Math.abs(entry.deltaGiB) < 1.5
             ? C.yellow
             : C.red;
+      const ttftStr = entry.ttft.ms != null ? `${entry.ttft.ms}ms` : "?";
+      const ramStr = entry.cpuRam.deltaMiB ? `RAM+${entry.cpuRam.deltaMiB}MiB` : "";
+      const bwStr = entry.gpuBandwidth.memUtilPct ? `bw=${entry.gpuBandwidth.memUtilPct}%` : "";
       log(
-        `${C.dim}        actual=${C.reset}${C.cyan}${fmtGiB(entry.modelVramGiB)}${C.reset}${C.dim}  est=${C.reset}${fmtGiB(entry.estimatedGiB)}${C.dim}  Δ=${C.reset}${dc}${entry.deltaGiB >= 0 ? "+" : ""}${entry.deltaGiB.toFixed(2)}${C.reset}${C.dim}  ${entry.tokensPerSecond} tok/s  ${entry.gpu.temp}°C ${entry.gpu.power}W${C.reset}`,
+        `${C.dim}        actual=${C.reset}${C.cyan}${fmtGiB(entry.modelVramGiB)}${C.reset}${C.dim}  est=${C.reset}${fmtGiB(entry.estimatedGiB)}${C.dim}  Δ=${C.reset}${dc}${entry.deltaGiB >= 0 ? "+" : ""}${entry.deltaGiB.toFixed(2)}${C.reset}${C.dim}  ${entry.tokensPerSecond} tok/s  TTFT=${ttftStr}  ${entry.gpu.temp}°C ${entry.gpu.power}W ${ramStr} ${bwStr}${C.reset}`,
       );
     } catch (err) {
       entry.error = err.message;
@@ -1080,7 +1363,179 @@ async function main() {
     await saveResult(entry);
   }
 
-  // ── Step 5: Summary Report ──────────────────────────────
+  // ── Hysteresis check: measure VRAM after unloading all models ──
+  log(`\n${C.dim}    Checking unload hysteresis…${C.reset}`);
+  await provider.unloadAll();
+  await sleep(3000);
+  const postUnloadGPU = await sampleGPU(3000, 500);
+  const postUnloadVramMiB = postUnloadGPU?.usedMiB || 0;
+  const hysteresisLeakMiB = postUnloadVramMiB - baselineVramMiB;
+  log(
+    `    ${C.dim}Post-unload VRAM:${C.reset} ${fmtMiB(postUnloadVramMiB)} ${C.dim}(baseline: ${fmtMiB(baselineVramMiB)}, leak: ${hysteresisLeakMiB > 10 ? `${C.red}+${hysteresisLeakMiB} MiB${C.reset}` : `${C.green}${hysteresisLeakMiB} MiB${C.reset}`})${C.reset}`,
+  );
+
+  // Tag all results from this run with hysteresis data
+  for (const r of results) {
+    r.hysteresis = { postUnloadVramMiB, leakedMiB: hysteresisLeakMiB };
+  }
+
+  // ── Step 4b: Extended Tests ─────────────────────────────
+  // These run once per model (default settings, smallest feasible context).
+
+  const extendedResults = [];
+
+  if (!SKIP_EXTENDED) {
+    logHeader("Extended Tests");
+
+    // Find unique models that had at least one successful run
+    const successfulModels = [...new Set(
+      results.filter((r) => !r.error && r.modelVramGiB > 0).map((r) => r.model),
+    )];
+
+    for (let mi = 0; mi < successfulModels.length; mi++) {
+      const modelKey = successfulModels[mi];
+      const model = models.find((m) => m.key === modelKey);
+      if (!model) continue;
+
+      // Pick smallest context that succeeded with default settings
+      const bestRun = results.find(
+        (r) => r.model === modelKey && r.settings.label === "default" && !r.error && r.modelVramGiB > 0,
+      );
+      if (!bestRun) continue;
+      const testCtx = bestRun.contextLength;
+
+      log(`\n${C.bgBlue}${C.white}${C.bold}  [${mi + 1}/${successfulModels.length}] ${model.displayName} (ctx=${testCtx})  ${C.reset}`);
+
+      // Load model for extended tests
+      try {
+        await provider.loadModel(model.key, testCtx, {
+          flash_attention: true,
+          offload_kv_cache_to_gpu: true,
+          eval_batch_size: 512,
+          parallel: 4,
+        });
+      } catch (err) {
+        log(`    ${C.red}Failed to load for extended tests: ${err.message.slice(0, 100)}${C.reset}`);
+        continue;
+      }
+
+      // ── Multi-Turn KV Cache Growth ──
+      if (!SKIP_MULTI_TURN && provider.generateMultiTurn) {
+        log(`    ${C.yellow}Multi-turn${C.reset} (${MULTI_TURN_COUNT} turns)…`);
+        try {
+          const turns = MULTI_TURN_PROMPTS.slice(0, MULTI_TURN_COUNT);
+          const turnResults = await provider.generateMultiTurn(model.key, turns, BENCH_MAX_TOKENS);
+          const vramStart = turnResults[0]?.vramMiB || 0;
+          const vramEnd = turnResults[turnResults.length - 1]?.vramMiB || 0;
+          const vramGrowth = vramEnd - vramStart;
+          const perTurn = turnResults.length > 1 ? Math.round(vramGrowth / (turnResults.length - 1)) : 0;
+
+          const mtEntry = {
+            runId: RUN_ID, testType: "multi-turn", model: modelKey,
+            displayName: model.displayName, contextLength: testCtx,
+            settings: { label: "default" }, system: systemProfile,
+            multiTurn: {
+              turnCount: turnResults.length, turns: turnResults,
+              vramGrowthMiB: vramGrowth, vramPerTurnMiB: perTurn,
+            },
+          };
+          extendedResults.push(mtEntry);
+          await saveResult(mtEntry);
+
+          log(`      ${C.dim}VRAM growth:${C.reset} ${vramGrowth > 50 ? C.red : C.green}+${vramGrowth} MiB${C.reset} ${C.dim}(${perTurn} MiB/turn)${C.reset}`);
+          for (const t of turnResults) {
+            log(`      ${C.dim}  Turn ${t.turn}: ${fmtMiB(t.vramMiB)} (in=${t.inputTokens} out=${t.outputTokens})${C.reset}`);
+          }
+        } catch (err) {
+          log(`      ${C.red}Multi-turn failed: ${err.message.slice(0, 100)}${C.reset}`);
+        }
+      }
+
+      // ── Concurrent Slot VRAM Scaling ──
+      if (!SKIP_CONCURRENT) {
+        const parallel = 4; // test with 4 concurrent slots
+        log(`    ${C.yellow}Concurrent slots${C.reset} (${parallel} requests)…`);
+        try {
+          // Single request VRAM
+          const singleGPU = await sampleGPU(2000, 250);
+          const singleVramMiB = singleGPU?.usedMiB || 0;
+
+          // Fire N concurrent requests
+          const concurrentPromises = Array.from({ length: parallel }, (_, i) =>
+            provider.generate(model.key, `Explain concept number ${i + 1} of machine learning in two sentences.`, BENCH_MAX_TOKENS),
+          );
+
+          const { peak: concurrentPeak } = await sampleGPUDuring(
+            () => Promise.all(concurrentPromises),
+          );
+          const concurrentVramMiB = concurrentPeak?.usedMiB || 0;
+          const perSlotDelta = parallel > 1
+            ? Math.round((concurrentVramMiB - singleVramMiB) / (parallel - 1))
+            : 0;
+
+          const csEntry = {
+            runId: RUN_ID, testType: "concurrent-slots", model: modelKey,
+            displayName: model.displayName, contextLength: testCtx,
+            settings: { label: "default", parallel }, system: systemProfile,
+            concurrent: {
+              slots: parallel, singleVramMiB, concurrentVramMiB,
+              deltaMiB: concurrentVramMiB - singleVramMiB,
+              perSlotDeltaMiB: perSlotDelta,
+              allCompleted: true,
+            },
+          };
+          extendedResults.push(csEntry);
+          await saveResult(csEntry);
+
+          log(`      ${C.dim}Single:${C.reset} ${fmtMiB(singleVramMiB)}  ${C.dim}Concurrent:${C.reset} ${fmtMiB(concurrentVramMiB)}  ${C.dim}Per-slot:${C.reset} ${perSlotDelta > 100 ? C.red : C.green}+${perSlotDelta} MiB${C.reset}`);
+        } catch (err) {
+          log(`      ${C.red}Concurrent test failed: ${err.message.slice(0, 100)}${C.reset}`);
+        }
+      }
+
+      // ── Prompt Saturation ──
+      if (!SKIP_SATURATION) {
+        log(`    ${C.yellow}Prompt saturation${C.reset} (filling ${testCtx} tokens)…`);
+        try {
+          const satPrompt = generateSaturationPrompt(testCtx);
+          const satBefore = await sampleGPU(1000, 250);
+
+          const { result: satResult, peak: satPeak } = await sampleGPUDuring(
+            () => provider.generateStreaming(model.key, satPrompt, 64),
+          );
+
+          const satVramMiB = satPeak?.usedMiB || 0;
+          const emptyVramMiB = satBefore?.usedMiB || 0;
+          const vramDelta = satVramMiB - emptyVramMiB;
+
+          const satEntry = {
+            runId: RUN_ID, testType: "saturation", model: modelKey,
+            displayName: model.displayName, contextLength: testCtx,
+            settings: { label: "default" }, system: systemProfile,
+            saturation: {
+              targetTokens: testCtx,
+              actualInputTokens: satResult.inputTokens || 0,
+              fillRatio: testCtx > 0 ? +((satResult.inputTokens || 0) / testCtx).toFixed(3) : 0,
+              vramMiB: satVramMiB,
+              vramGiB: +mibToGiB(satVramMiB - baselineVramMiB).toFixed(3),
+              vramVsEmptyMiB: vramDelta,
+              vramVsEmptyGiB: +mibToGiB(vramDelta).toFixed(3),
+              ttftMs: satResult.ttftMs || null,
+              tokensPerSecond: satResult.outputTokens > 0 && satResult.totalMs > 0
+                ? +(satResult.outputTokens / (satResult.totalMs / 1000)).toFixed(1) : 0,
+            },
+          };
+          extendedResults.push(satEntry);
+          await saveResult(satEntry);
+
+          log(`      ${C.dim}Filled:${C.reset} ${satResult.inputTokens || "?"} tokens  ${C.dim}VRAM:${C.reset} ${fmtMiB(satVramMiB)}  ${C.dim}Δ vs empty:${C.reset} ${vramDelta > 100 ? C.yellow : C.green}+${vramDelta} MiB${C.reset}  ${C.dim}TTFT:${C.reset} ${satResult.ttftMs || "?"}ms`);
+        } catch (err) {
+          log(`      ${C.red}Saturation test failed: ${err.message.slice(0, 100)}${C.reset}`);
+        }
+      }
+    }
+  }
+
 
   logHeader("Summary Report");
 
@@ -1205,6 +1660,39 @@ async function main() {
     );
   }
 
+  // ── TTFT Latency Analysis
+  const ttftRuns = successfulRuns.filter((r) => r.ttft?.ms != null && r.ttft.ms > 0);
+  if (ttftRuns.length > 0) {
+    logSection("TTFT Latency (Time to First Token)");
+    log(
+      `  ${"Model".padEnd(40)} │ ${"ctx".padStart(8)} │ ${"TTFT".padStart(8)} │ ${"Prefill".padStart(10)} │ ${"Decode".padStart(10)}`,
+    );
+    log(
+      `  ${"─".repeat(40)}─┼${"─".repeat(10)}┼${"─".repeat(10)}┼${"─".repeat(12)}┼${"─".repeat(12)}`,
+    );
+    for (const r of ttftRuns.filter((r) => r.settings.label === "default")) {
+      const ttft = r.ttft.ms != null ? `${r.ttft.ms}ms` : "-";
+      const prefill = r.ttft.prefillTokPerSec != null ? `${r.ttft.prefillTokPerSec} t/s` : "-";
+      const decode = r.ttft.decodeTokPerSec != null ? `${r.ttft.decodeTokPerSec} t/s` : "-";
+      const ttftColor = r.ttft.ms < 500 ? C.green : r.ttft.ms < 2000 ? C.yellow : C.red;
+      log(
+        `  ${r.model.padEnd(40).slice(0, 40)} │ ${String(r.contextLength).padStart(8)} │ ${ttftColor}${ttft.padStart(8)}${C.reset} │ ${prefill.padStart(10)} │ ${decode.padStart(10)}`,
+      );
+    }
+  }
+
+  // ── CPU RAM Impact
+  const ramRuns = successfulRuns.filter((r) => r.cpuRam?.deltaMiB);
+  if (ramRuns.length > 0) {
+    logSection("CPU RAM Impact");
+    const defaultRamRuns = ramRuns.filter((r) => r.settings.label === "default");
+    for (const r of defaultRamRuns) {
+      const deltaGiB = (r.cpuRam.deltaMiB / 1024).toFixed(2);
+      const color = r.cpuRam.deltaMiB > 2048 ? C.yellow : C.dim;
+      log(`    ${r.model.padEnd(45).slice(0, 45)} ${color}+${deltaGiB} GiB${C.reset} (ctx=${r.contextLength})`);
+    }
+  }
+
   // ── Context scaling
   logSection("Context Length Scaling (VRAM increase per model)");
   for (const [modelKey, runs] of Object.entries(byModel)) {
@@ -1264,6 +1752,42 @@ async function main() {
     );
   }
 
+  // ── Hysteresis
+  logSection("Unload Hysteresis");
+  logKV("Post-unload VRAM", fmtMiB(postUnloadVramMiB));
+  logKV("Baseline VRAM", fmtMiB(baselineVramMiB));
+  logKV("Leaked", `${hysteresisLeakMiB > 10 ? C.red : C.green}${hysteresisLeakMiB} MiB${C.reset}`);
+
+  // ── Extended Test Summaries
+  if (extendedResults.length > 0) {
+    logSection("Extended Test Summary");
+    const mtResults = extendedResults.filter((r) => r.testType === "multi-turn");
+    const csResults = extendedResults.filter((r) => r.testType === "concurrent-slots");
+    const satResults = extendedResults.filter((r) => r.testType === "saturation");
+
+    if (mtResults.length > 0) {
+      log(`\n    ${C.bold}Multi-Turn KV Growth:${C.reset}`);
+      for (const r of mtResults) {
+        const gc = r.multiTurn.vramGrowthMiB > 50 ? C.red : C.green;
+        log(`      ${r.model.padEnd(40).slice(0, 40)} ${gc}+${r.multiTurn.vramGrowthMiB} MiB${C.reset} over ${r.multiTurn.turnCount} turns (${r.multiTurn.vramPerTurnMiB} MiB/turn)`);
+      }
+    }
+    if (csResults.length > 0) {
+      log(`\n    ${C.bold}Concurrent Slot Scaling:${C.reset}`);
+      for (const r of csResults) {
+        const sc = r.concurrent.perSlotDeltaMiB > 100 ? C.red : C.green;
+        log(`      ${r.model.padEnd(40).slice(0, 40)} ${sc}+${r.concurrent.perSlotDeltaMiB} MiB/slot${C.reset} (${r.concurrent.slots} slots, Δ=${r.concurrent.deltaMiB} MiB total)`);
+      }
+    }
+    if (satResults.length > 0) {
+      log(`\n    ${C.bold}Prompt Saturation (filled vs empty context):${C.reset}`);
+      for (const r of satResults) {
+        const fc = r.saturation.vramVsEmptyMiB > 500 ? C.yellow : C.green;
+        log(`      ${r.model.padEnd(40).slice(0, 40)} ${fc}+${r.saturation.vramVsEmptyMiB} MiB${C.reset} (${r.saturation.actualInputTokens}/${r.saturation.targetTokens} tokens filled, TTFT=${r.saturation.ttftMs || "?"}ms)`);
+      }
+    }
+  }
+
   // ── Step 6: Write JSON Report ────────────────────────────
 
   const report = {
@@ -1300,7 +1824,9 @@ async function main() {
     modelsTotal: models.length,
     runsTotal: results.length,
     runsSuccessful: successfulRuns.length,
+    hysteresis: { postUnloadVramMiB, leakedMiB: hysteresisLeakMiB },
     results,
+    extendedResults,
   };
 
   writeFileSync(OUT_PATH, JSON.stringify(report, null, 2));
