@@ -361,7 +361,7 @@ const BenchmarkService = {
         return {
           provider: t.provider,
           model: t.model,
-          label: def?.label || t.model,
+          label: def?.label || t.display_name || t.model,
         };
       });
     } else {
