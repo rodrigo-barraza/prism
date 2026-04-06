@@ -63,6 +63,7 @@ router.get("/", async (req, res, next) => {
       fileSizeGB: 1,
       fileSizeBytes: 1,
       archParams: 1,
+      modality: 1,
 
       // Settings applied for this run
       settings: 1,
