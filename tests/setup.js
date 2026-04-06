@@ -18,7 +18,7 @@ vi.mock('../secrets.js', () => ({
     OLLAMA_BASE_URL: '',
     LLAMA_CPP_BASE_URL: '',
     OPENAI_COMPATIBLE_BASE_URL: 'http://localhost:9999',
-    MONGO_URI: 'mongodb://127.0.0.1:27017',
+    MONGO_URI: 'mongodb://192.168.86.2:27017/?directConnection=true&replicaSet=rs0',
     MONGO_DB_NAME: 'prism-test',
 }));
 
