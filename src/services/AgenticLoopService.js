@@ -90,6 +90,16 @@ export default class AgenticLoopService {
       finalTools = finalTools.filter((t) => enabledSet.has(t.name));
     }
 
+    // ── Native tool collision prevention ────────────────────────
+    // When the provider's native web search is active (e.g. OpenAI's
+    // web_search, Anthropic's web_search_20260209, Google's googleSearch),
+    // remove our custom web_search function to avoid namespace collisions.
+    // Centralized here so ALL providers — current and future — get a
+    // clean tools array without per-provider deduplication logic.
+    if (options.webSearch) {
+      finalTools = finalTools.filter((t) => t.name !== "web_search");
+    }
+
     // If the model is local (e.g. LM Studio / vLLM / Ollama), we only feed it tools for the first pass
     // to force an eventual text response and avoid infinite loops.
     const isLocalProvider = providerName === "lm-studio" || providerName === "vllm" || providerName === "ollama";

@@ -31,6 +31,16 @@ router.get("/models", async (req, res, next) => {
         $group: {
           _id: { model: "$model", provider: "$provider" },
           totalRequests: { $sum: 1 },
+          totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
+          totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
+          totalTokens: {
+            $sum: {
+              $add: [
+                { $ifNull: ["$inputTokens", 0] },
+                { $ifNull: ["$outputTokens", 0] },
+              ],
+            },
+          },
         },
       },
       { $sort: { totalRequests: -1 } },
@@ -46,6 +56,9 @@ router.get("/models", async (req, res, next) => {
         model: r._id.model,
         provider: r._id.provider,
         totalRequests: r.totalRequests,
+        totalInputTokens: r.totalInputTokens,
+        totalOutputTokens: r.totalOutputTokens,
+        totalTokens: r.totalTokens,
       })),
     );
   } catch (error) {
