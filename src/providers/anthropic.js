@@ -350,7 +350,7 @@ const anthropicProvider = {
       const tools = buildTools(options);
       if (tools) payload.tools = tools;
 
-      if (options.thinkingEnabled !== false && (options.thinkingBudget || options.reasoningEffort)) {
+      if (options.thinkingEnabled !== false && (options.thinkingEnabled === true || options.thinkingBudget || options.reasoningEffort)) {
         const budget = options.thinkingBudget
           ? parseInt(options.thinkingBudget)
           : EFFORT_BUDGET_MAP[options.reasoningEffort] ||
@@ -496,7 +496,7 @@ const anthropicProvider = {
       const tools = buildTools(options);
       if (tools) streamPayload.tools = tools;
 
-      if (options.thinkingEnabled !== false && (options.thinkingBudget || options.reasoningEffort)) {
+      if (options.thinkingEnabled !== false && (options.thinkingEnabled === true || options.thinkingBudget || options.reasoningEffort)) {
         const budget = options.thinkingBudget
           ? parseInt(options.thinkingBudget)
           : EFFORT_BUDGET_MAP[options.reasoningEffort] ||
