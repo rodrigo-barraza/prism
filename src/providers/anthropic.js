@@ -333,7 +333,7 @@ const anthropicProvider = {
         messages: prepared.messages,
         max_tokens: options.maxTokens || 1000,
         temperature:
-          options.temperature !== undefined ? options.temperature : undefined,
+          options.temperature !== undefined ? Math.min(options.temperature, 1) : undefined,
         top_p:
           options.temperature === undefined && options.topP !== undefined
             ? options.topP
@@ -343,6 +343,7 @@ const anthropicProvider = {
           options.stopSequences !== undefined
             ? options.stopSequences
             : undefined,
+        ...(options.serviceTier && { service_tier: options.serviceTier }),
       };
 
       // Server tools
@@ -478,7 +479,7 @@ const anthropicProvider = {
         messages: prepared.messages,
         max_tokens: options.maxTokens || 1000,
         temperature:
-          options.temperature !== undefined ? options.temperature : undefined,
+          options.temperature !== undefined ? Math.min(options.temperature, 1) : undefined,
         top_p:
           options.temperature === undefined && options.topP !== undefined
             ? options.topP
@@ -488,6 +489,7 @@ const anthropicProvider = {
           options.stopSequences !== undefined
             ? options.stopSequences
             : undefined,
+        ...(options.serviceTier && { service_tier: options.serviceTier }),
       };
 
       // Server tools

@@ -994,7 +994,15 @@ function getModelOptions(inputType, outputType) {
       if (m.pricing) entry.pricing = m.pricing;
       if (m.arena) entry.arena = m.arena;
       if (m.maxInputTokens) entry.contextLength = m.maxInputTokens;
+      if (m.maxOutputTokens) entry.maxOutputTokens = m.maxOutputTokens;
       if (m.assistantImages === false) entry.assistantImages = false;
+      // JSON mode: OpenAI + Google support response_format / responseMimeType
+      if (
+        m.modelType === MODEL_TYPES.CONVERSATION &&
+        [PROVIDERS.OPENAI, PROVIDERS.GOOGLE].includes(m.provider)
+      ) {
+        entry.jsonMode = true;
+      }
       if (m.codeExecution) entry.codeExecution = true;
       if (m.webFetch) entry.webFetch = true;
       if (m.urlContext) entry.urlContext = true;

@@ -237,6 +237,19 @@ const openaiProvider = {
 
     if (options.maxTokens) payload.max_output_tokens = options.maxTokens;
 
+    // Seed for reproducibility
+    if (options.seed !== undefined) payload.seed = options.seed;
+
+    // Service tier: auto / default / priority
+    if (options.serviceTier) payload.service_tier = options.serviceTier;
+
+    // Response format (JSON mode) — maps to text.format for Responses API
+    if (options.responseFormat === "json_object") {
+      text.format = { type: "json_object" };
+    } else if (options.responseFormat === "json_schema" && options.responseSchema) {
+      text.format = { type: "json_schema", json_schema: options.responseSchema };
+    }
+
     // Temperature/topP only work with reasoning.effort=none
     if (options.reasoningEffort === "none") {
       if (options.temperature !== undefined)
@@ -330,6 +343,18 @@ const openaiProvider = {
         payload.stop = options.stopSequences;
       if (options.maxTokens) payload.max_completion_tokens = options.maxTokens;
     }
+
+    // Seed for reproducibility
+    if (options.seed !== undefined) payload.seed = options.seed;
+
+    // Service tier: auto / default / priority
+    if (options.serviceTier) payload.service_tier = options.serviceTier;
+
+    // Response format (JSON mode)
+    if (options.responseFormat === "json_object") {
+      payload.response_format = { type: "json_object" };
+    }
+
     if (options.webSearch) {
       payload.tools = [{ type: "web_search_preview" }];
     }
@@ -450,6 +475,19 @@ const openaiProvider = {
 
     if (options.maxTokens) payload.max_output_tokens = options.maxTokens;
 
+    // Seed for reproducibility
+    if (options.seed !== undefined) payload.seed = options.seed;
+
+    // Service tier: auto / default / priority
+    if (options.serviceTier) payload.service_tier = options.serviceTier;
+
+    // Response format (JSON mode) — maps to text.format for Responses API
+    if (options.responseFormat === "json_object") {
+      text.format = { type: "json_object" };
+    } else if (options.responseFormat === "json_schema" && options.responseSchema) {
+      text.format = { type: "json_schema", json_schema: options.responseSchema };
+    }
+
     // Temperature/topP only work with reasoning.effort=none
     if (options.reasoningEffort === "none") {
       if (options.temperature !== undefined)
@@ -559,6 +597,18 @@ const openaiProvider = {
         payload.stop = options.stopSequences;
       if (options.maxTokens) payload.max_completion_tokens = options.maxTokens;
     }
+
+    // Seed for reproducibility
+    if (options.seed !== undefined) payload.seed = options.seed;
+
+    // Service tier: auto / default / priority
+    if (options.serviceTier) payload.service_tier = options.serviceTier;
+
+    // Response format (JSON mode)
+    if (options.responseFormat === "json_object") {
+      payload.response_format = { type: "json_object" };
+    }
+
     if (options.webSearch) {
       payload.tools = [{ type: "web_search_preview" }];
     }

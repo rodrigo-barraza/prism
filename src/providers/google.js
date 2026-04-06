@@ -234,6 +234,14 @@ const googleProvider = {
       if (options.maxTokens !== undefined) {
         config.maxOutputTokens = options.maxTokens;
       }
+      // Seed for reproducibility
+      if (options.seed !== undefined) {
+        config.seed = parseInt(options.seed);
+      }
+      // Response format (JSON mode)
+      if (options.responseFormat === "json_object") {
+        config.responseMimeType = "application/json";
+      }
 
       // Resolve model definition early — needed for thinking and image checks
       const modelDef = Object.values(MODELS).find((m) => m.name === model);
@@ -358,6 +366,14 @@ const googleProvider = {
       }
       if (options.maxTokens !== undefined) {
         config.maxOutputTokens = options.maxTokens;
+      }
+      // Seed for reproducibility
+      if (options.seed !== undefined) {
+        config.seed = parseInt(options.seed);
+      }
+      // Response format (JSON mode)
+      if (options.responseFormat === "json_object") {
+        config.responseMimeType = "application/json";
       }
 
       // Resolve model definition early — needed for thinking and image checks

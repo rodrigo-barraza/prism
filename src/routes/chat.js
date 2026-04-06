@@ -216,6 +216,8 @@ export async function handleChat(params, emit, { signal } = {}) {
     functionCallingEnabled,
     enabledTools,
     forceImageGeneration,
+    responseFormat,
+    serviceTier,
     textOnly,
     skipConversation,
     // systemPrompt arrives in two places by design:
@@ -300,6 +302,8 @@ export async function handleChat(params, emit, { signal } = {}) {
     ...(functionCallingEnabled !== undefined && { functionCallingEnabled }),
     ...(enabledTools && { enabledTools }),
     ...(forceImageGeneration && { forceImageGeneration }),
+    ...(responseFormat && { responseFormat }),
+    ...(serviceTier && { serviceTier }),
     ...(textOnly && { textOnly }),
     ...(extraParams.systemPrompt && { systemPrompt: extraParams.systemPrompt }),
   };
