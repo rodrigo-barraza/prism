@@ -852,6 +852,7 @@ async function connectDB() {
         "settings.label": 1,
         "system.hostname": 1,
         "system.gpu.name": 1,
+        "system.gpu.totalMiB": 1,
         "system.gpu.driver": 1,
         "system.cpu.model": 1,
         "system.ram.totalPhysicalGiB": 1,
@@ -898,6 +899,7 @@ async function existsInDB(provider, model, contextLength, settingsLabel, sysProf
   if (sysProfile) {
     if (sysProfile.hostname) query["system.hostname"] = sysProfile.hostname;
     if (sysProfile.gpu?.name) query["system.gpu.name"] = sysProfile.gpu.name;
+    if (sysProfile.gpu?.totalMiB) query["system.gpu.totalMiB"] = sysProfile.gpu.totalMiB;
     if (sysProfile.gpu?.driver) query["system.gpu.driver"] = sysProfile.gpu.driver;
     if (sysProfile.cpu?.model) query["system.cpu.model"] = sysProfile.cpu.model;
     if (sysProfile.ram?.totalPhysicalGiB) query["system.ram.totalPhysicalGiB"] = sysProfile.ram.totalPhysicalGiB;
