@@ -1023,6 +1023,14 @@ export async function finalizeTextGeneration(
         totalTime: parseFloat(totalSec.toFixed(3)),
         tokensPerSec,
         estimatedCost,
+        // Generation settings — source of truth per request
+        generationSettings: {
+          temperature: options.temperature,
+          maxTokens: options.maxTokens,
+          thinkingEnabled: options.thinkingEnabled || false,
+          ...(options.reasoningEffort && { reasoningEffort: options.reasoningEffort }),
+          ...(options.thinkingBudget && { thinkingBudget: options.thinkingBudget }),
+        },
       });
     } else {
       // Only append the user message on the first call for this turn
@@ -1050,6 +1058,14 @@ export async function finalizeTextGeneration(
         totalTime: parseFloat(totalSec.toFixed(3)),
         tokensPerSec,
         estimatedCost,
+        // Generation settings — source of truth per request
+        generationSettings: {
+          temperature: options.temperature,
+          maxTokens: options.maxTokens,
+          thinkingEnabled: options.thinkingEnabled || false,
+          ...(options.reasoningEffort && { reasoningEffort: options.reasoningEffort }),
+          ...(options.thinkingBudget && { thinkingBudget: options.thinkingBudget }),
+        },
       });
     }
 

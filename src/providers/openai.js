@@ -302,7 +302,7 @@ const openaiProvider = {
 
     // Web search tool
     if (options.webSearch) {
-      payload.tools = [{ type: "web_search_preview" }];
+      payload.tools = [{ type: "web_search" }];
     }
 
     // Custom function calling tools
@@ -393,7 +393,7 @@ const openaiProvider = {
     }
 
     if (options.webSearch) {
-      payload.tools = [{ type: "web_search_preview" }];
+      payload.tools = [{ type: "web_search" }];
     }
 
     // Custom function calling tools
@@ -540,7 +540,7 @@ const openaiProvider = {
 
     // Web search tool
     if (options.webSearch) {
-      payload.tools = [{ type: "web_search_preview" }];
+      payload.tools = [{ type: "web_search" }];
     }
 
     // Custom function calling tools
@@ -673,7 +673,7 @@ const openaiProvider = {
     }
 
     if (options.webSearch) {
-      payload.tools = [{ type: "web_search_preview" }];
+      payload.tools = [{ type: "web_search" }];
     }
 
     // Custom function calling tools
