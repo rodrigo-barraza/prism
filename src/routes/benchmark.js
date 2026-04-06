@@ -52,6 +52,147 @@ router.get("/", async (req, res, next) => {
 });
 
 // ============================================================
+// GET /benchmark/stats — Aggregate model performance across all runs
+// ============================================================
+// Per model+benchmark pair, only the LATEST run's result counts toward
+// pass/fail/error (unique test results). Cost and latency accumulate
+// across all runs for accurate historical totals.
+
+router.get("/stats", async (req, res, next) => {
+  try {
+    const benchmarks = await BenchmarkService.list(req.project);
+
+    // Phase 1: For each benchmark, find the latest result per model.
+    // getRuns() returns runs sorted by startedAt DESC, so the first
+    // occurrence of a model key is its most recent result.
+    // latestResults: Map<"provider:model", Map<benchmarkId, result>>
+    const latestResults = new Map();
+    // allRunTotals: Map<"provider:model", { totalCost, totalLatency, runCount }>
+    const allRunTotals = new Map();
+    // cumulativeBenchmarks: Map<"provider:model::benchmarkId", { name, total, passed, failed, errored }>
+    const cumulativeBenchmarks = new Map();
+
+    for (const b of benchmarks) {
+      const runs = await BenchmarkService.getRuns(b.id, req.project);
+      const seenForBenchmark = new Set(); // track which models we've already recorded as "latest"
+
+      for (const run of runs) {
+        for (const result of run.models || []) {
+          const modelKey = `${result.provider}:${result.model}`;
+
+          // Accumulate ALL-run cost/latency regardless of dedup
+          if (!allRunTotals.has(modelKey)) {
+            allRunTotals.set(modelKey, { totalCost: 0, totalLatency: 0, runCount: 0 });
+          }
+          const rt = allRunTotals.get(modelKey);
+          rt.totalCost += result.estimatedCost || 0;
+          rt.totalLatency += result.latency || 0;
+          rt.runCount++;
+
+          // Accumulate ALL-run per-benchmark stats (for detail cards)
+          const cumulKey = `${modelKey}::${b.id}`;
+          if (!cumulativeBenchmarks.has(cumulKey)) {
+            cumulativeBenchmarks.set(cumulKey, {
+              name: b.name,
+              total: 0,
+              passed: 0,
+              failed: 0,
+              errored: 0,
+            });
+          }
+          const cb = cumulativeBenchmarks.get(cumulKey);
+          cb.total++;
+          if (result.error) cb.errored++;
+          else if (result.passed) cb.passed++;
+          else cb.failed++;
+
+          // Only record the first (latest) result per model per benchmark
+          if (seenForBenchmark.has(cumulKey)) continue;
+          seenForBenchmark.add(cumulKey);
+
+          if (!latestResults.has(modelKey)) {
+            latestResults.set(modelKey, new Map());
+          }
+          latestResults.get(modelKey).set(b.id, {
+            benchmarkId: b.id,
+            benchmarkName: b.name,
+            provider: result.provider,
+            model: result.model,
+            label: result.label || result.model,
+            passed: result.passed,
+            error: result.error,
+          });
+        }
+      }
+    }
+
+    // Phase 2: Build per-model stats from deduplicated latest results
+    const models = [...latestResults.entries()].map(([modelKey, benchmarkMap]) => {
+      const benchmarkResults = [...benchmarkMap.values()];
+      const first = benchmarkResults[0];
+      const rt = allRunTotals.get(modelKey) || { totalCost: 0, totalLatency: 0, runCount: 0 };
+
+      let passed = 0;
+      let failed = 0;
+      let errored = 0;
+      const perBenchmark = [];
+
+      for (const r of benchmarkResults) {
+        if (r.error) errored++;
+        else if (r.passed) passed++;
+        else failed++;
+
+        // Detail card uses cumulative (all runs) stats
+        const cumulKey = `${modelKey}::${r.benchmarkId}`;
+        const cumul = cumulativeBenchmarks.get(cumulKey);
+
+        perBenchmark.push({
+          name: r.benchmarkName,
+          // Latest result (for the status badge)
+          latestPassed: !r.error && r.passed,
+          latestErrored: !!r.error,
+          // Cumulative stats (all runs)
+          total: cumul?.total || 0,
+          passed: cumul?.passed || 0,
+          failed: cumul?.failed || 0,
+          errored: cumul?.errored || 0,
+        });
+      }
+
+      const total = benchmarkResults.length;
+
+      return {
+        provider: first.provider,
+        model: first.model,
+        label: first.label,
+        total,
+        passed,
+        failed,
+        errored,
+        totalCost: rt.totalCost,
+        totalLatency: rt.totalLatency,
+        runCount: rt.runCount,
+        passRate: total > 0 ? passed / total : 0,
+        avgLatency: rt.runCount > 0 ? rt.totalLatency / rt.runCount : 0,
+        benchmarks: perBenchmark,
+      };
+    });
+
+    // Sort by pass rate descending, then by total benchmarks descending
+    models.sort((a, b) => b.passRate - a.passRate || b.total - a.total);
+
+    res.json({
+      models,
+      totalModels: models.length,
+      totalBenchmarks: benchmarks.length,
+    });
+  } catch (error) {
+    logger.error(`GET /benchmark/stats error: ${error.message}`);
+    next(error);
+  }
+});
+
+// ============================================================
 // GET /benchmark/models — List available conversation models for benchmarking
 // ============================================================
 
