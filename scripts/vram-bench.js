@@ -66,7 +66,7 @@ const hasFlag = (name) => args.includes(`--${name}`);
 const PROVIDER = getArg("provider", "lm-studio");
 const SINGLE_MODEL = getArg("model", null);
 const MAX_SIZE_GB = parseFloat(getArg("max-size", "22"));
-const CONTEXT_LIST = getArg("contexts", "2k,4k,8k,16k")
+const CONTEXT_LIST = getArg("contexts", "32k,64k,128k,256k,512k,1024k")
   .split(",")
   .map((s) => {
     const n = parseFloat(s.replace(/k$/i, ""));
@@ -809,8 +809,18 @@ async function main() {
 
   const testPlan = [];
   for (const model of models) {
+    // Build per-model context list: base list + model's max context length
+    const modelContexts = [...CONTEXT_LIST];
+    if (
+      model.maxContextLength > 0 &&
+      !modelContexts.includes(model.maxContextLength)
+    ) {
+      modelContexts.push(model.maxContextLength);
+      modelContexts.sort((a, b) => a - b);
+    }
+
     for (const settings of settingsMatrix) {
-      for (const ctx of CONTEXT_LIST) {
+      for (const ctx of modelContexts) {
         if (model.maxContextLength > 0 && ctx > model.maxContextLength)
           continue;
         testPlan.push({ model, ctx, settings });
