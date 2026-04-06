@@ -203,12 +203,14 @@ export default class AgenticLoopService {
 
             passPendingToolCalls.push({
               id: chunk.id || null,
+              responsesItemId: chunk.responsesItemId || undefined,
               name: chunk.name,
               args: chunk.args || {},
               thoughtSignature: chunk.thoughtSignature || undefined,
             });
             streamedToolCalls.push({
               id: chunk.id || null,
+              responsesItemId: chunk.responsesItemId || undefined,
               name: chunk.name,
               args: chunk.args || {},
               thoughtSignature: chunk.thoughtSignature || undefined,
@@ -352,7 +354,7 @@ export default class AgenticLoopService {
               const res = results.find(r => r.id === tc.id || (!r.id && r.name === tc.name));
               emit({
                   type: "tool_execution",
-                  tool: { name: tc.name, args: tc.args || {}, id: tc.id, result: res?.result },
+                  tool: { name: tc.name, args: tc.args || {}, id: tc.id, responsesItemId: tc.responsesItemId, result: res?.result },
                   status: res?.result?.error ? "error" : "done",
               });
           }
@@ -365,6 +367,7 @@ export default class AgenticLoopService {
                  const match = results.find((r) => r.id === tc.id);
                  return {
                      id: tc.id || null,
+                     responsesItemId: tc.responsesItemId || undefined,
                      name: tc.name,
                      args: tc.args,
                      thoughtSignature: tc.thoughtSignature || undefined,

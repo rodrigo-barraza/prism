@@ -861,4 +861,18 @@ router.get("/tools", (_req, res) => {
   res.json(schemas || []);
 });
 
+/**
+ * POST /config/tools/refresh
+ * Re-fetches tool schemas from tools-api and updates the cache.
+ * Returns the updated schema count.
+ */
+router.post("/tools/refresh", async (_req, res) => {
+  try {
+    const count = await ToolOrchestratorService.refreshSchemas();
+    res.json({ ok: true, count });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

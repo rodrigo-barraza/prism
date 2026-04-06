@@ -126,7 +126,41 @@ function prepareOpenAIMessages(messages) {
  * System messages become developer messages; images use input_image, PDFs use input_file.
  */
 function prepareResponsesInput(messages) {
-  return messages.map((m) => {
+  const result = [];
+  for (const m of messages) {
+    // Assistant message with tool calls → expand into function_call items
+    if (m.role === "assistant" && m.toolCalls?.length > 0) {
+      // If the assistant also produced text, include it first
+      if (m.content?.trim()) {
+        result.push({ role: "assistant", content: m.content });
+      }
+      // Each tool call becomes a function_call output item
+      for (const tc of m.toolCalls) {
+        // Responses API requires the function_call id to start with "fc_"
+        // responsesItemId is the fc_ prefixed ID from the streaming handler
+        const fcId = tc.responsesItemId || tc.id || `fc_${Date.now()}`;
+        result.push({
+          type: "function_call",
+          id: fcId,
+          call_id: tc.id || fcId,
+          name: tc.name,
+          arguments: typeof tc.args === "string" ? tc.args : JSON.stringify(tc.args || {}),
+        });
+      }
+      continue;
+    }
+
+    // Tool result message → function_call_output item
+    if (m.role === "tool") {
+      result.push({
+        type: "function_call_output",
+        call_id: m.tool_call_id || m.id,
+        output: typeof m.content === "string" ? m.content : JSON.stringify(m.content || ""),
+      });
+      continue;
+    }
+
+    // Standard message (system, user, assistant without tools)
     const role = m.role === "system" ? "developer" : m.role;
     const base = { role };
     if (m.name) base.name = m.name;
@@ -186,10 +220,13 @@ function prepareResponsesInput(messages) {
       if (m.content) {
         content.push({ type: "input_text", text: m.content });
       }
-      return { ...base, content };
+      result.push({ ...base, content });
+      continue;
     }
-    return { ...base, content: m.content };
-  });
+    // Responses API requires content to be a string or array, never null
+    result.push({ ...base, content: m.content ?? "" });
+  }
+  return result;
 }
 
 const openaiProvider = {
@@ -516,6 +553,9 @@ const openaiProvider = {
       ...(options.signal && { signal: options.signal }),
     });
     let usage = null;
+    // Track function names from output_item.added events; the arguments.done
+    // event may not include the name property (known OpenAI SDK issue).
+    const pendingFunctions = {};
     for await (const event of stream) {
       if (options.signal?.aborted) break;
       // Text delta from output_text
@@ -537,20 +577,43 @@ const openaiProvider = {
           mimeType: "image/png",
         };
       }
+      // Track function call metadata from output_item.added
+      // item.id matches item_id on subsequent delta/done events
+      if (event.type === "response.output_item.added" && event.item?.type === "function_call") {
+        pendingFunctions[event.item.id] = {
+          name: event.item.name,
+          callId: event.item.call_id,
+          args: "",
+        };
+      }
+      // Accumulate argument deltas (keyed by item_id)
+      if (event.type === "response.function_call_arguments.delta") {
+        const entry = pendingFunctions[event.item_id];
+        if (entry) {
+          entry.args += event.delta || "";
+        }
+      }
       // Function call completed (Responses API)
       if (event.type === "response.function_call_arguments.done") {
+        const tracked = pendingFunctions[event.item_id];
+        const name = tracked?.name || event.name || "unknown";
+        const callId = tracked?.callId || event.call_id || event.item_id;
         let args = {};
         try {
-          args = JSON.parse(event.arguments || "{}");
+          args = JSON.parse(event.arguments || tracked?.args || "{}");
         } catch {
           /* ignore */
         }
         yield {
           type: "toolCall",
-          id: event.call_id,
-          name: event.name,
+          id: callId,
+          // Responses API internal item ID (starts with "fc_")
+          responsesItemId: event.item_id,
+          name,
           args,
         };
+        // Clean up
+        delete pendingFunctions[event.item_id];
       }
       // Completed response — extract usage
       if (event.type === "response.completed" && event.response?.usage) {

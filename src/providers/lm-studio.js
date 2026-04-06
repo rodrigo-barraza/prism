@@ -313,14 +313,35 @@ const lmStudioProvider = {
           const loadedCtx = modelEntry.loaded_instances[0]?.config?.context_length;
           if (loadedCtx) options._loadedContextLength = loadedCtx;
         }
-        if (!isLoaded) {
+
+        // If minContextLength is requested (e.g. agentic mode) and model is loaded
+        // with insufficient context, force a reload with the required minimum.
+        const needsReload = isLoaded &&
+          options.minContextLength &&
+          options._loadedContextLength &&
+          options._loadedContextLength < options.minContextLength;
+
+        if (needsReload) {
+          const target = Math.min(options.minContextLength, modelEntry.max_context_length || options.minContextLength);
+          logger.info(`[LM-Studio] Reloading ${model}: loaded ctx ${options._loadedContextLength} < required ${options.minContextLength}, target=${target}`);
+          yield { type: "status", message: `Reloading model with ${(target / 1000).toFixed(0)}k context…` };
+          // Unload current instance
+          for (const inst of modelEntry.loaded_instances || []) {
+            await this.unloadModel(inst.id);
+          }
+          // Fall through to load below
+        }
+
+        if (!isLoaded || needsReload) {
           // Unload any other loaded models first (single-model enforcement)
-          for (const m of models || []) {
-            if (options.signal?.aborted) return;
-            for (const inst of m.loaded_instances || []) {
-              yield { type: "status", message: "Unloading previous model…" };
-              logger.info(`Auto-unloading ${inst.id} before loading ${model}`);
-              await this.unloadModel(inst.id);
+          if (!needsReload) {
+            for (const m of models || []) {
+              if (options.signal?.aborted) return;
+              for (const inst of m.loaded_instances || []) {
+                yield { type: "status", message: "Unloading previous model…" };
+                logger.info(`Auto-unloading ${inst.id} before loading ${model}`);
+                await this.unloadModel(inst.id);
+              }
             }
           }
 
@@ -328,10 +349,18 @@ const lmStudioProvider = {
           logger.info(`Auto-loading model ${model} for streaming`);
           yield { type: "status", message: "Loading model… 0%" };
 
+          // Build load options — enforce minContextLength if set
+          const loadOpts = {};
+          if (options.minContextLength) {
+            const maxCtx = modelEntry?.max_context_length || 262144;
+            loadOpts.context_length = Math.min(options.minContextLength, maxCtx);
+            logger.info(`[LM-Studio] Loading with context_length=${loadOpts.context_length} (min=${options.minContextLength}, max=${maxCtx})`);
+          }
+
           // Start load (non-blocking) and poll for progress
           let loadDone = false;
           let loadError = null;
-          const loadPromise = this.loadModel(model, {}, options.signal)
+          const loadPromise = this.loadModel(model, loadOpts, options.signal)
             .then(() => {
               loadDone = true;
             })

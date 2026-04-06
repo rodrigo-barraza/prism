@@ -93,6 +93,9 @@ export function expandMessagesForFC(messages, { filterDeleted = true } = {}) {
           id: tc.id,
           name: tc.name,
           args: tc.args,
+          ...(tc.responsesItemId
+            ? { responsesItemId: tc.responsesItemId }
+            : {}),
           ...(tc.thoughtSignature
             ? { thoughtSignature: tc.thoughtSignature }
             : {}),

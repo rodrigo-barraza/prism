@@ -215,6 +215,7 @@ export async function handleChat(params, emit, { signal } = {}) {
     reasoningSummary,
     functionCallingEnabled,
     enabledTools,
+    minContextLength,
     forceImageGeneration,
     responseFormat,
     serviceTier,
@@ -301,6 +302,7 @@ export async function handleChat(params, emit, { signal } = {}) {
     ...(reasoningSummary && { reasoningSummary }),
     ...(functionCallingEnabled !== undefined && { functionCallingEnabled }),
     ...(enabledTools && { enabledTools }),
+    ...(minContextLength && { minContextLength }),
     ...(forceImageGeneration && { forceImageGeneration }),
     ...(responseFormat && { responseFormat }),
     ...(serviceTier && { serviceTier }),
@@ -445,6 +447,9 @@ export async function handleChat(params, emit, { signal } = {}) {
           if (modelDef?.contextLength) {
             options.contextLength = modelDef.contextLength;
           }
+          logger.info(`[chat] LM-Studio MCP: ${tools.length} tools enabled, enabledTools=${(options.enabledTools || []).length}, builtIn=${builtInTools.length}, contextLength=${options.contextLength || 'unset'}`);
+        } else if (useLmStudioNativeMcp) {
+          logger.warn(`[chat] LM-Studio MCP SKIPPED: functionCallingEnabled=${options.functionCallingEnabled}, useLmStudioNativeMcp=${useLmStudioNativeMcp}`);
         }
 
         if (options.functionCallingEnabled && !useLmStudioNativeMcp) {
@@ -1443,7 +1448,7 @@ router.post("/", async (req, res, next) => {
     await handleChat(
       {
         ...req.body,
-        project: req.project,
+        project: req.body.project || req.project,
         username: req.username,
         clientIp: req.clientIp,
       },
@@ -1468,7 +1473,7 @@ router.post("/", async (req, res, next) => {
     await handleChat(
       {
         ...req.body,
-        project: req.project,
+        project: req.body.project || req.project,
         username: req.username,
         clientIp: req.clientIp,
       },
