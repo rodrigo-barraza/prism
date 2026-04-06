@@ -46,7 +46,13 @@ import { writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { MongoClient } from "mongodb";
 import { resolveArchParams, estimateMemory } from "../src/utils/gguf-arch.js";
-import { MONGO_URI, MONGO_DB_NAME } from "../secrets.js";
+import {
+  MONGO_URI,
+  MONGO_DB_NAME,
+  LM_STUDIO_BASE_URL,
+  OLLAMA_BASE_URL,
+  VLLM_BASE_URL as _VLLM_BASE_URL, // planned — vLLM adapter not yet wired
+} from "../secrets.js";
 
 // ── CLI Argument Parsing ─────────────────────────────────────
 
@@ -179,7 +185,7 @@ function buildSettingsMatrix() {
 const PROVIDERS = {
   "lm-studio": {
     name: "LM Studio",
-    baseUrl: "http://localhost:1234",
+    baseUrl: LM_STUDIO_BASE_URL || "http://localhost:1234",
 
     async listModels() {
       const res = await fetch(`${this.baseUrl}/api/v1/models`);
@@ -299,7 +305,7 @@ const PROVIDERS = {
   // ── Ollama Adapter ────────────────────────────────────────
   ollama: {
     name: "Ollama",
-    baseUrl: "http://localhost:11434",
+    baseUrl: OLLAMA_BASE_URL || "http://localhost:11434",
     async listModels() {
       const res = await fetch(`${this.baseUrl}/api/tags`);
       if (!res.ok) throw new Error(`Ollama not responding: ${res.status}`);
