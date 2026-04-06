@@ -487,6 +487,8 @@ export default class AgenticLoopService {
           const assistantMsg = {
              role: "assistant",
              content: passStreamedText || "",
+             // Preserve thinking for multi-step reasoning continuity
+             ...(passStreamedThinking && { thinking: passStreamedThinking }),
              toolCalls: passPendingToolCalls.map((tc) => {
                  const match = results.find((r) => r.id === tc.id);
                  return {

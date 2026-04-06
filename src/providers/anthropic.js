@@ -8,7 +8,7 @@ import { TYPES, getDefaultModels } from "../config.js";
 const EFFORT_BUDGET_MAP = {
   low: 1024,
   medium: 4096,
-  high: 10000,
+  high: 50000,
 };
 
 let client = null;
@@ -64,6 +64,10 @@ function prepareMessages(messages) {
       // Convert assistant messages with toolCalls to multi-part content
       if (m.role === "assistant" && m.toolCalls?.length > 0) {
         const contentBlocks = [];
+        // Preserve thinking blocks for multi-step reasoning continuity
+        if (m.thinking) {
+          contentBlocks.push({ type: "thinking", thinking: m.thinking });
+        }
         if (rest.content?.trim()) {
           contentBlocks.push({ type: "text", text: rest.content });
         }
