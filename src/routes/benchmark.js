@@ -292,9 +292,9 @@ router.post("/:id/run", async (req, res) => {
     // Emit run_complete to followers before cleanup
     emitter.emit("event", { type: "run_complete", ...run });
 
-    cleanup();
     send("run_complete", run);
     if (!clientClosed) res.end();
+    cleanup();
   } catch (error) {
     logger.error(`POST /benchmark/:id/run error: ${error.message}`);
     if (res.headersSent) {
