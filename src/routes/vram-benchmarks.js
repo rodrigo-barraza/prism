@@ -17,10 +17,11 @@ function getDb() {
  * Returns all benchmark entries, with optional query filters.
  *
  * Query params:
- *   settings  — filter by settings label (default: "default")
+ *   settings  — filter by settings label (e.g. "default", "no-flash-attn")
  *   hostname  — filter by system.hostname
  *   ctx       — filter by contextLength (number)
- *   limit     — max documents (default: 1000)
+ *   provider  — filter by provider string
+ *   limit     — max documents (default: 2000)
  */
 router.get("/", async (req, res, next) => {
   try {
@@ -38,30 +39,66 @@ router.get("/", async (req, res, next) => {
     if (req.query.ctx) {
       filter.contextLength = parseInt(req.query.ctx);
     }
+    if (req.query.provider) {
+      filter.provider = req.query.provider;
+    }
 
-    const limit = Math.min(parseInt(req.query.limit) || 1000, 5000);
+    const limit = Math.min(parseInt(req.query.limit) || 2000, 10000);
 
+    // Full projection — includes all measurement fields from the benchmark script
     const projection = {
       _id: 0,
+
+      // Identity
       displayName: 1,
       model: 1,
+      provider: 1,
+      runId: 1,
+
+      // Model metadata
       contextLength: 1,
-      modelVramGiB: 1,
-      modelVramMiB: 1,
-      estimatedGiB: 1,
+      architecture: 1,
+      quantization: 1,
+      bitsPerWeight: 1,
       fileSizeGB: 1,
       fileSizeBytes: 1,
+      archParams: 1,
+
+      // Settings applied for this run
+      settings: 1,
+
+      // Core VRAM measurements
+      baselineVramMiB: 1,
+      loadedVramMiB: 1,
+      modelVramMiB: 1,
+      modelVramGiB: 1,
+      estimatedGiB: 1,
+      deltaGiB: 1,
+      fitsInVram: 1,
+
+      // Generation performance
+      generation: 1,
       tokensPerSecond: 1,
-      quantization: 1,
-      architecture: 1,
-      bitsPerWeight: 1,
       loadTimeMs: 1,
-      "settings.label": 1,
+
+      // GPU snapshot during benchmark
+      gpu: 1,
+
+      // Extended measurements
+      ttft: 1,
+      cpuRam: 1,
+      vramDuringGen: 1,
+      gpuBandwidth: 1,
+      hysteresis: 1,
+
+      // System profile (hardware fingerprint)
       "system.hostname": 1,
-      "system.gpu.name": 1,
-      "system.gpu.totalMiB": 1,
-      "system.cpu.model": 1,
-      "system.ram.totalGiB": 1,
+      "system.os": 1,
+      "system.gpu": 1,
+      "system.cpu": 1,
+      "system.ram": 1,
+      "system.motherboard": 1,
+
       createdAt: 1,
     };
 
@@ -95,8 +132,14 @@ router.get("/machines", async (req, res, next) => {
           _id: "$system.hostname",
           gpu: { $first: "$system.gpu.name" },
           gpuVramMiB: { $first: "$system.gpu.totalMiB" },
+          gpuVendor: { $first: "$system.gpu.vendor" },
+          gpuDriver: { $first: "$system.gpu.driver" },
           cpu: { $first: "$system.cpu.model" },
           ramGiB: { $first: "$system.ram.totalGiB" },
+          ramSpeedMHz: { $first: "$system.ram.speedMHz" },
+          ramType: { $first: "$system.ram.type" },
+          platform: { $first: "$system.os.platform" },
+          motherboard: { $first: "$system.motherboard.product" },
           benchmarkCount: { $sum: 1 },
           lastRun: { $max: "$createdAt" },
         },
@@ -114,14 +157,74 @@ router.get("/machines", async (req, res, next) => {
         hostname: m._id,
         gpu: m.gpu,
         gpuVramGB: m.gpuVramMiB ? Math.round(m.gpuVramMiB / 1024) : null,
+        gpuVendor: m.gpuVendor || null,
+        gpuDriver: m.gpuDriver || null,
         cpu: m.cpu,
         ramGiB: m.ramGiB,
+        ramSpeedMHz: m.ramSpeedMHz || null,
+        ramType: m.ramType || null,
+        platform: m.platform || null,
+        motherboard: m.motherboard || null,
         benchmarkCount: m.benchmarkCount,
         lastRun: m.lastRun,
       })),
     );
   } catch (error) {
     logger.error(`GET /vram-benchmarks/machines error: ${error.message}`);
+    next(error);
+  }
+});
+
+/**
+ * GET /vram-benchmarks/settings
+ * Returns distinct settings labels available in the benchmark data.
+ */
+router.get("/settings", async (req, res, next) => {
+  try {
+    const db = getDb();
+    if (!db) return res.status(503).json({ error: "Database not available" });
+
+    const labels = await db
+      .collection(COLLECTION)
+      .distinct("settings.label", { error: null });
+
+    // Sort with "default" first, then alphabetically
+    labels.sort((a, b) => {
+      if (a === "default") return -1;
+      if (b === "default") return 1;
+      return a.localeCompare(b);
+    });
+
+    res.json(labels);
+  } catch (error) {
+    logger.error(`GET /vram-benchmarks/settings error: ${error.message}`);
+    next(error);
+  }
+});
+
+/**
+ * GET /vram-benchmarks/contexts
+ * Returns distinct context lengths available in the benchmark data.
+ */
+router.get("/contexts", async (req, res, next) => {
+  try {
+    const db = getDb();
+    if (!db) return res.status(503).json({ error: "Database not available" });
+
+    const filter = { error: null };
+    if (req.query.settings) {
+      filter["settings.label"] = req.query.settings;
+    }
+
+    const contexts = await db
+      .collection(COLLECTION)
+      .distinct("contextLength", filter);
+
+    contexts.sort((a, b) => a - b);
+
+    res.json(contexts);
+  } catch (error) {
+    logger.error(`GET /vram-benchmarks/contexts error: ${error.message}`);
     next(error);
   }
 });
