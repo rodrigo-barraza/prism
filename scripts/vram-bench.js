@@ -850,9 +850,13 @@ async function connectDB() {
         model: 1,
         contextLength: 1,
         "settings.label": 1,
+        "system.hostname": 1,
+        "system.gpu.name": 1,
         "system.gpu.driver": 1,
         "system.cpu.model": 1,
         "system.ram.totalPhysicalGiB": 1,
+        "system.ram.speedMHz": 1,
+        "system.ram.dimms": 1,
       },
       { unique: false, name: "bench_hw_lookup" },
     );
@@ -880,7 +884,7 @@ async function connectDB() {
 /**
  * Check if a benchmark run already exists in MongoDB.
  * Matches on provider + model + context + settings AND hardware fingerprint
- * (GPU driver, CPU model, physical RAM) so different rigs don't skip each other.
+ * (GPU name + driver, CPU model, physical RAM) so different rigs don't skip each other.
  */
 async function existsInDB(provider, model, contextLength, settingsLabel, sysProfile) {
   if (!_db) return false;
@@ -892,9 +896,13 @@ async function existsInDB(provider, model, contextLength, settingsLabel, sysProf
   };
   // Hardware fingerprint — skip only if same hardware config
   if (sysProfile) {
+    if (sysProfile.hostname) query["system.hostname"] = sysProfile.hostname;
+    if (sysProfile.gpu?.name) query["system.gpu.name"] = sysProfile.gpu.name;
     if (sysProfile.gpu?.driver) query["system.gpu.driver"] = sysProfile.gpu.driver;
     if (sysProfile.cpu?.model) query["system.cpu.model"] = sysProfile.cpu.model;
     if (sysProfile.ram?.totalPhysicalGiB) query["system.ram.totalPhysicalGiB"] = sysProfile.ram.totalPhysicalGiB;
+    if (sysProfile.ram?.speedMHz) query["system.ram.speedMHz"] = sysProfile.ram.speedMHz;
+    if (sysProfile.ram?.dimms) query["system.ram.dimms"] = sysProfile.ram.dimms;
   }
   const doc = await _db.collection(BENCH_COLLECTION).findOne(query);
   return !!doc;
