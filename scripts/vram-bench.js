@@ -144,17 +144,9 @@ function buildSettingsMatrix() {
     ];
   }
 
+  // Ordered from MOST VRAM-hungry → LEAST so stress-tests come first
   return [
-    // ① Default — optimal for most use cases
-    {
-      label: "default",
-      flash_attention: true,
-      offload_kv_cache_to_gpu: true,
-      eval_batch_size: 512,
-      parallel: 4,
-    },
-
-    // ② Flash attention OFF → FP32 KV cache (4× more VRAM per token)
+    // ① FP32 KV cache (no flash) + max parallel → highest VRAM per token
     {
       label: "no-flash-attn",
       flash_attention: false,
@@ -163,25 +155,25 @@ function buildSettingsMatrix() {
       parallel: 4,
     },
 
-    // ③ KV cache on CPU → saves GPU VRAM, hurts latency
+    // ② FP32 KV + single slot — still very heavy per-token, less parallel
     {
-      label: "kv-on-cpu",
-      flash_attention: true,
-      offload_kv_cache_to_gpu: false,
-      eval_batch_size: 512,
-      parallel: 4,
-    },
-
-    // ④ Single slot — less concurrent VRAM allocation
-    {
-      label: "single-slot",
-      flash_attention: true,
+      label: "max-quality",
+      flash_attention: false,
       offload_kv_cache_to_gpu: true,
       eval_batch_size: 512,
       parallel: 1,
     },
 
-    // ⑤ Small batch — less prompt eval VRAM
+    // ③ Default — flash attention Q8 KV, all on GPU
+    {
+      label: "default",
+      flash_attention: true,
+      offload_kv_cache_to_gpu: true,
+      eval_batch_size: 512,
+      parallel: 4,
+    },
+
+    // ④ Small batch — slightly less peak VRAM during prompt eval
     {
       label: "small-batch",
       flash_attention: true,
@@ -190,21 +182,30 @@ function buildSettingsMatrix() {
       parallel: 4,
     },
 
-    // ⑥ Minimal VRAM — KV on CPU + single slot + small batch
+    // ⑤ Single slot — less concurrent KV allocation
+    {
+      label: "single-slot",
+      flash_attention: true,
+      offload_kv_cache_to_gpu: true,
+      eval_batch_size: 512,
+      parallel: 1,
+    },
+
+    // ⑥ KV cache on CPU → saves GPU VRAM, hurts latency
+    {
+      label: "kv-on-cpu",
+      flash_attention: true,
+      offload_kv_cache_to_gpu: false,
+      eval_batch_size: 512,
+      parallel: 4,
+    },
+
+    // ⑦ Minimal VRAM — KV on CPU + single slot + small batch
     {
       label: "min-vram",
       flash_attention: true,
       offload_kv_cache_to_gpu: false,
       eval_batch_size: 128,
-      parallel: 1,
-    },
-
-    // ⑦ Maximum quality — no flash (FP32 KV) + max batch
-    {
-      label: "max-quality",
-      flash_attention: false,
-      offload_kv_cache_to_gpu: true,
-      eval_batch_size: 512,
       parallel: 1,
     },
   ];
@@ -828,20 +829,32 @@ async function connectDB() {
     await _mongoClient.connect();
     _db = _mongoClient.db(MONGO_DB_NAME);
 
-    // Drop the legacy unique index if it exists (we now allow multiple runs)
-    try {
-      await _db.collection(BENCH_COLLECTION).dropIndex(
-        "provider_1_model_1_contextLength_1_settings.label_1",
-      );
-      log(`${C.dim}    Dropped legacy unique index${C.reset}`);
-    } catch {
-      // Index doesn't exist — that's fine
+    // Drop legacy indexes if they exist (replaced by bench_hw_lookup)
+    for (const oldIndex of [
+      "provider_1_model_1_contextLength_1_settings.label_1",
+      "bench_lookup",
+    ]) {
+      try {
+        await _db.collection(BENCH_COLLECTION).dropIndex(oldIndex);
+        log(`${C.dim}    Dropped old index: ${oldIndex}${C.reset}`);
+      } catch {
+        // Index doesn't exist — that's fine
+      }
     }
 
     // Create non-unique compound index for query performance
+    // Includes hardware fingerprint so different machines don't skip each other's runs
     await _db.collection(BENCH_COLLECTION).createIndex(
-      { provider: 1, model: 1, contextLength: 1, "settings.label": 1 },
-      { unique: false, name: "bench_lookup" },
+      {
+        provider: 1,
+        model: 1,
+        contextLength: 1,
+        "settings.label": 1,
+        "system.gpu.driver": 1,
+        "system.cpu.model": 1,
+        "system.ram.totalPhysicalGiB": 1,
+      },
+      { unique: false, name: "bench_hw_lookup" },
     );
 
     // Index on runId for grouping entries from the same session
@@ -864,15 +877,26 @@ async function connectDB() {
   }
 }
 
-/** Check if a benchmark run already exists in MongoDB */
-async function existsInDB(provider, model, contextLength, settingsLabel) {
+/**
+ * Check if a benchmark run already exists in MongoDB.
+ * Matches on provider + model + context + settings AND hardware fingerprint
+ * (GPU driver, CPU model, physical RAM) so different rigs don't skip each other.
+ */
+async function existsInDB(provider, model, contextLength, settingsLabel, sysProfile) {
   if (!_db) return false;
-  const doc = await _db.collection(BENCH_COLLECTION).findOne({
+  const query = {
     provider,
     model,
     contextLength,
     "settings.label": settingsLabel,
-  });
+  };
+  // Hardware fingerprint — skip only if same hardware config
+  if (sysProfile) {
+    if (sysProfile.gpu?.driver) query["system.gpu.driver"] = sysProfile.gpu.driver;
+    if (sysProfile.cpu?.model) query["system.cpu.model"] = sysProfile.cpu.model;
+    if (sysProfile.ram?.totalPhysicalGiB) query["system.ram.totalPhysicalGiB"] = sysProfile.ram.totalPhysicalGiB;
+  }
+  const doc = await _db.collection(BENCH_COLLECTION).findOne(query);
   return !!doc;
 }
 
@@ -1052,14 +1076,15 @@ async function main() {
   const testPlan = [];
   for (const model of models) {
     // Build per-model context list: base list + model's max context length
+    // Sorted largest → smallest so highest VRAM stress comes first
     const modelContexts = [...CONTEXT_LIST];
     if (
       model.maxContextLength > 0 &&
       !modelContexts.includes(model.maxContextLength)
     ) {
       modelContexts.push(model.maxContextLength);
-      modelContexts.sort((a, b) => a - b);
     }
+    modelContexts.sort((a, b) => b - a);
 
     for (const settings of settingsMatrix) {
       for (const ctx of modelContexts) {
@@ -1201,7 +1226,7 @@ async function main() {
     try {
       // Skip if already benchmarked and --skip-existing is set
       if (SKIP_EXISTING && !REWRITE) {
-        const exists = await existsInDB(PROVIDER, model.key, ctx, settings.label);
+        const exists = await existsInDB(PROVIDER, model.key, ctx, settings.label, systemProfile);
         if (exists) {
           log(
             `    ${C.dim}[${settings.label}] ctx=${ctx} → skipped (already in DB)${C.reset}`,

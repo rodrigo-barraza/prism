@@ -236,6 +236,7 @@ export default class ToolOrchestratorService {
     execute_shell: "/compute/shell/stream",
     execute_python: "/utility/python/stream",
     execute_javascript: "/compute/js/stream",
+    run_command: "/agentic/command/stream",
   };
 
   static isStreamable(toolName) {

@@ -22,16 +22,26 @@ const DEFAULT_TIER_MAP = {
   glob_files: APPROVAL_TIERS.AUTO,
   web_search: APPROVAL_TIERS.AUTO,
   fetch_url: APPROVAL_TIERS.AUTO,
+  multi_file_read: APPROVAL_TIERS.AUTO,
+  file_info: APPROVAL_TIERS.AUTO,
+  file_diff: APPROVAL_TIERS.AUTO,
+  git_status: APPROVAL_TIERS.AUTO,
+  git_diff: APPROVAL_TIERS.AUTO,
+  git_log: APPROVAL_TIERS.AUTO,
+  project_summary: APPROVAL_TIERS.AUTO,
 
   // Tier 2 — write operations
   write_file: APPROVAL_TIERS.WRITE,
   str_replace_file: APPROVAL_TIERS.WRITE,
   patch_file: APPROVAL_TIERS.WRITE,
+  move_file: APPROVAL_TIERS.WRITE,
+  delete_file: APPROVAL_TIERS.WRITE,
 
   // Tier 3 — destructive / arbitrary execution
   execute_shell: APPROVAL_TIERS.DANGER,
   execute_python: APPROVAL_TIERS.DANGER,
   execute_javascript: APPROVAL_TIERS.DANGER,
+  run_command: APPROVAL_TIERS.DANGER,
 };
 
 const TIER_LABELS = {
