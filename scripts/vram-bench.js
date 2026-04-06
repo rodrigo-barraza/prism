@@ -559,6 +559,7 @@ function collectSystemProfile() {
     gpu: {},
     cpu: {},
     ram: {},
+    motherboard: {},
     collectedAt: new Date().toISOString(),
   };
 
@@ -605,8 +606,34 @@ function collectSystemProfile() {
       threads: parseInt(field("CPU\\(s\\)") || "0"),
       sockets: parseInt(field("Socket\\(s\\)") || "1"),
       bogoMIPS: parseFloat(field("BogoMIPS") || "0"),
+      maxMHz: parseFloat(field("CPU max MHz") || "0") || null,
+      minMHz: parseFloat(field("CPU min MHz") || "0") || null,
     };
   } catch { /* ignore */ }
+
+  // ── CPU frequency + temp + load (PowerShell on WSL2, /sys on bare metal) ──
+  try {
+    const psOutput = execSync(
+      'powershell.exe -NoProfile -Command "Get-CimInstance Win32_Processor | Select-Object CurrentClockSpeed, MaxClockSpeed, LoadPercentage | ConvertTo-Json" 2>/dev/null',
+      { encoding: "utf-8", timeout: 8000 },
+    ).trim();
+    const cpuInfo = JSON.parse(psOutput);
+    const cpu = Array.isArray(cpuInfo) ? cpuInfo[0] : cpuInfo;
+    if (cpu) {
+      profile.cpu.currentMHz = cpu.CurrentClockSpeed || null;
+      profile.cpu.maxClockMHz = cpu.MaxClockSpeed || null;
+      profile.cpu.loadPct = cpu.LoadPercentage || null;
+    }
+  } catch {
+    // Fallback: bare-metal Linux thermal zone
+    try {
+      const temp = execSync(
+        "cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null",
+        { encoding: "utf-8", timeout: 2000 },
+      ).trim();
+      if (temp) profile.cpu.tempC = +(parseInt(temp) / 1000).toFixed(1);
+    } catch { /* ignore */ }
+  }
 
   // ── RAM ─────────────────────────────────────────────────
   try {
@@ -616,10 +643,10 @@ function collectSystemProfile() {
     profile.ram.totalGiB = +(totalKB / 1024 / 1024).toFixed(1);
   } catch { /* ignore */ }
 
-  // ── RAM speed + manufacturer (via PowerShell on WSL2, or dmidecode on bare metal)
+  // ── RAM details (PowerShell on WSL2, dmidecode on bare metal) ──
   try {
     const psOutput = execSync(
-      "powershell.exe -NoProfile -Command 'Get-CimInstance Win32_PhysicalMemory | Select-Object Speed, ConfiguredClockSpeed, Capacity, Manufacturer | ConvertTo-Json' 2>/dev/null",
+      "powershell.exe -NoProfile -Command 'Get-CimInstance Win32_PhysicalMemory | Select-Object Speed, ConfiguredClockSpeed, Capacity, Manufacturer, SMBIOSMemoryType, PartNumber | ConvertTo-Json' 2>/dev/null",
       { encoding: "utf-8", timeout: 10000 },
     ).trim();
     const dimms = JSON.parse(psOutput);
@@ -630,18 +657,51 @@ function collectSystemProfile() {
       profile.ram.manufacturer = dimmList[0].Manufacturer || null;
       profile.ram.dimms = dimmList.length;
       profile.ram.totalPhysicalGiB = +(dimmList.reduce((sum, d) => sum + (d.Capacity || 0), 0) / 1024 ** 3).toFixed(1);
+      profile.ram.partNumber = dimmList[0].PartNumber?.trim() || null;
+      // SMBIOSMemoryType: 24=DDR3, 26=DDR4, 34=DDR5
+      const memTypeMap = { 24: "DDR3", 26: "DDR4", 34: "DDR5" };
+      profile.ram.type = memTypeMap[dimmList[0].SMBIOSMemoryType] || `SMBIOS-${dimmList[0].SMBIOSMemoryType}`;
     }
   } catch {
-    // Fallback: try dmidecode (bare-metal Linux)
+    // Fallback: dmidecode (bare-metal Linux)
     try {
       const dmi = execSync(
-        "sudo dmidecode -t memory 2>/dev/null | grep -E 'Speed|Size|Manufacturer' | head -12",
+        "sudo dmidecode -t memory 2>/dev/null | grep -E 'Speed|Size|Manufacturer|Type:' | head -16",
         { encoding: "utf-8", timeout: 5000 },
       );
       const speed = dmi.match(/Configured Memory Speed:\s*(\d+)/)?.[1];
       if (speed) profile.ram.speedMHz = parseInt(speed);
       const mfg = dmi.match(/Manufacturer:\s*(.+)/)?.[1]?.trim();
       if (mfg && mfg !== "Unknown") profile.ram.manufacturer = mfg;
+      const memType = dmi.match(/Type:\s*(DDR\d)/)?.[1];
+      if (memType) profile.ram.type = memType;
+    } catch { /* ignore */ }
+  }
+
+  // ── Motherboard (PowerShell on WSL2, dmidecode on bare metal) ──
+  try {
+    const psOutput = execSync(
+      'powershell.exe -NoProfile -Command "Get-CimInstance Win32_BaseBoard | Select-Object Manufacturer, Product, SerialNumber | ConvertTo-Json" 2>/dev/null',
+      { encoding: "utf-8", timeout: 8000 },
+    ).trim();
+    const mb = JSON.parse(psOutput);
+    profile.motherboard = {
+      manufacturer: mb.Manufacturer || null,
+      product: mb.Product || null,
+      serial: mb.SerialNumber || null,
+    };
+  } catch {
+    // Fallback: dmidecode
+    try {
+      const dmi = execSync(
+        "sudo dmidecode -t baseboard 2>/dev/null | grep -E 'Manufacturer|Product Name|Serial Number' | head -3",
+        { encoding: "utf-8", timeout: 5000 },
+      );
+      profile.motherboard = {
+        manufacturer: dmi.match(/Manufacturer:\s*(.+)/)?.[1]?.trim() || null,
+        product: dmi.match(/Product Name:\s*(.+)/)?.[1]?.trim() || null,
+        serial: dmi.match(/Serial Number:\s*(.+)/)?.[1]?.trim() || null,
+      };
     } catch { /* ignore */ }
   }
 
@@ -883,10 +943,30 @@ async function connectDB() {
 }
 
 /**
- * Check if a benchmark run already exists in MongoDB.
+ * Check if a COMPLETE benchmark run already exists in MongoDB.
  * Matches on provider + model + context + settings AND hardware fingerprint
- * (GPU name + driver, CPU model, physical RAM) so different rigs don't skip each other.
+ * (hostname, GPU name/VRAM/driver, CPU model, RAM size/speed/DIMMs).
+ *
+ * Even if a matching doc is found, returns false if it's missing any expected
+ * measurement fields — so older incomplete runs get re-benchmarked.
  */
+
+// Fields that a complete benchmark entry must have
+const REQUIRED_FIELDS = [
+  "modelVramGiB",
+  "tokensPerSecond",
+  "loadTimeMs",
+  "generation",
+  "ttft",
+  "cpuRam",
+  "vramDuringGen",
+  "gpuBandwidth",
+  "hysteresis",
+  "gpu",
+  "estimatedGiB",
+  "baselineVramMiB",
+];
+
 async function existsInDB(provider, model, contextLength, settingsLabel, sysProfile) {
   if (!_db) return false;
   const query = {
@@ -907,17 +987,46 @@ async function existsInDB(provider, model, contextLength, settingsLabel, sysProf
     if (sysProfile.ram?.dimms) query["system.ram.dimms"] = sysProfile.ram.dimms;
   }
   const doc = await _db.collection(BENCH_COLLECTION).findOne(query);
-  return !!doc;
+  if (!doc) return false;
+
+  // Completeness check — if the doc is missing any measurement field, re-run it
+  for (const field of REQUIRED_FIELDS) {
+    if (doc[field] == null) return false;
+  }
+  // Also verify nested fields aren't just empty placeholders
+  if (!doc.ttft?.ms && doc.tokensPerSecond > 0) return false; // has gen data but no TTFT
+  if (!doc.generation?.outputTokens && doc.tokensPerSecond > 0) return false;
+
+  return true;
 }
 
-/** Insert a new benchmark result into MongoDB (each run = new entry) */
+/**
+ * Save a benchmark result to MongoDB.
+ * Uses replaceOne with upsert keyed on the full fingerprint so incomplete
+ * or outdated runs are fully overwritten instead of duplicated.
+ */
 async function saveResult(entry) {
   if (!_db) return;
-  await _db.collection(BENCH_COLLECTION).insertOne({
+  const filter = {
+    provider: PROVIDER,
+    model: entry.model,
+    contextLength: entry.contextLength,
+    "settings.label": entry.settings.label,
+    "system.hostname": entry.system?.hostname,
+    "system.gpu.name": entry.system?.gpu?.name,
+    "system.gpu.totalMiB": entry.system?.gpu?.totalMiB,
+    "system.gpu.driver": entry.system?.gpu?.driver,
+    "system.cpu.model": entry.system?.cpu?.model,
+    "system.ram.totalPhysicalGiB": entry.system?.ram?.totalPhysicalGiB,
+    "system.ram.speedMHz": entry.system?.ram?.speedMHz,
+    "system.ram.dimms": entry.system?.ram?.dimms,
+  };
+  const doc = {
     ...entry,
     provider: PROVIDER,
     createdAt: new Date().toISOString(),
-  });
+  };
+  await _db.collection(BENCH_COLLECTION).replaceOne(filter, doc, { upsert: true });
 }
 
 /** Load all existing results from MongoDB for this provider */
@@ -972,6 +1081,9 @@ async function main() {
   logKV("Kernel", systemProfile.os?.kernel || "unknown");
   logKV("CPU", `${C.bold}${systemProfile.cpu?.model || "unknown"}${C.reset}`);
   logKV("Cores/Threads", `${systemProfile.cpu?.cores || "?"}C / ${systemProfile.cpu?.threads || "?"}T`);
+  logKV("CPU Clock", systemProfile.cpu?.maxMHz
+    ? `${systemProfile.cpu.currentMHz || "?"}/${systemProfile.cpu.maxMHz} MHz (load: ${systemProfile.cpu.loadPct ?? "?"}%)`
+    : "unknown");
   logKV("GPU", `${C.bold}${systemProfile.gpu?.name || "unknown"}${C.reset}`);
   logKV("GPU Driver", systemProfile.gpu?.driver || "unknown");
   logKV("GPU VRAM", systemProfile.gpu?.totalMiB ? fmtMiB(systemProfile.gpu.totalMiB) : "unknown");
@@ -982,8 +1094,13 @@ async function main() {
   logKV("RAM Speed", systemProfile.ram?.speedMHz
     ? `${systemProfile.ram.speedMHz} MHz (JEDEC: ${systemProfile.ram.jedecSpeedMHz || "?"})`
     : "unknown");
+  logKV("RAM Type", systemProfile.ram?.type || "unknown");
   logKV("RAM Mfg", systemProfile.ram?.manufacturer || "unknown");
+  logKV("RAM Part", systemProfile.ram?.partNumber || "unknown");
   logKV("RAM DIMMs", systemProfile.ram?.dimms ?? "unknown");
+  logKV("Motherboard", systemProfile.motherboard?.manufacturer && systemProfile.motherboard?.product
+    ? `${systemProfile.motherboard.manufacturer} ${systemProfile.motherboard.product}`
+    : "unknown");
   logKV("Run ID", `${C.dim}${RUN_ID}${C.reset}`);
 
   // ── Handle --backfill mode ──────────────────────────────
