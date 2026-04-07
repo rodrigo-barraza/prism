@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import ToolOrchestratorService from "./ToolOrchestratorService.js";
 import MemoryService from "./MemoryService.js";
 import { TOOLS_API_URL } from "../../secrets.js";
@@ -9,6 +10,9 @@ import logger from "../utils/logger.js";
  */
 const DEFAULT_TOKEN_BUDGET = 4096;
 const CHARS_PER_TOKEN = 4;
+
+/** Derive workspace root from $HOME — matches AgenticFileService ALLOWED_ROOTS */
+const DEFAULT_WORKSPACE_ROOT = resolve(process.env.HOME || "/home", "development/sun");
 
 /**
  * SystemPromptAssembler — dynamically injects project context, tool schemas,
@@ -24,7 +28,7 @@ export default class SystemPromptAssembler {
    */
   constructor(options = {}) {
     this.tokenBudget = options.tokenBudget || DEFAULT_TOKEN_BUDGET;
-    this.workspaceRoot = options.workspaceRoot || "/home/rodrigo/development/sun";
+    this.workspaceRoot = options.workspaceRoot || DEFAULT_WORKSPACE_ROOT;
     this._directoryCache = null;
     this._directoryCacheTime = 0;
     this._directoryCacheTTL = 60_000; // 1 minute

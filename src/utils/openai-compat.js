@@ -307,7 +307,7 @@ export function prepareOpenAICompatMessages(messages, { mediaStrategy = MEDIA_ST
       return { ...base, content };
     }
 
-    return { ...base, content: m.content };
+    return { ...base, content: m.content ?? "" };
   });
 }
 
