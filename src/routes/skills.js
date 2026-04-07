@@ -1,11 +1,27 @@
 import express from "express";
 import { ObjectId } from "mongodb";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
+import { getProvider } from "../providers/index.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 
 const router = express.Router();
 const COLLECTION = "agent_skills";
+const EMBEDDING_PROVIDER = "google";
+const EMBEDDING_MODEL = "gemini-embedding-2-preview";
+
+/**
+ * Generate an embedding vector for skill content.
+ * Combines name + description + content for richer semantic representation.
+ */
+async function generateSkillEmbedding(skill) {
+  const text = [skill.name, skill.description, skill.content]
+    .filter(Boolean)
+    .join("\n");
+  const provider = getProvider(EMBEDDING_PROVIDER);
+  const result = await provider.generateEmbedding(text, EMBEDDING_MODEL);
+  return result.embedding;
+}
 
 /**
  * GET /skills
@@ -26,6 +42,8 @@ router.get("/", async (req, res, next) => {
       .collection(COLLECTION)
       .find({ project, username })
       .sort({ createdAt: -1 })
+      // Don't return embedding vectors to the client — they're large
+      .project({ embedding: 0 })
       .toArray();
 
     res.json(skills.map((s) => ({ ...s, id: s._id.toString() })));
@@ -36,7 +54,7 @@ router.get("/", async (req, res, next) => {
 
 /**
  * POST /skills
- * Create a new skill.
+ * Create a new skill. Generates an embedding vector at creation time.
  */
 router.post("/", async (req, res, next) => {
   try {
@@ -59,13 +77,22 @@ router.post("/", async (req, res, next) => {
       updatedAt: new Date(),
     };
 
+    // Generate embedding for semantic similarity search
+    try {
+      doc.embedding = await generateSkillEmbedding(doc);
+    } catch (err) {
+      logger.warn(`[Skills] Embedding generation failed: ${err.message}`);
+      doc.embedding = null;
+    }
+
     const result = await client
       .db(MONGO_DB_NAME)
       .collection(COLLECTION)
       .insertOne(doc);
 
     logger.info(`Skill created: ${doc.name} (${result.insertedId})`);
-    res.status(201).json({ ...doc, id: result.insertedId.toString() });
+    const { embedding: _, ...response } = doc;
+    res.status(201).json({ ...response, id: result.insertedId.toString() });
   } catch (error) {
     next(error);
   }
@@ -73,7 +100,7 @@ router.post("/", async (req, res, next) => {
 
 /**
  * PUT /skills/:id
- * Update an existing skill.
+ * Update an existing skill. Re-generates embedding if content changes.
  */
 router.put("/:id", async (req, res, next) => {
   try {
@@ -92,13 +119,40 @@ router.put("/:id", async (req, res, next) => {
       updatedAt: new Date(),
     };
 
+    // Re-generate embedding if any semantic content changed
+    const contentChanged =
+      req.body.name !== undefined ||
+      req.body.description !== undefined ||
+      req.body.content !== undefined;
+
+    if (contentChanged) {
+      try {
+        // Need current doc to merge fields for embedding
+        const db = client.db(MONGO_DB_NAME);
+        const current = await db
+          .collection(COLLECTION)
+          .findOne({ _id: new ObjectId(req.params.id) });
+
+        if (current) {
+          const merged = {
+            name: updates.name ?? current.name,
+            description: updates.description ?? current.description,
+            content: updates.content ?? current.content,
+          };
+          updates.embedding = await generateSkillEmbedding(merged);
+        }
+      } catch (err) {
+        logger.warn(`[Skills] Embedding re-generation failed: ${err.message}`);
+      }
+    }
+
     const result = await client
       .db(MONGO_DB_NAME)
       .collection(COLLECTION)
       .findOneAndUpdate(
         { _id: new ObjectId(req.params.id) },
         { $set: updates },
-        { returnDocument: "after" },
+        { returnDocument: "after", projection: { embedding: 0 } },
       );
 
     if (!result) {

@@ -2,8 +2,28 @@ import { resolve } from "node:path";
 import ToolOrchestratorService from "./ToolOrchestratorService.js";
 import AgentMemoryService from "./AgentMemoryService.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
+import { getProvider } from "../providers/index.js";
 import { TOOLS_API_URL, WORKSPACE_ROOT as WORKSPACE_ROOT_RAW, MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
+
+const EMBEDDING_PROVIDER = "google";
+const EMBEDDING_MODEL = "gemini-embedding-2-preview";
+const SKILL_RELEVANCE_THRESHOLD = 0.3;
+
+/**
+ * Compute cosine similarity between two vectors.
+ */
+function cosineSimilarity(a, b) {
+  if (!a || !b || a.length !== b.length) return 0;
+  let dot = 0, magA = 0, magB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    magA += a[i] * a[i];
+    magB += b[i] * b[i];
+  }
+  const denom = Math.sqrt(magA) * Math.sqrt(magB);
+  return denom === 0 ? 0 : dot / denom;
+}
 
 
 
@@ -176,13 +196,14 @@ export default class SystemPromptAssembler {
   }
 
   /**
-   * Fetch enabled skills for a project from MongoDB.
+   * Fetch enabled skills relevant to the user's query via embedding similarity.
    *
    * @param {string} project - Project identifier
    * @param {string} username - Username
-   * @returns {Promise<Array<{ name: string, content: string }>>}
+   * @param {string} queryText - The user's latest message (used for relevance matching)
+   * @returns {Promise<Array<{ name: string, content: string, score: number }>>}
    */
-  async fetchSkills(project, username) {
+  async fetchSkills(project, username, queryText) {
     try {
       const client = MongoWrapper.getClient(MONGO_DB_NAME);
       if (!client) return [];
@@ -191,10 +212,47 @@ export default class SystemPromptAssembler {
         .db(MONGO_DB_NAME)
         .collection("agent_skills")
         .find({ project, username, enabled: true })
-        .project({ name: 1, content: 1, description: 1 })
+        .project({ name: 1, content: 1, description: 1, embedding: 1 })
         .toArray();
 
-      return skills;
+      if (skills.length === 0) return [];
+
+      // If no query or no skills have embeddings, return all (graceful fallback)
+      const hasEmbeddings = skills.some((s) => s.embedding?.length > 0);
+      if (!queryText || !hasEmbeddings) {
+        logger.info(
+          `[SystemPromptAssembler] Returning all ${skills.length} skills (no query or no embeddings)`,
+        );
+        return skills.map((s) => ({ name: s.name, content: s.content, description: s.description, score: 1 }));
+      }
+
+      // Generate query embedding
+      let queryEmbedding;
+      try {
+        const provider = getProvider(EMBEDDING_PROVIDER);
+        const result = await provider.generateEmbedding(queryText, EMBEDDING_MODEL);
+        queryEmbedding = result.embedding;
+      } catch (err) {
+        logger.warn(`[SystemPromptAssembler] Query embedding failed: ${err.message} — returning all skills`);
+        return skills.map((s) => ({ name: s.name, content: s.content, description: s.description, score: 1 }));
+      }
+
+      // Score and filter by relevance threshold
+      const scored = skills
+        .map((s) => ({
+          name: s.name,
+          content: s.content,
+          description: s.description,
+          score: s.embedding ? cosineSimilarity(queryEmbedding, s.embedding) : 0,
+        }))
+        .filter((s) => s.score >= SKILL_RELEVANCE_THRESHOLD)
+        .sort((a, b) => b.score - a.score);
+
+      logger.info(
+        `[SystemPromptAssembler] Skills: ${scored.length}/${skills.length} above threshold (${scored.map((s) => `${s.name}:${s.score.toFixed(2)}`).join(", ")})`,
+      );
+
+      return scored;
     } catch (err) {
       logger.warn(`[SystemPromptAssembler] Skills fetch error: ${err.message}`);
       return [];
@@ -263,8 +321,13 @@ export default class SystemPromptAssembler {
       sections.push(`## Project Structure\n` + dirTree);
     }
 
-    // ── 6. Project Skills ─────────────────────────────────────────
-    const skills = await this.fetchSkills(ctx.project, ctx.username);
+    // ── 6. Project Skills (relevance-filtered) ────────────────────
+    const lastUserMsg = [...(ctx.messages || [])]
+      .reverse()
+      .find((m) => m.role === "user");
+    const queryText = lastUserMsg?.content || "";
+
+    const skills = await this.fetchSkills(ctx.project, ctx.username, queryText);
     const skillNames = [];
     if (skills.length > 0) {
       const skillBlocks = skills.map((s) => {
@@ -275,13 +338,10 @@ export default class SystemPromptAssembler {
     }
 
     // ── 7. Session Memory ────────────────────────────────────────
-    const lastUserMsg = [...(ctx.messages || [])]
-      .reverse()
-      .find((m) => m.role === "user");
-    const queryText = lastUserMsg?.content || ctx.project || "";
+    const memoryQuery = queryText || ctx.project || "";
 
-    if (queryText) {
-      const memories = await this.fetchMemories(ctx.project, queryText);
+    if (memoryQuery) {
+      const memories = await this.fetchMemories(ctx.project, memoryQuery);
       if (memories) {
         sections.push(`## Session Memory (from past conversations)\n` + memories);
       }
