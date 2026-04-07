@@ -1437,6 +1437,45 @@ async function handleNonStreamingText(ctx) {
 }
 
 // ============================================================
+// Approval endpoint — resolves pending plan/tool approvals
+// ============================================================
+
+/**
+ * POST /chat/approve
+ *
+ * Body:
+ *   { conversationId: string, approved: boolean }
+ *
+ * Resolves the pending approval promise in AgenticLoopService
+ * so the agentic loop can continue (or abort).
+ */
+router.post("/approve", async (req, res) => {
+  const { conversationId, approved } = req.body;
+
+  if (!conversationId) {
+    return res.status(400).json({ error: "Missing conversationId" });
+  }
+
+  const resolved = AgenticLoopService.resolveApproval(
+    conversationId,
+    approved !== false, // default to approve if not explicitly false
+  );
+
+  if (!resolved) {
+    return res.status(404).json({
+      error: "No pending approval for this conversation",
+      conversationId,
+    });
+  }
+
+  logger.info(
+    `[chat/approve] ${approved !== false ? "Approved" : "Rejected"} for conversation ${conversationId}`,
+  );
+
+  res.json({ ok: true, approved: approved !== false });
+});
+
+// ============================================================
 // REST endpoint — SSE streaming or JSON fallback
 // ============================================================
 

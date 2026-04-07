@@ -16,6 +16,12 @@ import PlanningModeService from "./PlanningModeService.js";
 import SessionSummarizer from "./SessionSummarizer.js";
 
 const MAX_TOOL_ITERATIONS = 10;
+const MAX_CONSECUTIVE_TOOL_ERRORS = 3;
+
+// ── Approval Resolver Registry ─────────────────────────────
+// Stores pending { resolve, type } objects keyed by conversationId.
+// The HTTP endpoint resolves these when the client sends approval.
+const pendingApprovals = new Map();
 
 /**
  * Executes a fully managed agentic loop server-side.
@@ -177,9 +183,18 @@ export default class AgenticLoopService {
 
       // Wait for approval via a Promise that resolves when client responds
       const approved = await new Promise((resolve) => {
-        ctx._planApprovalResolve = resolve;
-        // If no approval mechanism is wired, auto-approve after 30s
-        setTimeout(() => resolve(true), 30_000);
+        const timeoutId = setTimeout(() => {
+          pendingApprovals.delete(conversationId);
+          resolve(false); // Default: reject on timeout (safe)
+        }, 120_000);
+        pendingApprovals.set(conversationId, {
+          resolve: (val) => {
+            clearTimeout(timeoutId);
+            pendingApprovals.delete(conversationId);
+            resolve(val);
+          },
+          type: "plan",
+        });
       });
 
       if (!approved || signal?.aborted) {
@@ -200,9 +215,15 @@ export default class AgenticLoopService {
       );
     }
 
+    // Track consecutive errors per tool name for retry budgeting
+    const toolErrorCounts = new Map();
+
     try {
       while (iterations < MAX_TOOL_ITERATIONS) {
         iterations++;
+
+        // ── Emit iteration progress ──────────────────────────
+        emit({ type: "status", message: `iteration_progress`, iteration: iterations, maxIterations: MAX_TOOL_ITERATIONS });
 
         // ── beforePrompt hook: inject dynamic context ─────────
         if (iterations === 1) {
@@ -434,11 +455,21 @@ export default class AgenticLoopService {
               });
             }
 
-            // Wait for approval responses (or auto-approve after timeout)
+            // Wait for approval responses via the registry
             const approvalResult = await new Promise((resolve) => {
-              ctx._toolApprovalResolve = resolve;
-              // Default: auto-approve after 60s to prevent permanent stall
-              setTimeout(() => resolve({ approved: true, reason: "timeout" }), 60_000);
+              const timeoutId = setTimeout(() => {
+                pendingApprovals.delete(conversationId);
+                resolve({ approved: false, reason: "timeout" });
+              }, 120_000);
+              pendingApprovals.set(conversationId, {
+                resolve: (val) => {
+                  clearTimeout(timeoutId);
+                  pendingApprovals.delete(conversationId);
+                  resolve(val);
+                },
+                type: "tool",
+                tools: needsApproval.map((t) => t.name),
+              });
             });
 
             if (!approvalResult?.approved) {
@@ -483,14 +514,27 @@ export default class AgenticLoopService {
             })
           );
 
-          // Emit done events for UI
+          // Emit done events for UI + track error budgets
           for (const tc of passPendingToolCalls) {
               const res = results.find(r => r.id === tc.id || (!r.id && r.name === tc.name));
+              const hasError = !!res?.result?.error;
               emit({
                   type: "tool_execution",
                   tool: { name: tc.name, args: tc.args || {}, id: tc.id, responsesItemId: tc.responsesItemId, result: res?.result },
-                  status: res?.result?.error ? "error" : "done",
+                  status: hasError ? "error" : "done",
               });
+
+              // Track consecutive errors per tool for retry budgeting
+              if (hasError) {
+                const count = (toolErrorCounts.get(tc.name) || 0) + 1;
+                toolErrorCounts.set(tc.name, count);
+                if (count >= MAX_CONSECUTIVE_TOOL_ERRORS) {
+                  logger.warn(`[AgenticLoop] Tool "${tc.name}" hit error limit (${count}), skipping in future iterations`);
+                  emit({ type: "status", message: `Tool "${tc.name}" failed ${count} times consecutively — skipping` });
+                }
+              } else {
+                toolErrorCounts.delete(tc.name); // Reset on success
+              }
           }
 
           // Append to context for next pass
@@ -571,14 +615,47 @@ export default class AgenticLoopService {
       hooks.run("onError", err, ctx).catch((hookErr) =>
         logger.error(`[AgenticLoopService] onError hooks failed: ${hookErr.message}`),
       );
-
-      // Clear generating flag so the conversation doesn't stay stuck
+      throw err; // Re-throw so handleChat's catch handler can log + emit the error event
+    } finally {
+      // Always clear generating flag — covers normal exit, abort, and errors
       if (conversationId) {
         ConversationService.setGenerating(conversationId, project, username, false).catch((e) =>
           logger.error(`Failed to clear isGenerating in agentic loop: ${e.message}`)
         );
       }
-      throw err; // Re-throw so handleChat's catch handler can log + emit the error event
+      // Clean up any lingering approval promises
+      pendingApprovals.delete(conversationId);
     }
+  }
+
+  /**
+   * Resolve a pending approval for a conversation.
+   * Called by the HTTP endpoint when the client sends an approval response.
+   *
+   * @param {string} conversationId
+   * @param {boolean} approved
+   * @returns {boolean} true if a pending approval was found and resolved
+   */
+  static resolveApproval(conversationId, approved) {
+    const entry = pendingApprovals.get(conversationId);
+    if (!entry) return false;
+
+    if (entry.type === "plan") {
+      entry.resolve(approved);
+    } else {
+      entry.resolve({ approved, reason: approved ? "user_approved" : "user_rejected" });
+    }
+    return true;
+  }
+
+  /**
+   * Check if a conversation has a pending approval.
+   * @param {string} conversationId
+   * @returns {{ pending: boolean, type?: string, tools?: string[] }}
+   */
+  static getPendingApproval(conversationId) {
+    const entry = pendingApprovals.get(conversationId);
+    if (!entry) return { pending: false };
+    return { pending: true, type: entry.type, tools: entry.tools };
   }
 }
