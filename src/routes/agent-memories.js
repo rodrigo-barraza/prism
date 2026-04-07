@@ -22,4 +22,21 @@ router.get("/", async (req, res, next) => {
   }
 });
 
+/**
+ * DELETE /agent-memories/:id
+ * Delete a specific agent memory.
+ */
+router.delete("/:id", async (req, res, next) => {
+  try {
+    const deleted = await AgentMemoryService.remove(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ error: "Memory not found" });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    logger.error(`[agent-memories] DELETE ${error.message}`);
+    next(error);
+  }
+});
+
 export default router;
