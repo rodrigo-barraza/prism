@@ -1,5 +1,6 @@
 import express from "express";
 import AgentMemoryService from "../services/AgentMemoryService.js";
+import MemoryConsolidationService from "../services/MemoryConsolidationService.js";
 import logger from "../utils/logger.js";
 
 const router = express.Router();
@@ -35,6 +36,23 @@ router.delete("/:id", async (req, res, next) => {
     res.json({ success: true });
   } catch (error) {
     logger.error(`[agent-memories] DELETE ${error.message}`);
+    next(error);
+  }
+});
+
+/**
+ * POST /agent-memories/consolidate
+ * Trigger on-demand memory consolidation for a project.
+ */
+router.post("/consolidate", async (req, res, next) => {
+  try {
+    const project = req.body.project || req.query.project || "default";
+    const username = req.body.username || "system";
+
+    const result = await MemoryConsolidationService.consolidate({ project, username });
+    res.json(result);
+  } catch (error) {
+    logger.error(`[agent-memories] CONSOLIDATE ${error.message}`);
     next(error);
   }
 });

@@ -1,5 +1,6 @@
 import { getProvider } from "../providers/index.js";
 import AgentMemoryService from "./AgentMemoryService.js";
+import MemoryConsolidationService from "./MemoryConsolidationService.js";
 import logger from "../utils/logger.js";
 
 const SUMMARIZATION_PROVIDER = "anthropic";
@@ -210,6 +211,12 @@ export default class SessionSummarizer {
               count: stored.length,
             });
           }
+
+          // Check if consolidation should run (tracks session count)
+          MemoryConsolidationService.checkAndRun({
+            project: ctx.project,
+            username: ctx.username,
+          });
         })
         .catch((err) =>
           logger.error(`[SessionSummarizer] Background summarization failed: ${err.message}`),
