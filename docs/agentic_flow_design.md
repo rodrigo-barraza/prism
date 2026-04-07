@@ -175,9 +175,9 @@ Prism streams raw chunks (`emit({ type: "chunk", content })`) without transforma
 4. ✅ **UltraPlan Mode** — `PlanningModeService` + `PlanCardComponent`: plan → approve → execute workflow
 5. ✅ **Session Summarization** — `SessionSummarizer` + `AgentMemoryService`: Claude Haiku extraction → 4-type memory taxonomy → MongoDB
 
-### Phase 2: Memory & Extensibility (3/5 complete)
+### Phase 2: Memory & Extensibility (4/5 complete)
 1. ✅ **Generalized MemoryService** — `AgentMemoryService`: project-scoped, embedding-based, 4-type taxonomy, duplicate detection, wired into `SystemPromptAssembler`
-2. 🔲 **Skills System** — Markdown skill files scanned from project directory, injected into system prompt
+2. ✅ **Skills System** — DB-backed per-project skills with embedding-based relevance filtering, CRUD via `/skills` API, SkillsPanel UI, injected into system prompt
 3. ✅ **Tool Rendering Registry** — `ToolResultRenderers.js`: registry-based rendering with specialized components per tool domain
 4. ✅ **MCP Client** — Prism connects to external MCP servers for third-party tool access
 5. 🔲 **Slash Commands** — Parameterized prompt templates with argument substitution
