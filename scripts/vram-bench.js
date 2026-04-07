@@ -89,7 +89,7 @@ const hasFlag = (name) => args.includes(`--${name}`);
 const PROVIDER = getArg("provider", "lm-studio");
 const SINGLE_MODEL = getArg("model", null);
 const MAX_SIZE_GB = parseFloat(getArg("max-size", "22"));
-const CONTEXT_LIST = getArg("contexts", "32k,64k,128k,256k,512k,1024k")
+const CONTEXT_LIST = getArg("contexts", "2k,4k,8k,16k,32k,64k,128k,256k,384k,512k,768k,1024k")
   .split(",")
   .map((s) => {
     const n = parseFloat(s.replace(/k$/i, ""));
