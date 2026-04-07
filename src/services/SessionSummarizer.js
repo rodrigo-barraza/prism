@@ -201,9 +201,19 @@ export default class SessionSummarizer {
         username: ctx.username,
         messages: messages || ctx.messages,
         conversationId: ctx.conversationId,
-      }).catch((err) =>
-        logger.error(`[SessionSummarizer] Background summarization failed: ${err.message}`),
-      );
+      })
+        .then((stored) => {
+          if (stored?.length > 0 && ctx.emit) {
+            ctx.emit({
+              type: "status",
+              message: "memories_updated",
+              count: stored.length,
+            });
+          }
+        })
+        .catch((err) =>
+          logger.error(`[SessionSummarizer] Background summarization failed: ${err.message}`),
+        );
     };
   }
 }
