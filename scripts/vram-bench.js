@@ -1745,8 +1745,6 @@ async function main() {
         vision: model.vision,
       });
       entry.estimatedGiB = +estimated.gpuGiB.toFixed(3);
-      entry.fitsInVram =
-        estimated.gpuGiB <= mibToGiB(availableForModelsMiB);
 
       // Skip if would clearly OOM (1.5 GiB safety margin)
       if (
@@ -1858,6 +1856,11 @@ async function main() {
         entry.gpu.power = postGenGPU.powerW;
       }
 
+      // Set fitsInVram from actual measured VRAM (not estimate)
+      entry.fitsInVram = entry.modelVramGiB > 0
+        && entry.modelVramGiB <= mibToGiB(totalVramMiB)
+        && entry.tokensPerSecond > 0;
+
       process.stdout.write(` ${C.green}done${C.reset}\n`);
 
       // Per-run metrics
@@ -1883,8 +1886,10 @@ async function main() {
 
     results.push(entry);
 
-    // Persist to MongoDB
-    await saveResult(entry);
+    // Only persist successful runs that fit and generated output
+    if (!entry.error && entry.fitsInVram && entry.tokensPerSecond > 0) {
+      await saveResult(entry);
+    }
   }
 
   // ── Hysteresis check: measure VRAM after unloading all models ──
