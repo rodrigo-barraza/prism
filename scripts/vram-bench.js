@@ -816,6 +816,10 @@ function collectSystemProfile() {
           profile.cpu.currentMHz = cpu.CurrentClockSpeed || null;
           profile.cpu.maxClockMHz = cpu.MaxClockSpeed || null;
           profile.cpu.loadPct = cpu.LoadPercentage || null;
+          // WSL's lscpu doesn't report MHz — use PowerShell values as fallback
+          if (!profile.cpu.maxMHz && cpu.MaxClockSpeed) {
+            profile.cpu.maxMHz = cpu.MaxClockSpeed;
+          }
         }
       } catch { /* ignore */ }
     }
@@ -1405,6 +1409,30 @@ async function backfillModality() {
   return result.modifiedCount;
 }
 
+/**
+ * Backfill existing entries with CPU clock data.
+ * Updates entries on this hostname that are missing cpu.maxMHz.
+ */
+async function backfillCpuClock(systemProfile) {
+  if (!_db) return 0;
+  if (!systemProfile.cpu?.maxMHz) return 0;
+  const result = await _db.collection(BENCH_COLLECTION).updateMany(
+    {
+      "system.hostname": systemProfile.hostname,
+      "system.cpu.maxMHz": { $exists: false },
+    },
+    {
+      $set: {
+        "system.cpu.maxMHz": systemProfile.cpu.maxMHz,
+        "system.cpu.currentMHz": systemProfile.cpu.currentMHz || null,
+        "system.cpu.loadPct": systemProfile.cpu.loadPct || null,
+        "system.cpu.minMHz": systemProfile.cpu.minMHz || null,
+      },
+    },
+  );
+  return result.modifiedCount;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Main
 // ═══════════════════════════════════════════════════════════════
@@ -1465,6 +1493,8 @@ async function main() {
       log(`    ${C.green}✓ Backfilled ${backfilled} entries with system profile${C.reset}`);
       const modalityBackfilled = await backfillModality();
       log(`    ${C.green}✓ Backfilled ${modalityBackfilled} entries with modality (TEXT→TEXT)${C.reset}`);
+      const cpuClockBackfilled = await backfillCpuClock(systemProfile);
+      log(`    ${C.green}✓ Backfilled ${cpuClockBackfilled} entries with CPU clock data${C.reset}`);
     } else {
       log(`    ${C.red}✗ MongoDB not connected — cannot backfill${C.reset}`);
     }
