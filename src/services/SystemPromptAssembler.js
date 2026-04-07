@@ -4,12 +4,7 @@ import AgentMemoryService from "./AgentMemoryService.js";
 import { TOOLS_API_URL, WORKSPACE_ROOT as WORKSPACE_ROOT_RAW } from "../../secrets.js";
 import logger from "../utils/logger.js";
 
-/**
- * Default token budget for assembled system prompt context.
- * ~4 chars per token → 4096 tokens ≈ 16K chars.
- */
-const DEFAULT_TOKEN_BUDGET = 4096;
-const CHARS_PER_TOKEN = 4;
+
 
 /** Workspace root from secrets.js — must match tools-api WORKSPACE_ROOT */
 const DEFAULT_WORKSPACE_ROOT = WORKSPACE_ROOT_RAW
@@ -17,19 +12,18 @@ const DEFAULT_WORKSPACE_ROOT = WORKSPACE_ROOT_RAW
   : resolve(process.env.HOME || "/home");
 
 /**
- * SystemPromptAssembler — dynamically injects project context, tool schemas,
- * and memory into the system prompt before each LLM call.
+ * SystemPromptAssembler — sole owner of the agent's system prompt.
  *
- * Registered as a `beforePrompt` hook in AgentHooks.
+ * Assembles identity, coding guidelines, tool descriptions, project
+ * structure, environment info, and session memory into a single coherent
+ * system message. Registered as a `beforePrompt` hook in AgentHooks.
  */
 export default class SystemPromptAssembler {
   /**
    * @param {object} [options]
-   * @param {number} [options.tokenBudget=4096] - Max tokens for injected context
    * @param {string} [options.workspaceRoot] - Workspace root path
    */
   constructor(options = {}) {
-    this.tokenBudget = options.tokenBudget || DEFAULT_TOKEN_BUDGET;
     this.workspaceRoot = options.workspaceRoot || DEFAULT_WORKSPACE_ROOT;
     this._directoryCache = null;
     this._directoryCacheTime = 0;
@@ -102,7 +96,12 @@ export default class SystemPromptAssembler {
   }
 
   /**
-   * Build tool descriptions from current schemas.
+   * Build domain-grouped tool descriptions from current schemas.
+   *
+   * Groups tools by their `domain` field, then for each tool shows:
+   *   - Name + first sentence of description (capability summary)
+   *   - Full parameter listing with required markers
+   *
    * @param {Array} [enabledTools] - If provided, only include these tool names
    * @returns {string}
    */
@@ -116,22 +115,38 @@ export default class SystemPromptAssembler {
 
     if (filtered.length === 0) return "";
 
-    const lines = filtered.map((tool) => {
-      const params = tool.parameters?.properties || {};
-      const paramNames = Object.keys(params);
-      const required = tool.parameters?.required || [];
-      const paramStr = paramNames
-        .map((p) => {
-          const isReq = required.includes(p);
-          const desc = params[p].description || "";
-          return `  - ${p}${isReq ? " (required)" : ""}: ${desc}`;
-        })
-        .join("\n");
+    // Group by domain
+    const groups = new Map();
+    for (const tool of filtered) {
+      const domain = (tool.domain || "Other").replace(/^Agentic:\s*/i, "");
+      if (!groups.has(domain)) groups.set(domain, []);
+      groups.get(domain).push(tool);
+    }
 
-      return `### ${tool.name}\n${tool.description || ""}\n${paramStr}`;
-    });
+    // Build categorised sections with parameter details
+    const sections = [];
+    for (const [domain, domainTools] of groups) {
+      const entries = domainTools.map((tool) => {
+        const desc = tool.description || "";
 
-    return lines.join("\n\n");
+        const params = tool.parameters?.properties || {};
+        const paramNames = Object.keys(params);
+        const required = tool.parameters?.required || [];
+        const paramStr = paramNames
+          .map((p) => {
+            const isReq = required.includes(p);
+            const paramDesc = params[p].description || "";
+            return `  - ${p}${isReq ? " (required)" : ""}: ${paramDesc}`;
+          })
+          .join("\n");
+
+        return `### ${tool.name}\n${desc}\n${paramStr}`;
+      });
+
+      sections.push(`**${domain}**\n${entries.join("\n\n")}`);
+    }
+
+    return sections.join("\n\n");
   }
 
   /**
@@ -159,32 +174,56 @@ export default class SystemPromptAssembler {
     }
   }
 
-  /**
-   * Truncate text to fit within token budget.
-   * @param {string} text
-   * @param {number} maxTokens
-   * @returns {string}
-   */
-  truncate(text, maxTokens) {
-    const maxChars = maxTokens * CHARS_PER_TOKEN;
-    if (text.length <= maxChars) return text;
-    return text.slice(0, maxChars) + "\n\n[... context truncated to fit token budget]";
-  }
+
 
   /**
-   * Assemble the dynamic context block to inject into the system prompt.
+   * Assemble the complete agent system prompt.
+   *
+   * Sections (in order):
+   *   1. Agent identity + coding guidelines
+   *   2. Available tools (domain-grouped with parameters)
+   *   3. Environment info (date/time, OS, workspace)
+   *   4. Project directory tree
+   *   5. Session memory from past conversations
    *
    * @param {object} ctx - Request context
    * @param {string} ctx.project - Project identifier
    * @param {Array} ctx.messages - Current messages array
    * @param {Array} [ctx.enabledTools] - Enabled tool names
-   * @returns {Promise<string>} Assembled context block
+   * @returns {Promise<string>} Complete system prompt
    */
   async assemble(ctx) {
     const sections = [];
-    const budgetPerSection = Math.floor(this.tokenBudget / 4);
 
-    // 1. Environment info (cheap, always include)
+    // ── 1. Agent Identity ────────────────────────────────────────
+    sections.push(
+      `You are a highly capable coding agent with access to file system, git, command execution, and web tools.`,
+    );
+
+    // ── 2. Available Tools (domain-grouped) ──────────────────────
+    const toolDescs = this.buildToolDescriptions(ctx.enabledTools);
+    if (toolDescs) {
+      const schemas = ToolOrchestratorService.getToolSchemas();
+      const count = ctx.enabledTools
+        ? schemas.filter((t) => new Set(ctx.enabledTools).has(t.name)).length
+        : schemas.length;
+      sections.push(`## Available Tools (${count})\n` + toolDescs);
+    }
+
+    // ── 3. Coding Guidelines ─────────────────────────────────────
+    sections.push(
+      `## Coding Guidelines\n` +
+      `1. Always read relevant files before making edits to understand context\n` +
+      `2. Prefer str_replace_file over write_file for editing existing code — it's safer and preserves unchanged content\n` +
+      `3. Use multi_file_read when you need to inspect several files at once\n` +
+      `4. After making changes, verify them by reading the modified section\n` +
+      `5. Use project_summary to understand unfamiliar codebases before diving in\n` +
+      `6. Check git_status before and after edits to track your changes\n` +
+      `7. When searching, use includes filters to narrow results (e.g. [".js", ".ts"])\n` +
+      `8. Keep your explanations concise and technical`,
+    );
+
+    // ── 4. Environment ───────────────────────────────────────────
     sections.push(
       `## Environment\n` +
       `- Date/Time: ${new Date().toLocaleString("en-US", { dateStyle: "full", timeStyle: "long" })}\n` +
@@ -192,25 +231,13 @@ export default class SystemPromptAssembler {
       `- Workspace: ${this.workspaceRoot}`,
     );
 
-    // 2. Directory tree (cached, ~500-1000 chars typically)
+    // ── 5. Project Structure (cached) ────────────────────────────
     const dirTree = await this.fetchDirectoryTree();
     if (dirTree) {
-      sections.push(
-        `## Project Structure\n` +
-        this.truncate(dirTree, budgetPerSection),
-      );
+      sections.push(`## Project Structure\n` + dirTree);
     }
 
-    // 3. Available tools
-    const toolDescs = this.buildToolDescriptions(ctx.enabledTools);
-    if (toolDescs) {
-      sections.push(
-        `## Available Tools\n` +
-        this.truncate(toolDescs, budgetPerSection),
-      );
-    }
-
-    // 4. Relevant memories from past sessions
+    // ── 6. Session Memory ────────────────────────────────────────
     const lastUserMsg = [...(ctx.messages || [])]
       .reverse()
       .find((m) => m.role === "user");
@@ -219,40 +246,38 @@ export default class SystemPromptAssembler {
     if (queryText) {
       const memories = await this.fetchMemories(ctx.project, queryText);
       if (memories) {
-        sections.push(
-          `## Session Memory (from past conversations)\n` +
-          this.truncate(memories, budgetPerSection),
-        );
+        sections.push(`## Session Memory (from past conversations)\n` + memories);
       }
     }
 
-    const assembled = sections.join("\n\n");
-    return this.truncate(assembled, this.tokenBudget);
+    return sections.join("\n\n");
   }
 
   /**
    * Create a beforePrompt hook handler for AgentHooks.
-   * Injects assembled context into the system prompt message.
+   *
+   * Replaces or creates the system message with the fully assembled prompt.
+   * Any existing system message content from the client is ignored — the
+   * backend is the single source of truth for the agent system prompt.
    *
    * @returns {Function}
    */
   createHook() {
     return async (ctx) => {
       try {
-        const context = await this.assemble(ctx);
-        if (!context) return;
+        const systemPrompt = await this.assemble(ctx);
+        if (!systemPrompt) return;
 
-        // Find the system message and append context
-        const systemMsg = ctx.messages?.find((m) => m.role === "system");
-        if (systemMsg) {
-          systemMsg.content = `${systemMsg.content}\n\n---\n\n${context}`;
+        // Replace existing system message or prepend a new one
+        const systemIdx = ctx.messages?.findIndex((m) => m.role === "system");
+        if (systemIdx !== undefined && systemIdx >= 0) {
+          ctx.messages[systemIdx].content = systemPrompt;
         } else {
-          // No system message — prepend one
-          ctx.messages?.unshift({ role: "system", content: context });
+          ctx.messages?.unshift({ role: "system", content: systemPrompt });
         }
 
         logger.info(
-          `[SystemPromptAssembler] Injected ${context.length} chars of context into system prompt`,
+          `[SystemPromptAssembler] Assembled ${systemPrompt.length} char system prompt`,
         );
       } catch (err) {
         logger.error(`[SystemPromptAssembler] Assembly failed: ${err.message}`);
