@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import ToolOrchestratorService from "./ToolOrchestratorService.js";
 import MemoryService from "./MemoryService.js";
-import { TOOLS_API_URL } from "../../secrets.js";
+import { TOOLS_API_URL, WORKSPACE_ROOTS as WORKSPACE_ROOTS_RAW } from "../../secrets.js";
 import logger from "../utils/logger.js";
 
 /**
@@ -11,8 +11,10 @@ import logger from "../utils/logger.js";
 const DEFAULT_TOKEN_BUDGET = 4096;
 const CHARS_PER_TOKEN = 4;
 
-/** Derive workspace root from $HOME — matches AgenticFileService ALLOWED_ROOTS */
-const DEFAULT_WORKSPACE_ROOT = resolve(process.env.HOME || "/home", "development/sun");
+/** Derive workspace root from secrets.js WORKSPACE_ROOTS — matches AgenticFileService ALLOWED_ROOTS */
+const DEFAULT_WORKSPACE_ROOT = WORKSPACE_ROOTS_RAW
+  ? resolve(WORKSPACE_ROOTS_RAW.split(",")[0].trim())
+  : resolve(process.env.HOME || "/home", "development/sun");
 
 /**
  * SystemPromptAssembler — dynamically injects project context, tool schemas,
