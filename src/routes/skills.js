@@ -1,14 +1,12 @@
 import express from "express";
 import { ObjectId } from "mongodb";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
-import { getProvider } from "../providers/index.js";
+import EmbeddingService from "../services/EmbeddingService.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 
 const router = express.Router();
 const COLLECTION = "agent_skills";
-const EMBEDDING_PROVIDER = "google";
-const EMBEDDING_MODEL = "gemini-embedding-2-preview";
 
 /**
  * Generate an embedding vector for skill content.
@@ -18,9 +16,7 @@ async function generateSkillEmbedding(skill) {
   const text = [skill.name, skill.description, skill.content]
     .filter(Boolean)
     .join("\n");
-  const provider = getProvider(EMBEDDING_PROVIDER);
-  const result = await provider.generateEmbedding(text, EMBEDDING_MODEL);
-  return result.embedding;
+  return EmbeddingService.embed(text, { source: "skill-creation" });
 }
 
 /**

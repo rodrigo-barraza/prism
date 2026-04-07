@@ -1,14 +1,12 @@
 import crypto from "crypto";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
-import { getProvider } from "../providers/index.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
+import EmbeddingService from "./EmbeddingService.js";
 import logger from "../utils/logger.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const COLLECTION = "agent_memories";
-const EMBEDDING_PROVIDER = "google";
-const EMBEDDING_MODEL = "gemini-embedding-2-preview";
 
 /**
  * Valid memory types — inspired by Claude Code's memdir taxonomy.
@@ -52,9 +50,7 @@ function cosineSimilarity(a, b) {
  * Generate an embedding vector for the given text.
  */
 async function generateEmbedding(text) {
-  const provider = getProvider(EMBEDDING_PROVIDER);
-  const result = await provider.generateEmbedding(text, EMBEDDING_MODEL);
-  return result.embedding;
+  return EmbeddingService.embed(text, { source: "agent-memory" });
 }
 
 /**

@@ -1,10 +1,6 @@
 import express from "express";
-import crypto from "crypto";
-import { getProvider } from "../providers/index.js";
 import { ProviderError } from "../utils/errors.js";
-import { TYPES, getDefaultModels, getPricing } from "../config.js";
-import RequestLogger from "../services/RequestLogger.js";
-import logger from "../utils/logger.js";
+import EmbeddingService from "../services/EmbeddingService.js";
 
 const router = express.Router();
 
@@ -24,11 +20,6 @@ const router = express.Router();
  * Response: { embedding, dimensions, provider, model }
  */
 router.post("/", async (req, res, next) => {
-  const requestId = crypto.randomUUID();
-  const requestStart = performance.now();
-  let providerName = null;
-  let resolvedModel = null;
-
   try {
     const {
       provider: pName,
@@ -41,9 +32,8 @@ router.post("/", async (req, res, next) => {
       taskType,
       dimensions,
     } = req.body;
-    providerName = pName;
 
-    if (!providerName) {
+    if (!pName) {
       throw new ProviderError(
         "server",
         "Missing required field: provider",
@@ -61,20 +51,6 @@ router.post("/", async (req, res, next) => {
         400,
       );
     }
-
-    const provider = getProvider(providerName);
-    if (!provider.generateEmbedding) {
-      throw new ProviderError(
-        providerName,
-        `Provider "${providerName}" does not support embeddings`,
-        400,
-      );
-    }
-
-    resolvedModel =
-      model ||
-      getDefaultModels(TYPES.TEXT, TYPES.EMBEDDING)[providerName] ||
-      null;
 
     // Build content for provider — text-only vs multimodal
     let content;
@@ -125,67 +101,19 @@ router.post("/", async (req, res, next) => {
       content = parts;
     }
 
-    const options = {};
-    if (taskType) options.taskType = taskType;
-    if (dimensions) options.dimensions = dimensions;
-
-    const result = await provider.generateEmbedding(
-      content,
-      resolvedModel,
-      options,
-    );
-    const totalSec = (performance.now() - requestStart) / 1000;
-
-    // Cost estimation
-    const pricing = getPricing(TYPES.TEXT, TYPES.EMBEDDING)[resolvedModel];
-    let estimatedCost = null;
-    if (pricing?.inputPerMillion) {
-      const approxTokens = text ? Math.ceil(text.length / 4) : 100;
-      estimatedCost = (approxTokens / 1_000_000) * pricing.inputPerMillion;
-    }
-
-    logger.request(
-      req.project,
-      req.username,
-      req.clientIp,
-      `[embed] ${providerName} model=${resolvedModel} — ` +
-        `dims: ${result.dimensions}, total: ${totalSec.toFixed(2)}s` +
-        (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
-    );
-
-    RequestLogger.log({
-      requestId,
-      endpoint: "embed",
+    const result = await EmbeddingService.generate(content, {
+      provider: pName,
+      model,
+      taskType,
+      dimensions,
       project: req.project,
       username: req.username,
       clientIp: req.clientIp,
-      provider: providerName,
-      model: resolvedModel,
-      success: true,
-      estimatedCost,
-      totalTime: parseFloat(totalSec.toFixed(3)),
+      source: "api",
     });
 
-    res.json({
-      embedding: result.embedding,
-      dimensions: result.dimensions,
-      provider: providerName,
-      model: resolvedModel,
-    });
+    res.json(result);
   } catch (error) {
-    const totalSec = (performance.now() - requestStart) / 1000;
-    RequestLogger.log({
-      requestId,
-      endpoint: "embed",
-      project: req.project,
-      username: req.username,
-      clientIp: req.clientIp,
-      provider: providerName,
-      model: resolvedModel,
-      success: false,
-      errorMessage: error.message,
-      totalTime: parseFloat(totalSec.toFixed(3)),
-    });
     next(error);
   }
 });

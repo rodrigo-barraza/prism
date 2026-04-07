@@ -1,13 +1,11 @@
 import { resolve } from "node:path";
 import ToolOrchestratorService from "./ToolOrchestratorService.js";
 import AgentMemoryService from "./AgentMemoryService.js";
+import EmbeddingService from "./EmbeddingService.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
-import { getProvider } from "../providers/index.js";
 import { TOOLS_API_URL, WORKSPACE_ROOT as WORKSPACE_ROOT_RAW, MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 
-const EMBEDDING_PROVIDER = "google";
-const EMBEDDING_MODEL = "gemini-embedding-2-preview";
 const SKILL_RELEVANCE_THRESHOLD = 0.3;
 
 /**
@@ -229,9 +227,7 @@ export default class SystemPromptAssembler {
       // Generate query embedding
       let queryEmbedding;
       try {
-        const provider = getProvider(EMBEDDING_PROVIDER);
-        const result = await provider.generateEmbedding(queryText, EMBEDDING_MODEL);
-        queryEmbedding = result.embedding;
+        queryEmbedding = await EmbeddingService.embed(queryText, { source: "skill-relevance" });
       } catch (err) {
         logger.warn(`[SystemPromptAssembler] Query embedding failed: ${err.message} — returning all skills`);
         return skills.map((s) => ({ name: s.name, content: s.content, description: s.description, score: 1 }));
