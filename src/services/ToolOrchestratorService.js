@@ -1,4 +1,5 @@
 import { TOOLS_API_URL } from "../../secrets.js";
+import MCPClientService from "./MCPClientService.js";
 import logger from "../utils/logger.js";
 
 // ────────────────────────────────────────────────────────────
@@ -236,7 +237,35 @@ export default class ToolOrchestratorService {
   }
 
   static async executeTool(name, args = {}) {
+    // Route MCP tools to MCPClientService
+    if (MCPClientService.isMCPTool(name)) {
+      return ToolOrchestratorService.executeMCPTool(name, args);
+    }
     return executeToolGeneric(name, args);
+  }
+
+  /**
+   * Execute a tool on an MCP server.
+   * Parses the namespaced tool name and delegates to MCPClientService.
+   *
+   * @param {string} fullName - Namespaced MCP tool name (mcp__{server}__{tool})
+   * @param {object} args - Tool arguments
+   * @returns {Promise<object>}
+   */
+  static async executeMCPTool(fullName, args = {}) {
+    const parsed = MCPClientService.parseMCPToolName(fullName);
+    if (!parsed) {
+      return { error: `Invalid MCP tool name: ${fullName}` };
+    }
+    return MCPClientService.callTool(parsed.serverName, parsed.toolName, args);
+  }
+
+  /**
+   * Get all tool schemas from connected MCP servers.
+   * @returns {Array}
+   */
+  static getMCPToolSchemas() {
+    return MCPClientService.getToolSchemas();
   }
 
   /**

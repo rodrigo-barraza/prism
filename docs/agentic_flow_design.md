@@ -78,11 +78,10 @@ Additionally, custom tools can be defined per-project in MongoDB (`custom_tools`
 
 ### Priority Additions
 
-1. 🔲 **MCP Client (Model Context Protocol)**:
-   - **What**: Prism acts as an **MCP client**, connecting to external MCP servers (GitHub, Postgres, Slack, etc.) and exposing their tools to the LLM.
-   - **Why**: Instantly unlocks community tools without writing custom wrappers.
-   - **Implementation**: MCP client in Prism discovers servers via project config, fetches their tool schemas, and proxies tool calls. Schemas are merged into `ToolOrchestratorService`'s tool list.
-   - **Scope**: Client only — Prism does *not* need to expose itself as an MCP server.
+1. ✅ **MCP Client (Model Context Protocol)**:
+   - **What**: Prism acts as an **MCP client**, connecting to external MCP servers and exposing their tools to the LLM.
+   - **Implementation**: `MCPClientService` manages connections via `@modelcontextprotocol/sdk` (stdio + Streamable HTTP transports). Tools namespaced as `mcp__{server}__{tool}` and merged into `ToolOrchestratorService`. Managed via `/mcp-servers` REST API with CRUD + connect/disconnect endpoints. Retina MCPServersPanel in Agent sidebar. Auto-connect on startup.
+   - **Files**: `MCPClientService.js`, `mcp-servers.js`, `ToolOrchestratorService.js`, `MCPServersPanel.js`
 
 2. 🔲 **Browser Automation ("Computer Use")**:
    - **What**: Headless Playwright-based browser tool for SPA navigation, E2E testing, and visual QA.
@@ -180,7 +179,7 @@ Prism streams raw chunks (`emit({ type: "chunk", content })`) without transforma
 1. ✅ **Generalized MemoryService** — `AgentMemoryService`: project-scoped, embedding-based, 4-type taxonomy, duplicate detection, wired into `SystemPromptAssembler`
 2. 🔲 **Skills System** — Markdown skill files scanned from project directory, injected into system prompt
 3. ✅ **Tool Rendering Registry** — `ToolResultRenderers.js`: registry-based rendering with specialized components per tool domain
-4. 🔲 **MCP Client** — Prism connects to external MCP servers for third-party tool access
+4. ✅ **MCP Client** — Prism connects to external MCP servers for third-party tool access
 5. 🔲 **Slash Commands** — Parameterized prompt templates with argument substitution
 
 ### Phase 3: Multi-Agent & Autonomy

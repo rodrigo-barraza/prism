@@ -41,6 +41,7 @@ import lmStudioRouter from "./routes/lm-studio.js";
 import customToolsRouter from "./routes/custom-tools.js";
 import skillsRouter from "./routes/skills.js";
 import agentMemoriesRouter from "./routes/agent-memories.js";
+import mcpServersRouter from "./routes/mcp-servers.js";
 import favoritesRouter from "./routes/favorites.js";
 import sessionsRouter from "./routes/sessions.js";
 import statsRouter from "./routes/stats.js";
@@ -75,6 +76,7 @@ const ENDPOINTS = {
     "/custom-tools",
     "/skills",
     "/agent-memories",
+    "/mcp-servers",
     "/favorites",
     "/sessions",
     "/stats",
@@ -121,6 +123,7 @@ app.use("/lm-studio", lmStudioRouter);
 app.use("/custom-tools", customToolsRouter);
 app.use("/skills", skillsRouter);
 app.use("/agent-memories", agentMemoriesRouter);
+app.use("/mcp-servers", mcpServersRouter);
 app.use("/favorites", favoritesRouter);
 app.use("/sessions", sessionsRouter);
 app.use("/stats", statsRouter);
@@ -172,6 +175,8 @@ setupWebSocket(wss);
         db.collection("synthesis").createIndex({ project: 1, username: 1, updatedAt: -1 }),
         // agent_skills
         db.collection("agent_skills").createIndex({ project: 1, username: 1 }),
+        // mcp_servers
+        db.collection("mcp_servers").createIndex({ project: 1, username: 1 }),
       ]);
       logger.success("Database indexes ensured");
     }
@@ -196,6 +201,17 @@ setupWebSocket(wss);
 
   // Initialize Change Streams (requires replica set — graceful fallback)
   await ChangeStreamService.init();
+
+  // Auto-connect enabled MCP servers
+  try {
+    const { default: MCPClientService } = await import("./services/MCPClientService.js");
+    const mcpDb = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
+    if (mcpDb) {
+      await MCPClientService.connectAllFromDB(mcpDb, "retina-agent", "admin");
+    }
+  } catch (err) {
+    logger.warn(`MCP auto-connect failed: ${err.message}`);
+  }
 
   // Initialize MinIO if all secrets are configured
   if (

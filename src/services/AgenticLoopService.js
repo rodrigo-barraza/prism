@@ -89,11 +89,23 @@ export default class AgenticLoopService {
       });
     }
 
+    // Merge MCP tools from connected servers
+    const mcpTools = ToolOrchestratorService.getMCPToolSchemas();
+    if (mcpTools.length > 0) {
+      // Strip internal metadata before passing to LLM
+      for (const t of mcpTools) {
+        const { _mcpServer, _mcpOriginalName, ...schema } = t;
+        dynamicTools.push(schema);
+      }
+      logger.info(`[AgenticLoop] Merged ${mcpTools.length} MCP tools from connected servers`);
+    }
+
     // If options.enabledTools is passed, filter out any tool not in the array
+    // MCP tools (mcp__*) are always included — managed by connect/disconnect
     let finalTools = dynamicTools;
     if (options.enabledTools && Array.isArray(options.enabledTools)) {
       const enabledSet = new Set(options.enabledTools);
-      finalTools = finalTools.filter((t) => enabledSet.has(t.name));
+      finalTools = finalTools.filter((t) => enabledSet.has(t.name) || t.name.startsWith("mcp__"));
     }
 
     // ── Native tool collision prevention ────────────────────────
