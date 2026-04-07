@@ -557,6 +557,12 @@ export default class AgenticLoopService {
                   status: hasError ? "error" : "done",
               });
 
+              // Promote browser screenshots into streamedImages so they persist
+              // into the conversation's images[] array and appear in /admin/media
+              if (res?.result?.screenshotRef) {
+                streamedImages.push(res.result.screenshotRef);
+              }
+
               // Track consecutive errors per tool for retry budgeting
               if (hasError) {
                 const count = (toolErrorCounts.get(tc.name) || 0) + 1;

@@ -2067,6 +2067,7 @@ router.get("/media", async (req, res, next) => {
           content: "$messages.content",
           images: { $ifNull: ["$messages.images", []] },
           audio: "$messages.audio",
+          toolCalls: { $ifNull: ["$messages.toolCalls", []] },
           timestamp: { $ifNull: ["$messages.timestamp", "$updatedAt"] },
           model: "$messages.model",
         },
@@ -2119,12 +2120,30 @@ router.get("/media", async (req, res, next) => {
               },
             },
           ],
+          // Extract browser screenshots from toolCalls[].result.screenshotRef
+          screenshotItems: [
+            { $unwind: "$toolCalls" },
+            { $match: { "toolCalls.result.screenshotRef": { $exists: true, $ne: null } } },
+            {
+              $project: {
+                url: "$toolCalls.result.screenshotRef",
+                mediaType: "image",
+                convId: 1,
+                convTitle: 1,
+                project: 1,
+                username: 1,
+                role: 1,
+                timestamp: 1,
+                model: 1,
+              },
+            },
+          ],
         },
       },
-      // Merge both streams
+      // Merge all streams
       {
         $project: {
-          allMedia: { $concatArrays: ["$imageItems", "$audioItems"] },
+          allMedia: { $concatArrays: ["$imageItems", "$audioItems", "$screenshotItems"] },
         },
       },
       { $unwind: "$allMedia" },
