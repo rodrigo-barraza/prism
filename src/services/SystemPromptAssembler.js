@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import ToolOrchestratorService from "./ToolOrchestratorService.js";
 import MemoryService from "./MemoryService.js";
-import { TOOLS_API_URL, WORKSPACE_ROOTS as WORKSPACE_ROOTS_RAW } from "../../secrets.js";
+import { TOOLS_API_URL, WORKSPACE_ROOT as WORKSPACE_ROOT_RAW } from "../../secrets.js";
 import logger from "../utils/logger.js";
 
 /**
@@ -11,9 +11,9 @@ import logger from "../utils/logger.js";
 const DEFAULT_TOKEN_BUDGET = 4096;
 const CHARS_PER_TOKEN = 4;
 
-/** Workspace root from secrets.js — must match tools-api WORKSPACE_ROOTS */
-const DEFAULT_WORKSPACE_ROOT = WORKSPACE_ROOTS_RAW
-  ? resolve(WORKSPACE_ROOTS_RAW.split(",")[0].trim())
+/** Workspace root from secrets.js — must match tools-api WORKSPACE_ROOT */
+const DEFAULT_WORKSPACE_ROOT = WORKSPACE_ROOT_RAW
+  ? resolve(WORKSPACE_ROOT_RAW.split(",")[0].trim())
   : resolve(process.env.HOME || "/home");
 
 /**

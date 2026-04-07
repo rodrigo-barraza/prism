@@ -236,6 +236,7 @@ export default class AgenticLoopService {
         
         let passStreamedText = "";
         let passStreamedThinking = "";
+        let passThinkingSignature = "";
         const passPendingToolCalls = [];
         const passStart = performance.now();
         let passFirstTokenTime = null;
@@ -282,6 +283,14 @@ export default class AgenticLoopService {
             streamedThinking += chunk.content;
             passStreamedThinking += chunk.content;
             emit({ type: "thinking", content: chunk.content });
+            continue;
+          }
+
+          // Thinking signature — Anthropic's cryptographic signature for thinking
+          // blocks. Must be captured and passed back verbatim for multi-turn
+          // tool use conversations to avoid API 400 errors.
+          if (chunk && typeof chunk === "object" && chunk.type === "thinking_signature") {
+            passThinkingSignature = chunk.signature;
             continue;
           }
 
@@ -543,6 +552,8 @@ export default class AgenticLoopService {
              content: passStreamedText || "",
              // Preserve thinking for multi-step reasoning continuity
              ...(passStreamedThinking && { thinking: passStreamedThinking }),
+             // Preserve the Anthropic thinking signature for API round-trip
+             ...(passThinkingSignature && { thinkingSignature: passThinkingSignature }),
              toolCalls: passPendingToolCalls.map((tc) => {
                  const match = results.find((r) => r.id === tc.id);
                  return {

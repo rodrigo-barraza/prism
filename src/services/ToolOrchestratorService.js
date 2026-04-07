@@ -148,7 +148,12 @@ async function fetchJson(url) {
   try {
     const res = await fetch(url);
     if (!res.ok) {
-      return { error: `API returned ${res.status}: ${res.statusText}` };
+      try {
+        const errBody = await res.json();
+        return { error: errBody.error || `API returned ${res.status}: ${res.statusText}` };
+      } catch {
+        return { error: `API returned ${res.status}: ${res.statusText}` };
+      }
     }
     return await res.json();
   } catch (err) {

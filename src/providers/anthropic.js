@@ -64,9 +64,15 @@ function prepareMessages(messages) {
       // Convert assistant messages with toolCalls to multi-part content
       if (m.role === "assistant" && m.toolCalls?.length > 0) {
         const contentBlocks = [];
-        // Preserve thinking blocks for multi-step reasoning continuity
+        // Preserve thinking blocks for multi-step reasoning continuity.
+        // The signature field is REQUIRED by Anthropic's API for multi-turn
+        // conversations — without it the API returns a 400.
         if (m.thinking) {
-          contentBlocks.push({ type: "thinking", thinking: m.thinking });
+          contentBlocks.push({
+            type: "thinking",
+            thinking: m.thinking,
+            ...(m.thinkingSignature && { signature: m.thinkingSignature }),
+          });
         }
         if (rest.content?.trim()) {
           contentBlocks.push({ type: "text", text: rest.content });
@@ -607,6 +613,14 @@ const anthropicProvider = {
           // Thinking delta
           if (chunk.delta.type === "thinking_delta") {
             yield { type: "thinking", content: chunk.delta.thinking };
+            continue;
+          }
+          // Signature delta — Anthropic sends the thinking block's cryptographic
+          // signature as a separate delta event. This MUST be captured and passed
+          // back verbatim in multi-turn conversations, otherwise the API rejects
+          // the request with a 400.
+          if (chunk.delta.type === "signature_delta") {
+            yield { type: "thinking_signature", signature: chunk.delta.signature };
             continue;
           }
           // Text delta

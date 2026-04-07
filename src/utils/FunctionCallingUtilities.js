@@ -89,6 +89,9 @@ export function expandMessagesForFC(messages, { filterDeleted = true } = {}) {
       const assistantMsg = {
         role: "assistant",
         content: m.content?.trim() || null,
+        // Preserve thinking + signature for Anthropic multi-turn round-trips
+        ...(m.thinking && { thinking: m.thinking }),
+        ...(m.thinkingSignature && { thinkingSignature: m.thinkingSignature }),
         toolCalls: m.toolCalls.map((tc) => ({
           id: tc.id,
           name: tc.name,

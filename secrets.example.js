@@ -50,7 +50,7 @@ export const MINIO_BUCKET_NAME = '';
 // Workspace Root (auto-detected from $HOME if not set)
 // Override if your projects live in a non-standard location.
 // Example: '/home/youruser/projects/sun'
-export const WORKSPACE_ROOTS = '';
+export const WORKSPACE_ROOT = '';
 
 // Tools API
 export const TOOLS_API_URL = 'http://localhost:5590';
