@@ -541,7 +541,7 @@ export default class AgenticLoopService {
                    return { name: tc.name, id: tc.id, result };
                }
 
-               const result = await ToolOrchestratorService.executeTool(tc.name, tc.args);
+               const result = await ToolOrchestratorService.executeTool(tc.name, tc.args, { project, username });
                await hooks.run("afterToolCall", tc, result, ctx);
                return { name: tc.name, id: tc.id, result };
             })

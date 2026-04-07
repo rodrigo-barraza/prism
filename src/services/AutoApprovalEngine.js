@@ -36,6 +36,7 @@ const DEFAULT_TIER_MAP = {
   patch_file: APPROVAL_TIERS.WRITE,
   move_file: APPROVAL_TIERS.WRITE,
   delete_file: APPROVAL_TIERS.WRITE,
+  browser_action: APPROVAL_TIERS.WRITE,
 
   // Tier 3 — destructive / arbitrary execution
   execute_shell: APPROVAL_TIERS.DANGER,

@@ -236,12 +236,29 @@ export default class ToolOrchestratorService {
     return initialized;
   }
 
-  static async executeTool(name, args = {}) {
+  static async executeTool(name, args = {}, ctx = {}) {
     // Route MCP tools to MCPClientService
     if (MCPClientService.isMCPTool(name)) {
       return ToolOrchestratorService.executeMCPTool(name, args);
     }
-    return executeToolGeneric(name, args);
+
+    const result = await executeToolGeneric(name, args);
+
+    // Post-process: upload browser screenshots to MinIO
+    if (name === "browser_action" && result.screenshot && !result.error) {
+      try {
+        const FileService = (await import("./FileService.js")).default;
+        const dataUrl = `data:${result.mimeType || "image/png"};base64,${result.screenshot}`;
+        const { ref } = await FileService.uploadFile(dataUrl, "screenshots", ctx.project, ctx.username);
+        result.screenshotRef = ref;
+        delete result.screenshot; // Don't send base64 downstream
+      } catch (err) {
+        logger.warn(`[ToolOrchestrator] Screenshot MinIO upload failed: ${err.message}`);
+        // Keep base64 as fallback if MinIO fails
+      }
+    }
+
+    return result;
   }
 
   /**
