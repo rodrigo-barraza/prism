@@ -152,6 +152,7 @@ export default class AgenticLoopService {
       await hooks.run("beforePrompt", {
         messages: planningMessages,
         project,
+        username,
         enabledTools: options.enabledTools,
       });
 
@@ -227,11 +228,22 @@ export default class AgenticLoopService {
 
         // ── beforePrompt hook: inject dynamic context ─────────
         if (iterations === 1) {
-          await hooks.run("beforePrompt", {
+          const hookCtx = {
             messages: currentMessages,
             project,
+            username,
             enabledTools: options.enabledTools,
-          });
+          };
+          await hooks.run("beforePrompt", hookCtx);
+
+          // Emit which skills were injected (set by SystemPromptAssembler)
+          if (hookCtx._injectedSkills?.length > 0) {
+            emit({
+              type: "status",
+              message: "skills_injected",
+              skills: hookCtx._injectedSkills,
+            });
+          }
         }
         
         let passStreamedText = "";

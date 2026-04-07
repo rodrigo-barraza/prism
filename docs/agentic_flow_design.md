@@ -13,18 +13,18 @@ The Retina Agent executes a robust 11-step loop for every user interaction, buil
 1. ✅ **User Input**: Captures input from the Retina UI via WebSocket (`/ws/chat`). Prism's `handleWsChat` handler receives JSON payloads and delegates to `handleChat()`.
 2. ✅ **Message Creation**: Wraps text into standard LLM message formats via `expandMessagesForFC()`, normalizing across providers (OpenAI, Anthropic, Google, local).
 3. ✅ **History Append**: Appends to a fast, in-memory `currentMessages` array within `AgenticLoopService`, backed by MongoDB persistence via `finalizeTextGeneration()` at loop end.
-4. 🔲 **System Prompt Assembly**: Dynamically builds the system prompt server-side. This is the **primary architectural gap** — Prism currently passes client messages unmodified. The assembly pipeline must:
-   - Load project-scoped memory from MongoDB (generalized `MemoryService`)
-   - Inject enabled tool schemas from `ToolOrchestratorService`
-   - Inject directory/file tree context from `tools-api`
-   - Append user persona / system prompt from Retina settings
-   - Apply token-budget–aware truncation to stay within context limits
+4. ✅ **System Prompt Assembly**: Dynamically builds the system prompt server-side via `SystemPromptAssembler`, registered as a `beforePrompt` hook in `AgentHooks`. The assembly pipeline:
+   - ✅ Loads project-scoped memory from MongoDB via `AgentMemoryService` (embedding-based search)
+   - ✅ Injects enabled tool schemas from `ToolOrchestratorService` (domain-grouped with parameter details)
+   - ✅ Injects directory/file tree context from `tools-api` (cached 1 minute)
+   - ✅ Injects environment info (date/time, OS, workspace)
+   - 🔲 Apply token-budget–aware truncation to stay within context limits
 5. ✅ **API Streaming**: Starts a streaming connection via `provider.generateTextStream()` or `provider.generateTextStreamLive()` for Live API models.
 6. ✅ **Token Parsing**: Chunk processing loop handles: `text`, `thinking`, `toolCall`, `image`, `executableCode`, `codeExecutionResult`, `webSearchResult`, `audio`, and `status` chunk types.
-7. ✅ **Tool Detection**: Resolves tool call chunks, including native MCP pass-through for LM Studio (`chunk.native === true`). Pre-flight permission checks are **not yet implemented** (see Auto-Approval Engine below).
+7. ✅ **Tool Detection**: Resolves tool call chunks, including native MCP pass-through for LM Studio (`chunk.native === true`). Pre-flight permission checks are implemented via `AutoApprovalEngine` (three-tier system with `beforeToolCall` hook).
 8. ✅ **Tool Loop**: Collects `passPendingToolCalls`, executes via `Promise.all`, appends results to context, and re-prompts the LLM automatically. Capped at `MAX_TOOL_ITERATIONS = 10`.
 9. ✅ **Response Rendering**: Flushes final text to the WebSocket via `emit({ type: "chunk", content })`.
-10. 🔲 **Post-Sampling Hooks**: Background processes for token compaction and memory extraction. Not yet implemented — `MemoryService` exists but is Discord-specific and not wired into the agentic loop.
+10. ✅ **Post-Sampling Hooks**: Background processes for memory extraction via `SessionSummarizer`, registered as an `afterResponse` hook. Uses Claude Haiku to extract 4-type memories (user, feedback, project, reference) and stores via `AgentMemoryService`. Token compaction is 🔲.
 11. ✅ **Await Input**: The WebSocket connection stays open for the next message.
 
 ---
@@ -33,7 +33,7 @@ The Retina Agent executes a robust 11-step loop for every user interaction, buil
 
 Concrete software patterns for building and extending Prism's agent loop:
 
-### 🔲 Unified Extensions & Hooks System
+### ✅ Unified Extensions & Hooks System
 The core logic must use an event-based hook system wrapping the `AgenticLoopService` while loop. Lifecycle events include:
 
 | Event | Fires When | Use Case |
@@ -54,18 +54,18 @@ Implementation: `EventEmitter`-based, registered via a plugin array in `AgenticL
 
 All use POST + SSE streaming with 65s timeout, stdout/stderr separation, and exit code tracking. **Remaining gap**: PID/process-tree killing for runaway server processes needs hardening in `tools-api`.
 
-### 🔲 Skills System
-Agent capabilities stored as Markdown files with YAML frontmatter (`name`, `description`), scanned from the project directory at prompt assembly time. This plugs into the **System Prompt Assembly** pipeline (Step 4) — skills are injected as context blocks into the system prompt, not as tools.
+### ✅ Skills System
+Database-backed per-project skills stored in `agent_skills` MongoDB collection. Full CRUD via REST API (`/skills`), managed through the **SkillsPanel** tab in Retina's Agent page. `SystemPromptAssembler.fetchSkills()` queries enabled skills and injects them as `## Project Skills` context blocks into the system prompt. `AgenticLoopService` emits a `skills_injected` status event listing loaded skill names for the UI. **Files**: `prism/src/routes/skills.js`, `SystemPromptAssembler.js`, `retina/src/components/SkillsPanel.js`.
 
 ### 🔲 Prompt Templates & Slash Commands
 Parameterized slash commands using bash-style argument substitution (`$1`, `$@`, `${@:start}`). Implementation lives in Retina's `ChatArea` component, expanding templates before sending to Prism.
 
-### ⚠️ Tool Rendering Registry (Partial)
-Retina has `ToolCardComponent` for rendering tool results, but cards are hardcoded per tool name. Needs refactoring into a registry pattern where each tool type registers its own renderer:
-- File tools → diff viewer
+### ✅ Tool Rendering Registry
+Retina has `ToolResultRenderers.js` (624 lines) — a registry-based architecture where each tool type registers its own specialized renderer. Integrated into `MessageList.js` via `ToolResultView`. Includes:
+- File tools → diff viewer with syntax highlighting
 - Shell tools → terminal output panel with ANSI color support
-- Search tools → result cards with links
-- Browser tools → screenshot previews
+- Search tools → result cards with file links
+- Git tools → status/diff/log renderers
 
 ---
 
@@ -98,15 +98,15 @@ Additionally, custom tools can be defined per-project in MongoDB (`custom_tools`
 ### ✅ Bridge Mode (Already Implemented)
 Retina (Web UI) connects to Prism (local gateway) over WebSocket. This is the existing architecture — Retina issues requests, Prism executes tools locally, streams results back. No additional work needed beyond hardening the connection lifecycle (reconnection, session resumption).
 
-### 🔲 UltraPlan (Planning Mode)
+### ✅ UltraPlan (Planning Mode)
 For tasks requiring extensive reasoning, the agent enters a dedicated planning loop:
-1. Retina UI toggle activates "Plan First" mode
-2. Prism injects a planning-specific system prompt that forces structured plan output
-3. Plan is presented to the user in Retina for review/approval
-4. Only after explicit approval does execution begin
-5. Plan steps are tracked as a checklist with progress updates
+1. ✅ Retina UI toggle activates "Plan First" mode (`planFirst` state in `AgentComponent`)
+2. ✅ Prism injects a planning-specific system prompt via `PlanningModeService.preparePlanningPass()` — tools stripped
+3. ✅ Plan is presented to the user in Retina via `PlanCardComponent` for review/approval
+4. ✅ Only after explicit approval does execution begin (120s timeout, registry-based approval via `resolveApproval`)
+5. ✅ Approved plan injected as context via `PlanningModeService.buildExecutionMessages()`
 
-**Implementation**: Retina UI flag → Prism wraps the first LLM call with a planning system prompt → response rendered as an approval card → approved plan injected as context for execution calls.
+**Implementation**: Retina UI flag → Prism wraps the first LLM call with a planning system prompt → response rendered via `PlanCardComponent` → approved plan injected as context for execution calls.
 
 ### 🔲 Coordinator Mode (Multi-Agent Orchestration)
 Retina can act as a manager, breaking a complex task into pieces and spawning parallel worker agents. **Scoped to a single concrete use case**: fan-out a refactoring task across N files in isolated git worktrees, then merge results.
@@ -116,16 +116,10 @@ Retina can act as a manager, breaking a complex task into pieces and spawning pa
 - Results are merged via git and presented as a unified diff for review
 - **Requires**: Mutation Queue (file-write serialization) to prevent conflicts
 
-### 🔲 Persistent Memory (Two-Phase)
+### ⚠️ Persistent Memory (Two-Phase)
 
-**Phase A — Session Summarization** (lower complexity):
-On conversation close, Prism runs a background extraction pass over the conversation history using a fast model (e.g., `claude-haiku`). Extracts:
-- Key decisions made
-- Files modified and why
-- Unresolved issues / TODOs
-- User preferences observed
-
-Stored as project-scoped memory in MongoDB via a generalized `MemoryService` (stripped of current Discord-specific fields like `guildId`, `channelId`).
+**Phase A — Session Summarization** ✅:
+`SessionSummarizer` runs as a fire-and-forget `afterResponse` hook, extracting memories via `claude-haiku-4-5` into a 4-type taxonomy (user, feedback, project, reference). Stored in `agent_memories` collection via `AgentMemoryService` with embedding-based duplicate detection (cosine similarity > 0.92 = skip). Memories include staleness caveats and age metadata for prompt injection.
 
 **Phase B — Auto-Dream** (higher complexity, deferred):
 Between sessions, a background inference loop reviews accumulated session summaries, identifies patterns, and consolidates knowledge into project-specific skill/memory files. Requires careful cost management to avoid burning API credits on low-value consolidation.
@@ -134,7 +128,7 @@ Between sessions, a background inference loop reviews accumulated session summar
 
 ## 5. Permissions & Safety
 
-### 🔲 Auto-Approval Engine (Three-Tier System)
+### ✅ Auto-Approval Engine (Three-Tier System)
 A **rule-based** permission system for tool execution, replacing the need for expensive LLM-based classification:
 
 | Tier | Risk | Tools | Behavior |
@@ -143,9 +137,9 @@ A **rule-based** permission system for tool execution, replacing the need for ex
 | **Tier 2: Configurable** | Write | `write_file`, `str_replace_file`, `patch_file` | Auto-approve when user enables "Auto Mode" toggle; otherwise prompt |
 | **Tier 3: Always Prompt** | Destructive / Arbitrary | `execute_shell`, `execute_python`, `execute_javascript`, delete operations | Always require explicit user approval |
 
-**Implementation**: Integrated via the `BeforeToolCall` event hook. Tier assignments stored in project config. Users can promote/demote tools between tiers in Retina settings.
+**Implementation**: ✅ Integrated via the `beforeToolCall` hook in `AgentHooks`. Default tier assignments in `AutoApprovalEngine.js`. Unknown tools default to Tier 2. `ApprovalCardComponent` renders approval UI in Retina. 🔲 Per-tool tier overrides in Retina settings UI not yet built (constructor accepts `tierOverrides` but no UI exposes it).
 
-**Escape hatch**: A per-session "Full Auto" toggle (accessible behind a confirmation dialog) promotes all tools to Tier 1 for power users who want zero interruptions.
+**Escape hatch**: ✅ `fullAuto` mode (via `options.autoApprove`) promotes all tools to Tier 1. 🔲 Retina confirmation dialog for activating Full Auto not yet implemented.
 
 ---
 
@@ -153,20 +147,20 @@ A **rule-based** permission system for tool execution, replacing the need for ex
 
 Principles to avoid common pitfalls seen in rigid agent codebases:
 
-### ⚠️ Explicit State Machines over Ad-Hoc Control Flow
-The current `AgenticLoopService` is a clean `while` loop with structured chunk types — no regex parsing of LLM output. To maintain this as complexity grows, formalize the loop states into an explicit finite state machine:
+### ✅ Explicit State Machines over Ad-Hoc Control Flow
+The `AgenticLoopService` implements a structured loop with clear state transitions via hooks and iteration tracking:
 
 ```
-IDLE → ASSEMBLING → STREAMING → TOOL_EXECUTING → STREAMING → ... → FINALIZING → IDLE
+IDLE → ASSEMBLING (beforePrompt) → STREAMING → TOOL_GATING (beforeToolCall/approval) → TOOL_EXECUTING → afterToolCall → STREAMING → ... → FINALIZING (afterResponse) → IDLE
 ```
 
-This prevents the loop from accumulating defensive edge-case handling as new features (planning mode, auto-approval, etc.) are added.
+Planning mode adds a pre-loop state: `PLANNING → PLAN_APPROVAL → EXECUTING`. The `isGenerating` flag and `finally` cleanup ensure clean state transitions even on errors/aborts.
 
 ### ✅ Raw Token Integrity
 Prism streams raw chunks (`emit({ type: "chunk", content })`) without transformation. All rendering (markdown, syntax highlighting, ANSI colors) happens client-side in Retina. This separation must be maintained — Prism should never mutate token content.
 
-### ⚠️ Memory as a First-Class Citizen
-`MemoryService` exists with embedding-based storage and cosine similarity search, but is currently Discord-oriented (`guildId`, `aboutUserId`). Needs generalization to project/session scoping and integration into the System Prompt Assembly pipeline.
+### ✅ Memory as a First-Class Citizen
+`AgentMemoryService` is a fully generalized project-scoped memory system (stripped of Discord-specific fields). Uses embedding-based storage with cosine similarity search, 4-type taxonomy (user, feedback, project, reference), duplicate detection, and staleness caveats. Integrated into `SystemPromptAssembler.fetchMemories()` — relevant memories are injected into the system prompt on every agentic loop iteration.
 
 ### ✅ Client-Server Tool Decoupling
 `ToolOrchestratorService` dynamically fetches schemas from `tools-api` at boot and proxies execution. Tool definitions live entirely in `tools-api` — Prism is transport-agnostic. This decoupling allows `tools-api` to add new tools without Prism changes.
@@ -175,19 +169,19 @@ Prism streams raw chunks (`emit({ type: "chunk", content })`) without transforma
 
 ## Strategic Roadmap for Prism & Retina
 
-### Phase 1: Foundation & Planning
-1. **Event Hook System** — Lifecycle events (`BeforePrompt`, `BeforeToolCall`, `AfterToolCall`, `AfterResponse`, `OnError`) wrapping the `AgenticLoopService` while loop via `EventEmitter`
-2. **Dynamic System Prompt Assembly** — Server-side composition pipeline: tool schemas + project context + memory + user persona, with token-budget truncation
-3. **Auto-Approval Engine** — Rule-based three-tier permission system integrated via `BeforeToolCall` hook
-4. **UltraPlan Mode** — Retina UI toggle forcing plan → approve → execute workflow
-5. **Session Summarization** — Automatic conversation summary extraction on close, stored as project memory
+### Phase 1: Foundation & Planning ✅ COMPLETE
+1. ✅ **Event Hook System** — `AgentHooks` (`EventEmitter`-based) with `beforePrompt`, `beforeToolCall`, `afterToolCall`, `afterResponse`, `onError` lifecycle events
+2. ✅ **Dynamic System Prompt Assembly** — `SystemPromptAssembler`: tool schemas + project context + directory tree + environment + memory. 🔲 Token-budget truncation
+3. ✅ **Auto-Approval Engine** — `AutoApprovalEngine`: three-tier system with `beforeToolCall` hook + `ApprovalCardComponent` UI
+4. ✅ **UltraPlan Mode** — `PlanningModeService` + `PlanCardComponent`: plan → approve → execute workflow
+5. ✅ **Session Summarization** — `SessionSummarizer` + `AgentMemoryService`: Claude Haiku extraction → 4-type memory taxonomy → MongoDB
 
-### Phase 2: Memory & Extensibility
-1. **Generalized MemoryService** — Strip Discord-specific fields, add project/session scoping, wire into System Prompt Assembly
-2. **Skills System** — Markdown skill files scanned from project directory, injected into system prompt
-3. **Tool Rendering Registry** — Retina-side dynamic tool card rendering by type
-4. **MCP Client** — Prism connects to external MCP servers for third-party tool access
-5. **Slash Commands** — Parameterized prompt templates with argument substitution
+### Phase 2: Memory & Extensibility (3/5 complete)
+1. ✅ **Generalized MemoryService** — `AgentMemoryService`: project-scoped, embedding-based, 4-type taxonomy, duplicate detection, wired into `SystemPromptAssembler`
+2. 🔲 **Skills System** — Markdown skill files scanned from project directory, injected into system prompt
+3. ✅ **Tool Rendering Registry** — `ToolResultRenderers.js`: registry-based rendering with specialized components per tool domain
+4. 🔲 **MCP Client** — Prism connects to external MCP servers for third-party tool access
+5. 🔲 **Slash Commands** — Parameterized prompt templates with argument substitution
 
 ### Phase 3: Multi-Agent & Autonomy
 1. **Coordinator Mode** — Parallel file refactoring with git worktree isolation, scoped to fan-out/merge pattern

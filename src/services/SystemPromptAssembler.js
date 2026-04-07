@@ -1,7 +1,8 @@
 import { resolve } from "node:path";
 import ToolOrchestratorService from "./ToolOrchestratorService.js";
 import AgentMemoryService from "./AgentMemoryService.js";
-import { TOOLS_API_URL, WORKSPACE_ROOT as WORKSPACE_ROOT_RAW } from "../../secrets.js";
+import MongoWrapper from "../wrappers/MongoWrapper.js";
+import { TOOLS_API_URL, WORKSPACE_ROOT as WORKSPACE_ROOT_RAW, MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 
 
@@ -174,7 +175,31 @@ export default class SystemPromptAssembler {
     }
   }
 
+  /**
+   * Fetch enabled skills for a project from MongoDB.
+   *
+   * @param {string} project - Project identifier
+   * @param {string} username - Username
+   * @returns {Promise<Array<{ name: string, content: string }>>}
+   */
+  async fetchSkills(project, username) {
+    try {
+      const client = MongoWrapper.getClient(MONGO_DB_NAME);
+      if (!client) return [];
 
+      const skills = await client
+        .db(MONGO_DB_NAME)
+        .collection("agent_skills")
+        .find({ project, username, enabled: true })
+        .project({ name: 1, content: 1, description: 1 })
+        .toArray();
+
+      return skills;
+    } catch (err) {
+      logger.warn(`[SystemPromptAssembler] Skills fetch error: ${err.message}`);
+      return [];
+    }
+  }
 
   /**
    * Assemble the complete agent system prompt.
@@ -188,9 +213,10 @@ export default class SystemPromptAssembler {
    *
    * @param {object} ctx - Request context
    * @param {string} ctx.project - Project identifier
+   * @param {string} ctx.username - Username
    * @param {Array} ctx.messages - Current messages array
    * @param {Array} [ctx.enabledTools] - Enabled tool names
-   * @returns {Promise<string>} Complete system prompt
+   * @returns {Promise<{ prompt: string, skillNames: string[] }>} Complete system prompt + skill names for UI emission
    */
   async assemble(ctx) {
     const sections = [];
@@ -237,7 +263,18 @@ export default class SystemPromptAssembler {
       sections.push(`## Project Structure\n` + dirTree);
     }
 
-    // ── 6. Session Memory ────────────────────────────────────────
+    // ── 6. Project Skills ─────────────────────────────────────────
+    const skills = await this.fetchSkills(ctx.project, ctx.username);
+    const skillNames = [];
+    if (skills.length > 0) {
+      const skillBlocks = skills.map((s) => {
+        skillNames.push(s.name);
+        return `### ${s.name}\n${s.content}`;
+      });
+      sections.push(`## Project Skills (${skills.length})\n` + skillBlocks.join("\n\n"));
+    }
+
+    // ── 7. Session Memory ────────────────────────────────────────
     const lastUserMsg = [...(ctx.messages || [])]
       .reverse()
       .find((m) => m.role === "user");
@@ -250,7 +287,7 @@ export default class SystemPromptAssembler {
       }
     }
 
-    return sections.join("\n\n");
+    return { prompt: sections.join("\n\n"), skillNames };
   }
 
   /**
@@ -265,8 +302,11 @@ export default class SystemPromptAssembler {
   createHook() {
     return async (ctx) => {
       try {
-        const systemPrompt = await this.assemble(ctx);
+        const { prompt: systemPrompt, skillNames } = await this.assemble(ctx);
         if (!systemPrompt) return;
+
+        // Expose skill names on ctx for downstream emission
+        ctx._injectedSkills = skillNames;
 
         // Replace existing system message or prepend a new one
         const systemIdx = ctx.messages?.findIndex((m) => m.role === "system");
@@ -277,7 +317,7 @@ export default class SystemPromptAssembler {
         }
 
         logger.info(
-          `[SystemPromptAssembler] Assembled ${systemPrompt.length} char system prompt`,
+          `[SystemPromptAssembler] Assembled ${systemPrompt.length} char system prompt (${skillNames.length} skills)`,
         );
       } catch (err) {
         logger.error(`[SystemPromptAssembler] Assembly failed: ${err.message}`);

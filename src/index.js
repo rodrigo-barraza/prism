@@ -39,6 +39,7 @@ import mediaRouter from "./routes/media.js";
 import textRouter from "./routes/text.js";
 import lmStudioRouter from "./routes/lm-studio.js";
 import customToolsRouter from "./routes/custom-tools.js";
+import skillsRouter from "./routes/skills.js";
 import favoritesRouter from "./routes/favorites.js";
 import sessionsRouter from "./routes/sessions.js";
 import statsRouter from "./routes/stats.js";
@@ -71,6 +72,7 @@ const ENDPOINTS = {
     "/text",
     "/lm-studio",
     "/custom-tools",
+    "/skills",
     "/favorites",
     "/sessions",
     "/stats",
@@ -115,6 +117,7 @@ app.use("/media", mediaRouter);
 app.use("/text", textRouter);
 app.use("/lm-studio", lmStudioRouter);
 app.use("/custom-tools", customToolsRouter);
+app.use("/skills", skillsRouter);
 app.use("/favorites", favoritesRouter);
 app.use("/sessions", sessionsRouter);
 app.use("/stats", statsRouter);
@@ -164,6 +167,8 @@ setupWebSocket(wss);
         // synthesis
         db.collection("synthesis").createIndex({ id: 1 }, { unique: true }),
         db.collection("synthesis").createIndex({ project: 1, username: 1, updatedAt: -1 }),
+        // agent_skills
+        db.collection("agent_skills").createIndex({ project: 1, username: 1 }),
       ]);
       logger.success("Database indexes ensured");
     }
