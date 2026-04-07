@@ -164,7 +164,13 @@ async function fetchJsonPost(url, body) {
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      return { error: `API returned ${res.status}: ${res.statusText}` };
+      // Forward the actual error body from tools-api for debugging
+      try {
+        const errBody = await res.json();
+        return { error: errBody.error || `API returned ${res.status}: ${res.statusText}` };
+      } catch {
+        return { error: `API returned ${res.status}: ${res.statusText}` };
+      }
     }
     return await res.json();
   } catch (err) {
