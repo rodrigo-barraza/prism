@@ -4,7 +4,7 @@ import { getProvider } from "../providers/index.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 
-const COLLECTION = "memories";
+const LUPOS_COLLECTION = "lupos_memories";
 const EMBEDDING_PROVIDER = "google";
 const EMBEDDING_MODEL = "gemini-embedding-2-preview";
 const EXTRACTION_PROVIDER = "anthropic";
@@ -161,7 +161,7 @@ const MemoryService = {
     if (!client) throw new Error("Database not available");
 
     const db = client.db(MONGO_DB_NAME);
-    const collection = db.collection(COLLECTION);
+    const collection = db.collection(LUPOS_COLLECTION);
 
     // Extract facts from the conversation via AI
     const facts = await extractFactsFromConversation(messages, participants);
@@ -280,7 +280,7 @@ const MemoryService = {
     if (!client) throw new Error("Database not available");
 
     const db = client.db(MONGO_DB_NAME);
-    const collection = db.collection(COLLECTION);
+    const collection = db.collection(LUPOS_COLLECTION);
 
     // Generate embedding for the search query
     const queryEmbedding = await generateEmbedding(queryText);
@@ -346,7 +346,7 @@ const MemoryService = {
     if (!client) throw new Error("Database not available");
 
     const db = client.db(MONGO_DB_NAME);
-    const collection = db.collection(COLLECTION);
+    const collection = db.collection(LUPOS_COLLECTION);
 
     const filter = { guildId, aboutUserId: userId };
 
@@ -374,166 +374,28 @@ const MemoryService = {
     if (!client) throw new Error("Database not available");
 
     const db = client.db(MONGO_DB_NAME);
-    const collection = db.collection(COLLECTION);
+    const collection = db.collection(LUPOS_COLLECTION);
 
     const result = await collection.deleteOne({ id: memoryId });
     return result.deletedCount > 0;
   },
 
-  // ────────────────────────────────────────────────────────────
-  // Project-scoped methods (for agentic coding sessions)
-  // ────────────────────────────────────────────────────────────
-
   /**
-   * Search for relevant memories by project using cosine similarity.
-   *
-   * @param {object} params
-   * @param {string} params.project - Project identifier
-   * @param {string} params.queryText - Text to search for
-   * @param {number} [params.limit=10]
-   * @returns {Promise<Array>} Relevant memories sorted by relevance
-   */
-  async searchByProject({ project, queryText, limit = 10 }) {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) return [];
-
-    const db = client.db(MONGO_DB_NAME);
-    const collection = db.collection(COLLECTION);
-
-    let queryEmbedding;
-    try {
-      queryEmbedding = await generateEmbedding(queryText);
-    } catch (err) {
-      logger.warn(`[MemoryService] Embedding generation failed for project search: ${err.message}`);
-      return [];
-    }
-
-    const memories = await collection
-      .find(
-        { project },
-        {
-          projection: {
-            embedding: 1,
-            fact: 1,
-            category: 1,
-            confidence: 1,
-            createdAt: 1,
-            username: 1,
-          },
-        },
-      )
-      .toArray();
-
-    if (memories.length === 0) return [];
-
-    const scored = memories
-      .filter((m) => m.embedding && m.embedding.length > 0)
-      .map((m) => ({
-        id: m._id,
-        fact: m.fact,
-        category: m.category,
-        confidence: m.confidence,
-        createdAt: m.createdAt,
-        score: cosineSimilarity(queryEmbedding, m.embedding),
-      }))
-      .filter((m) => m.score > 0.3)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit);
-
-    logger.info(
-      `[MemoryService] Project search found ${scored.length} relevant memories (from ${memories.length} total)`,
-    );
-
-    return scored;
-  },
-
-  /**
-   * Store pre-extracted facts as project-scoped memories.
-   *
-   * @param {object} params
-   * @param {string} params.project - Project identifier
-   * @param {string} params.username - Who generated these facts
-   * @param {Array} params.facts - Array of { fact, category, confidence }
-   * @param {string} [params.conversationId] - Source conversation
-   * @returns {Promise<Array>} Stored memory documents
-   */
-  async extractAndStoreForProject({ project, username, facts, conversationId }) {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) throw new Error("Database not available");
-
-    const db = client.db(MONGO_DB_NAME);
-    const collection = db.collection(COLLECTION);
-
-    if (!facts || facts.length === 0) return [];
-
-    const storedMemories = [];
-    const now = new Date().toISOString();
-
-    for (const fact of facts) {
-      try {
-        const newEmbedding = await generateEmbedding(fact.fact);
-
-        // Check for duplicates within the same project
-        const existingMemories = await collection
-          .find({ project })
-          .project({ embedding: 1 })
-          .toArray();
-
-        const isDuplicate = existingMemories.some((existing) => {
-          if (!existing.embedding) return false;
-          return cosineSimilarity(newEmbedding, existing.embedding) > 0.92;
-        });
-
-        if (isDuplicate) {
-          logger.info(
-            `[MemoryService] Skipping duplicate project fact: "${fact.fact.substring(0, 60)}..."`,
-          );
-          continue;
-        }
-
-        const memory = {
-          id: crypto.randomUUID(),
-          project,
-          username,
-          fact: fact.fact,
-          category: fact.category || "context",
-          embedding: newEmbedding,
-          confidence: fact.confidence,
-          conversationId: conversationId || null,
-          createdAt: now,
-          updatedAt: now,
-        };
-
-        await collection.insertOne(memory);
-        storedMemories.push(memory);
-        logger.info(
-          `[MemoryService] Stored project fact: "${fact.fact.substring(0, 60)}..." (${fact.category})`,
-        );
-      } catch (err) {
-        logger.error(`[MemoryService] Failed to store project fact: ${err.message}`);
-      }
-    }
-
-    return storedMemories;
-  },
-
-  /**
-   * Ensure indexes exist on the memories collection.
+   * Ensure indexes exist on the lupos_memories collection.
    */
   async ensureIndexes() {
     const client = MongoWrapper.getClient(MONGO_DB_NAME);
     if (!client) return;
 
     const db = client.db(MONGO_DB_NAME);
-    const collection = db.collection(COLLECTION);
+    const luposCol = db.collection(LUPOS_COLLECTION);
 
-    await collection.createIndex({ guildId: 1, aboutUserId: 1 });
-    await collection.createIndex({ guildId: 1 });
-    await collection.createIndex({ project: 1 });
-    await collection.createIndex({ id: 1 }, { unique: true });
-    logger.info("[MemoryService] Indexes ensured on memories collection.");
+    await luposCol.createIndex({ guildId: 1, aboutUserId: 1 });
+    await luposCol.createIndex({ guildId: 1 });
+    await luposCol.createIndex({ id: 1 }, { unique: true });
+
+    logger.info("[MemoryService] Indexes ensured on lupos_memories collection.");
   },
 };
 
 export default MemoryService;
-

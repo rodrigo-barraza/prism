@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import ToolOrchestratorService from "./ToolOrchestratorService.js";
-import MemoryService from "./MemoryService.js";
+import AgentMemoryService from "./AgentMemoryService.js";
 import { TOOLS_API_URL, WORKSPACE_ROOT as WORKSPACE_ROOT_RAW } from "../../secrets.js";
 import logger from "../utils/logger.js";
 
@@ -144,7 +144,7 @@ export default class SystemPromptAssembler {
    */
   async fetchMemories(project, queryText, limit = 5) {
     try {
-      const memories = await MemoryService.searchByProject({
+      const memories = await AgentMemoryService.search({
         project,
         queryText,
         limit,
@@ -152,10 +152,7 @@ export default class SystemPromptAssembler {
 
       if (!memories || memories.length === 0) return "";
 
-      const lines = memories.map(
-        (m) => `- ${m.fact} (${m.category || "general"}, relevance: ${(m.score * 100).toFixed(0)}%)`,
-      );
-      return lines.join("\n");
+      return AgentMemoryService.formatForPrompt(memories);
     } catch (err) {
       logger.warn(`[SystemPromptAssembler] Memory fetch error: ${err.message}`);
       return "";

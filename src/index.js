@@ -32,6 +32,7 @@ import conversationsRouter from "./routes/conversations.js";
 import filesRouter from "./routes/files.js";
 import memoryRouter from "./routes/memory.js";
 import MemoryService from "./services/MemoryService.js";
+import AgentMemoryService from "./services/AgentMemoryService.js";
 import adminRouter from "./routes/admin.js";
 import workflowsRouter from "./routes/workflows.js";
 import mediaRouter from "./routes/media.js";
@@ -132,6 +133,7 @@ setupWebSocket(wss);
 (async () => {
   await MongoWrapper.createClient(MONGO_DB_NAME, MONGO_URI);
   await MemoryService.ensureIndexes();
+  await AgentMemoryService.ensureIndexes();
 
   // ── Ensure collection indexes ──────────────────────────────────
   // Critical for $lookup aggregation performance (conversations ↔ requests).
