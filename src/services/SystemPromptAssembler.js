@@ -11,10 +11,10 @@ import logger from "../utils/logger.js";
 const DEFAULT_TOKEN_BUDGET = 4096;
 const CHARS_PER_TOKEN = 4;
 
-/** Derive workspace root from secrets.js WORKSPACE_ROOTS — matches AgenticFileService ALLOWED_ROOTS */
+/** Workspace root from secrets.js — must match tools-api WORKSPACE_ROOTS */
 const DEFAULT_WORKSPACE_ROOT = WORKSPACE_ROOTS_RAW
   ? resolve(WORKSPACE_ROOTS_RAW.split(",")[0].trim())
-  : resolve(process.env.HOME || "/home", "development/sun");
+  : resolve(process.env.HOME || "/home");
 
 /**
  * SystemPromptAssembler — dynamically injects project context, tool schemas,
