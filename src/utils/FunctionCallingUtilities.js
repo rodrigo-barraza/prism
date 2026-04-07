@@ -131,6 +131,8 @@ export function expandMessagesForFC(messages, { filterDeleted = true } = {}) {
     }
 
     // Standard message — include all media fields (images, video, audio, pdf)
+    // Preserve thinking + thinkingSignature on assistant messages so Anthropic
+    // can receive them back in multi-turn conversations (required by their API).
     return [
       {
         role: m.role,
@@ -139,6 +141,8 @@ export function expandMessagesForFC(messages, { filterDeleted = true } = {}) {
         ...(m.video?.length > 0 ? { video: m.video } : {}),
         ...(m.audio?.length > 0 ? { audio: m.audio } : {}),
         ...(m.pdf?.length > 0 ? { pdf: m.pdf } : {}),
+        ...(m.role === "assistant" && m.thinking ? { thinking: m.thinking } : {}),
+        ...(m.role === "assistant" && m.thinkingSignature ? { thinkingSignature: m.thinkingSignature } : {}),
       },
     ];
   });

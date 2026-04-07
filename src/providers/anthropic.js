@@ -42,7 +42,7 @@ function prepareMessages(messages) {
       (m) => m.role === "user" || m.role === "assistant" || m.role === "tool",
     )
     .map((m) => {
-      const { name: _name, id: _id, tool_call_id: _tcId, images, ...rest } = m;
+      const { name: _name, id: _id, tool_call_id: _tcId, images, thinking: _thinking, thinkingSignature: _tSig, toolCalls: _toolCalls, ...rest } = m;
 
       // Convert tool role messages to tool_result user messages for Anthropic
       if (m.role === "tool") {
@@ -67,11 +67,13 @@ function prepareMessages(messages) {
         // Preserve thinking blocks for multi-step reasoning continuity.
         // The signature field is REQUIRED by Anthropic's API for multi-turn
         // conversations — without it the API returns a 400.
-        if (m.thinking) {
+        // Only include thinking when we have the signature; for legacy
+        // conversations missing it, omit the block entirely.
+        if (m.thinking && m.thinkingSignature) {
           contentBlocks.push({
             type: "thinking",
             thinking: m.thinking,
-            ...(m.thinkingSignature && { signature: m.thinkingSignature }),
+            signature: m.thinkingSignature,
           });
         }
         if (rest.content?.trim()) {
@@ -149,6 +151,31 @@ function prepareMessages(messages) {
         return {
           role: rest.role,
           content: contentBlocks.length > 0 ? contentBlocks : rest.content,
+        };
+      }
+
+      // Handle assistant messages that have thinking but no toolCalls.
+      // Anthropic requires thinking blocks as structured content blocks,
+      // not top-level fields — convert them into the proper format.
+      // Only include thinking when we have the signature; legacy conversations
+      // without it must omit the block entirely to avoid a 400.
+      if (m.role === "assistant" && m.thinking && !m.toolCalls?.length) {
+        const contentBlocks = [];
+        if (m.thinkingSignature) {
+          contentBlocks.push({
+            type: "thinking",
+            thinking: m.thinking,
+            signature: m.thinkingSignature,
+          });
+        }
+        if (rest.content?.trim()) {
+          contentBlocks.push({ type: "text", text: rest.content });
+        } else {
+          contentBlocks.push({ type: "text", text: " " });
+        }
+        return {
+          role: "assistant",
+          content: contentBlocks.length > 1 ? contentBlocks : rest.content?.trim() || " ",
         };
       }
 
@@ -280,6 +307,7 @@ function buildTools(options) {
 function extractResponseContent(contentBlocks) {
   let text = "";
   let thinking = null;
+  let thinkingSignature = null;
   const citations = [];
   const toolCalls = [];
 
@@ -300,6 +328,7 @@ function extractResponseContent(contentBlocks) {
       }
     } else if (block.type === "thinking") {
       thinking = block.thinking;
+      if (block.signature) thinkingSignature = block.signature;
     } else if (block.type === "tool_use") {
       toolCalls.push({
         id: block.id,
@@ -310,7 +339,7 @@ function extractResponseContent(contentBlocks) {
     // server_tool_use and *_tool_result blocks are informational — skip
   }
 
-  return { text, thinking, citations, toolCalls };
+  return { text, thinking, thinkingSignature, citations, toolCalls };
 }
 
 /**
@@ -377,7 +406,7 @@ const anthropicProvider = {
 
       const response = await getClient().messages.create(payload);
 
-      const { text, thinking, citations, toolCalls } = extractResponseContent(
+      const { text, thinking, thinkingSignature, citations, toolCalls } = extractResponseContent(
         response.content,
       );
       const result = {
@@ -385,6 +414,7 @@ const anthropicProvider = {
         usage: buildUsage(response.usage),
       };
       if (thinking) result.thinking = thinking;
+      if (thinkingSignature) result.thinkingSignature = thinkingSignature;
       if (citations.length > 0) result.citations = citations;
       if (toolCalls.length > 0) result.toolCalls = toolCalls;
       return result;

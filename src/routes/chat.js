@@ -780,6 +780,7 @@ export async function finalizeTextGeneration(
   {
     text,
     thinking,
+    thinkingSignature,
     images,
     toolCalls,
     audioChunks,
@@ -1013,6 +1014,7 @@ export async function finalizeTextGeneration(
         role: "assistant",
         content: text,
         ...(thinking && { thinking }),
+        ...(thinkingSignature && { thinkingSignature }),
         ...(images.length > 0 && { images }),
         ...(audioRef && { audio: audioRef }),
         // We do not append toolCalls here because overrideMessagesToAppend handles intermediate tool iterations
@@ -1048,6 +1050,7 @@ export async function finalizeTextGeneration(
         role: "assistant",
         content: text,
         ...(thinking && { thinking }),
+        ...(thinkingSignature && { thinkingSignature }),
         ...(images.length > 0 && { images }),
         ...(audioRef && { audio: audioRef }),
         ...(toolCalls.length > 0 && { toolCalls }),
@@ -1148,6 +1151,7 @@ async function handleStreamingText(ctx) {
   let outputCharacters = 0;
   let fullStreamedText = "";
   let streamedThinking = "";
+  let streamedThinkingSignature = "";
   const streamedImages = [];
   const streamedToolCalls = [];
   /** @type {string[]} base64-encoded PCM audio chunks from Live API */
@@ -1173,6 +1177,13 @@ async function handleStreamingText(ctx) {
       generationEnd = performance.now();
       streamedThinking += chunk.content;
       emit({ type: "thinking", content: chunk.content });
+      continue;
+    }
+    // Thinking signature — Anthropic's cryptographic signature for thinking
+    // blocks. Must be captured and persisted so multi-turn conversations
+    // can pass it back verbatim (required by Anthropic's API).
+    if (chunk && typeof chunk === "object" && chunk.type === "thinking_signature") {
+      streamedThinkingSignature = chunk.signature;
       continue;
     }
     // Image chunks from multimodal models
@@ -1306,6 +1317,7 @@ async function handleStreamingText(ctx) {
   await finalizeTextGeneration(ctx, {
     text: fullStreamedText,
     thinking: streamedThinking,
+    thinkingSignature: streamedThinkingSignature,
     images: streamedImages,
     toolCalls: streamedToolCalls,
     audioChunks: streamedAudioChunks,

@@ -35,12 +35,7 @@ function sanitizeMsg(m) {
 
   return {
     role: m.role,
-    content:
-      typeof m.content === "string"
-        ? m.content.length > 500
-          ? m.content.slice(0, 500) + "…"
-          : m.content
-        : m.content,
+    content: typeof m.content === "string" ? m.content : m.content,
     ...(m.images?.length ? { images: sanitizeMedia(m.images) } : {}),
     ...(m.audio ? { audio: sanitizeMedia(m.audio) } : {}),
     ...(m.video?.length ? { video: sanitizeMedia(m.video) } : {}),
@@ -233,8 +228,8 @@ const RequestLogger = {
         ...(agenticIteration !== null ? { agenticIteration } : {}),
       },
       responsePayload: {
-        text: text && text.length > 2000 ? text.slice(0, 2000) + "…" : text || null,
-        thinking: thinking ? "[present]" : null,
+        text: text || null,
+        thinking: thinking || null,
         ...(images && images.length > 0 ? { images } : {}),
         toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls.map((tc) => ({ name: API_TO_CANONICAL[tc.name] || tc.name, id: tc.id, args: tc.args })) : null,
         ...(audioRef ? { audioRef } : {}),
