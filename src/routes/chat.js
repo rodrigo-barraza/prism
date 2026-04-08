@@ -15,13 +15,21 @@ import {
 } from "../utils/CostCalculator.js";
 import logger from "../utils/logger.js";
 import RequestLogger from "../services/RequestLogger.js";
-import ConversationService from "../services/ConversationService.js";
 import FileService from "../services/FileService.js";
 
 import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
 import localModelQueue from "../services/LocalModelQueue.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
+import {
+  markGenerating,
+  linkConversationToSession,
+  appendAndFinalize,
+} from "../utils/ConversationUtilities.js";
+import {
+  handleSseRequest,
+  handleJsonRequest,
+} from "../utils/SseUtilities.js";
 
 const router = express.Router();
 
@@ -537,16 +545,7 @@ export async function handleChat(params, emit, { signal } = {}) {
     }
   } catch (error) {
     // Clear generating flag on error
-    if (conversationId) {
-      ConversationService.setGenerating(
-        conversationId,
-        project,
-        username,
-        false,
-      ).catch((err) =>
-        logger.error(`Failed to clear isGenerating on error: ${err.message}`),
-      );
-    }
+    markGenerating(conversationId, project, username, false);
     const totalSec = (performance.now() - requestStart) / 1000;
     RequestLogger.log({
       requestId,
@@ -591,16 +590,7 @@ async function handleImageAPIModel(ctx) {
   } = ctx;
 
   // Mark conversation as generating
-  if (conversationId) {
-    ConversationService.setGenerating(
-      conversationId,
-      project,
-      username,
-      true,
-    ).catch((err) =>
-      logger.error(`Failed to set isGenerating: ${err.message}`),
-    );
-  }
+  markGenerating(conversationId, project, username, true);
   const lastUserMsg = messages.filter((m) => m.role === "user").pop();
   const prompt = lastUserMsg?.content || "";
 
@@ -703,24 +693,7 @@ async function handleImageAPIModel(ctx) {
   });
 
   // Link conversation to session
-  if (sessionId && conversationId) {
-    try {
-      const sessionDb = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
-      if (sessionDb) {
-        sessionDb.collection("sessions").updateOne(
-          { id: sessionId },
-          {
-            $addToSet: { conversationIds: conversationId },
-            $set: { updatedAt: new Date().toISOString() },
-          },
-        ).catch((err) =>
-          logger.error(`Failed to link conversation to session: ${err.message}`),
-        );
-      }
-    } catch (err) {
-      logger.error(`Failed to link conversation to session: ${err.message}`);
-    }
-  }
+  linkConversationToSession(sessionId, conversationId);
 
   // Auto-append to conversation
   if (conversationId) {
@@ -756,26 +729,7 @@ async function handleImageAPIModel(ctx) {
         }
       : undefined;
 
-    ConversationService.appendMessages(
-      conversationId,
-      project,
-      username,
-      messagesToAppend,
-      meta,
-    )
-      .then(() =>
-        ConversationService.setGenerating(
-          conversationId,
-          project,
-          username,
-          false,
-        ),
-      )
-      .catch((err) =>
-        logger.error(
-          `Failed to append messages to conversation ${conversationId}: ${err.message}`,
-        ),
-      );
+    appendAndFinalize(conversationId, project, username, messagesToAppend, meta);
   }
 }
 
@@ -994,24 +948,7 @@ export async function finalizeTextGeneration(
   }
 
   // ── Link conversation to session ──────────────────────────────
-  if (sessionId && conversationId) {
-    try {
-      const sessionDb = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
-      if (sessionDb) {
-        sessionDb.collection("sessions").updateOne(
-          { id: sessionId },
-          {
-            $addToSet: { conversationIds: conversationId },
-            $set: { updatedAt: new Date().toISOString() },
-          },
-        ).catch((err) =>
-          logger.error(`Failed to link conversation to session: ${err.message}`),
-        );
-      }
-    } catch (err) {
-      logger.error(`Failed to link conversation to session: ${err.message}`);
-    }
-  }
+  linkConversationToSession(sessionId, conversationId);
 
   // ── Conversation persistence ──────────────────────────────────
   if (conversationId) {
@@ -1088,26 +1025,7 @@ export async function finalizeTextGeneration(
         }
       : undefined;
 
-    ConversationService.appendMessages(
-      conversationId,
-      project,
-      username,
-      messagesToAppend,
-      meta,
-    )
-      .then(() =>
-        ConversationService.setGenerating(
-          conversationId,
-          project,
-          username,
-          false,
-        ),
-      )
-      .catch((err) =>
-        logger.error(
-          `Failed to append messages to conversation ${conversationId}: ${err.message}`,
-        ),
-      );
+    appendAndFinalize(conversationId, project, username, messagesToAppend, meta);
   }
 }
 
@@ -1132,16 +1050,7 @@ async function handleStreamingText(ctx) {
   } = ctx;
 
   // Mark conversation as generating
-  if (conversationId) {
-    ConversationService.setGenerating(
-      conversationId,
-      project,
-      username,
-      true,
-    ).catch((err) =>
-      logger.error(`Failed to set isGenerating: ${err.message}`),
-    );
-  }
+  markGenerating(conversationId, project, username, true);
 
   const stream =
     modelDef?.liveAPI && provider.generateTextStreamLive
@@ -1362,16 +1271,7 @@ async function handleNonStreamingText(ctx) {
   } = ctx;
 
   // Mark conversation as generating
-  if (conversationId) {
-    ConversationService.setGenerating(
-      conversationId,
-      project,
-      username,
-      true,
-    ).catch((err) =>
-      logger.error(`Failed to set isGenerating: ${err.message}`),
-    );
-  }
+  markGenerating(conversationId, project, username, true);
 
   const generationStart = performance.now();
   const genResult = await provider.generateText(
@@ -1473,99 +1373,17 @@ async function handleNonStreamingText(ctx) {
  *   { provider, model?, messages, tools?, temperature?, maxTokens?, ... }
  */
 router.post("/", async (req, res, next) => {
-  const wantsStream = req.query.stream !== "false";
+  const params = {
+    ...req.body,
+    project: req.body.project || req.project,
+    username: req.username,
+    clientIp: req.clientIp,
+  };
 
-  if (wantsStream) {
-    // SSE streaming response
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.flushHeaders();
-
-    // Abort upstream provider when client disconnects (not on normal completion)
-    const controller = new AbortController();
-    res.on("close", () => {
-      if (!res.writableFinished) controller.abort();
-    });
-
-    await handleChat(
-      {
-        ...req.body,
-        project: req.body.project || req.project,
-        username: req.username,
-        clientIp: req.clientIp,
-      },
-      (event) => {
-        if (!controller.signal.aborted) {
-          // Strip heavy base64 data from image events when minioRef is
-          // available — SSE/browser clients load images via the ref URL.
-          if (event.type === "image" && event.minioRef && event.data) {
-            const { data: _stripped, ...lightweight } = event;
-            res.write(`data: ${JSON.stringify(lightweight)}\n\n`);
-          } else {
-            res.write(`data: ${JSON.stringify(event)}\n\n`);
-          }
-        }
-      },
-      { signal: controller.signal },
-    );
-    if (!controller.signal.aborted) res.end();
+  if (req.query.stream !== "false") {
+    await handleSseRequest(req, res, params);
   } else {
-    // Non-streaming JSON response (for lupos and other server callers)
-    const events = [];
-    await handleChat(
-      {
-        ...req.body,
-        project: req.body.project || req.project,
-        username: req.username,
-        clientIp: req.clientIp,
-      },
-      (event) => events.push(event),
-    );
-
-    // Build a flat response from collected events
-    const errorEvent = events.find((e) => e.type === "error");
-    if (errorEvent) {
-      return next(new ProviderError("server", errorEvent.message, 500));
-    }
-
-    const doneEvent = events.find((e) => e.type === "done") || {};
-    const text = events
-      .filter((e) => e.type === "chunk")
-      .map((e) => e.content)
-      .join("");
-    const thinking = events
-      .filter((e) => e.type === "thinking")
-      .map((e) => e.content)
-      .join("");
-    const images = events
-      .filter((e) => e.type === "image")
-      .map((e) => ({
-        data: e.data,
-        mimeType: e.mimeType,
-        minioRef: e.minioRef || null,
-      }));
-
-    const toolCalls = events
-      .filter((e) => e.type === "tool_execution" && e.status === "calling")
-      .map((e) => ({
-        name: e.tool?.name,
-        args: e.tool?.args,
-      }));
-
-    res.json({
-      text: text || null,
-      thinking: thinking || null,
-      images: images.length > 0 ? images : undefined,
-      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-      // provider/model echoed back — useful when Prism resolves a default model
-      provider: doneEvent.provider || req.body.provider,
-      model: doneEvent.model || req.body.model,
-      usage: doneEvent.usage || null,
-      estimatedCost: doneEvent.estimatedCost ?? null,
-      ...(doneEvent.sessionId && { sessionId: doneEvent.sessionId }),
-      ...(doneEvent.conversationId && { conversationId: doneEvent.conversationId }),
-    });
+    await handleJsonRequest(req, res, next, params);
   }
 });
 
