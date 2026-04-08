@@ -1,6 +1,8 @@
+import crypto from "crypto";
 import { getProvider } from "../providers/index.js";
 import FileService from "./FileService.js";
 import logger from "../utils/logger.js";
+import RequestLogger from "./RequestLogger.js";
 
 // ────────────────────────────────────────────────────────────
 // Built-in tools — handled natively by the agentic loop
@@ -95,7 +97,7 @@ export default class BuiltInTools {
    */
   static async _executeGenerateImage(args, ctx) {
     const { prompt } = args;
-    const { messages, project, username } = ctx;
+    const { messages, project, username, sessionId, conversationId, clientIp, requestId, agenticIteration } = ctx;
 
     if (!prompt) {
       return { error: "Missing required parameter: prompt" };
@@ -135,11 +137,13 @@ export default class BuiltInTools {
       // Call Google's non-streaming generateText — handles images natively
       // when the model has IMAGE output types. forceImageGeneration sets
       // responseModalities to ["IMAGE"] for image-only output.
+      const toolRequestStart = performance.now();
       const result = await provider.generateText(
         imageGenMessages,
         IMAGE_MODEL,
         { forceImageGeneration: true },
       );
+      const toolTotalSec = (performance.now() - toolRequestStart) / 1000;
 
       // Content safety block — Gemini refused
       if (result.safetyBlock) {
@@ -181,6 +185,32 @@ export default class BuiltInTools {
 
       logger.info(
         `[BuiltInTools] generate_image: success, minioRef=${minioRef || "none"}`,
+      );
+
+      // Log the image generation request so it appears in admin dashboard
+      // with the correct model (Gemini) instead of the parent agent model.
+      RequestLogger.logChatGeneration({
+        requestId: requestId ? `${requestId}-img-${agenticIteration || 0}` : crypto.randomUUID(),
+        endpoint: "agent",
+        project,
+        username,
+        clientIp: clientIp || null,
+        provider: IMAGE_PROVIDER,
+        model: IMAGE_MODEL,
+        conversationId: conversationId || null,
+        sessionId: sessionId || null,
+        success: true,
+        usage: result.usage || { inputTokens: 0, outputTokens: 0 },
+        totalSec: toolTotalSec,
+        options: { forceImageGeneration: true },
+        messages: imageGenMessages,
+        images: [minioRef || "[generated]"],
+        text: result.text || null,
+        toolCalls: [],
+        outputCharacters: result.text?.length || 0,
+        agenticIteration: agenticIteration || null,
+      }).catch((err) =>
+        logger.error(`[BuiltInTools] Failed to log image generation request: ${err.message}`),
       );
 
       // Return the result with a private _image field.

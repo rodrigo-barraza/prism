@@ -555,6 +555,11 @@ export default class AgenticLoopService {
                      messages: currentMessages,
                      project,
                      username,
+                     sessionId: ctx.sessionId || null,
+                     conversationId,
+                     clientIp: ctx.clientIp || null,
+                     requestId: ctx.requestId,
+                     agenticIteration: iterations,
                    });
                    await hooks.run("afterToolCall", tc, result, ctx);
                    return { name: tc.name, id: tc.id, result };
