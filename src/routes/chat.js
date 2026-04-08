@@ -17,7 +17,7 @@ import logger from "../utils/logger.js";
 import RequestLogger from "../services/RequestLogger.js";
 import ConversationService from "../services/ConversationService.js";
 import FileService from "../services/FileService.js";
-import AgenticLoopService from "../services/AgenticLoopService.js";
+
 import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
 import localModelQueue from "../services/LocalModelQueue.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
@@ -214,6 +214,7 @@ export async function handleChat(params, emit, { signal } = {}) {
     verbosity,
     reasoningSummary,
     functionCallingEnabled,
+    agenticLoopEnabled,
     enabledTools,
     minContextLength,
     forceImageGeneration,
@@ -303,6 +304,7 @@ export async function handleChat(params, emit, { signal } = {}) {
     ...(verbosity && { verbosity }),
     ...(reasoningSummary && { reasoningSummary }),
     ...(functionCallingEnabled !== undefined && { functionCallingEnabled }),
+    ...(agenticLoopEnabled !== undefined && { agenticLoopEnabled }),
     ...(enabledTools && { enabledTools }),
     ...(minContextLength && { minContextLength }),
     ...(forceImageGeneration && { forceImageGeneration }),
@@ -456,7 +458,10 @@ export async function handleChat(params, emit, { signal } = {}) {
           logger.warn(`[chat] LM-Studio MCP SKIPPED: functionCallingEnabled=${options.functionCallingEnabled}, useLmStudioNativeMcp=${useLmStudioNativeMcp}`);
         }
 
-        if (options.functionCallingEnabled && !useLmStudioNativeMcp) {
+        if (options.agenticLoopEnabled && !useLmStudioNativeMcp) {
+          // Lazy-load AgenticLoopService — only needed for the agentic path
+          // which is exclusively triggered via the /agents endpoint.
+          const { default: AgenticLoopService } = await import("../services/AgenticLoopService.js");
           await AgenticLoopService.runAgenticLoop({
             provider,
             providerName,
@@ -1448,44 +1453,7 @@ async function handleNonStreamingText(ctx) {
   });
 }
 
-// ============================================================
-// Approval endpoint — resolves pending plan/tool approvals
-// ============================================================
 
-/**
- * POST /chat/approve
- *
- * Body:
- *   { conversationId: string, approved: boolean }
- *
- * Resolves the pending approval promise in AgenticLoopService
- * so the agentic loop can continue (or abort).
- */
-router.post("/approve", async (req, res) => {
-  const { conversationId, approved } = req.body;
-
-  if (!conversationId) {
-    return res.status(400).json({ error: "Missing conversationId" });
-  }
-
-  const resolved = AgenticLoopService.resolveApproval(
-    conversationId,
-    approved !== false, // default to approve if not explicitly false
-  );
-
-  if (!resolved) {
-    return res.status(404).json({
-      error: "No pending approval for this conversation",
-      conversationId,
-    });
-  }
-
-  logger.info(
-    `[chat/approve] ${approved !== false ? "Approved" : "Rejected"} for conversation ${conversationId}`,
-  );
-
-  res.json({ ok: true, approved: approved !== false });
-});
 
 // ============================================================
 // REST endpoint — SSE streaming or JSON fallback

@@ -25,6 +25,7 @@ import ChangeStreamService from "./services/ChangeStreamService.js";
 
 // Routes
 import chatRouter from "./routes/chat.js";
+import agentsRouter from "./routes/agents.js";
 import audioRouter from "./routes/audio.js";
 import embedRouter from "./routes/embed.js";
 import configRouter, { localConfigRouter } from "./routes/config.js";
@@ -63,6 +64,7 @@ const ENDPOINTS = {
     "/config",
     "/config-local",
     "/chat",
+    "/agents",
     "/text-to-audio",
     "/audio-to-text",
     "/embed",
@@ -111,6 +113,7 @@ app.use(authMiddleware);
 app.use("/config", configRouter);
 app.use("/config-local", localConfigRouter);
 app.use("/chat", chatRouter);
+app.use("/agents", agentsRouter);
 app.use("/text-to-audio", audioRouter);
 app.use("/audio-to-text", audioRouter);
 app.use("/embed", embedRouter);
