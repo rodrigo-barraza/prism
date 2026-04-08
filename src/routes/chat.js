@@ -19,6 +19,7 @@ import RequestLogger from "../services/RequestLogger.js";
 import FileService from "../services/FileService.js";
 import { createStreamState, dispatchChunk } from "../utils/StreamChunkDispatcher.js";
 import { calculateTokensPerSec } from "../utils/math.js";
+import { compressImageForSizeLimit } from "../utils/media.js";
 
 import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
 import localModelQueue from "../services/LocalModelQueue.js";
@@ -84,16 +85,57 @@ async function resolveImageRefs(messages, project, username) {
 }
 
 /**
+ * Compress an oversized image data URL in-place.
+ * Parses the data URL, checks decoded size, runs through compressImageForSizeLimit,
+ * and reconstructs if compression changed the data.
+ * @param {string} dataUrl - Full data URL (data:<mime>;base64,<data>)
+ * @returns {Promise<string>} - Possibly compressed data URL
+ */
+async function compressDataUrlIfOversized(dataUrl) {
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return dataUrl;
+
+  const mimeType = match[1];
+  if (!mimeType.startsWith("image/")) return dataUrl;
+
+  const base64Data = match[2];
+  const decodedSize = Buffer.byteLength(base64Data, "base64");
+  const MAX = 5 * 1024 * 1024;
+
+  if (decodedSize <= MAX) return dataUrl;
+
+  logger.info(
+    `[chat] Oversized image detected: ${(decodedSize / 1024 / 1024).toFixed(2)} MB (${mimeType}). Compressing...`,
+  );
+
+  try {
+    const result = await compressImageForSizeLimit(base64Data, mimeType);
+    const newUrl = `data:${result.mediaType};base64,${result.data}`;
+    const newSize = Buffer.byteLength(result.data, "base64");
+    logger.info(
+      `[chat] Compressed: ${(decodedSize / 1024 / 1024).toFixed(2)} MB → ${(newSize / 1024 / 1024).toFixed(2)} MB (${result.mediaType})`,
+    );
+    return newUrl;
+  } catch (err) {
+    logger.error(`[chat] Image compression failed: ${err.message}. Sending original.`);
+    return dataUrl;
+  }
+}
+
+/**
  * Resolve a single media reference for both provider and storage use.
  * @returns {{ providerRef: string, storageRef: string }}
  */
 async function resolveMediaRef(ref, project, username) {
-  // Already a base64 data URL — upload to MinIO for storage, keep data URL for provider
+  // Already a base64 data URL — compress if oversized, upload to MinIO for storage
   if (ref.startsWith("data:")) {
-    let storageRef = ref;
+    let providerRef = ref;
+    // Compress oversized images before they reach any provider
+    providerRef = await compressDataUrlIfOversized(providerRef);
+    let storageRef = providerRef;
     try {
       const { ref: minioRef } = await FileService.uploadFile(
-        ref,
+        ref, // Upload original to MinIO
         "uploads",
         project,
         username,
@@ -102,7 +144,7 @@ async function resolveMediaRef(ref, project, username) {
     } catch (err) {
       logger.error(`[chat] Failed to upload media to MinIO: ${err.message}`);
     }
-    return { providerRef: ref, storageRef };
+    return { providerRef, storageRef };
   }
 
   // MinIO reference — download for provider, keep ref for storage
@@ -144,8 +186,11 @@ async function resolveMediaRef(ref, project, username) {
         response.headers.get("content-type") || "application/octet-stream";
       const arrayBuffer = await response.arrayBuffer();
       const base64 = Buffer.from(arrayBuffer).toString("base64");
+      let providerRef = `data:${contentType};base64,${base64}`;
+      // Compress oversized images before they reach any provider
+      providerRef = await compressDataUrlIfOversized(providerRef);
       return {
-        providerRef: `data:${contentType};base64,${base64}`,
+        providerRef,
         storageRef: ref,
       };
     } catch (err) {

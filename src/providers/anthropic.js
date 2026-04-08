@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
 import { extractAnthropicRateLimits } from "../utils/rateLimits.js";
+import { compressImageForSizeLimit } from "../utils/media.js";
 import { ANTHROPIC_API_KEY } from "../../secrets.js";
 import { TYPES, getDefaultModels } from "../config.js";
 
@@ -24,11 +25,43 @@ function getClient() {
   return client;
 }
 
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Walk all Anthropic-format message content blocks and compress any
+ * base64 image that exceeds 5 MB. Mutates the messages array in-place.
+ */
+async function enforceImageSizeLimits(messages) {
+  for (const msg of messages) {
+    if (!Array.isArray(msg.content)) continue;
+    for (const block of msg.content) {
+      if (block.type !== "image" || block.source?.type !== "base64") continue;
+      const data = block.source.data;
+      if (!data) continue;
+
+      const size = Buffer.byteLength(data, "base64");
+      if (size <= MAX_IMAGE_BYTES) continue;
+
+      logger.warn(
+        `[anthropic] SAFETY NET: image still ${(size / 1024 / 1024).toFixed(2)} MB after prepareMessages. Compressing now...`,
+      );
+      const result = await compressImageForSizeLimit(data, block.source.media_type || "image/png");
+      block.source.data = result.data;
+      block.source.media_type = result.mediaType;
+
+      const newSize = Buffer.byteLength(result.data, "base64");
+      logger.info(
+        `[anthropic] SAFETY NET compressed: ${(size / 1024 / 1024).toFixed(2)} → ${(newSize / 1024 / 1024).toFixed(2)} MB`,
+      );
+    }
+  }
+}
+
 /**
  * Anthropic requires alternating user/assistant roles and handles system messages separately.
  * This helper extracts the system message and merges consecutive same-role messages.
  */
-function prepareMessages(messages) {
+async function prepareMessages(messages) {
   let systemMessage;
 
   // Extract system message
@@ -38,11 +71,11 @@ function prepareMessages(messages) {
   }
 
   // Remove unsupported properties and convert media content
-  const cleaned = conversation
+  const cleaned = await Promise.all(conversation
     .filter(
       (m) => m.role === "user" || m.role === "assistant" || m.role === "tool",
     )
-    .map((m) => {
+    .map(async (m) => {
       const { name: _name, id: _id, tool_call_id: _tcId, images, thinking: _thinking, thinkingSignature: _tSig, toolCalls: _toolCalls, ...rest } = m;
 
       // Convert tool role messages to tool_result user messages for Anthropic
@@ -101,7 +134,7 @@ function prepareMessages(messages) {
           const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
           if (!match) continue;
           const mimeType = match[1];
-          const data = match[2];
+          let data = match[2];
 
           if (mimeType.startsWith("image/")) {
             // Image content block
@@ -110,6 +143,13 @@ function prepareMessages(messages) {
             else if (data.startsWith("iVBOR")) mediaType = "image/png";
             else if (data.startsWith("R0lG")) mediaType = "image/gif";
             else if (data.startsWith("UklG")) mediaType = "image/webp";
+
+            // Enforce Anthropic's 5 MB per-image limit
+            const rawSize = Buffer.byteLength(data, "base64");
+            logger.info(`[anthropic] Image block: ${mediaType}, ${(rawSize / 1024 / 1024).toFixed(2)} MB (raw base64 len=${data.length})`);
+            const compressed = await compressImageForSizeLimit(data, mediaType);
+            data = compressed.data;
+            mediaType = compressed.mediaType;
 
             contentBlocks.push({
               type: "image",
@@ -188,7 +228,7 @@ function prepareMessages(messages) {
         return { ...rest, content: " " };
       }
       return rest;
-    });
+    }));
 
   // Merge consecutive same-role messages
   const merged = cleaned.reduce((acc, cur) => {
@@ -365,7 +405,7 @@ const anthropicProvider = {
   ) {
     logger.provider("Anthropic", `generateText model=${model}`);
     try {
-      const prepared = prepareMessages(messages);
+      const prepared = await prepareMessages(messages);
       const payload = {
         cache_control: { type: "ephemeral" },
         system: prepared.systemMessage,
@@ -452,12 +492,17 @@ const anthropicProvider = {
         const match = imageUrlOrBase64.match(/^data:([^;]+);base64,(.+)$/);
         if (match) {
           let mediaType = match[1];
-          const data = match[2];
+          let data = match[2];
           // Auto-detect media type from data prefix
           if (data.startsWith("/9j/")) mediaType = "image/jpeg";
           else if (data.startsWith("iVBOR")) mediaType = "image/png";
           else if (data.startsWith("R0lG")) mediaType = "image/gif";
           else if (data.startsWith("UklG")) mediaType = "image/webp";
+
+          // Enforce Anthropic's 5 MB per-image limit
+          const compressed = await compressImageForSizeLimit(data, mediaType);
+          data = compressed.data;
+          mediaType = compressed.mediaType;
 
           contentBlocks.push({
             type: "image",
@@ -514,7 +559,7 @@ const anthropicProvider = {
   ) {
     logger.provider("Anthropic", `generateTextStream model=${model}`);
     try {
-      const prepared = prepareMessages(messages);
+      const prepared = await prepareMessages(messages);
       const streamPayload = {
         cache_control: { type: "ephemeral" },
         system: prepared.systemMessage,
@@ -553,6 +598,11 @@ const anthropicProvider = {
         delete streamPayload.top_p;
         delete streamPayload.top_k;
       }
+
+      // ── Final safety net: enforce 5 MB limit on ALL image blocks ──
+      // Walks every message content block and compresses any oversized images
+      // right before the API call. This catches anything that slipped through.
+      await enforceImageSizeLimits(streamPayload.messages);
 
       const stream = getClient().messages.stream(streamPayload, {
         ...(options.signal && { signal: options.signal }),

@@ -6,7 +6,205 @@ import { execFile } from "child_process";
 import { writeFile, readFile, mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
+import sharp from "sharp";
 import logger from "./logger.js";
+
+// ── Provider Image Size Limits ──────────────────────────────
+
+/** Anthropic's per-image inline base64 limit. */
+const ANTHROPIC_IMAGE_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+
+/**
+ * Compress a base64-encoded image to fit within a byte-size limit.
+ *
+ * Strategy:
+ *  - GIFs → ffmpeg resize (preserves animation for models that support it)
+ *  - Everything else → sharp JPEG conversion + progressive downscale
+ *
+ * @param {string} base64Data  - Raw base64 string (no data: prefix)
+ * @param {string} mediaType   - MIME type, e.g. "image/png"
+ * @param {number} [maxBytes]   - Maximum allowed size in bytes (default: 5 MB)
+ * @returns {Promise<{ data: string, mediaType: string }>} Compressed base64 + updated MIME
+ */
+export async function compressImageForSizeLimit(
+  base64Data,
+  mediaType,
+  maxBytes = ANTHROPIC_IMAGE_MAX_BYTES,
+) {
+  const rawBytes = Buffer.byteLength(base64Data, "base64");
+  if (rawBytes <= maxBytes) {
+    return { data: base64Data, mediaType };
+  }
+
+  const sizeMB = (rawBytes / 1024 / 1024).toFixed(2);
+  const limitMB = (maxBytes / 1024 / 1024).toFixed(0);
+  logger.info(
+    `[media] Image exceeds ${limitMB} MB limit (${sizeMB} MB, ${mediaType}). Compressing...`,
+  );
+
+  // GIFs → ffmpeg (preserves animation)
+  if (mediaType === "image/gif") {
+    return compressGifWithFfmpeg(base64Data, maxBytes);
+  }
+
+  // Everything else → sharp (converts to JPEG)
+  return compressWithSharp(base64Data, maxBytes);
+}
+
+/**
+ * Compress an animated GIF using ffmpeg's scale filter.
+ * Preserves animation — progressively halves dimensions until under limit.
+ */
+async function compressGifWithFfmpeg(base64Data, maxBytes) {
+  let tmpDir = null;
+  try {
+    tmpDir = await mkdtemp(join(tmpdir(), "prism-gif-"));
+    const inputPath = join(tmpDir, "input.gif");
+    const buffer = Buffer.from(base64Data, "base64");
+    await writeFile(inputPath, buffer);
+
+    // Progressive resize: 75% → 56% → 42% → 32% → 24% → 18% of original
+    const scaleFactors = [0.75, 0.75, 0.75, 0.75, 0.75, 0.75];
+    let cumulativeScale = 1;
+
+    for (const factor of scaleFactors) {
+      cumulativeScale *= factor;
+      const outputPath = join(tmpDir, `output_${Math.round(cumulativeScale * 100)}.gif`);
+
+      await new Promise((resolve, reject) => {
+        execFile(
+          "ffmpeg",
+          [
+            "-y",
+            "-i", inputPath,
+            "-vf", `scale='iw*${cumulativeScale}:ih*${cumulativeScale}':flags=lanczos`,
+            "-gifflags", "+transdiff",
+            outputPath,
+          ],
+          { timeout: 30_000 },
+          (error, _stdout, stderr) => {
+            if (error) reject(new Error(`ffmpeg GIF resize failed: ${stderr?.slice(-200) || error.message}`));
+            else resolve();
+          },
+        );
+      });
+
+      const result = await readFile(outputPath);
+      if (result.length <= maxBytes) {
+        logger.info(
+          `[media] GIF compressed to ${(result.length / 1024 / 1024).toFixed(2)} MB ` +
+          `(scale=${Math.round(cumulativeScale * 100)}%)`,
+        );
+        return {
+          data: result.toString("base64"),
+          mediaType: "image/gif",
+        };
+      }
+    }
+
+    // Final fallback: tiny GIF
+    const fallbackPath = join(tmpDir, "output_fallback.gif");
+    await new Promise((resolve, reject) => {
+      execFile(
+        "ffmpeg",
+        [
+          "-y",
+          "-i", inputPath,
+          "-vf", "scale='min(512,iw):min(512,ih)':force_original_aspect_ratio=decrease:flags=lanczos",
+          "-gifflags", "+transdiff",
+          fallbackPath,
+        ],
+        { timeout: 30_000 },
+        (error, _stdout, stderr) => {
+          if (error) reject(new Error(`ffmpeg GIF fallback resize failed: ${stderr?.slice(-200) || error.message}`));
+          else resolve();
+        },
+      );
+    });
+
+    const fallback = await readFile(fallbackPath);
+    logger.warn(
+      `[media] GIF aggressive fallback: ${(fallback.length / 1024 / 1024).toFixed(2)} MB (512px max)`,
+    );
+    return {
+      data: fallback.toString("base64"),
+      mediaType: "image/gif",
+    };
+  } finally {
+    if (tmpDir) {
+      rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+    }
+  }
+}
+
+/**
+ * Compress a non-GIF image using sharp.
+ * Converts to JPEG with progressive quality + dimension reduction.
+ */
+async function compressWithSharp(base64Data, maxBytes) {
+  let buffer = Buffer.from(base64Data, "base64");
+  const qualitySteps = [85, 70, 50];
+
+  // Step 1: try quality reduction (convert to JPEG)
+  for (const quality of qualitySteps) {
+    const compressed = await sharp(buffer)
+      .jpeg({ quality, mozjpeg: true })
+      .toBuffer();
+
+    if (compressed.length <= maxBytes) {
+      logger.info(
+        `[media] Compressed to ${(compressed.length / 1024 / 1024).toFixed(2)} MB ` +
+        `(JPEG q=${quality})`,
+      );
+      return {
+        data: compressed.toString("base64"),
+        mediaType: "image/jpeg",
+      };
+    }
+    buffer = compressed;
+  }
+
+  // Step 2: progressive resize (shrink by 25% each iteration)
+  const metadata = await sharp(buffer).metadata();
+  let width = metadata.width;
+  let height = metadata.height;
+
+  for (let i = 0; i < 6; i++) {
+    width = Math.round(width * 0.75);
+    height = Math.round(height * 0.75);
+
+    const resized = await sharp(Buffer.from(base64Data, "base64"))
+      .resize(width, height, { fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 70, mozjpeg: true })
+      .toBuffer();
+
+    if (resized.length <= maxBytes) {
+      logger.info(
+        `[media] Compressed to ${(resized.length / 1024 / 1024).toFixed(2)} MB ` +
+        `(${width}x${height}, JPEG q=70)`,
+      );
+      return {
+        data: resized.toString("base64"),
+        mediaType: "image/jpeg",
+      };
+    }
+  }
+
+  // Final fallback: aggressive resize
+  const fallback = await sharp(Buffer.from(base64Data, "base64"))
+    .resize(1024, 1024, { fit: "inside", withoutEnlargement: true })
+    .jpeg({ quality: 50, mozjpeg: true })
+    .toBuffer();
+
+  logger.warn(
+    `[media] Aggressive fallback: ${(fallback.length / 1024 / 1024).toFixed(2)} MB (1024px, q=50)`,
+  );
+
+  return {
+    data: fallback.toString("base64"),
+    mediaType: "image/jpeg",
+  };
+}
 
 /**
  * Detect MIME type from a base64 data URL.
