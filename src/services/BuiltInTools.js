@@ -3,6 +3,8 @@ import { getProvider } from "../providers/index.js";
 import FileService from "./FileService.js";
 import logger from "../utils/logger.js";
 import RequestLogger from "./RequestLogger.js";
+import { calculateImageCost } from "../utils/CostCalculator.js";
+import { getModelByName } from "../config.js";
 
 // ────────────────────────────────────────────────────────────
 // Built-in tools — handled natively by the agentic loop
@@ -189,6 +191,19 @@ export default class BuiltInTools {
 
       // Log the image generation request so it appears in admin dashboard
       // with the correct model (Gemini) instead of the parent agent model.
+      const modelDef = getModelByName(IMAGE_MODEL);
+      const estimatedCost = calculateImageCost(
+        prompt,
+        modelDef?.pricing,
+        referenceImages.length,
+        modelDef?.imageTokensPerImage || 1120,
+      );
+      const usage = result.usage || { inputTokens: 0, outputTokens: 0 };
+      const outputTokens = usage.outputTokens || 0;
+      const tokensPerSec = toolTotalSec > 0 && outputTokens > 0
+        ? parseFloat((outputTokens / toolTotalSec).toFixed(1))
+        : null;
+
       RequestLogger.logChatGeneration({
         requestId: requestId ? `${requestId}-img-${agenticIteration || 0}` : crypto.randomUUID(),
         endpoint: "agent",
@@ -200,7 +215,9 @@ export default class BuiltInTools {
         conversationId: conversationId || null,
         sessionId: sessionId || null,
         success: true,
-        usage: result.usage || { inputTokens: 0, outputTokens: 0 },
+        usage,
+        estimatedCost,
+        tokensPerSec,
         totalSec: toolTotalSec,
         options: { forceImageGeneration: true },
         messages: imageGenMessages,
