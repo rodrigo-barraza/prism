@@ -11,7 +11,7 @@ const router = express.Router();
 // ============================================================
 
 /**
- * POST /agents/approve
+ * POST /agent/approve
  *
  * Body:
  *   { conversationId: string, approved: boolean }
@@ -40,7 +40,7 @@ router.post("/approve", async (req, res) => {
   }
 
   logger.info(
-    `[agents/approve] ${approved !== false ? "Approved" : "Rejected"}${approveAll ? " (all future)" : ""} for conversation ${conversationId}`,
+    `[agent/approve] ${approved !== false ? "Approved" : "Rejected"}${approveAll ? " (all future)" : ""} for conversation ${conversationId}`,
   );
 
   res.json({ ok: true, approved: approved !== false });
@@ -51,7 +51,7 @@ router.post("/approve", async (req, res) => {
 // ============================================================
 
 /**
- * POST /agents
+ * POST /agent
  *
  * Agentic endpoint — always enables function calling and the
  * AgenticLoopService tool-execution loop. Use this for autonomous

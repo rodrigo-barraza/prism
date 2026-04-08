@@ -464,7 +464,7 @@ export async function handleChat(params, emit, { signal } = {}) {
 
         if (options.agenticLoopEnabled) {
           // Lazy-load AgenticLoopService — only needed for the agentic path
-          // which is exclusively triggered via the /agents endpoint.
+          // which is exclusively triggered via the /agent endpoint.
           const { default: AgenticLoopService } = await import("../services/AgenticLoopService.js");
           await AgenticLoopService.runAgenticLoop({
             provider,

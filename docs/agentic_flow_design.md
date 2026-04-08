@@ -12,7 +12,7 @@ The Retina Agent executes a robust 11-step loop for every user interaction, buil
 
 1. ✅ **User Input**: Captures input from the Retina UI. Two transports:
    - **WebSocket** (`/ws/chat`) — persistent bidirectional connection, used by Retina's real-time chat
-   - **REST SSE** (`POST /agents`) — dedicated agentic endpoint with SSE streaming (default) or JSON response (`?stream=false`), used by server-to-server callers (Lupos, external integrations). Always enables `agenticLoopEnabled` + `functionCallingEnabled`.
+   - **REST SSE** (`POST /agent`) — dedicated agentic endpoint with SSE streaming (default) or JSON response (`?stream=false`), used by server-to-server callers (Lupos, external integrations). Always enables `agenticLoopEnabled` + `functionCallingEnabled`.
 2. ✅ **Message Creation**: Wraps text into standard LLM message formats via `expandMessagesForFC()`, normalizing across providers (OpenAI, Anthropic, Google, local).
 3. ✅ **History Append**: Appends to a fast, in-memory `currentMessages` array within `AgenticLoopService`, backed by MongoDB persistence via `finalizeTextGeneration()` at loop end.
 4. ✅ **System Prompt Assembly**: Dynamically builds the system prompt server-side via `SystemPromptAssembler`, registered as a `beforePrompt` hook in `AgentHooks`. The assembly pipeline:
@@ -51,18 +51,18 @@ The core logic uses an `EventEmitter`-based hook system wrapping the `AgenticLoo
 
 Implementation: `EventEmitter`-based, registered via a plugin array in `AgenticLoopService`. Named hooks with sequential execution and error isolation.
 
-### ✅ Dual Endpoint Architecture (`/chat` vs `/agents`)
+### ✅ Dual Endpoint Architecture (`/chat` vs `/agent`)
 The agentic loop is gated on a dedicated REST endpoint:
 
 | Endpoint | Agentic Loop | Function Calling | Use Case |
 |---|---|---|---|
 | `POST /chat` | ❌ Off by default | Optional | Simple LLM calls, Chat tab |
-| `POST /agents` | ✅ Always on | ✅ Always on | Autonomous agent workflows, Agent tab, Lupos |
+| `POST /agent` | ✅ Always on | ✅ Always on | Autonomous agent workflows, Agent tab, Lupos |
 | `WS /ws/chat` | Flag-gated | Flag-gated | Retina real-time chat |
 
-`/agents` forces `agenticLoopEnabled: true` and `functionCallingEnabled: true` on every request. Supports SSE streaming (default) and JSON response (`?stream=false` for server-to-server callers like Lupos). Approval endpoint at `POST /agents/approve` resolves pending plan/tool approvals by conversationId.
+`/agent` forces `agenticLoopEnabled: true` and `functionCallingEnabled: true` on every request. Supports SSE streaming (default) and JSON response (`?stream=false` for server-to-server callers like Lupos). Approval endpoint at `POST /agent/approve` resolves pending plan/tool approvals by conversationId.
 
-**Files**: `prism/src/routes/agents.js`, `prism/src/routes/chat.js`
+**Files**: `prism/src/routes/agent.js`, `prism/src/routes/chat.js`
 
 ### ✅ Robust Execution Design
 `ToolOrchestratorService` implements streaming shell execution for process-based tools:
@@ -128,7 +128,7 @@ Additionally, custom tools can be defined per-project in MongoDB (`custom_tools`
 ## 4. Advanced Architectural Paradigms
 
 ### ✅ Bridge Mode (Already Implemented)
-Retina (Web UI) connects to Prism (local gateway) over WebSocket. This is the existing architecture — Retina issues requests, Prism executes tools locally, streams results back. REST SSE via `/agents` provides an alternative for server-to-server callers.
+Retina (Web UI) connects to Prism (local gateway) over WebSocket. This is the existing architecture — Retina issues requests, Prism executes tools locally, streams results back. REST SSE via `/agent` provides an alternative for server-to-server callers.
 
 ### ✅ UltraPlan (Planning Mode)
 For tasks requiring extensive reasoning, the agent enters a dedicated planning loop:
@@ -251,7 +251,7 @@ IDLE → ASSEMBLING (beforePrompt) → CONTEXT_ENFORCEMENT → STREAMING → TOO
 Planning mode adds a pre-loop state: `PLANNING → PLAN_APPROVAL → EXECUTING`. The `isGenerating` flag and `finally` cleanup ensure clean state transitions even on errors/aborts. `pendingApprovals` Map is cleaned up in `finally` to prevent dangling promises.
 
 ### ✅ Raw Token Integrity
-Prism streams raw chunks (`emit({ type: "chunk", content })`) without transformation. All rendering (markdown, syntax highlighting, ANSI colors) happens client-side in Retina. This separation must be maintained — Prism should never mutate token content. The `/agents` SSE endpoint strips heavy base64 image data when `minioRef` is available, sending lightweight references instead.
+Prism streams raw chunks (`emit({ type: "chunk", content })`) without transformation. All rendering (markdown, syntax highlighting, ANSI colors) happens client-side in Retina. This separation must be maintained — Prism should never mutate token content. The `/agent` SSE endpoint strips heavy base64 image data when `minioRef` is available, sending lightweight references instead.
 
 ### ✅ Memory as a First-Class Citizen
 `AgentMemoryService` is a fully generalized project-scoped memory system (stripped of Discord-specific fields). Uses embedding-based storage with cosine similarity search, 4-type taxonomy (user, feedback, project, reference), duplicate detection, and staleness caveats. Integrated into `SystemPromptAssembler.fetchMemories()` — relevant memories are injected into the system prompt on every agentic loop iteration.
@@ -288,7 +288,7 @@ Every agentic iteration is individually logged via `RequestLogger.logChatGenerat
 
 ### Phase 4: Hardening & Intelligence
 1. ✅ **Token-Budget Truncation** — `ContextWindowManager`: three-strategy cascade (tool result truncation → old message compression → sliding window) wired into `AgenticLoopService` before every LLM call. Uses ~3.5 chars/token estimation, 80% utilization target, configurable per-model via `maxInputTokens`
-2. ✅ **Dedicated Agent Endpoint** — `POST /agents` with SSE streaming + JSON fallback, approval endpoint, decoupled from `/chat`
+2. ✅ **Dedicated Agent Endpoint** — `POST /agent` with SSE streaming + JSON fallback, approval endpoint, decoupled from `/chat`
 3. ✅ **Exhaustion Recovery** — Final tool-free LLM pass on iteration limit, summarizes progress for user
 4. ✅ **Local GPU Mutex** — `LocalModelQueue`: process-level lock preventing GPU collisions across chat + benchmark
 5. ✅ **Request Iteration Logging** — Per-pass `RequestLogger.logChatGeneration()` with agenticIteration number, per-pass and overall usage aggregation
@@ -299,6 +299,89 @@ Every agentic iteration is individually logged via `RequestLogger.logChatGenerat
 10. 🔲 **Per-Tool Tier Overrides UI** — Retina settings panel to customize Auto-Approval tiers per tool
 11. 🔲 **Coordinator Conflict Resolution** — Interactive diff merge UI for worktree conflicts
 12. 🔲 **Boot-Time Cleanup** — Prune orphan worktrees from `/tmp/prism-worktrees/` on Prism startup
+13. 🔲 **Full Auto Confirmation Dialog** — Retina modal confirming the user wants to activate `autoApprove` mode before enabling it
+
+---
+
+## 7. Known Gaps & Technical Debt
+
+Identified gaps between the current implementation and production-grade robustness, ordered by impact.
+
+### 🔲 Test Coverage for Critical Paths
+**Impact**: High — `AgenticLoopService`, `ContextWindowManager`, and `AutoApprovalEngine` are the three most critical services in the agent stack, and none have automated tests.
+
+| Service | Testability | Notes |
+|---|---|---|
+| `ContextWindowManager` | Pure logic, no I/O | Ideal unit test candidate — deterministic input/output, no mocks needed |
+| `AutoApprovalEngine` | Pure logic, no I/O | Ideal unit test candidate — tier assignment + batch checking |
+| `AgenticLoopService` | Requires mocking | Integration tests: mock provider streams, tool executor, hooks. Verify iteration counting, exhaustion recovery, approval flow |
+| `SystemPromptAssembler` | Requires mocking | Integration tests: mock tools-api, MongoDB, embedding service |
+
+**Recommendation**: Start with `ContextWindowManager` and `AutoApprovalEngine` (zero dependencies, fast), then `AgenticLoopService` integration tests.
+
+### 🔲 Abort Propagation to Tool Processes
+**Impact**: Medium — When a user aborts an agentic session (via disconnect or cancel), the `AbortController` signal stops the LLM stream and breaks the loop, but **in-flight tool executions may continue running** on `tools-api`.
+
+**Current behavior**:
+- `signal.aborted` → `stream.return()` breaks the LLM stream
+- `Promise.all` of pending tool calls is not cancelled — HTTP requests to `tools-api` complete independently
+- Shell processes spawned by `execute_shell`/`run_command` may keep running as orphans
+
+**Gap**: No abort signal is forwarded to `ToolOrchestratorService.executeTool()` or the SSE streaming connection. `tools-api` has no abort/kill endpoint for in-flight processes.
+
+**Mitigation path**:
+1. Pass `signal` through to `executeTool()` / `executeToolStreaming()` and abort the `fetch()` calls
+2. Add a `POST /compute/shell/kill/:pid` endpoint to `tools-api` for process-tree cleanup
+3. Track spawned PIDs in `AgenticLoopService` and kill them in the `finally` block
+
+### 🔲 Coordinator WebSocket Streaming
+**Impact**: Low — The Coordinator Mode currently uses **polling** (`GET /coordinator/status/:taskId`) to track worker progress. This works but creates unnecessary request overhead and latency in the UI.
+
+**Gap**: `CoordinatorService._runWorker()` does not emit events to a WebSocket channel. `CoordinatorPanel.js` polls on a timer instead of receiving push updates.
+
+**Mitigation path**: Emit `coordinator_progress` events via the existing WebSocket broadcast infrastructure. Wire `CoordinatorService` to accept a `broadcast` callback (same pattern as `MemoryConsolidationService`).
+
+### ⚠️ Token Estimation Accuracy
+**Impact**: Low — `ContextWindowManager` uses a fixed `~3.5 chars/token` ratio for budget enforcement. This is intentionally conservative but has known limitations:
+
+| Content Type | Actual Ratio | Estimation Accuracy |
+|---|---|---|
+| English prose | ~4.0 chars/token | Slightly over-estimates (safe) |
+| Code (JS/Python) | ~3.5 chars/token | Accurate |
+| CJK text | ~1.5 chars/token | **Under-estimates by ~2×** (risk of overflow) |
+| JSON/structured data | ~3.0 chars/token | Slightly over-estimates (safe) |
+| Base64 data | ~4.0 chars/token | Accurate |
+
+**Current mitigation**: The `80%` utilization target (`TARGET_UTILIZATION = 0.80`) provides a 20% safety margin that absorbs most estimation errors. No production overflow incidents observed.
+
+**Future improvement**: Per-model tokenizer integration (e.g. `tiktoken` for OpenAI, `@anthropic-ai/tokenizer` for Anthropic) would give exact counts but adds ~2ms latency per estimation and external dependencies. Only worth it if CJK-heavy workflows become common.
+
+### 🔲 Tool Execution Sandboxing
+**Impact**: Accepted risk — `execute_shell`, `execute_python`, `execute_javascript`, and `run_command` execute arbitrary code on the host system with the user's permissions. The **only** safety layer is the Tier 3 approval gate.
+
+**Current design**: This is an intentional tradeoff for a local-first tool. The agent runs on the user's own machine with their own filesystem access — sandboxing would limit the agent's utility for its primary use case (autonomous coding).
+
+**Noted risks**:
+- `autoApprove` / Full Auto mode bypasses the approval gate entirely
+- No audit log of executed commands beyond `RequestLogger` (queryable but not surfaced in UI)
+- No resource limits (CPU, memory, disk) on spawned processes
+
+**Possible future hardening** (if needed):
+- Command allowlist/denylist patterns in `AutoApprovalEngine` (e.g. block `rm -rf /`, `sudo`, `curl | sh`)
+- Per-session command audit panel in Retina
+- Docker/container-based execution for untrusted tool calls
+
+### 🔲 Undocumented Systems
+**Impact**: Low — Several implemented systems are not covered in this design document because they are orthogonal to the agentic loop:
+
+| System | Route | Service | Purpose |
+|---|---|---|---|
+| **Synthesis** | `/synthesis` | `synthesis.js` | User simulation — generates synthetic multi-turn conversations for testing and training |
+| **VRAM Benchmarks** | `/vram-benchmarks` | `vram-benchmarks.js` | GPU memory profiling for local models across different quantizations |
+| **Change Streams** | — | `ChangeStreamService.js` | MongoDB change stream watchers for real-time UI updates |
+| **Request Logger** | — | `RequestLogger.js` | Structured logging of all LLM API calls with cost, latency, and usage metrics |
+
+These are documented in their respective source files but excluded from this agentic architecture document to maintain focus.
 
 ---
 
