@@ -215,7 +215,7 @@ const MemoryService = {
     for (const fact of facts) {
       try {
         // Generate embedding (needed for both dedup check and storage)
-        const embedding = await generateEmbedding(fact.fact);
+        const embedding = await generateEmbedding(fact.fact, { project });
 
         // Check for duplicate facts (same user + very similar content)
         const existingMemories = await collection

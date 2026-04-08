@@ -214,7 +214,7 @@ export default class SystemPromptAssembler {
       // Generate query embedding
       let queryEmbedding;
       try {
-        queryEmbedding = await EmbeddingService.embed(queryText, { source: "skill-relevance" });
+        queryEmbedding = await EmbeddingService.embed(queryText, { source: "skill-relevance", project });
       } catch (err) {
         logger.warn(`[SystemPromptAssembler] Query embedding failed: ${err.message} — returning all skills`);
         return skills.map((s) => ({ name: s.name, content: s.content, description: s.description, score: 1 }));

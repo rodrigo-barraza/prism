@@ -34,8 +34,8 @@ const RELEVANCE_THRESHOLD = 0.3;
 /**
  * Generate an embedding vector for the given text.
  */
-async function generateEmbedding(text) {
-  return EmbeddingService.embed(text, { source: "agent-memory" });
+async function generateEmbedding(text, options = {}) {
+  return EmbeddingService.embed(text, { source: "agent-memory", ...options });
 }
 
 /**
@@ -100,7 +100,7 @@ const AgentMemoryService = {
 
     const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
 
-    const embedding = await generateEmbedding(`${title}: ${content}`);
+    const embedding = await generateEmbedding(`${title}: ${content}`, { project });
 
     // Duplicate detection — compare against existing memories in same project
     const existing = await collection
@@ -158,7 +158,7 @@ const AgentMemoryService = {
 
     let queryEmbedding;
     try {
-      queryEmbedding = await generateEmbedding(queryText);
+      queryEmbedding = await generateEmbedding(queryText, { project });
     } catch (err) {
       logger.warn(`[AgentMemoryService] Embedding failed: ${err.message}`);
       return [];
@@ -273,7 +273,7 @@ const AgentMemoryService = {
     // Re-generate embedding if content changed
     if (content !== undefined) {
       const embedText = title ? `${title}: ${content}` : content;
-      $set.embedding = await generateEmbedding(embedText);
+      $set.embedding = await generateEmbedding(embedText, { project: (await collection.findOne({ id: memoryId }, { projection: { project: 1 } }))?.project });
     }
 
     const result = await collection.updateOne({ id: memoryId }, { $set });
