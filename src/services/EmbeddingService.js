@@ -96,6 +96,9 @@ const EmbeddingService = {
           (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
       );
 
+      const approxInputTokens =
+        typeof content === "string" ? Math.ceil(content.length / 4) : 100;
+
       RequestLogger.log({
         requestId,
         endpoint: `embed:${source}`,
@@ -108,6 +111,11 @@ const EmbeddingService = {
         success,
         errorMessage,
         estimatedCost,
+        inputTokens: approxInputTokens,
+        outputTokens: 0,
+        tokensPerSec: totalSec > 0 && approxInputTokens > 0
+          ? parseFloat((approxInputTokens / totalSec).toFixed(1))
+          : null,
         inputCharacters,
         totalTime: parseFloat(totalSec.toFixed(3)),
         modalities: { embeddingIn: true },

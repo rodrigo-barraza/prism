@@ -273,7 +273,7 @@ const MemoryService = {
    * @param {number} [params.limit=10]
    * @returns {Promise<Array>} Relevant memories sorted by relevance
    */
-  async search({ guildId, userIds, queryText, limit = 10, sessionId }) {
+  async search({ guildId, userIds, queryText, limit = 10, sessionId, project }) {
     const client = MongoWrapper.getClient(MONGO_DB_NAME);
     if (!client) throw new Error("Database not available");
 
@@ -281,7 +281,9 @@ const MemoryService = {
     const collection = db.collection(LUPOS_COLLECTION);
 
     // Generate embedding for the search query
-    const embeddingOpts = sessionId ? { sessionId } : {};
+    const embeddingOpts = {};
+    if (sessionId) embeddingOpts.sessionId = sessionId;
+    if (project) embeddingOpts.project = project;
     const queryEmbedding = await generateEmbedding(queryText, embeddingOpts);
 
     // Build the filter

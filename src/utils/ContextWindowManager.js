@@ -18,7 +18,7 @@ import logger from "./logger.js";
 // ────────────────────────────────────────────────────────────
 
 /** Rough chars-per-token ratio. Conservative (slightly high) to avoid overflow. */
-const CHARS_PER_TOKEN = 3.5;
+const CHARS_PER_TOKEN = 4;
 
 /** Default overhead for tool schemas, internal formatting, etc. */
 const TOOL_SCHEMA_OVERHEAD_TOKENS = 2000;

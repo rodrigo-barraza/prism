@@ -19,12 +19,12 @@ import ContextWindowManager from "../src/utils/ContextWindowManager.js";
 
 describe("Token estimation", () => {
   it("estimates tokens for a simple text message", () => {
-    // "Hello world" = 11 chars → ceil(11 / 3.5) = 4 tokens + 4 overhead = 8
+    // "Hello world" = 11 chars → ceil(11 / 4) = 3 tokens + 4 overhead = 7
     const tokens = ContextWindowManager.estimateMessageTokens({
       role: "user",
       content: "Hello world",
     });
-    expect(tokens).toBe(4 + 4); // 4 content + 4 overhead
+    expect(tokens).toBe(3 + 4); // 3 content + 4 overhead
   });
 
   it("estimates zero tokens for null content", () => {

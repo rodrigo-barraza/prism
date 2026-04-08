@@ -56,6 +56,7 @@ router.post("/search", async (req, res, next) => {
       queryText,
       limit: limit || 10,
       sessionId: sessionId || null,
+      project: req.project || null,
     });
 
     res.json({ memories, count: memories.length });
