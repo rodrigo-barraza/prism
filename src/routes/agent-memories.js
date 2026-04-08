@@ -41,6 +41,23 @@ router.delete("/:id", async (req, res, next) => {
 });
 
 /**
+ * GET /agent-memories/consolidation-history?project=<project>&limit=10
+ * Retrieve consolidation run history for a project.
+ */
+router.get("/consolidation-history", async (req, res, next) => {
+  try {
+    const project = req.query.project || req.project || "default";
+    const limit = parseInt(req.query.limit) || 10;
+
+    const history = await MemoryConsolidationService.getHistory(project, limit);
+    res.json({ history });
+  } catch (error) {
+    logger.error(`[agent-memories] HISTORY ${error.message}`);
+    next(error);
+  }
+});
+
+/**
  * POST /agent-memories/consolidate
  * Trigger on-demand memory consolidation for a project.
  */
@@ -49,7 +66,11 @@ router.post("/consolidate", async (req, res, next) => {
     const project = req.body.project || req.query.project || "default";
     const username = req.body.username || "system";
 
-    const result = await MemoryConsolidationService.consolidate({ project, username });
+    const result = await MemoryConsolidationService.consolidate({
+      project,
+      username,
+      trigger: "manual",
+    });
     res.json(result);
   } catch (error) {
     logger.error(`[agent-memories] CONSOLIDATE ${error.message}`);

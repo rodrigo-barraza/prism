@@ -21,7 +21,11 @@ const STALENESS_DAYS = 30;
 /** Min sessions between consolidation runs */
 const SESSIONS_BETWEEN_RUNS = 5;
 
+/** Max consolidation runs per project per day (cost guard) */
+const DAILY_MAX_CONSOLIDATIONS = 3;
+
 const RUNS_COLLECTION = "memory_consolidation_runs";
+const HISTORY_COLLECTION = "memory_consolidation_history";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -253,6 +257,66 @@ async function resetRunCount(project) {
   );
 }
 
+// ─── History & Cost Guard ────────────────────────────────────────────────────
+
+/**
+ * Record a consolidation run for audit trail.
+ */
+async function recordHistory(project, trigger, memoriesBefore, actions, summary, durationMs) {
+  const client = MongoWrapper.getClient(MONGO_DB_NAME);
+  if (!client) return;
+
+  const db = client.db(MONGO_DB_NAME);
+  const mergeCount = actions.filter((a) => a.type === "merge").reduce(
+    (sum, a) => sum + (a.sourceIds?.length || 0), 0,
+  );
+  const deleteCount = actions.filter((a) => a.type === "delete").length;
+
+  await db.collection(HISTORY_COLLECTION).insertOne({
+    project,
+    runAt: new Date().toISOString(),
+    trigger,
+    memoriesBefore,
+    memoriesAfter: memoriesBefore - mergeCount - deleteCount + actions.filter((a) => a.type === "merge").length,
+    actionsApplied: actions.length,
+    actions: actions.map((a) => ({
+      type: a.type,
+      ...(a.sourceIds && { sourceIds: a.sourceIds }),
+      ...(a.merged && { mergedTitle: a.merged.title }),
+      ...(a.id && { deletedId: a.id }),
+      reason: a.reason || "",
+    })),
+    summary,
+    durationMs,
+  });
+}
+
+/**
+ * Check if the daily consolidation budget is exhausted.
+ * Returns true if more runs are allowed.
+ */
+async function canRunToday(project) {
+  const client = MongoWrapper.getClient(MONGO_DB_NAME);
+  if (!client) return true;
+
+  const db = client.db(MONGO_DB_NAME);
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const todayCount = await db.collection(HISTORY_COLLECTION).countDocuments({
+    project,
+    runAt: { $gte: startOfDay.toISOString() },
+  });
+
+  if (todayCount >= DAILY_MAX_CONSOLIDATIONS) {
+    logger.warn(
+      `[MemoryConsolidation] Daily limit reached for "${project}" (${todayCount}/${DAILY_MAX_CONSOLIDATIONS})`,
+    );
+    return false;
+  }
+  return true;
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 const MemoryConsolidationService = {
@@ -262,10 +326,18 @@ const MemoryConsolidationService = {
    * @param {object} params
    * @param {string} params.project - Project identifier
    * @param {string} [params.username] - For attribution on merged memories
+   * @param {string} [params.trigger="manual"] - What triggered the run ("manual", "scheduled", "session_threshold")
+   * @param {function} [params.broadcast] - Optional callback for real-time WebSocket notifications
    * @returns {Promise<object>} Consolidation results
    */
-  async consolidate({ project, username }) {
-    logger.info(`[MemoryConsolidation] Starting consolidation for project "${project}"`);
+  async consolidate({ project, username, trigger = "manual", broadcast }) {
+    const startTime = performance.now();
+    logger.info(`[MemoryConsolidation] Starting consolidation for project "${project}" (trigger: ${trigger})`);
+
+    // Cost guard — check daily budget
+    if (!(await canRunToday(project))) {
+      return { skipped: true, reason: "daily_limit_reached", total: 0 };
+    }
 
     // Load all memories with embeddings
     const client = MongoWrapper.getClient(MONGO_DB_NAME);
@@ -335,21 +407,47 @@ const MemoryConsolidationService = {
     await resetRunCount(project);
 
     const summary = parsed.summary || `Merged ${results.merged}, deleted ${results.deleted}`;
-    logger.info(`[MemoryConsolidation] Complete: ${summary}`);
+    const durationMs = Math.round(performance.now() - startTime);
+    logger.info(`[MemoryConsolidation] Complete: ${summary} (${durationMs}ms)`);
 
-    return {
+    // Phase 5: Record history for audit trail
+    await recordHistory(project, trigger, allMemories.length, actions, summary, durationMs);
+
+    const consolidationResult = {
       ...results,
       actionsApplied: actions.length,
       summary,
       total: allMemories.length,
+      trigger,
+      durationMs,
     };
+
+    // Broadcast to connected clients if callback provided
+    if (typeof broadcast === "function") {
+      try {
+        broadcast({
+          type: "memory_consolidation_complete",
+          project,
+          ...consolidationResult,
+        });
+      } catch (err) {
+        logger.warn(`[MemoryConsolidation] Broadcast failed: ${err.message}`);
+      }
+    }
+
+    return consolidationResult;
   },
 
   /**
    * Check if consolidation should run and trigger if needed.
    * Called by SessionSummarizer after storing new memories.
+   *
+   * @param {object} params
+   * @param {string} params.project - Project identifier
+   * @param {string} [params.username] - Username for attribution
+   * @param {function} [params.broadcast] - Optional broadcast callback for WebSocket notifications
    */
-  async checkAndRun({ project, username }) {
+  async checkAndRun({ project, username, broadcast }) {
     try {
       await incrementRunCount(project);
       const count = await getRunCount(project);
@@ -359,13 +457,39 @@ const MemoryConsolidationService = {
           `[MemoryConsolidation] Threshold reached (${count}/${SESSIONS_BETWEEN_RUNS}) — triggering`,
         );
         // Fire-and-forget
-        MemoryConsolidationService.consolidate({ project, username }).catch((err) =>
+        MemoryConsolidationService.consolidate({
+          project,
+          username,
+          trigger: "session_threshold",
+          broadcast,
+        }).catch((err) =>
           logger.error(`[MemoryConsolidation] Background consolidation failed: ${err.message}`),
         );
       }
     } catch (err) {
       logger.error(`[MemoryConsolidation] checkAndRun failed: ${err.message}`);
     }
+  },
+
+  /**
+   * Get consolidation run history for a project.
+   *
+   * @param {string} project - Project identifier
+   * @param {number} [limit=10] - Max history entries to return
+   * @returns {Promise<Array>} Consolidation history entries, newest first
+   */
+  async getHistory(project, limit = 10) {
+    const client = MongoWrapper.getClient(MONGO_DB_NAME);
+    if (!client) return [];
+
+    const db = client.db(MONGO_DB_NAME);
+    return db
+      .collection(HISTORY_COLLECTION)
+      .find({ project })
+      .sort({ runAt: -1 })
+      .limit(limit)
+      .project({ _id: 0 })
+      .toArray();
   },
 };
 

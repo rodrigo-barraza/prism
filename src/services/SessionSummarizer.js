@@ -212,10 +212,16 @@ export default class SessionSummarizer {
             });
           }
 
+          // Build a broadcast callback from ctx.emit for consolidation notifications
+          const broadcast = ctx.emit
+            ? (payload) => ctx.emit(payload)
+            : undefined;
+
           // Check if consolidation should run (tracks session count)
           MemoryConsolidationService.checkAndRun({
             project: ctx.project,
             username: ctx.username,
+            broadcast,
           });
         })
         .catch((err) =>

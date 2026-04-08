@@ -1,0 +1,119 @@
+import { Router } from "express";
+import CoordinatorService from "../services/CoordinatorService.js";
+import logger from "../utils/logger.js";
+
+const router = Router();
+
+// ═══════════════════════════════════════════════════════════════
+// Coordinator Routes — Multi-Agent Orchestration
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * POST /coordinator/plan
+ * Decompose a task into parallel sub-tasks for review.
+ *
+ * Body: { task: string, files: string[], repoPath?: string }
+ */
+router.post("/plan", async (req, res, next) => {
+  try {
+    const { task, files, repoPath } = req.body;
+
+    if (!task || typeof task !== "string") {
+      return res.status(400).json({ error: "'task' (string) is required" });
+    }
+    if (!files || !Array.isArray(files) || files.length === 0) {
+      return res.status(400).json({ error: "'files' (non-empty array) is required" });
+    }
+
+    const plan = await CoordinatorService.decompose({ task, files, repoPath });
+    res.json(plan);
+  } catch (error) {
+    logger.error(`[coordinator] PLAN ${error.message}`);
+    next(error);
+  }
+});
+
+/**
+ * POST /coordinator/execute
+ * Execute an approved plan — spawn workers in git worktrees.
+ *
+ * Body: { plan: object, provider?: string, model?: string }
+ */
+router.post("/execute", async (req, res, next) => {
+  try {
+    const { plan, provider, model } = req.body;
+
+    if (!plan || !plan.taskId || !plan.subTasks) {
+      return res.status(400).json({ error: "'plan' object with taskId and subTasks is required" });
+    }
+
+    // Fire and respond immediately — progress via polling or WebSocket
+    const result = await CoordinatorService.execute(plan, {
+      provider,
+      model,
+      project: req.project,
+      username: req.username,
+    });
+
+    res.json(result);
+  } catch (error) {
+    logger.error(`[coordinator] EXECUTE ${error.message}`);
+    next(error);
+  }
+});
+
+/**
+ * GET /coordinator/status/:taskId
+ * Get the current status of a coordinator task.
+ */
+router.get("/status/:taskId", (req, res) => {
+  const status = CoordinatorService.getStatus(req.params.taskId);
+  if (!status) {
+    return res.status(404).json({ error: "Task not found" });
+  }
+  res.json(status);
+});
+
+/**
+ * GET /coordinator/tasks
+ * List all active coordinator tasks.
+ */
+router.get("/tasks", (_req, res) => {
+  res.json({ tasks: CoordinatorService.listTasks() });
+});
+
+/**
+ * POST /coordinator/approve-merge/:taskId
+ * Approve and merge completed worker branches.
+ */
+router.post("/approve-merge/:taskId", async (req, res, next) => {
+  try {
+    const result = await CoordinatorService.approveMerge(req.params.taskId);
+    if (result.error) {
+      return res.status(400).json(result);
+    }
+    res.json(result);
+  } catch (error) {
+    logger.error(`[coordinator] APPROVE-MERGE ${error.message}`);
+    next(error);
+  }
+});
+
+/**
+ * POST /coordinator/abort/:taskId
+ * Abort a running task — kill workers and clean up worktrees.
+ */
+router.post("/abort/:taskId", async (req, res, next) => {
+  try {
+    const result = await CoordinatorService.abort(req.params.taskId);
+    if (result.error) {
+      return res.status(400).json(result);
+    }
+    res.json(result);
+  } catch (error) {
+    logger.error(`[coordinator] ABORT ${error.message}`);
+    next(error);
+  }
+});
+
+export default router;

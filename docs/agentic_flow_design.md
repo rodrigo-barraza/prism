@@ -22,7 +22,7 @@ The Retina Agent executes a robust 11-step loop for every user interaction, buil
 5. ✅ **API Streaming**: Starts a streaming connection via `provider.generateTextStream()` or `provider.generateTextStreamLive()` for Live API models.
 6. ✅ **Token Parsing**: Chunk processing loop handles: `text`, `thinking`, `toolCall`, `image`, `executableCode`, `codeExecutionResult`, `webSearchResult`, `audio`, and `status` chunk types.
 7. ✅ **Tool Detection**: Resolves tool call chunks, including native MCP pass-through for LM Studio (`chunk.native === true`). Pre-flight permission checks are implemented via `AutoApprovalEngine` (three-tier system with `beforeToolCall` hook).
-8. ✅ **Tool Loop**: Collects `passPendingToolCalls`, executes via `Promise.all`, appends results to context, and re-prompts the LLM automatically. Capped at `MAX_TOOL_ITERATIONS = 10`.
+8. ✅ **Tool Loop**: Collects `passPendingToolCalls`, executes via `Promise.all`, appends results to context, and re-prompts the LLM automatically. Capped at `MAX_TOOL_ITERATIONS = 25`.
 9. ✅ **Response Rendering**: Flushes final text to the WebSocket via `emit({ type: "chunk", content })`.
 10. ✅ **Post-Sampling Hooks**: Background processes for memory extraction via `SessionSummarizer`, registered as an `afterResponse` hook. Uses Claude Haiku to extract 4-type memories (user, feedback, project, reference) and stores via `AgentMemoryService`. Token compaction is 🔲.
 11. ✅ **Await Input**: The WebSocket connection stays open for the next message.
@@ -83,10 +83,11 @@ Additionally, custom tools can be defined per-project in MongoDB (`custom_tools`
    - **Implementation**: `MCPClientService` manages connections via `@modelcontextprotocol/sdk` (stdio + Streamable HTTP transports). Tools namespaced as `mcp__{server}__{tool}` and merged into `ToolOrchestratorService`. Managed via `/mcp-servers` REST API with CRUD + connect/disconnect endpoints. Retina MCPServersPanel in Agent sidebar. Auto-connect on startup.
    - **Files**: `MCPClientService.js`, `mcp-servers.js`, `ToolOrchestratorService.js`, `MCPServersPanel.js`
 
-2. 🔲 **Browser Automation ("Computer Use")**:
+2. ✅ **Browser Automation ("Computer Use")**:
    - **What**: Headless Playwright-based browser tool for SPA navigation, E2E testing, and visual QA.
    - **Why**: `fetch_url` can't handle JavaScript-rendered pages, authentication flows, or visual regression testing.
-   - **Implementation**: `tools-api` spawns a Playwright browser instance, exposes actions (`navigate`, `click`, `type`, `screenshot`, `evaluate`) as tool parameters. Screenshots are uploaded to MinIO and returned as image references.
+   - **Implementation**: `AgenticBrowserService` in `tools-api` manages a Playwright browser instance via `browser_action` tool. Supports `navigate`, `click`, `type`, `screenshot`, `scroll`, `evaluate`, `get_elements` (DOM inspection with CSS selectors). Screenshots persisted as `screenshotRef` values promoted into conversation `images` arrays.
+   - **Files**: `tools-api/services/AgenticBrowserService.js`, `AgenticRoutes.js` (`/agentic/browser/action`), `retina/src/components/ToolResultRenderers.js`
 
 > **Design principle**: Optimize for the *right* tools at each capability tier, not raw count. Claude Code ships ~15 tools. Cursor ships fewer. Coverage of capability categories (filesystem, search, execution, network, browser) matters more than quantity.
 
@@ -107,21 +108,47 @@ For tasks requiring extensive reasoning, the agent enters a dedicated planning l
 
 **Implementation**: Retina UI flag → Prism wraps the first LLM call with a planning system prompt → response rendered via `PlanCardComponent` → approved plan injected as context for execution calls.
 
-### 🔲 Coordinator Mode (Multi-Agent Orchestration)
-Retina can act as a manager, breaking a complex task into pieces and spawning parallel worker agents. **Scoped to a single concrete use case**: fan-out a refactoring task across N files in isolated git worktrees, then merge results.
+### ⚠️ Coordinator Mode (Multi-Agent Orchestration)
+Retina can act as a manager, breaking a complex task into pieces and spawning parallel worker agents. **Scoped to file-centric refactoring tasks**: fan-out a task across N files in isolated git worktrees, then merge results.
 
-- Prism spawns worker instances (forked `AgenticLoopService` runs) with isolated file contexts
-- Each worker operates in a git worktree branch
-- Results are merged via git and presented as a unified diff for review
-- **Requires**: Mutation Queue (file-write serialization) to prevent conflicts
+**Architecture**: User Request → LLM Decomposition (Claude Sonnet) → N Workers → Git Worktree Isolation → MutationQueue Safety → Unified Diff → User Approval → Git Merge
 
-### ⚠️ Persistent Memory (Two-Phase)
+**Infrastructure** ✅:
+- `CoordinatorService.js`: `decompose()` (LLM-based task decomposition, max 5 sub-tasks), `execute()` (parallel worktree spawning), `approveMerge()`, `abort()`, status polling
+- `MutationQueue.js`: Per-file-path FIFO mutex with `acquire()`/`release()`/`withLock()` — singleton pattern for concurrent write safety
+- `coordinator.js` route: `POST /coordinator/{plan,execute,approve-merge,abort}`, `GET /coordinator/{status/:taskId,tasks}`
+- `AgenticGitService.js` (tools-api): 5 worktree functions — `create`, `remove`, `merge` (`--no-ff`), `diff` (three-dot), `cleanup` (prune orphans from `/tmp/prism-worktrees/`)
+- `AgenticRoutes.js`: `POST /agentic/git/worktree/{create,remove,merge,diff,cleanup}`
+- `CoordinatorPanel.js` + CSS: Full lifecycle UI — Input → Plan Review (complexity badges) → Executing → Diff Review (+/- counts) → Approve & Merge / Reject & Cleanup
+- Wired as `GitBranch` tab in Agent sidebar (`AgentComponent.js`)
+
+**Not yet wired** 🔲:
+- `_runWorker()` does not yet invoke `AgenticLoopService.runAgenticLoop()` — currently stages/commits only. Worker loop integration is deferred to keep the infrastructure PR focused.
+- WebSocket progress streaming (currently polling-based)
+- Merge conflict resolution UI
+- Boot-time orphan worktree cleanup
+
+**Design decisions**:
+- Scoped to file mutations only — non-file parallel tasks (test running, research) don't need worktree isolation and should use a simpler fan-out pattern
+- File paths currently required in input — future improvement: let decomposition LLM discover files via `project_summary` + `grep_search`
+- Workers operate on the full tool suite (not just file ops) when loop is wired in
+
+### ✅ Persistent Memory (Two-Phase)
 
 **Phase A — Session Summarization** ✅:
 `SessionSummarizer` runs as a fire-and-forget `afterResponse` hook, extracting memories via `claude-haiku-4-5` into a 4-type taxonomy (user, feedback, project, reference). Stored in `agent_memories` collection via `AgentMemoryService` with embedding-based duplicate detection (cosine similarity > 0.92 = skip). Memories include staleness caveats and age metadata for prompt injection.
 
-**Phase B — Auto-Dream** (higher complexity, deferred):
-Between sessions, a background inference loop reviews accumulated session summaries, identifies patterns, and consolidates knowledge into project-specific skill/memory files. Requires careful cost management to avoid burning API credits on low-value consolidation.
+**Phase B — Memory Consolidation** ✅:
+Autonomous background process that clusters, merges, and prunes accumulated memories using Union-Find clustering on embeddings. Implementation:
+
+- `MemoryConsolidationService.js`: Clusters memories by cosine similarity, sends clusters to Claude Haiku for merge/delete/keep analysis, applies actions, records audit trail in `memory_consolidation_history` collection
+- **Scheduled loop**: `setInterval` in `index.js` runs every 6 hours, processes all projects with 10+ memories (trigger: `scheduled`)
+- **Cost guard**: `DAILY_MAX_CONSOLIDATIONS = 3` per project per day to prevent API credit burn
+- **Audit trail**: Every run recorded with trigger type, memory counts (before/after), actions applied, duration, summary
+- **Real-time feedback**: `broadcast` callback wired through `SessionSummarizer` → `ctx.emit` pushes `memory_consolidation_complete` events to Retina via WebSocket
+- **API**: `GET /agent-memories/consolidation-history?project=X&limit=5`
+- **UI**: `MemoriesPanel.js` has collapsible Consolidation History section with trigger badges (Manual / Scheduled / Session), timeline entries, and auto-refresh on consolidation events via `consolidationEvent` prop
+- **Triggers**: Manual (POST endpoint), scheduled (6h interval), session-threshold (after N sessions via SessionSummarizer)
 
 ---
 
@@ -182,11 +209,19 @@ Prism streams raw chunks (`emit({ type: "chunk", content })`) without transforma
 4. ✅ **MCP Client** — Prism connects to external MCP servers for third-party tool access
 5. 🔲 **Slash Commands** — Parameterized prompt templates with argument substitution
 
-### Phase 3: Multi-Agent & Autonomy
-1. **Coordinator Mode** — Parallel file refactoring with git worktree isolation, scoped to fan-out/merge pattern
-2. **Mutation Queue** — File-write serialization for concurrent agent sessions (required by Coordinator Mode)
-3. **Auto-Dream** — Background inference for knowledge consolidation between sessions
-4. **Browser Automation** — Headless Playwright integration in `tools-api` for E2E testing and visual QA
+### Phase 3: Multi-Agent & Autonomy (4/4 infrastructure complete)
+1. ✅ **Coordinator Mode** — Infrastructure: `CoordinatorService`, `CoordinatorPanel`, git worktree endpoints, REST API. 🔲 Worker loop integration (wiring `AgenticLoopService` into `_runWorker`)
+2. ✅ **Mutation Queue** — `MutationQueue.js`: per-path FIFO mutex singleton for concurrent write safety
+3. ✅ **Memory Consolidation** — `MemoryConsolidationService`: scheduled 6h loop, audit trail, cost guard, real-time broadcast, UI history panel
+4. ✅ **Browser Automation** — `AgenticBrowserService`: Playwright integration with `browser_action` tool, DOM inspection, screenshot persistence
+
+### Phase 4: Hardening & Intelligence
+1. 🔲 **Coordinator Worker Loop** — Wire `AgenticLoopService.runAgenticLoop()` into `CoordinatorService._runWorker()` so workers autonomously edit files
+2. 🔲 **Token-Budget Truncation** — Context window overflow protection in `SystemPromptAssembler` (compress old messages, drop low-relevance context)
+3. 🔲 **Slash Commands** — Parameterized prompt templates with `$1`, `$@` argument substitution
+4. 🔲 **Per-Tool Tier Overrides UI** — Retina settings panel to customize Auto-Approval tiers per tool
+5. 🔲 **Coordinator Conflict Resolution** — Interactive diff merge UI for worktree conflicts
+6. 🔲 **Boot-Time Cleanup** — Prune orphan worktrees from `/tmp/prism-worktrees/` on Prism startup
 
 ---
 

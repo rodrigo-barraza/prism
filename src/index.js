@@ -22,6 +22,7 @@ import {
 import MongoWrapper from "./wrappers/MongoWrapper.js";
 import MinioWrapper from "./wrappers/MinioWrapper.js";
 import ChangeStreamService from "./services/ChangeStreamService.js";
+import MemoryConsolidationService from "./services/MemoryConsolidationService.js";
 
 // Routes
 import chatRouter from "./routes/chat.js";
@@ -49,6 +50,7 @@ import statsRouter from "./routes/stats.js";
 import benchmarkRouter from "./routes/benchmark.js";
 import synthesisRouter from "./routes/synthesis.js";
 import vramBenchmarksRouter from "./routes/vram-benchmarks.js";
+import coordinatorRouter from "./routes/coordinator.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -85,6 +87,7 @@ const ENDPOINTS = {
     "/benchmark",
     "/synthesis",
     "/vram-benchmarks",
+    "/coordinator",
   ],
   websocket: ["/ws/chat", "/ws/text-to-audio"],
   admin: ["/admin", "/admin/lm-studio", "/admin/sessions"],
@@ -133,6 +136,7 @@ app.use("/stats", statsRouter);
 app.use("/benchmark", benchmarkRouter);
 app.use("/synthesis", synthesisRouter);
 app.use("/vram-benchmarks", vramBenchmarksRouter);
+app.use("/coordinator", coordinatorRouter);
 
 // Error handler (must be last)
 app.use(errorHandler);
@@ -215,6 +219,36 @@ setupWebSocket(wss);
   } catch (err) {
     logger.warn(`MCP auto-connect failed: ${err.message}`);
   }
+
+  // ── Scheduled Memory Consolidation ─────────────────
+  // Runs every 6 hours, consolidates memories for all active projects.
+  const CONSOLIDATION_INTERVAL_MS = 6 * 60 * 60 * 1000;
+  setInterval(async () => {
+    try {
+      const db = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
+      if (!db) return;
+
+      // Find all distinct projects with at least some memories
+      const projects = await db.collection("agent_memories").distinct("project");
+
+      for (const project of projects) {
+        const count = await db.collection("agent_memories").countDocuments({ project });
+        if (count < 10) continue; // Skip projects with few memories
+
+        logger.info(`[AutoDream] Scheduled consolidation for project "${project}" (${count} memories)`);
+        MemoryConsolidationService.consolidate({
+          project,
+          username: "system",
+          trigger: "scheduled",
+        }).catch((err) =>
+          logger.error(`[AutoDream] Scheduled consolidation failed for "${project}": ${err.message}`),
+        );
+      }
+    } catch (err) {
+      logger.error(`[AutoDream] Scheduled consolidation sweep failed: ${err.message}`);
+    }
+  }, CONSOLIDATION_INTERVAL_MS);
+  logger.info(`[AutoDream] Scheduled consolidation every ${CONSOLIDATION_INTERVAL_MS / 3_600_000}h`);
 
   // Initialize MinIO if all secrets are configured
   if (
