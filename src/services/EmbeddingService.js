@@ -79,6 +79,12 @@ const EmbeddingService = {
 
       const source = options.source || "unknown";
 
+      // Determine input content type for payload logging
+      const contentType = typeof content === "string" ? "text"
+        : Array.isArray(content) ? "multimodal"
+          : "unknown";
+      const inputCharacters = typeof content === "string" ? content.length : 0;
+
       logger.request(
         options.project || null,
         options.username || "system",
@@ -101,7 +107,22 @@ const EmbeddingService = {
         success,
         errorMessage,
         estimatedCost,
+        inputCharacters,
         totalTime: parseFloat(totalSec.toFixed(3)),
+        modalities: { embeddingIn: true },
+        requestPayload: {
+          source,
+          contentType,
+          ...(options.taskType ? { taskType: options.taskType } : {}),
+          ...(options.dimensions ? { dimensions: options.dimensions } : {}),
+          ...(contentType === "text" ? { textPreview: (typeof content === "string" ? content : "").slice(0, 200) } : {}),
+        },
+        responsePayload: success
+          ? {
+              dimensions: result?.dimensions || null,
+              embeddingPreview: result?.embedding?.slice(0, 5) || null,
+            }
+          : { error: errorMessage },
       });
     }
 

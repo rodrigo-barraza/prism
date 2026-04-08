@@ -547,19 +547,21 @@ export async function handleChat(params, emit, { signal } = {}) {
     // Clear generating flag on error
     markGenerating(conversationId, project, username, false);
     const totalSec = (performance.now() - requestStart) / 1000;
-    RequestLogger.log({
+    RequestLogger.logChatGeneration({
       requestId,
       endpoint: agenticLoopEnabled ? "agent" : "chat",
       project,
       username,
       clientIp,
       provider: providerName,
-      model: resolvedModel,
+      model: resolvedModel || requestedModel || "unknown",
+      conversationId: conversationId || null,
       sessionId: sessionId || null,
       success: false,
       errorMessage: error.message,
-      messageCount: messages ? messages.length : 0,
-      totalTime: totalSec,
+      totalSec,
+      messages: messages || [],
+      options: {},
     });
     emit({ type: "error", message: error.message });
   }
