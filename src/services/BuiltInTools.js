@@ -29,7 +29,10 @@ const BUILT_IN_SCHEMAS = [
       "Can also edit or redraw existing images from the conversation when reference images are available. " +
       "Always provide a highly detailed, descriptive prompt for best results — include specifics about style, " +
       "composition, subjects, colors, mood, lighting, and artistic direction. " +
-      "The generated image will be delivered to the user automatically.",
+      "The generated image will be delivered to the user automatically. " +
+      "IMPORTANT: Do NOT call this tool unless the user's current message explicitly asks for an " +
+      "image, drawing, painting, illustration, or artwork. Never call it for greetings, " +
+      "questions, or casual conversation.",
     parameters: {
       type: "object",
       properties: {
