@@ -1,6 +1,6 @@
 import ToolOrchestratorService from "./ToolOrchestratorService.js";
 import BuiltInTools from "./BuiltInTools.js";
-import { expandMessagesForFC, truncateToolResult } from "../utils/FunctionCallingUtilities.js";
+import { expandMessagesForFC, truncateToolResult as _truncateToolResult } from "../utils/FunctionCallingUtilities.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
@@ -10,6 +10,7 @@ import { finalizeTextGeneration } from "../routes/chat.js";
 import RequestLogger from "./RequestLogger.js";
 import { TYPES, getPricing } from "../config.js";
 import { calculateTextCost } from "../utils/CostCalculator.js";
+import { calculateTokensPerSec } from "../utils/math.js";
 import ContextWindowManager from "../utils/ContextWindowManager.js";
 import AgentHooks from "./AgentHooks.js";
 import AutoApprovalEngine from "./AutoApprovalEngine.js";
@@ -328,6 +329,8 @@ export default class AgenticLoopService {
           }
 
           if (chunk && typeof chunk === "object" && chunk.type === "thinking") {
+            if (!overallFirstTokenTime) overallFirstTokenTime = performance.now();
+            if (!passFirstTokenTime) passFirstTokenTime = performance.now();
             overallGenerationEnd = performance.now();
             passGenerationEnd = performance.now();
             streamedThinking += chunk.content;
@@ -345,6 +348,12 @@ export default class AgenticLoopService {
           }
 
           if (chunk && typeof chunk === "object" && chunk.type === "toolCall") {
+            // Tool call chunks indicate model output — track generation timing
+            if (!overallFirstTokenTime) overallFirstTokenTime = performance.now();
+            if (!passFirstTokenTime) passFirstTokenTime = performance.now();
+            overallGenerationEnd = performance.now();
+            passGenerationEnd = performance.now();
+
             // Native MCP tool calls (e.g. LM Studio): already executed by provider,
             // pass through directly as toolCall events — do NOT re-execute.
             if (chunk.native) {
@@ -466,13 +475,13 @@ export default class AgenticLoopService {
         // Log the intermediate request
         const passGenerationSec = passFirstTokenTime && passGenerationEnd ? (passGenerationEnd - passFirstTokenTime) / 1000 : null;
         const passTotalSec = (performance.now() - passStart) / 1000;
-        const passTokensPerSec = passGenerationSec > 0 && passUsage.outputTokens > 0 ? parseFloat((passUsage.outputTokens / passGenerationSec).toFixed(1)) : null;
+        const passTokensPerSec = calculateTokensPerSec(passUsage.outputTokens, passGenerationSec);
         const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[resolvedModel];
         const passEstimatedCost = calculateTextCost(passUsage, pricing);
 
         RequestLogger.logChatGeneration({
           requestId: `${ctx.requestId}-${iterations}`,
-          endpoint: "agent",
+          endpoint: "/agent",
           operation: "agent:iteration",
           project,
           username,

@@ -1,9 +1,13 @@
+import crypto from "crypto";
 import { getProvider } from "../providers/index.js";
 import AgentMemoryService from "./AgentMemoryService.js";
+import RequestLogger from "./RequestLogger.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
-import { cosineSimilarity } from "../utils/math.js";
+import { cosineSimilarity, calculateTokensPerSec } from "../utils/math.js";
+import { estimateTokens } from "../utils/CostCalculator.js";
+import { TYPES, getPricing } from "../config.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -365,10 +369,65 @@ const MemoryConsolidationService = {
       { role: "user", content: input },
     ];
 
+    const llmRequestId = crypto.randomUUID();
+    const llmStart = performance.now();
+    let llmSuccess = true;
+    let llmError = null;
+
     const result = await provider.generateText(aiMessages, CONSOLIDATION_MODEL, {
       maxTokens: 2000,
       temperature: 0.1,
+    }).catch((err) => {
+      llmSuccess = false;
+      llmError = err.message;
+      throw err;
+    }).finally(() => {
+      // intentionally empty — logging happens below after we have the result
     });
+
+    // Log the consolidation LLM call
+    {
+      const llmTotalSec = (performance.now() - llmStart) / 1000;
+      const inputText = aiMessages.map((m) => m.content).join("\n");
+      const approxInputTokens = estimateTokens(inputText);
+      const approxOutputTokens = result ? estimateTokens(result.text || "") : 0;
+      const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[CONSOLIDATION_MODEL];
+      let estimatedCost = null;
+      if (pricing) {
+        const inputCost = (approxInputTokens / 1_000_000) * (pricing.inputPerMillion || 0);
+        const outputCost = (approxOutputTokens / 1_000_000) * (pricing.outputPerMillion || 0);
+        estimatedCost = parseFloat((inputCost + outputCost).toFixed(8));
+      }
+
+      RequestLogger.log({
+        requestId: llmRequestId,
+        endpoint: null,
+        operation: "memory:consolidate",
+        project,
+        username: username || "system",
+        clientIp: null,
+        provider: CONSOLIDATION_PROVIDER,
+        model: CONSOLIDATION_MODEL,
+        success: llmSuccess,
+        errorMessage: llmError,
+        estimatedCost,
+        inputTokens: approxInputTokens,
+        outputTokens: approxOutputTokens,
+        tokensPerSec: calculateTokensPerSec(approxOutputTokens, llmTotalSec),
+        inputCharacters: inputText.length,
+        totalTime: parseFloat(llmTotalSec.toFixed(3)),
+        modalities: { textIn: true, textOut: true },
+        requestPayload: {
+          operation: "memory:consolidate",
+          trigger,
+          clusterCount: clusters.length,
+          memoryCount: allMemories.length,
+        },
+        responsePayload: llmSuccess
+          ? { textPreview: (result?.text || "").slice(0, 200) }
+          : { error: llmError },
+      });
+    }
 
     // Parse response
     let parsed;

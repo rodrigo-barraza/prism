@@ -13,6 +13,7 @@ import RequestLogger from "../services/RequestLogger.js";
 import ConversationService from "../services/ConversationService.js";
 import { calculateLiveCost } from "../utils/CostCalculator.js";
 import { getModelByName } from "../config.js";
+import { calculateTokensPerSec } from "../utils/math.js";
 
 /**
  * Set up WebSocket handlers on the HTTP server.
@@ -569,7 +570,7 @@ function handleWsLive(ws, project, username, _clientIp) {
 
                   RequestLogger.logChatGeneration({
                     requestId: `live-${crypto.randomUUID()}`,
-                    endpoint: "live",
+                    endpoint: "/live",
                     operation: "live",
                     project,
                     username,
@@ -580,7 +581,7 @@ function handleWsLive(ws, project, username, _clientIp) {
                     success: true,
                     usage: { ...turnUsage },
                     estimatedCost,
-                    tokensPerSec: generationSec > 0 && turnUsage.outputTokens > 0 ? parseFloat((turnUsage.outputTokens / generationSec).toFixed(1)) : null,
+                    tokensPerSec: calculateTokensPerSec(turnUsage.outputTokens, generationSec),
                     timeToGenerationSec,
                     generationSec,
                     totalSec,

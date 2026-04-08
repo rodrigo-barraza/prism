@@ -37,6 +37,7 @@ router.get("/requests", async (req, res, next) => {
       provider,
       model,
       endpoint,
+      operation,
       success,
       from,
       to,
@@ -50,6 +51,7 @@ router.get("/requests", async (req, res, next) => {
     if (provider) filter.provider = provider;
     if (model) filter.model = model;
     if (endpoint) filter.endpoint = endpoint;
+    if (operation) filter.operation = operation;
     if (success !== undefined) filter.success = success === "true";
     if (from || to) {
       filter.timestamp = {};
@@ -2382,6 +2384,7 @@ router.get("/sessions", async (req, res, next) => {
                 project: 1,
                 username: 1,
                 endpoint: 1,
+                operation: 1,
                 estimatedCost: 1,
                 success: 1,
                 modalities: 1,
@@ -2670,6 +2673,33 @@ router.get("/sessions", async (req, res, next) => {
           // Derive start/finish timestamps from earliest/latest request
           startedAt: { $min: "$_requests.timestamp" },
           finishedAt: { $max: "$_requests.timestamp" },
+          // Merge modalities from all requests into a session-level object
+          modalities: {
+            $reduce: {
+              input: "$_requests",
+              initialValue: {},
+              in: {
+                $mergeObjects: [
+                  "$$value",
+                  {
+                    $cond: [
+                      { $ne: ["$$this.modalities", null] },
+                      {
+                        $arrayToObject: {
+                          $filter: {
+                            input: { $objectToArray: "$$this.modalities" },
+                            as: "kv",
+                            cond: { $eq: ["$$kv.v", true] },
+                          },
+                        },
+                      },
+                      {},
+                    ],
+                  },
+                ],
+              },
+            },
+          },
         },
       },
       // Rename _requests to requests for the frontend

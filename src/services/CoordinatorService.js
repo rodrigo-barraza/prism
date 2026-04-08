@@ -4,6 +4,10 @@ import { resolve } from "node:path";
 import logger from "../utils/logger.js";
 import mutationQueue from "./MutationQueue.js";
 import { getProvider } from "../providers/index.js";
+import RequestLogger from "./RequestLogger.js";
+import { estimateTokens } from "../utils/CostCalculator.js";
+import { TYPES, getPricing } from "../config.js";
+import { calculateTokensPerSec } from "../utils/math.js";
 
 // ────────────────────────────────────────────────────────────
 // CoordinatorService — Multi-Agent Orchestration
@@ -128,10 +132,62 @@ export default class CoordinatorService {
       { role: "user", content: userMessage },
     ];
 
+    const requestId = randomUUID();
+    const requestStart = performance.now();
+    let llmSuccess = true;
+    let llmError = null;
+
     const result = await provider.generateText(messages, DECOMPOSITION_MODEL, {
       maxTokens: 2000,
       temperature: 0.2,
+    }).catch((err) => {
+      llmSuccess = false;
+      llmError = err.message;
+      throw err;
     });
+
+    // Log the decomposition LLM call
+    {
+      const llmTotalSec = (performance.now() - requestStart) / 1000;
+      const inputText = messages.map((m) => m.content).join("\n");
+      const approxInputTokens = estimateTokens(inputText);
+      const approxOutputTokens = result ? estimateTokens(result.text || "") : 0;
+      const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[DECOMPOSITION_MODEL];
+      let estimatedCost = null;
+      if (pricing) {
+        const inputCost = (approxInputTokens / 1_000_000) * (pricing.inputPerMillion || 0);
+        const outputCost = (approxOutputTokens / 1_000_000) * (pricing.outputPerMillion || 0);
+        estimatedCost = parseFloat((inputCost + outputCost).toFixed(8));
+      }
+
+      RequestLogger.log({
+        requestId,
+        endpoint: null,
+        operation: "coordinator:decompose",
+        project: null,
+        username: "system",
+        clientIp: null,
+        provider: DECOMPOSITION_PROVIDER,
+        model: DECOMPOSITION_MODEL,
+        success: llmSuccess,
+        errorMessage: llmError,
+        estimatedCost,
+        inputTokens: approxInputTokens,
+        outputTokens: approxOutputTokens,
+        tokensPerSec: calculateTokensPerSec(approxOutputTokens, llmTotalSec),
+        inputCharacters: inputText.length,
+        totalTime: parseFloat(llmTotalSec.toFixed(3)),
+        modalities: { textIn: true, textOut: true },
+        requestPayload: {
+          operation: "coordinator:decompose",
+          task: task.slice(0, 200),
+          fileCount: files.length,
+        },
+        responsePayload: llmSuccess
+          ? { textPreview: (result?.text || "").slice(0, 200) }
+          : { error: llmError },
+      });
+    }
 
     let parsed;
     try {

@@ -1,7 +1,12 @@
+import crypto from "crypto";
 import { getProvider } from "../providers/index.js";
 import AgentMemoryService from "./AgentMemoryService.js";
 import MemoryConsolidationService from "./MemoryConsolidationService.js";
+import RequestLogger from "./RequestLogger.js";
 import logger from "../utils/logger.js";
+import { estimateTokens } from "../utils/CostCalculator.js";
+import { TYPES, getPricing } from "../config.js";
+import { calculateTokensPerSec } from "../utils/math.js";
 
 const SUMMARIZATION_PROVIDER = "anthropic";
 const SUMMARIZATION_MODEL = "claude-haiku-4-5-20251001";
@@ -125,10 +130,62 @@ export default class SessionSummarizer {
         },
       ];
 
-      const result = await provider.generateText(aiMessages, SUMMARIZATION_MODEL, {
-        maxTokens: 1000,
-        temperature: 0.1,
-      });
+      const requestId = crypto.randomUUID();
+      const requestStart = performance.now();
+      let result;
+      let success = true;
+      let errorMessage = null;
+
+      try {
+        result = await provider.generateText(aiMessages, SUMMARIZATION_MODEL, {
+          maxTokens: 1000,
+          temperature: 0.1,
+        });
+      } catch (err) {
+        success = false;
+        errorMessage = err.message;
+        throw err;
+      } finally {
+        const totalSec = (performance.now() - requestStart) / 1000;
+        const inputText = aiMessages.map((m) => m.content).join("\n");
+        const approxInputTokens = estimateTokens(inputText);
+        const approxOutputTokens = result ? estimateTokens(result.text || "") : 0;
+        const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[SUMMARIZATION_MODEL];
+        let estimatedCost = null;
+        if (pricing) {
+          const inputCost = (approxInputTokens / 1_000_000) * (pricing.inputPerMillion || 0);
+          const outputCost = (approxOutputTokens / 1_000_000) * (pricing.outputPerMillion || 0);
+          estimatedCost = parseFloat((inputCost + outputCost).toFixed(8));
+        }
+
+        RequestLogger.log({
+          requestId,
+          endpoint: null,
+          operation: "session:summarize",
+          project,
+          username: username || "system",
+          clientIp: null,
+          provider: SUMMARIZATION_PROVIDER,
+          model: SUMMARIZATION_MODEL,
+          success,
+          errorMessage,
+          estimatedCost,
+          inputTokens: approxInputTokens,
+          outputTokens: approxOutputTokens,
+          tokensPerSec: calculateTokensPerSec(approxOutputTokens, totalSec),
+          inputCharacters: inputText.length,
+          totalTime: parseFloat(totalSec.toFixed(3)),
+          modalities: { textIn: true, textOut: true },
+          requestPayload: {
+            operation: "session:summarize",
+            messageCount: messages.length,
+            conversationId: conversationId || null,
+          },
+          responsePayload: success
+            ? { textPreview: (result?.text || "").slice(0, 200) }
+            : { error: errorMessage },
+        });
+      }
 
       const text = result.text || "";
 

@@ -3,8 +3,11 @@ import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { getProvider } from "../providers/index.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import EmbeddingService from "./EmbeddingService.js";
+import RequestLogger from "./RequestLogger.js";
 import logger from "../utils/logger.js";
-import { cosineSimilarity } from "../utils/math.js";
+import { cosineSimilarity, calculateTokensPerSec } from "../utils/math.js";
+import { estimateTokens } from "../utils/CostCalculator.js";
+import { TYPES, getPricing } from "../config.js";
 
 const LUPOS_COLLECTION = "lupos_memories";
 const EXTRACTION_PROVIDER = "anthropic";
@@ -28,8 +31,10 @@ async function generateEmbedding(text, options = {}) {
  * @param {Array} participants - Array of { id, username, displayName }
  * @returns {Promise<Array>}
  */
-async function extractFactsFromConversation(messages, participants) {
+async function extractFactsFromConversation(messages, participants, meta = {}) {
   const provider = getProvider(EXTRACTION_PROVIDER);
+  const requestId = crypto.randomUUID();
+  const requestStart = performance.now();
 
   const participantList = participants
     .map(
@@ -80,10 +85,61 @@ ${participantList}`;
     },
   ];
 
-  const result = await provider.generateText(aiMessages, EXTRACTION_MODEL, {
-    maxTokens: 1000,
-    temperature: 0.1,
-  });
+  let result;
+  let success = true;
+  let errorMessage = null;
+
+  try {
+    result = await provider.generateText(aiMessages, EXTRACTION_MODEL, {
+      maxTokens: 1000,
+      temperature: 0.1,
+    });
+  } catch (err) {
+    success = false;
+    errorMessage = err.message;
+    throw err;
+  } finally {
+    const totalSec = (performance.now() - requestStart) / 1000;
+    const inputText = aiMessages.map((m) => m.content).join("\n");
+    const approxInputTokens = estimateTokens(inputText);
+    const approxOutputTokens = result ? estimateTokens(result.text || "") : 0;
+    const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[EXTRACTION_MODEL];
+    let estimatedCost = null;
+    if (pricing) {
+      const inputCost = (approxInputTokens / 1_000_000) * (pricing.inputPerMillion || 0);
+      const outputCost = (approxOutputTokens / 1_000_000) * (pricing.outputPerMillion || 0);
+      estimatedCost = parseFloat((inputCost + outputCost).toFixed(8));
+    }
+
+    RequestLogger.log({
+      requestId,
+      endpoint: null,
+      operation: "memory:extract",
+      project: meta.project || null,
+      username: meta.username || "system",
+      clientIp: null,
+      provider: EXTRACTION_PROVIDER,
+      model: EXTRACTION_MODEL,
+      sessionId: meta.sessionId || null,
+      success,
+      errorMessage,
+      estimatedCost,
+      inputTokens: approxInputTokens,
+      outputTokens: approxOutputTokens,
+      tokensPerSec: calculateTokensPerSec(approxOutputTokens, totalSec),
+      inputCharacters: inputText.length,
+      totalTime: parseFloat(totalSec.toFixed(3)),
+      modalities: { textIn: true, textOut: true },
+      requestPayload: {
+        operation: "memory:extract",
+        participantCount: participants.length,
+        messageCount: messages.length,
+      },
+      responsePayload: success
+        ? { textPreview: (result?.text || "").slice(0, 200) }
+        : { error: errorMessage },
+    });
+  }
 
   const text = result.text || "";
 
@@ -136,11 +192,12 @@ const MemoryService = {
     messages,
     participants,
     sourceMessageId,
+    project,
   }) {
     const collection = MongoWrapper.getCollection(MONGO_DB_NAME, LUPOS_COLLECTION);
 
     // Extract facts from the conversation via AI
-    const facts = await extractFactsFromConversation(messages, participants);
+    const facts = await extractFactsFromConversation(messages, participants, { project });
     if (facts.length === 0) {
       logger.info(
         "[MemoryService] No personal facts extracted from conversation.",

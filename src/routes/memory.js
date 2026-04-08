@@ -26,6 +26,7 @@ router.post("/extract", async (req, res, next) => {
       messages,
       participants,
       sourceMessageId,
+      project: req.project || null,
     });
 
     res.json({ memories, count: memories.length });

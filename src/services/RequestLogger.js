@@ -94,7 +94,7 @@ const RequestLogger = {
         requestId,
         timestamp: new Date().toISOString(),
         endpoint,
-        operation: operation || endpoint || null,
+        operation: operation || null,
         project,
         username,
         clientIp,
@@ -194,7 +194,7 @@ const RequestLogger = {
     return this.log({
       requestId,
       endpoint,
-      operation: operation || endpoint || null,
+      operation,
       project,
       username,
       clientIp,

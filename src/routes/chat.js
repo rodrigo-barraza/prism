@@ -18,6 +18,7 @@ import logger from "../utils/logger.js";
 import RequestLogger from "../services/RequestLogger.js";
 import FileService from "../services/FileService.js";
 import { createStreamState, dispatchChunk } from "../utils/StreamChunkDispatcher.js";
+import { calculateTokensPerSec } from "../utils/math.js";
 
 import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
 import localModelQueue from "../services/LocalModelQueue.js";
@@ -568,7 +569,7 @@ export async function handleChat(params, emit, { signal } = {}) {
     const totalSec = (performance.now() - requestStart) / 1000;
     RequestLogger.logChatGeneration({
       requestId,
-      endpoint: agenticLoopEnabled ? "agent" : "chat",
+      endpoint: agenticLoopEnabled ? "/agent" : "/chat",
       operation: agenticLoopEnabled ? "agent" : "chat",
       project,
       username,
@@ -678,7 +679,7 @@ async function handleImageAPIModel(ctx) {
 
   RequestLogger.log({
     requestId,
-    endpoint: "chat",
+    endpoint: "/chat",
     operation: "chat:image",
     project,
     username,
@@ -835,19 +836,10 @@ export async function finalizeTextGeneration(
       estimatedCost = calculateTextCost(usage, pricing);
     }
 
-    const effectiveGenSec =
-      generationSec && generationSec > 0.001 ? generationSec : totalSec;
-
-    tokensPerSec = usage.tokensPerSec
-      ? parseFloat(usage.tokensPerSec.toFixed(1))
-      : effectiveGenSec > 0 && usage.outputTokens > 0
-        ? parseFloat((usage.outputTokens / effectiveGenSec).toFixed(1))
-        : null;
-
-    // Cap at 10k tok/s — anything higher is a measurement artifact
-    if (tokensPerSec !== null && tokensPerSec > 10000) {
-      tokensPerSec = null;
-    }
+    tokensPerSec = calculateTokensPerSec(usage.outputTokens, generationSec, {
+      providerReported: usage.tokensPerSec,
+      fallbackSec: totalSec,
+    });
   }
 
   // ── Console logging ───────────────────────────────────────────
@@ -922,7 +914,7 @@ export async function finalizeTextGeneration(
   if (!skipRequestLog) {
     RequestLogger.logChatGeneration({
       requestId,
-      endpoint: options.agenticLoopEnabled ? "agent" : modelDef?.liveAPI ? "live" : "chat",
+      endpoint: options.agenticLoopEnabled ? "/agent" : modelDef?.liveAPI ? "/live" : "/chat",
       operation: options.agenticLoopEnabled ? "agent" : modelDef?.liveAPI ? "live" : "chat",
       project,
       username,

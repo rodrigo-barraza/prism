@@ -5,6 +5,7 @@ import logger from "../utils/logger.js";
 import RequestLogger from "./RequestLogger.js";
 import { calculateImageCost } from "../utils/CostCalculator.js";
 import { getModelByName } from "../config.js";
+import { calculateTokensPerSec } from "../utils/math.js";
 
 // ────────────────────────────────────────────────────────────
 // Built-in tools — handled natively by the agentic loop
@@ -200,13 +201,11 @@ export default class BuiltInTools {
       );
       const usage = result.usage || { inputTokens: 0, outputTokens: 0 };
       const outputTokens = usage.outputTokens || 0;
-      const tokensPerSec = toolTotalSec > 0 && outputTokens > 0
-        ? parseFloat((outputTokens / toolTotalSec).toFixed(1))
-        : null;
+      const tokensPerSec = calculateTokensPerSec(outputTokens, toolTotalSec);
 
       RequestLogger.logChatGeneration({
         requestId: requestId ? `${requestId}-img-${agenticIteration || 0}` : crypto.randomUUID(),
-        endpoint: "agent",
+        endpoint: "/agent",
         operation: "agent:image",
         project,
         username,

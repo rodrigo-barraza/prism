@@ -4,6 +4,7 @@ import { TYPES, getDefaultModels, getPricing } from "../config.js";
 import { estimateTokens } from "../utils/CostCalculator.js";
 import RequestLogger from "./RequestLogger.js";
 import logger from "../utils/logger.js";
+import { calculateTokensPerSec } from "../utils/math.js";
 
 const DEFAULT_PROVIDER = "google";
 const DEFAULT_MODEL = "gemini-embedding-2-preview";
@@ -99,7 +100,8 @@ const EmbeddingService = {
 
       RequestLogger.log({
         requestId,
-        endpoint: `embed:${source}`,
+        endpoint: source === "api" ? "/embed" : null,
+        operation: `embed:${source}`,
         project: options.project || null,
         username: options.username || "system",
         clientIp: options.clientIp || null,
@@ -111,9 +113,7 @@ const EmbeddingService = {
         estimatedCost,
         inputTokens: approxInputTokens,
         outputTokens: result?.dimensions || 0,
-        tokensPerSec: totalSec > 0 && approxInputTokens > 0
-          ? parseFloat((approxInputTokens / totalSec).toFixed(1))
-          : null,
+        tokensPerSec: calculateTokensPerSec(approxInputTokens, totalSec),
         inputCharacters,
         totalTime: parseFloat(totalSec.toFixed(3)),
         modalities: (() => {
