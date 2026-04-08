@@ -1,4 +1,5 @@
 import ToolOrchestratorService from "./ToolOrchestratorService.js";
+import BuiltInTools from "./BuiltInTools.js";
 import { expandMessagesForFC, truncateToolResult } from "../utils/FunctionCallingUtilities.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
@@ -46,8 +47,11 @@ export default class AgenticLoopService {
       emit,
       signal,
     } = ctx;
-    // Load built-in schemas
-    const builtInTools = ToolOrchestratorService.getToolSchemas();
+    // Load tool schemas from tools-api
+    const toolsApiSchemas = ToolOrchestratorService.getToolSchemas();
+
+    // Load built-in tools (generate_image, etc.) — handled natively by the loop
+    const builtInSchemas = BuiltInTools.getSchemas();
 
     // Load custom tools from MongoDB
     let customToolsData = [];
@@ -66,7 +70,7 @@ export default class AgenticLoopService {
 
     // Build the dynamic tool map
     const customToolMap = new Map();
-    const dynamicTools = [...builtInTools];
+    const dynamicTools = [...toolsApiSchemas, ...builtInSchemas];
     
     for (const t of customToolsData) {
       customToolMap.set(t.name, t);
@@ -465,7 +469,7 @@ export default class AgenticLoopService {
 
         RequestLogger.logChatGeneration({
           requestId: `${ctx.requestId}-${iterations}`,
-          endpoint: modelDef?.liveAPI ? "live" : "chat",
+          endpoint: "agent",
           project,
           username,
           clientIp: ctx.clientIp,
@@ -539,8 +543,19 @@ export default class AgenticLoopService {
           // Execute tools in parallel — use streaming for supported tools
           const results = await Promise.all(
             passPendingToolCalls.map(async (tc) => {
-               // Run afterToolCall hook (for logging/tracking)
+               // Run beforeToolCall hook (for logging/tracking)
                await hooks.run("beforeToolCall", tc, ctx);
+
+               // Built-in tools (generate_image, etc.) — handled natively
+               if (BuiltInTools.isBuiltIn(tc.name)) {
+                   const result = await BuiltInTools.execute(tc.name, tc.args, {
+                     messages: currentMessages,
+                     project,
+                     username,
+                   });
+                   await hooks.run("afterToolCall", tc, result, ctx);
+                   return { name: tc.name, id: tc.id, result };
+               }
 
                const customDef = customToolMap.get(tc.name);
                if (customDef) {
@@ -585,6 +600,22 @@ export default class AgenticLoopService {
               // into the conversation's images[] array and appear in /admin/media
               if (res?.result?.screenshotRef) {
                 streamedImages.push(res.result.screenshotRef);
+              }
+
+              // Handle built-in generate_image results — emit image event
+              // and track in streamedImages, then strip heavy data from context
+              if (res?.result?._image) {
+                const img = res.result._image;
+                streamedImages.push(img.minioRef || `data:${img.mimeType};base64,${img.data}`);
+                emit({
+                  type: "image",
+                  data: img.data,
+                  mimeType: img.mimeType,
+                  minioRef: img.minioRef,
+                });
+                // Strip heavy image data from the tool result before it enters
+                // the LLM context — only keep the metadata
+                delete res.result._image;
               }
 
               // Track consecutive errors per tool for retry budgeting

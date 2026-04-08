@@ -549,7 +549,7 @@ export async function handleChat(params, emit, { signal } = {}) {
     const totalSec = (performance.now() - requestStart) / 1000;
     RequestLogger.log({
       requestId,
-      endpoint: "chat",
+      endpoint: agenticLoopEnabled ? "agent" : "chat",
       project,
       username,
       clientIp,
@@ -899,7 +899,7 @@ export async function finalizeTextGeneration(
   if (!skipRequestLog) {
     RequestLogger.logChatGeneration({
       requestId,
-      endpoint: modelDef?.liveAPI ? "live" : "chat",
+      endpoint: options.agenticLoopEnabled ? "agent" : modelDef?.liveAPI ? "live" : "chat",
       project,
       username,
       clientIp,
