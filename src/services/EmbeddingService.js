@@ -112,13 +112,28 @@ const EmbeddingService = {
         errorMessage,
         estimatedCost,
         inputTokens: approxInputTokens,
-        outputTokens: 0,
+        outputTokens: result?.dimensions || 0,
         tokensPerSec: totalSec > 0 && approxInputTokens > 0
           ? parseFloat((approxInputTokens / totalSec).toFixed(1))
           : null,
         inputCharacters,
         totalTime: parseFloat(totalSec.toFixed(3)),
-        modalities: { embeddingIn: true },
+        modalities: (() => {
+          const mod = { embeddingOut: true };
+          if (typeof content === "string") {
+            mod.textIn = true;
+          } else if (Array.isArray(content)) {
+            for (const part of content) {
+              if (part.text) mod.textIn = true;
+              const mime = part.inlineData?.mimeType || "";
+              if (mime.startsWith("image/")) mod.imageIn = true;
+              else if (mime.startsWith("audio/")) mod.audioIn = true;
+              else if (mime.startsWith("video/")) mod.videoIn = true;
+              else if (mime === "application/pdf") mod.docIn = true;
+            }
+          }
+          return mod;
+        })(),
         requestPayload: {
           source,
           contentType,
