@@ -15,7 +15,7 @@ import SystemPromptAssembler from "./SystemPromptAssembler.js";
 import PlanningModeService from "./PlanningModeService.js";
 import SessionSummarizer from "./SessionSummarizer.js";
 
-const MAX_TOOL_ITERATIONS = 10;
+const MAX_TOOL_ITERATIONS = 25;
 const MAX_CONSECUTIVE_TOOL_ERRORS = 3;
 
 // ── Approval Resolver Registry ─────────────────────────────
@@ -620,6 +620,58 @@ export default class AgenticLoopService {
         // If text was returned without new tools, we're done
         if (passStreamedText) {
            break;
+        }
+      }
+
+      // ── Exhaustion Recovery Pass ──────────────────────────────
+      // If we exited the loop by hitting MAX_TOOL_ITERATIONS (i.e. the
+      // model was still calling tools), run one final tool-free pass so
+      // the model can summarize what it accomplished rather than leaving
+      // the user with a silent, mid-task cutoff.
+      if (iterations >= MAX_TOOL_ITERATIONS && !finalStreamedText?.trim()) {
+        emit({ type: "status", message: "iteration_limit_reached" });
+
+        currentMessages.push({
+          role: "user",
+          content: [
+            "[SYSTEM] You have reached the maximum number of tool-call iterations for this turn.",
+            "Summarize the progress you have made so far, report any partial results,",
+            "and clearly state what remains to be done so the user knows where things stand.",
+          ].join(" "),
+        });
+
+        const exhaustionOptions = { ...options, tools: undefined };
+        delete exhaustionOptions.tools;
+        const expandedExhaustionMsgs = expandMessagesForFC(currentMessages, { filterDeleted: false });
+
+        const exhaustionStream =
+          modelDef?.liveAPI && provider.generateTextStreamLive
+            ? provider.generateTextStreamLive(expandedExhaustionMsgs, resolvedModel, { ...exhaustionOptions, signal })
+            : provider.generateTextStream(expandedExhaustionMsgs, resolvedModel, { ...exhaustionOptions, signal });
+
+        for await (const chunk of exhaustionStream) {
+          if (signal?.aborted) break;
+
+          if (chunk && typeof chunk === "object" && chunk.type === "usage") {
+            overallUsage.inputTokens += chunk.usage.inputTokens || 0;
+            overallUsage.outputTokens += chunk.usage.outputTokens || 0;
+            overallUsage.cacheReadInputTokens += chunk.usage.cacheReadInputTokens || 0;
+            overallUsage.cacheCreationInputTokens += chunk.usage.cacheCreationInputTokens || 0;
+            continue;
+          }
+          if (chunk && typeof chunk === "object" && chunk.type === "thinking") {
+            streamedThinking += chunk.content;
+            emit({ type: "thinking", content: chunk.content });
+            continue;
+          }
+          if (chunk && typeof chunk === "object") continue; // skip non-text
+
+          if (!overallFirstTokenTime) overallFirstTokenTime = performance.now();
+          overallGenerationEnd = performance.now();
+          const chunkStr = typeof chunk === "string" ? chunk : "";
+          overallOutputCharacters += chunkStr.length;
+          finalStreamedText += chunkStr;
+          emit({ type: "chunk", content: chunk });
         }
       }
 
