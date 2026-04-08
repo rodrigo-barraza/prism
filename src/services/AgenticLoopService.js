@@ -598,14 +598,12 @@ export default class AgenticLoopService {
           };
           currentMessages.push(assistantMsg);
 
-          for (const res of results) {
-              currentMessages.push({
-                  role: "tool",
-                  name: res.name,
-                  tool_call_id: res.id,
-                  content: JSON.stringify(truncateToolResult(res.result)),
-              });
-          }
+          // NOTE: We do NOT push standalone role:"tool" messages here.
+          // The assistant message above already embeds results in toolCalls[].result,
+          // and expandMessagesForFC() expands them into the [assistant, tool, tool, ...]
+          // format required by providers. Pushing standalone tool messages here would
+          // create duplicates — OpenAI strictly rejects orphaned tool messages with:
+          // "messages with role 'tool' must be a response to a preceding message with 'tool_calls'"
 
           // Clean up empty assistant text content nodes
           currentMessages = currentMessages.filter((m) => !(m.role === "assistant" && !m.content?.trim() && (!m.toolCalls || m.toolCalls.length === 0)));
