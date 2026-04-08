@@ -345,7 +345,7 @@ const openaiProvider = {
     const { data: response, response: rawResponse } = await getClient().responses.create(payload).withResponse();
 
     // Extract rate-limit headers
-    const rateLimits = extractOpenAIRateLimits(rawResponse);
+    const rateLimits = extractOpenAIRateLimits(rawResponse, model);
 
     // Collect tool calls and images from output items
     const images = [];
@@ -439,7 +439,7 @@ const openaiProvider = {
 
     try {
       const { data: response, response: rawResponse } = await getClient().chat.completions.create(payload).withResponse();
-      const rateLimits = extractOpenAIRateLimits(rawResponse);
+      const rateLimits = extractOpenAIRateLimits(rawResponse, model);
       const msg = response.choices[0].message;
       const result = {
         text: msg.content || "",
@@ -589,7 +589,7 @@ const openaiProvider = {
     const { data: stream, response: rawStreamResponse } = await getClient().responses.create(payload, {
       ...(options.signal && { signal: options.signal }),
     }).withResponse();
-    const rateLimits = extractOpenAIRateLimits(rawStreamResponse);
+    const rateLimits = extractOpenAIRateLimits(rawStreamResponse, model);
     let usage = null;
     // Track function names from output_item.added events; the arguments.done
     // event may not include the name property (known OpenAI SDK issue).
@@ -730,7 +730,7 @@ const openaiProvider = {
         ...(options.signal && { signal: options.signal }),
       }).withResponse();
       stream = streamData;
-      rateLimits = extractOpenAIRateLimits(rawStreamResponse);
+      rateLimits = extractOpenAIRateLimits(rawStreamResponse, model);
     } catch (error) {
       // Retry once after stripping unsupported parameters (e.g. gpt-5-nano rejects temperature)
       if (error.status === 400 && error.message?.includes("Unsupported")) {
@@ -760,7 +760,7 @@ const openaiProvider = {
             ...(options.signal && { signal: options.signal }),
           }).withResponse();
           stream = retryResult.data;
-          rateLimits = extractOpenAIRateLimits(retryResult.response);
+          rateLimits = extractOpenAIRateLimits(retryResult.response, model);
         } else {
           throw error;
         }

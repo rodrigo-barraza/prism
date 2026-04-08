@@ -406,7 +406,7 @@ const anthropicProvider = {
       }
 
       const { data: response, response: rawResponse } = await getClient().messages.create(payload).withResponse();
-      const rateLimits = extractAnthropicRateLimits(rawResponse);
+      const rateLimits = extractAnthropicRateLimits(rawResponse, model);
 
       const { text, thinking, thinkingSignature, citations, toolCalls } = extractResponseContent(
         response.content,
@@ -579,7 +579,7 @@ const anthropicProvider = {
           messageStartUsage = chunk.message.usage;
           // Capture rate-limit headers from the stream's initial response
           if (!rateLimits && stream.response) {
-            rateLimits = extractAnthropicRateLimits(stream.response);
+            rateLimits = extractAnthropicRateLimits(stream.response, model);
           }
           continue;
         }

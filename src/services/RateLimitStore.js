@@ -2,17 +2,16 @@
  * RateLimitStore — In-memory cache of latest provider rate-limit data.
  *
  * Updated dynamically from each OpenAI/Anthropic API response.
- * Google tier limits are seeded statically (no response headers available).
+ * Rate limits are per-model (both OpenAI and Anthropic enforce limits
+ * separately for each model). Google uses static tier limits.
  *
- * Call `.update(providerName, rateLimits)` after every API response.
- * Call `.getAll()` to get a snapshot of all providers.
- * Call `.get(providerName)` to get a single provider's limits.
+ * Call `.update(providerName, model, rateLimits)` after every API response.
+ * Call `.getAll()` to get a snapshot of all providers/models.
  */
 
 // Static Google Tier 2 limits — seeded on module load since Google
 // doesn't expose rate-limit headers in their SDK responses.
 const GOOGLE_STATIC_LIMITS = {
-  provider: "google",
   note: "Static tier-2 limits from Google AI Studio. Not dynamically updated.",
   models: {
     "gemini-3-flash": {
@@ -35,52 +34,64 @@ const GOOGLE_STATIC_LIMITS = {
 
 class RateLimitStore {
   constructor() {
-    /** @type {Map<string, { rateLimits: object, updatedAt: string }>} */
-    this._store = new Map();
+    /**
+     * Per-model rate limits for dynamic providers.
+     * Key: `${provider}::${model}` → { rateLimits, updatedAt }
+     * @type {Map<string, { rateLimits: object, updatedAt: string }>}
+     */
+    this._models = new Map();
 
-    // Seed Google static limits
-    this._store.set("google", {
-      rateLimits: GOOGLE_STATIC_LIMITS,
-      updatedAt: new Date().toISOString(),
-      dynamic: false,
-    });
+    /** Static Google limits (separate shape — not per-response). */
+    this._google = GOOGLE_STATIC_LIMITS;
   }
 
   /**
-   * Update the stored rate-limit snapshot for a provider.
+   * Update the stored rate-limit snapshot for a provider + model.
    * Called after every API response that contains rate-limit headers.
    *
    * @param {string} providerName - e.g. "openai", "anthropic"
+   * @param {string} model - Model name from the API call
    * @param {object} rateLimits - Parsed rate-limit data from extractXxxRateLimits()
    */
-  update(providerName, rateLimits) {
-    if (!rateLimits || !providerName) return;
+  update(providerName, model, rateLimits) {
+    if (!rateLimits || !providerName || !model) return;
 
-    this._store.set(providerName, {
+    const key = `${providerName}::${model}`;
+    this._models.set(key, {
       rateLimits,
       updatedAt: new Date().toISOString(),
-      dynamic: true,
     });
   }
 
   /**
-   * Get the latest rate-limit data for a single provider.
-   * @param {string} providerName
-   * @returns {object|null}
-   */
-  get(providerName) {
-    return this._store.get(providerName) || null;
-  }
-
-  /**
-   * Get a snapshot of all provider rate limits.
-   * @returns {object} { [provider]: { rateLimits, updatedAt, dynamic } }
+   * Get a snapshot of all provider rate limits, grouped by provider.
+   *
+   * Returns:
+   * {
+   *   openai: { dynamic: true, models: { "gpt-5": { rateLimits, updatedAt }, ... } },
+   *   anthropic: { dynamic: true, models: { "claude-opus-4": { ... }, ... } },
+   *   google: { dynamic: false, note: "...", models: { "gemini-3-flash": { rpm, tpm, rpd }, ... } },
+   * }
    */
   getAll() {
     const result = {};
-    for (const [key, val] of this._store) {
-      result[key] = val;
+
+    // Group dynamic models by provider
+    for (const [key, val] of this._models) {
+      const [provider, model] = key.split("::");
+      if (!result[provider]) {
+        result[provider] = { dynamic: true, models: {} };
+      }
+      result[provider].models[model] = val;
     }
+
+    // Add Google static limits
+    result.google = {
+      dynamic: false,
+      note: this._google.note,
+      models: this._google.models,
+    };
+
     return result;
   }
 }

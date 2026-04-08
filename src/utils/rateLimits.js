@@ -21,9 +21,10 @@ import rateLimitStore from "../services/RateLimitStore.js";
  *   x-ratelimit-reset-tokens        → TPM reset time
  *
  * @param {Response|null} response - Fetch Response object from OpenAI SDK
+ * @param {string} [model] - Model name for per-model rate-limit tracking
  * @returns {object|null} Parsed rate-limit data, or null if unavailable
  */
-export function extractOpenAIRateLimits(response) {
+export function extractOpenAIRateLimits(response, model) {
   if (!response?.headers) return null;
   const h = response.headers;
 
@@ -47,8 +48,8 @@ export function extractOpenAIRateLimits(response) {
     },
   };
 
-  // Update the global store with the latest snapshot
-  rateLimitStore.update("openai", result);
+  // Update the global store with the latest per-model snapshot
+  rateLimitStore.update("openai", model, result);
 
   return result;
 }
@@ -68,9 +69,10 @@ export function extractOpenAIRateLimits(response) {
  *   retry-after                             → seconds to wait if 429
  *
  * @param {Response|null} response - Fetch Response object from Anthropic SDK
+ * @param {string} [model] - Model name for per-model rate-limit tracking
  * @returns {object|null} Parsed rate-limit data, or null if unavailable
  */
-export function extractAnthropicRateLimits(response) {
+export function extractAnthropicRateLimits(response, model) {
   if (!response?.headers) return null;
   const h = response.headers;
 
@@ -104,8 +106,8 @@ export function extractAnthropicRateLimits(response) {
     },
   };
 
-  // Update the global store with the latest snapshot
-  rateLimitStore.update("anthropic", result);
+  // Update the global store with the latest per-model snapshot
+  rateLimitStore.update("anthropic", model, result);
 
   return result;
 }
