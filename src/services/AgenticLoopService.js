@@ -488,7 +488,7 @@ export default class AgenticLoopService {
           generationSec: passGenerationSec,
           totalSec: passTotalSec,
           options: passOptions,
-          messages: currentMessages.slice(-2),
+          messages: currentMessages,
           text: passStreamedText,
           thinking: passStreamedThinking,
           toolCalls: passPendingToolCalls,
