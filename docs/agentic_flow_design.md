@@ -197,7 +197,7 @@ Prism streams raw chunks (`emit({ type: "chunk", content })`) without transforma
 
 ### Phase 1: Foundation & Planning ✅ COMPLETE
 1. ✅ **Event Hook System** — `AgentHooks` (`EventEmitter`-based) with `beforePrompt`, `beforeToolCall`, `afterToolCall`, `afterResponse`, `onError` lifecycle events
-2. ✅ **Dynamic System Prompt Assembly** — `SystemPromptAssembler`: tool schemas + project context + directory tree + environment + memory. 🔲 Token-budget truncation
+2. ✅ **Dynamic System Prompt Assembly** — `SystemPromptAssembler`: tool schemas + project context + directory tree + environment + memory. ✅ Token-budget truncation via `ContextWindowManager`
 3. ✅ **Auto-Approval Engine** — `AutoApprovalEngine`: three-tier system with `beforeToolCall` hook + `ApprovalCardComponent` UI
 4. ✅ **UltraPlan Mode** — `PlanningModeService` + `PlanCardComponent`: plan → approve → execute workflow
 5. ✅ **Session Summarization** — `SessionSummarizer` + `AgentMemoryService`: Claude Haiku extraction → 4-type memory taxonomy → MongoDB
@@ -217,7 +217,7 @@ Prism streams raw chunks (`emit({ type: "chunk", content })`) without transforma
 
 ### Phase 4: Hardening & Intelligence
 1. 🔲 **Coordinator Worker Loop** — Wire `AgenticLoopService.runAgenticLoop()` into `CoordinatorService._runWorker()` so workers autonomously edit files
-2. 🔲 **Token-Budget Truncation** — Context window overflow protection in `SystemPromptAssembler` (compress old messages, drop low-relevance context)
+2. ✅ **Token-Budget Truncation** — `ContextWindowManager`: three-strategy cascade (tool result truncation → old message compression → sliding window) wired into `AgenticLoopService` before every LLM call. Uses ~3.5 chars/token estimation, 80% utilization target, configurable per-model via `maxInputTokens`
 3. 🔲 **Slash Commands** — Parameterized prompt templates with `$1`, `$@` argument substitution
 4. 🔲 **Per-Tool Tier Overrides UI** — Retina settings panel to customize Auto-Approval tiers per tool
 5. 🔲 **Coordinator Conflict Resolution** — Interactive diff merge UI for worktree conflicts

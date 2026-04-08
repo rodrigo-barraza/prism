@@ -9,6 +9,7 @@ import { finalizeTextGeneration } from "../routes/chat.js";
 import RequestLogger from "./RequestLogger.js";
 import { TYPES, getPricing } from "../config.js";
 import { calculateTextCost } from "../utils/CostCalculator.js";
+import ContextWindowManager from "../utils/ContextWindowManager.js";
 import AgentHooks from "./AgentHooks.js";
 import AutoApprovalEngine from "./AutoApprovalEngine.js";
 import SystemPromptAssembler from "./SystemPromptAssembler.js";
@@ -272,6 +273,24 @@ export default class AgenticLoopService {
           delete passOptions.tools;
         } else {
           passOptions.tools = finalTools;
+        }
+
+        // ── Context window enforcement ─────────────────────────
+        // Enforce token budget before expanding messages. This prevents
+        // context overflow as tool results accumulate across iterations.
+        const contextResult = ContextWindowManager.enforce(currentMessages, {
+          maxInputTokens: modelDef?.maxInputTokens || 128_000,
+          maxOutputTokens: options.maxTokens || 8192,
+          toolCount: finalTools.length,
+        });
+        if (contextResult.truncated) {
+          currentMessages = contextResult.messages;
+          emit({
+            type: "status",
+            message: "context_truncated",
+            strategy: contextResult.strategy,
+            estimatedTokens: contextResult.estimatedTokens,
+          });
         }
 
         const expandedMessages = expandMessagesForFC(currentMessages, { filterDeleted: false });
@@ -642,6 +661,15 @@ export default class AgenticLoopService {
 
         const exhaustionOptions = { ...options, tools: undefined };
         delete exhaustionOptions.tools;
+        // Context enforcement for exhaustion pass too
+        const exhaustionCtx = ContextWindowManager.enforce(currentMessages, {
+          maxInputTokens: modelDef?.maxInputTokens || 128_000,
+          maxOutputTokens: options.maxTokens || 8192,
+          toolCount: 0,
+        });
+        if (exhaustionCtx.truncated) {
+          currentMessages = exhaustionCtx.messages;
+        }
         const expandedExhaustionMsgs = expandMessagesForFC(currentMessages, { filterDeleted: false });
 
         const exhaustionStream =

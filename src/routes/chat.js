@@ -433,10 +433,14 @@ export async function handleChat(params, emit, { signal } = {}) {
         modelDef?.streaming !== false;
 
       if (useStreaming) {
-        // LM Studio's native API handles tool calling via MCP internally —
-        // no need for Prism's AgenticLoopService. Tool events are part of
-        // the SSE stream and get forwarded directly to the client.
-        const useLmStudioNativeMcp = providerName === "lm-studio";
+        // LM Studio supports both native MCP (tool calling handled server-side)
+        // and standard function calling (tool calling managed by Prism).
+        // When agenticLoopEnabled is true (Agent tab), we ALWAYS use Prism's
+        // AgenticLoopService so local models get iteration tracking, context
+        // management, approval gating, planning mode, and memory extraction.
+        // Native MCP is only used for the Chat tab where Prism doesn't
+        // manage the tool loop.
+        const useLmStudioNativeMcp = providerName === "lm-studio" && !options.agenticLoopEnabled;
 
         // For LM Studio MCP: populate options.tools with the allowed tool names
         // so the provider can pass them as `allowed_tools` in the MCP integration.
@@ -458,7 +462,7 @@ export async function handleChat(params, emit, { signal } = {}) {
           logger.warn(`[chat] LM-Studio MCP SKIPPED: functionCallingEnabled=${options.functionCallingEnabled}, useLmStudioNativeMcp=${useLmStudioNativeMcp}`);
         }
 
-        if (options.agenticLoopEnabled && !useLmStudioNativeMcp) {
+        if (options.agenticLoopEnabled) {
           // Lazy-load AgenticLoopService — only needed for the agentic path
           // which is exclusively triggered via the /agents endpoint.
           const { default: AgenticLoopService } = await import("../services/AgenticLoopService.js");
