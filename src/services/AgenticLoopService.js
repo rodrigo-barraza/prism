@@ -510,6 +510,11 @@ export default class AgenticLoopService {
               emit({ type: "status", message: `Tool execution rejected: ${needsApproval.map((t) => t.name).join(", ")}` });
               break;
             }
+
+            // "Approve All" — user opted in to auto-approve for the rest of this session
+            if (approvalResult.approveAll) {
+              options.autoApprove = true;
+            }
           }
 
           // Execute tools in parallel — use streaming for supported tools
@@ -675,14 +680,14 @@ export default class AgenticLoopService {
    * @param {boolean} approved
    * @returns {boolean} true if a pending approval was found and resolved
    */
-  static resolveApproval(conversationId, approved) {
+  static resolveApproval(conversationId, approved, { approveAll = false } = {}) {
     const entry = pendingApprovals.get(conversationId);
     if (!entry) return false;
 
     if (entry.type === "plan") {
       entry.resolve(approved);
     } else {
-      entry.resolve({ approved, reason: approved ? "user_approved" : "user_rejected" });
+      entry.resolve({ approved, approveAll, reason: approved ? "user_approved" : "user_rejected" });
     }
     return true;
   }

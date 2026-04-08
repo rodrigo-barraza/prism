@@ -20,7 +20,7 @@ const router = express.Router();
  * so the agentic loop can continue (or abort).
  */
 router.post("/approve", async (req, res) => {
-  const { conversationId, approved } = req.body;
+  const { conversationId, approved, approveAll } = req.body;
 
   if (!conversationId) {
     return res.status(400).json({ error: "Missing conversationId" });
@@ -28,7 +28,8 @@ router.post("/approve", async (req, res) => {
 
   const resolved = AgenticLoopService.resolveApproval(
     conversationId,
-    approved !== false, // default to approve if not explicitly false
+    approved !== false,
+    { approveAll: approveAll === true },
   );
 
   if (!resolved) {
@@ -39,7 +40,7 @@ router.post("/approve", async (req, res) => {
   }
 
   logger.info(
-    `[agents/approve] ${approved !== false ? "Approved" : "Rejected"} for conversation ${conversationId}`,
+    `[agents/approve] ${approved !== false ? "Approved" : "Rejected"}${approveAll ? " (all future)" : ""} for conversation ${conversationId}`,
   );
 
   res.json({ ok: true, approved: approved !== false });
