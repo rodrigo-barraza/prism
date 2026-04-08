@@ -99,21 +99,21 @@ async function compressDataUrlIfOversized(dataUrl) {
   if (!mimeType.startsWith("image/")) return dataUrl;
 
   const base64Data = match[2];
-  const decodedSize = Buffer.byteLength(base64Data, "base64");
+  const b64Len = base64Data.length; // Anthropic checks base64 STRING length
   const MAX = 5 * 1024 * 1024;
 
-  if (decodedSize <= MAX) return dataUrl;
+  if (b64Len <= MAX) return dataUrl;
 
   logger.info(
-    `[chat] Oversized image detected: ${(decodedSize / 1024 / 1024).toFixed(2)} MB (${mimeType}). Compressing...`,
+    `[chat] Oversized image detected: ${(b64Len / 1024 / 1024).toFixed(2)} MB b64 (${mimeType}). Compressing...`,
   );
 
   try {
     const result = await compressImageForSizeLimit(base64Data, mimeType);
     const newUrl = `data:${result.mediaType};base64,${result.data}`;
-    const newSize = Buffer.byteLength(result.data, "base64");
+    const newLen = result.data.length;
     logger.info(
-      `[chat] Compressed: ${(decodedSize / 1024 / 1024).toFixed(2)} MB → ${(newSize / 1024 / 1024).toFixed(2)} MB (${result.mediaType})`,
+      `[chat] Compressed: ${(b64Len / 1024 / 1024).toFixed(2)} MB → ${(newLen / 1024 / 1024).toFixed(2)} MB b64 (${result.mediaType})`,
     );
     return newUrl;
   } catch (err) {

@@ -31,7 +31,8 @@ export async function compressImageForSizeLimit(
   mediaType,
   maxBytes = ANTHROPIC_IMAGE_MAX_BYTES,
 ) {
-  const rawBytes = Buffer.byteLength(base64Data, "base64");
+  // Anthropic measures the base64 STRING length, not decoded binary size
+  const rawBytes = base64Data.length;
   if (rawBytes <= maxBytes) {
     return { data: base64Data, mediaType };
   }
@@ -90,13 +91,14 @@ async function compressGifWithFfmpeg(base64Data, maxBytes) {
       });
 
       const result = await readFile(outputPath);
-      if (result.length <= maxBytes) {
+      const resultB64 = result.toString("base64");
+      if (resultB64.length <= maxBytes) {
         logger.info(
-          `[media] GIF compressed to ${(result.length / 1024 / 1024).toFixed(2)} MB ` +
+          `[media] GIF compressed to ${(resultB64.length / 1024 / 1024).toFixed(2)} MB b64 ` +
           `(scale=${Math.round(cumulativeScale * 100)}%)`,
         );
         return {
-          data: result.toString("base64"),
+          data: resultB64,
           mediaType: "image/gif",
         };
       }
@@ -123,11 +125,12 @@ async function compressGifWithFfmpeg(base64Data, maxBytes) {
     });
 
     const fallback = await readFile(fallbackPath);
+    const fallbackB64 = fallback.toString("base64");
     logger.warn(
-      `[media] GIF aggressive fallback: ${(fallback.length / 1024 / 1024).toFixed(2)} MB (512px max)`,
+      `[media] GIF aggressive fallback: ${(fallbackB64.length / 1024 / 1024).toFixed(2)} MB b64 (512px max)`,
     );
     return {
-      data: fallback.toString("base64"),
+      data: fallbackB64,
       mediaType: "image/gif",
     };
   } finally {
@@ -151,13 +154,14 @@ async function compressWithSharp(base64Data, maxBytes) {
       .jpeg({ quality, mozjpeg: true })
       .toBuffer();
 
-    if (compressed.length <= maxBytes) {
+    const compressedB64 = compressed.toString("base64");
+    if (compressedB64.length <= maxBytes) {
       logger.info(
-        `[media] Compressed to ${(compressed.length / 1024 / 1024).toFixed(2)} MB ` +
+        `[media] Compressed to ${(compressedB64.length / 1024 / 1024).toFixed(2)} MB b64 ` +
         `(JPEG q=${quality})`,
       );
       return {
-        data: compressed.toString("base64"),
+        data: compressedB64,
         mediaType: "image/jpeg",
       };
     }
@@ -178,13 +182,14 @@ async function compressWithSharp(base64Data, maxBytes) {
       .jpeg({ quality: 70, mozjpeg: true })
       .toBuffer();
 
-    if (resized.length <= maxBytes) {
+    const resizedB64 = resized.toString("base64");
+    if (resizedB64.length <= maxBytes) {
       logger.info(
-        `[media] Compressed to ${(resized.length / 1024 / 1024).toFixed(2)} MB ` +
+        `[media] Compressed to ${(resizedB64.length / 1024 / 1024).toFixed(2)} MB b64 ` +
         `(${width}x${height}, JPEG q=70)`,
       );
       return {
-        data: resized.toString("base64"),
+        data: resizedB64,
         mediaType: "image/jpeg",
       };
     }
@@ -196,12 +201,13 @@ async function compressWithSharp(base64Data, maxBytes) {
     .jpeg({ quality: 50, mozjpeg: true })
     .toBuffer();
 
+  const fallbackB64 = fallback.toString("base64");
   logger.warn(
-    `[media] Aggressive fallback: ${(fallback.length / 1024 / 1024).toFixed(2)} MB (1024px, q=50)`,
+    `[media] Aggressive fallback: ${(fallbackB64.length / 1024 / 1024).toFixed(2)} MB b64 (1024px, q=50)`,
   );
 
   return {
-    data: fallback.toString("base64"),
+    data: fallbackB64,
     mediaType: "image/jpeg",
   };
 }

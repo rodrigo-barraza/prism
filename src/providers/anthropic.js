@@ -39,7 +39,7 @@ async function enforceImageSizeLimits(messages) {
       const data = block.source.data;
       if (!data) continue;
 
-      const size = Buffer.byteLength(data, "base64");
+      const size = data.length; // Anthropic checks base64 STRING length
       if (size <= MAX_IMAGE_BYTES) continue;
 
       logger.warn(
@@ -49,7 +49,7 @@ async function enforceImageSizeLimits(messages) {
       block.source.data = result.data;
       block.source.media_type = result.mediaType;
 
-      const newSize = Buffer.byteLength(result.data, "base64");
+      const newSize = result.data.length;
       logger.info(
         `[anthropic] SAFETY NET compressed: ${(size / 1024 / 1024).toFixed(2)} → ${(newSize / 1024 / 1024).toFixed(2)} MB`,
       );
@@ -145,8 +145,7 @@ async function prepareMessages(messages) {
             else if (data.startsWith("UklG")) mediaType = "image/webp";
 
             // Enforce Anthropic's 5 MB per-image limit
-            const rawSize = Buffer.byteLength(data, "base64");
-            logger.info(`[anthropic] Image block: ${mediaType}, ${(rawSize / 1024 / 1024).toFixed(2)} MB (raw base64 len=${data.length})`);
+            logger.info(`[anthropic] Image block: ${mediaType}, b64_len=${data.length} (${(data.length / 1024 / 1024).toFixed(2)} MB), decoded=${(Buffer.byteLength(data, "base64") / 1024 / 1024).toFixed(2)} MB`);
             const compressed = await compressImageForSizeLimit(data, mediaType);
             data = compressed.data;
             mediaType = compressed.mediaType;
@@ -600,9 +599,22 @@ const anthropicProvider = {
       }
 
       // ── Final safety net: enforce 5 MB limit on ALL image blocks ──
-      // Walks every message content block and compresses any oversized images
-      // right before the API call. This catches anything that slipped through.
       await enforceImageSizeLimits(streamPayload.messages);
+
+      // DEBUG: dump image block sizes right before API call
+      for (let mi = 0; mi < streamPayload.messages.length; mi++) {
+        const msg = streamPayload.messages[mi];
+        if (!Array.isArray(msg.content)) continue;
+        for (let bi = 0; bi < msg.content.length; bi++) {
+          const block = msg.content[bi];
+          if (block.type === "image") {
+            const sz = Buffer.byteLength(block.source?.data || "", "base64");
+            console.error(`[ANTHROPIC-DEBUG] messages[${mi}].content[${bi}]: type=image, media_type=${block.source?.media_type}, source_type=${block.source?.type}, decoded_size=${sz} bytes (${(sz/1024/1024).toFixed(2)} MB)`);
+          } else {
+            console.error(`[ANTHROPIC-DEBUG] messages[${mi}].content[${bi}]: type=${block.type}`);
+          }
+        }
+      }
 
       const stream = getClient().messages.stream(streamPayload, {
         ...(options.signal && { signal: options.signal }),
