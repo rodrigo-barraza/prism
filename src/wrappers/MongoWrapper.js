@@ -19,6 +19,30 @@ const MongoWrapper = {
   getClient(name) {
     return clients.get(name);
   },
+  /**
+   * Get the database instance for a named connection.
+   * Shorthand for `getClient(name)?.db(name)`.
+   *
+   * @param {string} name - Connection/database name
+   * @returns {import("mongodb").Db|null}
+   */
+  getDb(name) {
+    const client = clients.get(name);
+    return client ? client.db(name) : null;
+  },
+  /**
+   * Get a collection from a named connection.
+   * Throws if the database is not available.
+   *
+   * @param {string} dbName - Connection/database name
+   * @param {string} collectionName - Collection name
+   * @returns {import("mongodb").Collection}
+   */
+  getCollection(dbName, collectionName) {
+    const client = clients.get(dbName);
+    if (!client) throw new Error("Database not available");
+    return client.db(dbName).collection(collectionName);
+  },
   closeClient(name) {
     const client = clients.get(name);
     if (client) {

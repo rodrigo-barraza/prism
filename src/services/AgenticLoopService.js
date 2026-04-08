@@ -473,6 +473,7 @@ export default class AgenticLoopService {
         RequestLogger.logChatGeneration({
           requestId: `${ctx.requestId}-${iterations}`,
           endpoint: "agent",
+          operation: "agent:iteration",
           project,
           username,
           clientIp: ctx.clientIp,

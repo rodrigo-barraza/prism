@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { getProvider } from "../providers/index.js";
 import { TYPES, getDefaultModels, getPricing } from "../config.js";
+import { estimateTokens } from "../utils/CostCalculator.js";
 import RequestLogger from "./RequestLogger.js";
 import logger from "../utils/logger.js";
 
@@ -70,11 +71,11 @@ const EmbeddingService = {
 
       // Cost estimation
       const pricing = getPricing(TYPES.TEXT, TYPES.EMBEDDING)[resolvedModel];
+      const approxInputTokens =
+        typeof content === "string" ? estimateTokens(content) : 100;
       let estimatedCost = null;
       if (pricing?.inputPerMillion) {
-        const approxTokens =
-          typeof content === "string" ? Math.ceil(content.length / 4) : 100;
-        estimatedCost = (approxTokens / 1_000_000) * pricing.inputPerMillion;
+        estimatedCost = (approxInputTokens / 1_000_000) * pricing.inputPerMillion;
       }
 
       const source = options.source || "unknown";
@@ -95,9 +96,6 @@ const EmbeddingService = {
             : `FAILED: ${errorMessage}`) +
           (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
       );
-
-      const approxInputTokens =
-        typeof content === "string" ? Math.ceil(content.length / 4) : 100;
 
       RequestLogger.log({
         requestId,

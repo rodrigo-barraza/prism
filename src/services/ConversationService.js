@@ -233,11 +233,7 @@ const ConversationService = {
     conversationMeta = null,
   ) {
     const sessionId = conversationMeta?.sessionId || null;
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) throw new Error("Database not available");
-
-    const db = client.db(MONGO_DB_NAME);
-    const col = db.collection(COLLECTION);
+    const col = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
 
     // Auto-create conversation if it doesn't exist
     const existing = await col.findOne({
@@ -350,10 +346,8 @@ const ConversationService = {
    * @param {boolean} generating
    */
   async setGenerating(conversationId, project, username, generating) {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) return;
-
-    const db = client.db(MONGO_DB_NAME);
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
+    if (!db) return;
     const now = new Date().toISOString();
 
     if (generating) {

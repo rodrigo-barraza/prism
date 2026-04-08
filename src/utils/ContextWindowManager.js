@@ -1,4 +1,5 @@
 import logger from "./logger.js";
+import { estimateTokens } from "./CostCalculator.js";
 
 // ────────────────────────────────────────────────────────────
 // ContextWindowManager — Token-Budget Truncation
@@ -17,9 +18,6 @@ import logger from "./logger.js";
 // real tokenizer (which would add latency and a dependency).
 // ────────────────────────────────────────────────────────────
 
-/** Rough chars-per-token ratio. Conservative (slightly high) to avoid overflow. */
-const CHARS_PER_TOKEN = 4;
-
 /** Default overhead for tool schemas, internal formatting, etc. */
 const TOOL_SCHEMA_OVERHEAD_TOKENS = 2000;
 
@@ -34,16 +32,6 @@ const AGGRESSIVE_TOOL_RESULT_CAP = 3000;
 
 /** Number of recent turns to always preserve (never compress) */
 const PROTECTED_RECENT_TURNS = 4;
-
-/**
- * Estimate token count for a string.
- * @param {string} text
- * @returns {number}
- */
-function estimateTokens(text) {
-  if (!text) return 0;
-  return Math.ceil(text.length / CHARS_PER_TOKEN);
-}
 
 /**
  * Estimate token count for a single message.

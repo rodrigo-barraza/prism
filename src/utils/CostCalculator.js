@@ -1,4 +1,16 @@
 /**
+ * Estimate token count from a text string using the ~4 chars/token heuristic.
+ * Accurate enough for budget enforcement without requiring a real tokenizer.
+ *
+ * @param {string} text
+ * @returns {number}
+ */
+export function estimateTokens(text) {
+  if (!text) return 0;
+  return Math.ceil(text.length / 4);
+}
+
+/**
  * Get the total input token count from a usage object.
  * Providers like Anthropic and Google split prompt tokens into
  * new + cache_read + cache_write. This aggregates all three.
@@ -127,7 +139,7 @@ export function calculateImageCost(
 ) {
   if (!pricing || !prompt) return null;
 
-  const estimatedInputTokens = Math.ceil(prompt.length / 4);
+  const estimatedInputTokens = estimateTokens(prompt);
 
   let cost = 0;
 

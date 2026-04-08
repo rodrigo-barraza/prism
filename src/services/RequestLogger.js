@@ -50,6 +50,7 @@ const RequestLogger = {
   async log({
     requestId,
     endpoint,
+    operation = null,
     project,
     username,
     clientIp = null,
@@ -83,8 +84,8 @@ const RequestLogger = {
     modalities = null,
   }) {
     try {
-      const client = MongoWrapper.getClient(MONGO_DB_NAME);
-      if (!client) {
+      const db = MongoWrapper.getDb(MONGO_DB_NAME);
+      if (!db) {
         logger.error("RequestLogger: MongoDB client not available");
         return;
       }
@@ -93,6 +94,7 @@ const RequestLogger = {
         requestId,
         timestamp: new Date().toISOString(),
         endpoint,
+        operation: operation || endpoint || null,
         project,
         username,
         clientIp,
@@ -126,7 +128,7 @@ const RequestLogger = {
         modalities,
       };
 
-      await client.db(MONGO_DB_NAME).collection(COLLECTION).insertOne(doc);
+      await db.collection(COLLECTION).insertOne(doc);
     } catch (error) {
       logger.error("RequestLogger: failed to save request", error.message);
     }
@@ -139,6 +141,7 @@ const RequestLogger = {
   async logChatGeneration({
     requestId,
     endpoint = "chat",
+    operation = null,
     project,
     username,
     clientIp = null,
@@ -191,6 +194,7 @@ const RequestLogger = {
     return this.log({
       requestId,
       endpoint,
+      operation: operation || endpoint || null,
       project,
       username,
       clientIp,

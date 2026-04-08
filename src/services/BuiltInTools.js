@@ -207,6 +207,7 @@ export default class BuiltInTools {
       RequestLogger.logChatGeneration({
         requestId: requestId ? `${requestId}-img-${agenticIteration || 0}` : crypto.randomUUID(),
         endpoint: "agent",
+        operation: "agent:image",
         project,
         username,
         clientIp: clientIp || null,

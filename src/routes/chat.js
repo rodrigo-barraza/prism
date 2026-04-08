@@ -9,6 +9,7 @@ import {
   getModelByName,
 } from "../config.js";
 import {
+  estimateTokens,
   calculateTextCost,
   calculateImageCost,
   getTotalInputTokens,
@@ -16,6 +17,7 @@ import {
 import logger from "../utils/logger.js";
 import RequestLogger from "../services/RequestLogger.js";
 import FileService from "../services/FileService.js";
+import { createStreamState, dispatchChunk } from "../utils/StreamChunkDispatcher.js";
 
 import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
 import localModelQueue from "../services/LocalModelQueue.js";
@@ -567,6 +569,7 @@ export async function handleChat(params, emit, { signal } = {}) {
     RequestLogger.logChatGeneration({
       requestId,
       endpoint: agenticLoopEnabled ? "agent" : "chat",
+      operation: agenticLoopEnabled ? "agent" : "chat",
       project,
       username,
       clientIp,
@@ -671,11 +674,12 @@ async function handleImageAPIModel(ctx) {
 
   // Estimate token counts for tracking
   const estimatedInputTokens =
-    Math.ceil(prompt.length / 4) + allImages.length * (modelDef?.imageTokensPerImage || 1120);
+    estimateTokens(prompt) + allImages.length * (modelDef?.imageTokensPerImage || 1120);
 
   RequestLogger.log({
     requestId,
     endpoint: "chat",
+    operation: "chat:image",
     project,
     username,
     clientIp,
@@ -919,6 +923,7 @@ export async function finalizeTextGeneration(
     RequestLogger.logChatGeneration({
       requestId,
       endpoint: options.agenticLoopEnabled ? "agent" : modelDef?.liveAPI ? "live" : "chat",
+      operation: options.agenticLoopEnabled ? "agent" : modelDef?.liveAPI ? "live" : "chat",
       project,
       username,
       clientIp,
@@ -1082,18 +1087,7 @@ async function handleStreamingText(ctx) {
           signal,
         });
 
-  let usage = null;
-  let firstTokenTime = null;
-  let generationEnd = null;
-  let outputCharacters = 0;
-  let fullStreamedText = "";
-  let streamedThinking = "";
-  let streamedThinkingSignature = "";
-  const streamedImages = [];
-  const streamedToolCalls = [];
-  /** @type {string[]} base64-encoded PCM audio chunks from Live API */
-  const streamedAudioChunks = [];
-  let audioSampleRate = 24000;
+  const ss = createStreamState();
 
   for await (const chunk of stream) {
     // Client disconnected — abort the upstream provider stream
@@ -1104,149 +1098,7 @@ async function handleStreamingText(ctx) {
       );
       break;
     }
-    // Usage object (final item from provider)
-    if (chunk && typeof chunk === "object" && chunk.type === "usage") {
-      usage = chunk.usage;
-      continue;
-    }
-    // Thinking chunks
-    if (chunk && typeof chunk === "object" && chunk.type === "thinking") {
-      generationEnd = performance.now();
-      streamedThinking += chunk.content;
-      emit({ type: "thinking", content: chunk.content });
-      continue;
-    }
-    // Thinking signature — Anthropic's cryptographic signature for thinking
-    // blocks. Must be captured and persisted so multi-turn conversations
-    // can pass it back verbatim (required by Anthropic's API).
-    if (chunk && typeof chunk === "object" && chunk.type === "thinking_signature") {
-      streamedThinkingSignature = chunk.signature;
-      continue;
-    }
-    // Image chunks from multimodal models
-    if (chunk && typeof chunk === "object" && chunk.type === "image") {
-      let minioRef = null;
-      if (chunk.data) {
-        try {
-          const mimeType = chunk.mimeType || "image/png";
-          const dataUrl = `data:${mimeType};base64,${chunk.data}`;
-          const { ref } = await FileService.uploadFile(
-            dataUrl,
-            "generations",
-            project,
-            username,
-          );
-          minioRef = ref;
-        } catch (uploadErr) {
-          logger.error(
-            `[chat/stream] MinIO upload failed: ${uploadErr.message}`,
-          );
-        }
-        streamedImages.push(
-          minioRef ||
-            `data:${chunk.mimeType || "image/png"};base64,${chunk.data}`,
-        );
-      }
-      emit({
-        type: "image",
-        data: chunk.data,
-        mimeType: chunk.mimeType,
-        minioRef,
-      });
-      continue;
-    }
-    // Code execution chunks
-    if (chunk && typeof chunk === "object" && chunk.type === "executableCode") {
-      emit({
-        type: "executableCode",
-        code: chunk.code,
-        language: chunk.language,
-      });
-      continue;
-    }
-    if (
-      chunk &&
-      typeof chunk === "object" &&
-      chunk.type === "codeExecutionResult"
-    ) {
-      emit({
-        type: "codeExecutionResult",
-        output: chunk.output,
-        outcome: chunk.outcome,
-      });
-      continue;
-    }
-    // Web search result chunks
-    if (
-      chunk &&
-      typeof chunk === "object" &&
-      chunk.type === "webSearchResult"
-    ) {
-      emit({ type: "webSearchResult", results: chunk.results });
-      continue;
-    }
-    // Audio chunks (Live API — streamed PCM for client playback)
-    if (chunk && typeof chunk === "object" && chunk.type === "audio") {
-      emit({ type: "audio", data: chunk.data, mimeType: chunk.mimeType });
-      if (chunk.data) streamedAudioChunks.push(chunk.data);
-      if (chunk.mimeType) {
-        const rateMatch = chunk.mimeType.match(/rate=(\d+)/);
-        if (rateMatch) audioSampleRate = parseInt(rateMatch[1], 10);
-      }
-      continue;
-    }
-    // Tool call chunks (custom function calling or MCP native tool events)
-    if (chunk && typeof chunk === "object" && chunk.type === "toolCall") {
-      if (chunk.status === "done" || chunk.status === "error") {
-        // Update existing entry with result (don't create a new one)
-        const existing = streamedToolCalls.find(
-          (tc) =>
-            (chunk.id && tc.id === chunk.id) ||
-            (!chunk.id && tc.name === chunk.name && !tc.result),
-        );
-        if (existing) {
-          existing.result = chunk.result || undefined;
-          existing.status = chunk.status;
-          if (chunk.args && Object.keys(chunk.args).length > 0) {
-            existing.args = chunk.args;
-          }
-        }
-      } else {
-        // New tool call (status: "calling")
-        streamedToolCalls.push({
-          id: chunk.id || null,
-          name: chunk.name,
-          args: chunk.args || {},
-          result: chunk.result || undefined,
-          status: chunk.status || undefined,
-          thoughtSignature: chunk.thoughtSignature || undefined,
-        });
-      }
-      emit({
-        type: "toolCall",
-        id: chunk.id || null,
-        name: chunk.name,
-        args: chunk.args || {},
-        result: chunk.result || undefined,
-        status: chunk.status || undefined,
-        thoughtSignature: chunk.thoughtSignature || undefined,
-      });
-      continue;
-    }
-    // Status messages (e.g. "Loading model…")
-    if (chunk && typeof chunk === "object" && chunk.type === "status") {
-      emit({ type: "status", message: chunk.message });
-      continue;
-    }
-    // Text chunk
-    if (!firstTokenTime) {
-      firstTokenTime = performance.now();
-    }
-    generationEnd = performance.now();
-    const chunkStr = typeof chunk === "string" ? chunk : "";
-    outputCharacters += chunkStr.length;
-    fullStreamedText += chunkStr;
-    emit({ type: "chunk", content: chunk });
+    await dispatchChunk(chunk, ss, { emit, project, username }, { logPrefix: "chat/stream" });
   }
 
   // ── FC tool execution loop ─────────────────────────────────
@@ -1259,13 +1111,13 @@ async function handleStreamingText(ctx) {
 
   while (
     options.functionCallingEnabled &&
-    streamedToolCalls.length > 0 &&
-    streamedToolCalls.some((tc) => !tc.result && tc.status !== "done" && tc.status !== "error") &&
+    ss.toolCalls.length > 0 &&
+    ss.toolCalls.some((tc) => !tc.result && tc.status !== "done" && tc.status !== "error") &&
     fcIteration < MAX_FC_ITERATIONS &&
     !signal?.aborted
   ) {
     fcIteration++;
-    const pendingCalls = streamedToolCalls.filter(
+    const pendingCalls = ss.toolCalls.filter(
       (tc) => !tc.result && tc.status !== "done" && tc.status !== "error",
     );
 
@@ -1289,20 +1141,19 @@ async function handleStreamingText(ctx) {
     }
 
     // Build tool result messages for the provider
-    // Append the assistant's tool_use turn + tool results to messages
     const assistantToolMsg = {
       role: "assistant",
-      content: fullStreamedText || "",
-      toolCalls: streamedToolCalls.map((tc) => ({
+      content: ss.text || "",
+      toolCalls: ss.toolCalls.map((tc) => ({
         id: tc.id,
         name: tc.name,
         args: tc.args,
       })),
-      ...(streamedThinking ? { thinking: streamedThinking } : {}),
-      ...(streamedThinkingSignature ? { thinkingSignature: streamedThinkingSignature } : {}),
+      ...(ss.thinking ? { thinking: ss.thinking } : {}),
+      ...(ss.thinkingSignature ? { thinkingSignature: ss.thinkingSignature } : {}),
     };
 
-    const toolResultMsgs = streamedToolCalls
+    const toolResultMsgs = ss.toolCalls
       .filter((tc) => tc.result)
       .map((tc) => ({
         role: "tool",
@@ -1315,68 +1166,32 @@ async function handleStreamingText(ctx) {
     const updatedMessages = [...messages, assistantToolMsg, ...toolResultMsgs];
 
     // Reset accumulators for the follow-up stream
-    fullStreamedText = "";
-    streamedThinking = "";
-    streamedThinkingSignature = "";
-    streamedToolCalls.length = 0;
+    ss.text = "";
+    ss.thinking = "";
+    ss.thinkingSignature = "";
+    ss.toolCalls.length = 0;
 
     const followUpStream = provider.generateTextStream(updatedMessages, resolvedModel, {
       ...options,
       signal,
     });
 
+    // Use dispatchChunk with a custom usage merger for follow-up iteration
+    const usageMerger = (followUpUsage) => {
+      if (ss.usage && followUpUsage) {
+        ss.usage.inputTokens = (ss.usage.inputTokens || 0) + (followUpUsage.inputTokens || 0);
+        ss.usage.outputTokens = (ss.usage.outputTokens || 0) + (followUpUsage.outputTokens || 0);
+      } else {
+        ss.usage = followUpUsage;
+      }
+    };
+
     for await (const chunk of followUpStream) {
       if (signal?.aborted) {
         if (typeof followUpStream.return === "function") followUpStream.return();
         break;
       }
-      if (chunk && typeof chunk === "object" && chunk.type === "usage") {
-        // Merge usage from follow-up
-        if (usage && chunk.usage) {
-          usage.inputTokens = (usage.inputTokens || 0) + (chunk.usage.inputTokens || 0);
-          usage.outputTokens = (usage.outputTokens || 0) + (chunk.usage.outputTokens || 0);
-        } else {
-          usage = chunk.usage;
-        }
-        continue;
-      }
-      if (chunk && typeof chunk === "object" && chunk.type === "thinking") {
-        streamedThinking += chunk.content;
-        emit({ type: "thinking", content: chunk.content });
-        continue;
-      }
-      if (chunk && typeof chunk === "object" && chunk.type === "thinking_signature") {
-        streamedThinkingSignature = chunk.signature;
-        continue;
-      }
-      if (chunk && typeof chunk === "object" && chunk.type === "toolCall") {
-        if (chunk.status === "done" || chunk.status === "error") {
-          const existing = streamedToolCalls.find(
-            (tc) => (chunk.id && tc.id === chunk.id) || (!chunk.id && tc.name === chunk.name && !tc.result),
-          );
-          if (existing) {
-            existing.result = chunk.result || undefined;
-            existing.status = chunk.status;
-          }
-        } else {
-          streamedToolCalls.push({
-            id: chunk.id || null,
-            name: chunk.name,
-            args: chunk.args || {},
-            result: chunk.result || undefined,
-            status: chunk.status || undefined,
-          });
-        }
-        emit({ type: "toolCall", id: chunk.id, name: chunk.name, args: chunk.args || {}, result: chunk.result, status: chunk.status });
-        continue;
-      }
-      // Text chunk
-      if (!firstTokenTime) firstTokenTime = performance.now();
-      generationEnd = performance.now();
-      const chunkStr = typeof chunk === "string" ? chunk : "";
-      outputCharacters += chunkStr.length;
-      fullStreamedText += chunkStr;
-      emit({ type: "chunk", content: chunk });
+      await dispatchChunk(chunk, ss, { emit, project, username }, { onUsage: usageMerger, logPrefix: "chat/FC" });
     }
 
     // Update messages ref for potential next iteration
@@ -1386,21 +1201,21 @@ async function handleStreamingText(ctx) {
   // Build normalized result for shared finalization
   const now = performance.now();
   await finalizeTextGeneration(ctx, {
-    text: fullStreamedText,
-    thinking: streamedThinking,
-    thinkingSignature: streamedThinkingSignature,
-    images: streamedImages,
-    toolCalls: streamedToolCalls,
-    audioChunks: streamedAudioChunks,
-    audioSampleRate,
-    usage,
-    outputCharacters,
-    timeToGenerationSec: firstTokenTime
-      ? (firstTokenTime - requestStart) / 1000
+    text: ss.text,
+    thinking: ss.thinking,
+    thinkingSignature: ss.thinkingSignature,
+    images: ss.images,
+    toolCalls: ss.toolCalls,
+    audioChunks: ss.audioChunks,
+    audioSampleRate: ss.audioSampleRate,
+    usage: ss.usage,
+    outputCharacters: ss.outputCharacters,
+    timeToGenerationSec: ss.firstTokenTime
+      ? (ss.firstTokenTime - requestStart) / 1000
       : null,
     generationSec:
-      firstTokenTime && generationEnd
-        ? (generationEnd - firstTokenTime) / 1000
+      ss.firstTokenTime && ss.generationEnd
+        ? (ss.generationEnd - ss.firstTokenTime) / 1000
         : null,
     totalSec: (now - requestStart) / 1000,
   });

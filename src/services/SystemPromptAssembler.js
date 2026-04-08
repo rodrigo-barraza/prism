@@ -5,23 +5,10 @@ import EmbeddingService from "./EmbeddingService.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { TOOLS_API_URL, WORKSPACE_ROOT as WORKSPACE_ROOT_RAW, MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
+import { cosineSimilarity } from "../utils/math.js";
 
 const SKILL_RELEVANCE_THRESHOLD = 0.3;
 
-/**
- * Compute cosine similarity between two vectors.
- */
-function cosineSimilarity(a, b) {
-  if (!a || !b || a.length !== b.length) return 0;
-  let dot = 0, magA = 0, magB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    magA += a[i] * a[i];
-    magB += b[i] * b[i];
-  }
-  const denom = Math.sqrt(magA) * Math.sqrt(magB);
-  return denom === 0 ? 0 : dot / denom;
-}
 
 
 

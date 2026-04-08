@@ -3,6 +3,7 @@ import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import EmbeddingService from "./EmbeddingService.js";
 import logger from "../utils/logger.js";
+import { cosineSimilarity } from "../utils/math.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -29,22 +30,6 @@ const DUPLICATE_THRESHOLD = 0.92;
  */
 const RELEVANCE_THRESHOLD = 0.3;
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/**
- * Compute cosine similarity between two vectors.
- */
-function cosineSimilarity(a, b) {
-  if (!a || !b || a.length !== b.length) return 0;
-  let dot = 0, magA = 0, magB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    magA += a[i] * a[i];
-    magB += b[i] * b[i];
-  }
-  const denom = Math.sqrt(magA) * Math.sqrt(magB);
-  return denom === 0 ? 0 : dot / denom;
-}
 
 /**
  * Generate an embedding vector for the given text.
@@ -110,14 +95,10 @@ const AgentMemoryService = {
    * @returns {Promise<object|null>} Stored memory document, or null if duplicate
    */
   async store({ project, username, type, title, content, conversationId }) {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) throw new Error("Database not available");
-
     // Validate type
     const validType = MEMORY_TYPES.includes(type) ? type : "project";
 
-    const db = client.db(MONGO_DB_NAME);
-    const collection = db.collection(COLLECTION);
+    const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
 
     const embedding = await generateEmbedding(`${title}: ${content}`);
 
@@ -170,10 +151,9 @@ const AgentMemoryService = {
    * @returns {Promise<Array>} Relevant memories sorted by score, with age metadata
    */
   async search({ project, queryText, limit = 5 }) {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) return [];
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
+    if (!db) return [];
 
-    const db = client.db(MONGO_DB_NAME);
     const collection = db.collection(COLLECTION);
 
     let queryEmbedding;
@@ -258,11 +238,7 @@ const AgentMemoryService = {
    * @returns {Promise<{ memories: Array, total: number }>}
    */
   async list({ project, limit = 50, skip = 0 }) {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) throw new Error("Database not available");
-
-    const db = client.db(MONGO_DB_NAME);
-    const collection = db.collection(COLLECTION);
+    const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
 
     const filter = { project };
     const [memories, total] = await Promise.all([
@@ -287,11 +263,7 @@ const AgentMemoryService = {
    * @returns {Promise<boolean>}
    */
   async update(memoryId, { title, content, type }) {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) throw new Error("Database not available");
-
-    const db = client.db(MONGO_DB_NAME);
-    const collection = db.collection(COLLECTION);
+    const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
 
     const $set = { updatedAt: new Date().toISOString() };
     if (title !== undefined) $set.title = title;
@@ -315,11 +287,7 @@ const AgentMemoryService = {
    * @returns {Promise<boolean>}
    */
   async remove(memoryId) {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) throw new Error("Database not available");
-
-    const db = client.db(MONGO_DB_NAME);
-    const collection = db.collection(COLLECTION);
+    const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
 
     const result = await collection.deleteOne({ id: memoryId });
     return result.deletedCount > 0;
@@ -329,10 +297,9 @@ const AgentMemoryService = {
    * Ensure MongoDB indexes on the agent_memories collection.
    */
   async ensureIndexes() {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) return;
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
+    if (!db) return;
 
-    const db = client.db(MONGO_DB_NAME);
     const collection = db.collection(COLLECTION);
 
     await collection.createIndex({ project: 1 });

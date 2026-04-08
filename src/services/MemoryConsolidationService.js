@@ -3,6 +3,7 @@ import AgentMemoryService from "./AgentMemoryService.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
+import { cosineSimilarity } from "../utils/math.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -27,19 +28,6 @@ const DAILY_MAX_CONSOLIDATIONS = 3;
 const RUNS_COLLECTION = "memory_consolidation_runs";
 const HISTORY_COLLECTION = "memory_consolidation_history";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function cosineSimilarity(a, b) {
-  if (!a || !b || a.length !== b.length) return 0;
-  let dot = 0, magA = 0, magB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    magA += a[i] * a[i];
-    magB += b[i] * b[i];
-  }
-  const denom = Math.sqrt(magA) * Math.sqrt(magB);
-  return denom === 0 ? 0 : dot / denom;
-}
 
 function daysSince(isoDate) {
   return Math.max(0, Math.floor((Date.now() - new Date(isoDate).getTime()) / 86_400_000));

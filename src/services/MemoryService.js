@@ -4,30 +4,12 @@ import { getProvider } from "../providers/index.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import EmbeddingService from "./EmbeddingService.js";
 import logger from "../utils/logger.js";
+import { cosineSimilarity } from "../utils/math.js";
 
 const LUPOS_COLLECTION = "lupos_memories";
 const EXTRACTION_PROVIDER = "anthropic";
 const EXTRACTION_MODEL = "claude-haiku-4-5-20251001";
 
-/**
- * Compute cosine similarity between two vectors.
- * @param {number[]} a
- * @param {number[]} b
- * @returns {number} Similarity score between -1 and 1
- */
-function cosineSimilarity(a, b) {
-  if (a.length !== b.length) return 0;
-  let dotProduct = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dotProduct += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  const denominator = Math.sqrt(normA) * Math.sqrt(normB);
-  return denominator === 0 ? 0 : dotProduct / denominator;
-}
 
 /**
  * Generate an embedding for text via EmbeddingService.
@@ -155,11 +137,7 @@ const MemoryService = {
     participants,
     sourceMessageId,
   }) {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) throw new Error("Database not available");
-
-    const db = client.db(MONGO_DB_NAME);
-    const collection = db.collection(LUPOS_COLLECTION);
+    const collection = MongoWrapper.getCollection(MONGO_DB_NAME, LUPOS_COLLECTION);
 
     // Extract facts from the conversation via AI
     const facts = await extractFactsFromConversation(messages, participants);
@@ -179,23 +157,18 @@ const MemoryService = {
 
     for (const fact of facts) {
       try {
+        // Generate embedding (needed for both dedup check and storage)
+        const embedding = await generateEmbedding(fact.fact);
+
         // Check for duplicate facts (same user + very similar content)
         const existingMemories = await collection
           .find({ guildId, aboutUserId: fact.aboutUserId })
           .toArray();
 
         if (existingMemories.length > 0) {
-          // Generate embedding for the new fact
-          const newEmbedding = await generateEmbedding(fact.fact);
-
-          // Check if a very similar fact already exists
           const isDuplicate = existingMemories.some((existing) => {
             if (!existing.embedding) return false;
-            const similarity = cosineSimilarity(
-              newEmbedding,
-              existing.embedding,
-            );
-            return similarity > 0.92; // High threshold for dedup
+            return cosineSimilarity(embedding, existing.embedding) > 0.92;
           });
 
           if (isDuplicate) {
@@ -204,57 +177,30 @@ const MemoryService = {
             );
             continue;
           }
-
-          // Store with the already-computed embedding
-          const memory = {
-            id: crypto.randomUUID(),
-            guildId,
-            channelId,
-            aboutUserId: fact.aboutUserId,
-            aboutUsername: fact.aboutUsername,
-            sourceUserId: fact.sourceUserId,
-            sourceUsername: fact.sourceUsername,
-            fact: fact.fact,
-            category: fact.category || "other",
-            embedding: newEmbedding,
-            confidence: fact.confidence,
-            sourceMessageId: sourceMessageId || null,
-            createdAt: now,
-            updatedAt: now,
-          };
-
-          await collection.insertOne(memory);
-          storedMemories.push(memory);
-          logger.info(
-            `[MemoryService] Stored: "${fact.fact.substring(0, 60)}..." (about: ${fact.aboutUsername})`,
-          );
-        } else {
-          // No existing memories, generate embedding and store
-          const embedding = await generateEmbedding(fact.fact);
-
-          const memory = {
-            id: crypto.randomUUID(),
-            guildId,
-            channelId,
-            aboutUserId: fact.aboutUserId,
-            aboutUsername: fact.aboutUsername,
-            sourceUserId: fact.sourceUserId,
-            sourceUsername: fact.sourceUsername,
-            fact: fact.fact,
-            category: fact.category || "other",
-            embedding,
-            confidence: fact.confidence,
-            sourceMessageId: sourceMessageId || null,
-            createdAt: now,
-            updatedAt: now,
-          };
-
-          await collection.insertOne(memory);
-          storedMemories.push(memory);
-          logger.info(
-            `[MemoryService] Stored: "${fact.fact.substring(0, 60)}..." (about: ${fact.aboutUsername})`,
-          );
         }
+
+        const memory = {
+          id: crypto.randomUUID(),
+          guildId,
+          channelId,
+          aboutUserId: fact.aboutUserId,
+          aboutUsername: fact.aboutUsername,
+          sourceUserId: fact.sourceUserId,
+          sourceUsername: fact.sourceUsername,
+          fact: fact.fact,
+          category: fact.category || "other",
+          embedding,
+          confidence: fact.confidence,
+          sourceMessageId: sourceMessageId || null,
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        await collection.insertOne(memory);
+        storedMemories.push(memory);
+        logger.info(
+          `[MemoryService] Stored: "${fact.fact.substring(0, 60)}..." (about: ${fact.aboutUsername})`,
+        );
       } catch (err) {
         logger.error(`[MemoryService] Failed to store fact: ${err.message}`);
       }
@@ -274,11 +220,7 @@ const MemoryService = {
    * @returns {Promise<Array>} Relevant memories sorted by relevance
    */
   async search({ guildId, userIds, queryText, limit = 10, sessionId, project }) {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) throw new Error("Database not available");
-
-    const db = client.db(MONGO_DB_NAME);
-    const collection = db.collection(LUPOS_COLLECTION);
+    const collection = MongoWrapper.getCollection(MONGO_DB_NAME, LUPOS_COLLECTION);
 
     // Generate embedding for the search query
     const embeddingOpts = {};
@@ -343,11 +285,7 @@ const MemoryService = {
    * @returns {Promise<{ memories: Array, total: number }>}
    */
   async list(guildId, userId, limit = 50, skip = 0) {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) throw new Error("Database not available");
-
-    const db = client.db(MONGO_DB_NAME);
-    const collection = db.collection(LUPOS_COLLECTION);
+    const collection = MongoWrapper.getCollection(MONGO_DB_NAME, LUPOS_COLLECTION);
 
     const filter = { guildId, aboutUserId: userId };
 
@@ -371,11 +309,7 @@ const MemoryService = {
    * @returns {Promise<boolean>} Whether a document was deleted
    */
   async delete(memoryId) {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) throw new Error("Database not available");
-
-    const db = client.db(MONGO_DB_NAME);
-    const collection = db.collection(LUPOS_COLLECTION);
+    const collection = MongoWrapper.getCollection(MONGO_DB_NAME, LUPOS_COLLECTION);
 
     const result = await collection.deleteOne({ id: memoryId });
     return result.deletedCount > 0;
@@ -385,10 +319,9 @@ const MemoryService = {
    * Ensure indexes exist on the lupos_memories collection.
    */
   async ensureIndexes() {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) return;
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
+    if (!db) return;
 
-    const db = client.db(MONGO_DB_NAME);
     const luposCol = db.collection(LUPOS_COLLECTION);
 
     await luposCol.createIndex({ guildId: 1, aboutUserId: 1 });
