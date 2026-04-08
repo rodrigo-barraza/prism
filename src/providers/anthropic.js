@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
+import { extractAnthropicRateLimits } from "../utils/rateLimits.js";
 import { ANTHROPIC_API_KEY } from "../../secrets.js";
 import { TYPES, getDefaultModels } from "../config.js";
 
@@ -404,7 +405,8 @@ const anthropicProvider = {
         delete payload.top_k;
       }
 
-      const response = await getClient().messages.create(payload);
+      const { data: response, response: rawResponse } = await getClient().messages.create(payload).withResponse();
+      const rateLimits = extractAnthropicRateLimits(rawResponse);
 
       const { text, thinking, thinkingSignature, citations, toolCalls } = extractResponseContent(
         response.content,
@@ -417,6 +419,7 @@ const anthropicProvider = {
       if (thinkingSignature) result.thinkingSignature = thinkingSignature;
       if (citations.length > 0) result.citations = citations;
       if (toolCalls.length > 0) result.toolCalls = toolCalls;
+      if (rateLimits) result.rateLimits = rateLimits;
       return result;
     } catch (error) {
       throw new ProviderError(
@@ -562,6 +565,7 @@ const anthropicProvider = {
       let codeInput = "";
       let usage = null;
       let messageStartUsage = null;
+      let rateLimits = null;
 
       for await (const chunk of stream) {
         if (options.signal?.aborted) {
@@ -573,6 +577,10 @@ const anthropicProvider = {
         // cache_creation_input_tokens here — message_delta only has output_tokens.
         if (chunk.type === "message_start" && chunk.message?.usage) {
           messageStartUsage = chunk.message.usage;
+          // Capture rate-limit headers from the stream's initial response
+          if (!rateLimits && stream.response) {
+            rateLimits = extractAnthropicRateLimits(stream.response);
+          }
           continue;
         }
         // Content block start — track what kind of block we're in
@@ -737,6 +745,9 @@ const anthropicProvider = {
         yield { type: "usage", usage };
       } else {
         yield { type: "usage", usage: { inputTokens: 0, outputTokens: 0 } };
+      }
+      if (rateLimits) {
+        yield { type: "rateLimits", rateLimits };
       }
     } catch (error) {
       if (error.name === "AbortError") return;

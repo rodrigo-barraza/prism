@@ -82,6 +82,7 @@ const RequestLogger = {
     requestPayload = null,
     responsePayload = null,
     modalities = null,
+    rateLimits = null,
   }) {
     try {
       const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -126,6 +127,7 @@ const RequestLogger = {
         requestPayload,
         responsePayload,
         modalities,
+        rateLimits,
       };
 
       await db.collection(COLLECTION).insertOne(doc);
@@ -173,6 +175,7 @@ const RequestLogger = {
     audioRef = null,
     // Optional
     agenticIteration = null,
+    rateLimits = null,
   }) {
     const inputTokens = usage ? getTotalInputTokens(usage) : 0;
     const outputTokens = usage ? (usage.outputTokens || 0) : 0;
@@ -240,6 +243,7 @@ const RequestLogger = {
         usage,
       },
       modalities,
+      rateLimits,
     });
   },
 };

@@ -777,6 +777,7 @@ export async function finalizeTextGeneration(
     timeToGenerationSec,
     generationSec,
     totalSec,
+    rateLimits,
   },
   overrideMessagesToAppend = null,
   skipRequestLog = false
@@ -938,6 +939,7 @@ export async function finalizeTextGeneration(
       toolCalls,
       outputCharacters,
       audioRef,
+      rateLimits,
     });
   }
 
@@ -1210,6 +1212,7 @@ async function handleStreamingText(ctx) {
         ? (ss.generationEnd - ss.firstTokenTime) / 1000
         : null,
     totalSec: (now - requestStart) / 1000,
+    rateLimits: ss.rateLimits,
   });
 }
 
@@ -1314,6 +1317,7 @@ async function handleNonStreamingText(ctx) {
     timeToGenerationSec: (generationStart - requestStart) / 1000,
     generationSec: (now - generationStart) / 1000,
     totalSec: (now - requestStart) / 1000,
+    rateLimits: genResult.rateLimits || null,
   });
 }
 

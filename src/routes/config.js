@@ -12,6 +12,7 @@ import { getProvider } from "../providers/index.js";
 import { ARENA_SCORES } from "../arrays.js";
 import logger from "../utils/logger.js";
 import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
+import rateLimitStore from "../services/RateLimitStore.js";
 import {
   OPENAI_API_KEY,
   ANTHROPIC_API_KEY,
@@ -873,6 +874,16 @@ router.post("/tools/refresh", async (_req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+/**
+ * GET /config/rate-limits
+ * Returns the latest rate-limit snapshots for all cloud providers.
+ * OpenAI and Anthropic update dynamically from API response headers.
+ * Google is seeded with static tier-2 limits.
+ */
+router.get("/rate-limits", (_req, res) => {
+  res.json(rateLimitStore.getAll());
 });
 
 export default router;

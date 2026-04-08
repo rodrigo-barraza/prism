@@ -142,6 +142,7 @@ export default class AgenticLoopService {
     const streamedToolCalls = [];
     const streamedAudioChunks = [];
     let audioSampleRate = 24000;
+    let lastRateLimits = null;
 
     // ── Initialize lifecycle hooks ──────────────────────────────
     const hooks = new AgentHooks();
@@ -325,6 +326,12 @@ export default class AgenticLoopService {
             passUsage.outputTokens += chunk.usage.outputTokens || 0;
             passUsage.cacheReadInputTokens += chunk.usage.cacheReadInputTokens || 0;
             passUsage.cacheCreationInputTokens += chunk.usage.cacheCreationInputTokens || 0;
+            continue;
+          }
+
+          // Rate limit headers from the provider response
+          if (chunk && typeof chunk === "object" && chunk.type === "rateLimits") {
+            lastRateLimits = chunk.rateLimits;
             continue;
           }
 
@@ -772,6 +779,7 @@ export default class AgenticLoopService {
           timeToGenerationSec: overallFirstTokenTime ? (overallFirstTokenTime - requestStart) / 1000 : null,
           generationSec: overallFirstTokenTime && overallGenerationEnd ? (overallGenerationEnd - overallFirstTokenTime) / 1000 : null,
           totalSec: (now - requestStart) / 1000,
+          rateLimits: lastRateLimits,
       }, currentMessages, true); // <--- pass true to skip the overall request logging so we don't duplicate
 
       // ── afterResponse hook: session summarization ───────────

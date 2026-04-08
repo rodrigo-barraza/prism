@@ -1,6 +1,7 @@
 import OpenAI, { toFile } from "openai";
 import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
+import { extractOpenAIRateLimits } from "../utils/rateLimits.js";
 import { OPENAI_API_KEY } from "../../secrets.js";
 import {
   TYPES,
@@ -341,7 +342,10 @@ const openaiProvider = {
       payload.tools = [...(payload.tools || []), ...customTools];
     }
 
-    const response = await getClient().responses.create(payload);
+    const { data: response, response: rawResponse } = await getClient().responses.create(payload).withResponse();
+
+    // Extract rate-limit headers
+    const rateLimits = extractOpenAIRateLimits(rawResponse);
 
     // Collect tool calls and images from output items
     const images = [];
@@ -379,6 +383,7 @@ const openaiProvider = {
       },
     };
     if (toolCalls.length > 0) result.toolCalls = toolCalls;
+    if (rateLimits) result.rateLimits = rateLimits;
     return result;
   },
 
@@ -433,7 +438,8 @@ const openaiProvider = {
     }
 
     try {
-      const response = await getClient().chat.completions.create(payload);
+      const { data: response, response: rawResponse } = await getClient().chat.completions.create(payload).withResponse();
+      const rateLimits = extractOpenAIRateLimits(rawResponse);
       const msg = response.choices[0].message;
       const result = {
         text: msg.content || "",
@@ -458,6 +464,7 @@ const openaiProvider = {
           };
         });
       }
+      if (rateLimits) result.rateLimits = rateLimits;
       return result;
     } catch (error) {
       // Retry once after stripping unsupported parameters (e.g. gpt-5-nano rejects temperature)
@@ -579,9 +586,10 @@ const openaiProvider = {
       payload.tools = [...(payload.tools || []), ...customTools];
     }
 
-    const stream = await getClient().responses.create(payload, {
+    const { data: stream, response: rawStreamResponse } = await getClient().responses.create(payload, {
       ...(options.signal && { signal: options.signal }),
-    });
+    }).withResponse();
+    const rateLimits = extractOpenAIRateLimits(rawStreamResponse);
     let usage = null;
     // Track function names from output_item.added events; the arguments.done
     // event may not include the name property (known OpenAI SDK issue).
@@ -658,6 +666,9 @@ const openaiProvider = {
     } else {
       yield { type: "usage", usage: { inputTokens: 0, outputTokens: 0 } };
     }
+    if (rateLimits) {
+      yield { type: "rateLimits", rateLimits };
+    }
   },
 
   /**
@@ -713,10 +724,13 @@ const openaiProvider = {
     }
 
     let stream;
+    let rateLimits = null;
     try {
-      stream = await getClient().chat.completions.create(payload, {
+      const { data: streamData, response: rawStreamResponse } = await getClient().chat.completions.create(payload, {
         ...(options.signal && { signal: options.signal }),
-      });
+      }).withResponse();
+      stream = streamData;
+      rateLimits = extractOpenAIRateLimits(rawStreamResponse);
     } catch (error) {
       // Retry once after stripping unsupported parameters (e.g. gpt-5-nano rejects temperature)
       if (error.status === 400 && error.message?.includes("Unsupported")) {
@@ -742,9 +756,11 @@ const openaiProvider = {
           }
         }
         if (stripped) {
-          stream = await getClient().chat.completions.create(payload, {
+          const retryResult = await getClient().chat.completions.create(payload, {
             ...(options.signal && { signal: options.signal }),
-          });
+          }).withResponse();
+          stream = retryResult.data;
+          rateLimits = extractOpenAIRateLimits(retryResult.response);
         } else {
           throw error;
         }
@@ -811,6 +827,9 @@ const openaiProvider = {
       yield { type: "usage", usage };
     } else {
       yield { type: "usage", usage: { inputTokens: 0, outputTokens: 0 } };
+    }
+    if (rateLimits) {
+      yield { type: "rateLimits", rateLimits };
     }
   },
 

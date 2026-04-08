@@ -3,7 +3,7 @@ import { getProvider } from "../providers/index.js";
 import FileService from "./FileService.js";
 import logger from "../utils/logger.js";
 import RequestLogger from "./RequestLogger.js";
-import { calculateImageCost } from "../utils/CostCalculator.js";
+import { calculateImageCost, calculateTextCost } from "../utils/CostCalculator.js";
 import { getModelByName } from "../config.js";
 import { calculateTokensPerSec } from "../utils/math.js";
 
@@ -14,6 +14,8 @@ import { calculateTokensPerSec } from "../utils/math.js";
 
 const IMAGE_MODEL = "gemini-3.1-flash-image-preview";
 const IMAGE_PROVIDER = "google";
+const VISION_MODEL = "gemini-3-flash-preview";
+const VISION_PROVIDER = "google";
 
 /**
  * Tool schemas — same format as tools-api schemas (without endpoint metadata).
@@ -42,9 +44,46 @@ const BUILT_IN_SCHEMAS = [
       required: ["prompt"],
     },
   },
+  {
+    name: "describe_image",
+    description:
+      "Describe the visual contents of one or more images (avatars, banners, photos, etc.) " +
+      "by URL. Returns a text description of each image. Use this when you need to understand " +
+      "what someone looks like (their avatar or banner) before generating artwork, or when " +
+      "you need to describe any image from a URL. IMPORTANT: Always batch ALL image URLs " +
+      "into a single call — pass all URLs in the imageUrls array at once. " +
+      "Never make multiple separate calls for individual URLs.",
+    parameters: {
+      type: "object",
+      properties: {
+        imageUrls: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Array of image URLs to describe. Can be Discord avatar URLs, " +
+            "banner URLs, or any publicly accessible image URL.",
+        },
+        context: {
+          type: "string",
+          enum: ["avatar", "banner", "photo", "general"],
+          description:
+            "What kind of image this is, to tailor the description. " +
+            "Use 'avatar' for profile pictures, 'banner' for profile banners, " +
+            "'photo' for user-uploaded photos, 'general' for anything else.",
+        },
+      },
+      required: ["imageUrls"],
+    },
+  },
 ];
 
 const builtInMap = new Map(BUILT_IN_SCHEMAS.map((t) => [t.name, t]));
+
+// Per-request vision dedup cache: prevents the agent from describing the
+// same image URL multiple times within one agentic session.
+// Keyed by requestId → Map<url, description>
+const visionCache = new Map();
+const VISION_CACHE_TTL_MS = 5 * 60 * 1000; // Auto-cleanup after 5 min
 
 // ────────────────────────────────────────────────────────────
 // Public API
@@ -82,6 +121,9 @@ export default class BuiltInTools {
   static async execute(name, args, ctx) {
     if (name === "generate_image") {
       return BuiltInTools._executeGenerateImage(args, ctx);
+    }
+    if (name === "describe_image") {
+      return BuiltInTools._executeDescribeImage(args, ctx);
     }
     return { error: `Unknown built-in tool: ${name}` };
   }
@@ -249,6 +291,134 @@ export default class BuiltInTools {
     } catch (err) {
       logger.error(`[BuiltInTools] generate_image failed: ${err.message}`);
       return { error: `Image generation failed: ${err.message}` };
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // describe_image implementation
+  // ────────────────────────────────────────────────────────────
+
+  /**
+   * Describe the visual contents of one or more images via the vision API.
+   * Returns text descriptions that the agent can use when composing image
+   * generation prompts (e.g., to know what someone's avatar looks like).
+   */
+  static async _executeDescribeImage(args, ctx) {
+    const { imageUrls, context = "general" } = args;
+    const { project, username, sessionId, conversationId, clientIp, requestId, agenticIteration } = ctx;
+
+    if (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0) {
+      return { error: "Missing required parameter: imageUrls (array of URLs)" };
+    }
+
+    // Tailor the prompt based on image context
+    const prompts = {
+      avatar: "Describe this profile picture/avatar. Focus on the person's appearance, " +
+        "style, notable features, and any artistic elements. Make no mention about quality or resolution.",
+      banner: "Describe this profile banner image. Focus on the scene, colors, mood, " +
+        "and notable elements. Make no mention about quality or resolution.",
+      photo: "Describe this image. Make no mention about the quality, resolution, or pixelation.",
+      general: "Describe this image. Make no mention about the quality, resolution, or pixelation.",
+    };
+    const prompt = prompts[context] || prompts.general;
+
+    try {
+      const provider = getProvider(VISION_PROVIDER);
+      const descriptions = [];
+
+      // Get or create per-request cache (stores Promises for singleflight dedup)
+      if (!visionCache.has(requestId)) {
+        visionCache.set(requestId, new Map());
+        // Auto-cleanup to prevent memory leaks
+        setTimeout(() => visionCache.delete(requestId), VISION_CACHE_TTL_MS);
+      }
+      const urlCache = visionCache.get(requestId);
+
+      // Deduplicate URLs within this call
+      const uniqueUrls = [...new Set(imageUrls)];
+
+      for (const url of uniqueUrls) {
+        // Singleflight: if a request for this URL is already in-flight (from
+        // a parallel tool call), await it instead of firing a duplicate.
+        if (urlCache.has(url)) {
+          const cached = await urlCache.get(url);
+          descriptions.push({ url, description: cached });
+          logger.info(`[BuiltInTools] describe_image: cache hit for ${url.slice(0, 60)}…`);
+          continue;
+        }
+
+        // Store the promise IMMEDIATELY so parallel calls can await it
+        const descriptionPromise = (async () => {
+          const toolRequestStart = performance.now();
+          const result = await provider.generateText(
+            [{ role: "user", content: prompt, images: [url] }],
+            VISION_MODEL,
+            {},
+          );
+          const toolTotalSec = (performance.now() - toolRequestStart) / 1000;
+
+          const text = result.text || "Unable to describe this image.";
+
+          // Log each vision call
+          const usage = result.usage || { inputTokens: 0, outputTokens: 0 };
+          const tokensPerSec = calculateTokensPerSec(
+            usage.outputTokens || 0,
+            toolTotalSec,
+          );
+
+          // Calculate cost from pricing config (Google provider doesn't return estimatedCost)
+          const modelDef = getModelByName(VISION_MODEL);
+          const estimatedCost = calculateTextCost(usage, modelDef?.pricing);
+
+          RequestLogger.logChatGeneration({
+            requestId: requestId ? `${requestId}-vision-${agenticIteration || 0}` : crypto.randomUUID(),
+            endpoint: "/agent",
+            operation: "agent:vision",
+            project,
+            username,
+            clientIp: clientIp || null,
+            provider: VISION_PROVIDER,
+            model: result.model || VISION_MODEL,
+            conversationId: conversationId || null,
+            sessionId: sessionId || null,
+            success: true,
+            usage,
+            estimatedCost,
+            tokensPerSec,
+            totalSec: toolTotalSec,
+            options: {},
+            messages: [{ role: "user", content: prompt, images: [url] }],
+            images: [],
+            text,
+            toolCalls: [],
+            outputCharacters: text.length,
+            agenticIteration: agenticIteration || null,
+          }).catch((err) =>
+            logger.error(`[BuiltInTools] Failed to log vision request: ${err.message}`),
+          );
+
+          return text;
+        })();
+
+        // Store promise in cache BEFORE awaiting — this is what makes singleflight work
+        urlCache.set(url, descriptionPromise);
+
+        const text = await descriptionPromise;
+        descriptions.push({ url, description: text });
+      }
+
+      logger.info(
+        `[BuiltInTools] describe_image: described ${descriptions.length} image(s), ` +
+          `context=${context}`,
+      );
+
+      return {
+        success: true,
+        descriptions,
+      };
+    } catch (err) {
+      logger.error(`[BuiltInTools] describe_image failed: ${err.message}`);
+      return { error: `Image description failed: ${err.message}` };
     }
   }
 }

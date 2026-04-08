@@ -94,6 +94,10 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
       }
       return true;
 
+    case "rateLimits":
+      state.rateLimits = chunk.rateLimits;
+      return true;
+
     case "thinking":
       state.generationEnd = performance.now();
       state.thinking += chunk.content;
@@ -208,5 +212,6 @@ export function createStreamState() {
     toolCalls: [],
     audioChunks: [],
     audioSampleRate: 24000,
+    rateLimits: null,
   };
 }
