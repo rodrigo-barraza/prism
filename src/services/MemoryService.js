@@ -32,10 +32,11 @@ function cosineSimilarity(a, b) {
 /**
  * Generate an embedding for text via EmbeddingService.
  * @param {string} text
+ * @param {object} [options] - Extra options forwarded to EmbeddingService
  * @returns {Promise<number[]>}
  */
-async function generateEmbedding(text) {
-  return EmbeddingService.embed(text, { source: "memory" });
+async function generateEmbedding(text, options = {}) {
+  return EmbeddingService.embed(text, { source: "memory", ...options });
 }
 
 /**
@@ -272,7 +273,7 @@ const MemoryService = {
    * @param {number} [params.limit=10]
    * @returns {Promise<Array>} Relevant memories sorted by relevance
    */
-  async search({ guildId, userIds, queryText, limit = 10 }) {
+  async search({ guildId, userIds, queryText, limit = 10, sessionId }) {
     const client = MongoWrapper.getClient(MONGO_DB_NAME);
     if (!client) throw new Error("Database not available");
 
@@ -280,7 +281,8 @@ const MemoryService = {
     const collection = db.collection(LUPOS_COLLECTION);
 
     // Generate embedding for the search query
-    const queryEmbedding = await generateEmbedding(queryText);
+    const embeddingOpts = sessionId ? { sessionId } : {};
+    const queryEmbedding = await generateEmbedding(queryText, embeddingOpts);
 
     // Build the filter
     const filter = { guildId };

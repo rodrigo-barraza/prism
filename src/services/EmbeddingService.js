@@ -104,6 +104,7 @@ const EmbeddingService = {
         clientIp: options.clientIp || null,
         provider: providerName,
         model: resolvedModel,
+        sessionId: options.sessionId || null,
         success,
         errorMessage,
         estimatedCost,

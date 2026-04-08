@@ -42,7 +42,7 @@ router.post("/extract", async (req, res, next) => {
  */
 router.post("/search", async (req, res, next) => {
   try {
-    const { guildId, userIds, queryText, limit } = req.body;
+    const { guildId, userIds, queryText, limit, sessionId } = req.body;
 
     if (!guildId || !queryText) {
       return res.status(400).json({
@@ -55,6 +55,7 @@ router.post("/search", async (req, res, next) => {
       userIds,
       queryText,
       limit: limit || 10,
+      sessionId: sessionId || null,
     });
 
     res.json({ memories, count: memories.length });
