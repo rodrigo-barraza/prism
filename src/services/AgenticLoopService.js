@@ -152,8 +152,11 @@ export default class AgenticLoopService {
     hooks.register("beforeToolCall", approvalEngine.createHook(), "AutoApprovalEngine");
 
     // Dynamic System Prompt Assembly
-    const assembler = new SystemPromptAssembler();
-    hooks.register("beforePrompt", assembler.createHook(), "SystemPromptAssembler");
+    // Skip when caller provides their own system prompt (e.g. Lupos personality)
+    if (!options.customSystemPrompt) {
+      const assembler = new SystemPromptAssembler();
+      hooks.register("beforePrompt", assembler.createHook(), "SystemPromptAssembler");
+    }
 
     // Session Summarization (fire-and-forget on loop exit)
     hooks.register("afterResponse", SessionSummarizer.createHook(), "SessionSummarizer");

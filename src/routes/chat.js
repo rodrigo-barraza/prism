@@ -232,6 +232,7 @@ export async function handleChat(params, emit, { signal } = {}) {
     skipConversation,
     autoApprove,
     planFirst,
+    customSystemPrompt,
     // systemPrompt arrives in two places by design:
     //  - messages[0] with role:"system" → what the LLM actually sees
     //  - conversationMeta.systemPrompt → stored as top-level DB field for quick UI access
@@ -321,6 +322,7 @@ export async function handleChat(params, emit, { signal } = {}) {
     ...(textOnly && { textOnly }),
     ...(autoApprove && { autoApprove }),
     ...(planFirst && { planFirst }),
+    ...(customSystemPrompt && { customSystemPrompt }),
     ...(extraParams.systemPrompt && { systemPrompt: extraParams.systemPrompt }),
   };
 
@@ -468,6 +470,21 @@ export async function handleChat(params, emit, { signal } = {}) {
           logger.info(`[chat] LM-Studio MCP: ${tools.length} tools enabled, enabledTools=${(options.enabledTools || []).length}, builtIn=${builtInTools.length}, contextLength=${options.contextLength || 'unset'}`);
         } else if (useLmStudioNativeMcp) {
           logger.warn(`[chat] LM-Studio MCP SKIPPED: functionCallingEnabled=${options.functionCallingEnabled}, useLmStudioNativeMcp=${useLmStudioNativeMcp}`);
+        }
+
+        // For non-LM-Studio providers on the /chat path: load tool schemas
+        // from ToolOrchestratorService so the provider receives proper function
+        // definitions. Without this, the LLM only sees tool names in the system
+        // prompt and hallucinates XML tool calls instead of structured ones.
+        if (!useLmStudioNativeMcp && !options.agenticLoopEnabled && options.functionCallingEnabled) {
+          const builtInTools = ToolOrchestratorService.getToolSchemas();
+          let tools = builtInTools;
+          if (options.enabledTools && Array.isArray(options.enabledTools)) {
+            const enabledSet = new Set(options.enabledTools);
+            tools = tools.filter((t) => enabledSet.has(t.name));
+          }
+          options.tools = tools;
+          logger.info(`[chat] FC tools injected: ${tools.length} tools enabled for ${providerName} ${resolvedModel}`);
         }
 
         if (options.agenticLoopEnabled) {
@@ -1230,6 +1247,140 @@ async function handleStreamingText(ctx) {
     outputCharacters += chunkStr.length;
     fullStreamedText += chunkStr;
     emit({ type: "chunk", content: chunk });
+  }
+
+  // ── FC tool execution loop ─────────────────────────────────
+  // When functionCallingEnabled is set on /chat (not the agentic loop),
+  // execute returned tool calls via ToolOrchestratorService and re-call
+  // the provider with tool results. Lightweight loop — no approval
+  // engine, no context manager, just direct execution.
+  const MAX_FC_ITERATIONS = 10;
+  let fcIteration = 0;
+
+  while (
+    options.functionCallingEnabled &&
+    streamedToolCalls.length > 0 &&
+    streamedToolCalls.some((tc) => !tc.result && tc.status !== "done" && tc.status !== "error") &&
+    fcIteration < MAX_FC_ITERATIONS &&
+    !signal?.aborted
+  ) {
+    fcIteration++;
+    const pendingCalls = streamedToolCalls.filter(
+      (tc) => !tc.result && tc.status !== "done" && tc.status !== "error",
+    );
+
+    if (pendingCalls.length === 0) break;
+
+    logger.info(`[chat/FC] Iteration ${fcIteration}: executing ${pendingCalls.length} tool call(s)`);
+
+    // Execute all pending tool calls
+    for (const tc of pendingCalls) {
+      emit({ type: "toolCall", id: tc.id, name: tc.name, args: tc.args, status: "calling" });
+      try {
+        const result = await ToolOrchestratorService.executeTool(tc.name, tc.args, { project, username });
+        tc.result = result;
+        tc.status = result?.error ? "error" : "done";
+        emit({ type: "toolCall", id: tc.id, name: tc.name, args: tc.args, result, status: tc.status });
+      } catch (err) {
+        tc.result = { error: err.message };
+        tc.status = "error";
+        emit({ type: "toolCall", id: tc.id, name: tc.name, args: tc.args, result: tc.result, status: "error" });
+      }
+    }
+
+    // Build tool result messages for the provider
+    // Append the assistant's tool_use turn + tool results to messages
+    const assistantToolMsg = {
+      role: "assistant",
+      content: fullStreamedText || "",
+      toolCalls: streamedToolCalls.map((tc) => ({
+        id: tc.id,
+        name: tc.name,
+        args: tc.args,
+      })),
+      ...(streamedThinking ? { thinking: streamedThinking } : {}),
+      ...(streamedThinkingSignature ? { thinkingSignature: streamedThinkingSignature } : {}),
+    };
+
+    const toolResultMsgs = streamedToolCalls
+      .filter((tc) => tc.result)
+      .map((tc) => ({
+        role: "tool",
+        tool_call_id: tc.id,
+        name: tc.name,
+        content: typeof tc.result === "string" ? tc.result : JSON.stringify(tc.result),
+      }));
+
+    // Re-call provider with tool results appended
+    const updatedMessages = [...messages, assistantToolMsg, ...toolResultMsgs];
+
+    // Reset accumulators for the follow-up stream
+    fullStreamedText = "";
+    streamedThinking = "";
+    streamedThinkingSignature = "";
+    streamedToolCalls.length = 0;
+
+    const followUpStream = provider.generateTextStream(updatedMessages, resolvedModel, {
+      ...options,
+      signal,
+    });
+
+    for await (const chunk of followUpStream) {
+      if (signal?.aborted) {
+        if (typeof followUpStream.return === "function") followUpStream.return();
+        break;
+      }
+      if (chunk && typeof chunk === "object" && chunk.type === "usage") {
+        // Merge usage from follow-up
+        if (usage && chunk.usage) {
+          usage.inputTokens = (usage.inputTokens || 0) + (chunk.usage.inputTokens || 0);
+          usage.outputTokens = (usage.outputTokens || 0) + (chunk.usage.outputTokens || 0);
+        } else {
+          usage = chunk.usage;
+        }
+        continue;
+      }
+      if (chunk && typeof chunk === "object" && chunk.type === "thinking") {
+        streamedThinking += chunk.content;
+        emit({ type: "thinking", content: chunk.content });
+        continue;
+      }
+      if (chunk && typeof chunk === "object" && chunk.type === "thinking_signature") {
+        streamedThinkingSignature = chunk.signature;
+        continue;
+      }
+      if (chunk && typeof chunk === "object" && chunk.type === "toolCall") {
+        if (chunk.status === "done" || chunk.status === "error") {
+          const existing = streamedToolCalls.find(
+            (tc) => (chunk.id && tc.id === chunk.id) || (!chunk.id && tc.name === chunk.name && !tc.result),
+          );
+          if (existing) {
+            existing.result = chunk.result || undefined;
+            existing.status = chunk.status;
+          }
+        } else {
+          streamedToolCalls.push({
+            id: chunk.id || null,
+            name: chunk.name,
+            args: chunk.args || {},
+            result: chunk.result || undefined,
+            status: chunk.status || undefined,
+          });
+        }
+        emit({ type: "toolCall", id: chunk.id, name: chunk.name, args: chunk.args || {}, result: chunk.result, status: chunk.status });
+        continue;
+      }
+      // Text chunk
+      if (!firstTokenTime) firstTokenTime = performance.now();
+      generationEnd = performance.now();
+      const chunkStr = typeof chunk === "string" ? chunk : "";
+      outputCharacters += chunkStr.length;
+      fullStreamedText += chunkStr;
+      emit({ type: "chunk", content: chunk });
+    }
+
+    // Update messages ref for potential next iteration
+    messages.push(assistantToolMsg, ...toolResultMsgs);
   }
 
   // Build normalized result for shared finalization
