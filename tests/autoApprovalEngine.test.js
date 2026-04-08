@@ -1,0 +1,426 @@
+import { vi } from "vitest";
+
+// Suppress logger output during tests
+vi.mock("../src/utils/logger.js", () => ({
+  default: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    success: vi.fn(),
+  },
+}));
+
+import AutoApprovalEngine, {
+  APPROVAL_TIERS,
+} from "../src/services/AutoApprovalEngine.js";
+
+// ═══════════════════════════════════════════════════════════════
+// Tier Constants
+// ═══════════════════════════════════════════════════════════════
+
+describe("APPROVAL_TIERS constants", () => {
+  it("defines AUTO = 1", () => {
+    expect(APPROVAL_TIERS.AUTO).toBe(1);
+  });
+
+  it("defines WRITE = 2", () => {
+    expect(APPROVAL_TIERS.WRITE).toBe(2);
+  });
+
+  it("defines DANGER = 3", () => {
+    expect(APPROVAL_TIERS.DANGER).toBe(3);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// getTier() — Default Tier Assignments
+// ═══════════════════════════════════════════════════════════════
+
+describe("getTier — default assignments", () => {
+  const engine = new AutoApprovalEngine();
+
+  // ── Tier 1: Read-only tools ──
+
+  const tier1Tools = [
+    "read_file",
+    "list_directory",
+    "grep_search",
+    "glob_files",
+    "web_search",
+    "fetch_url",
+    "multi_file_read",
+    "file_info",
+    "file_diff",
+    "git_status",
+    "git_diff",
+    "git_log",
+    "project_summary",
+  ];
+
+  for (const tool of tier1Tools) {
+    it(`${tool} → Tier 1 (AUTO)`, () => {
+      expect(engine.getTier(tool)).toBe(APPROVAL_TIERS.AUTO);
+    });
+  }
+
+  // ── Tier 2: Write tools ──
+
+  const tier2Tools = [
+    "write_file",
+    "str_replace_file",
+    "patch_file",
+    "move_file",
+    "delete_file",
+    "browser_action",
+  ];
+
+  for (const tool of tier2Tools) {
+    it(`${tool} → Tier 2 (WRITE)`, () => {
+      expect(engine.getTier(tool)).toBe(APPROVAL_TIERS.WRITE);
+    });
+  }
+
+  // ── Tier 3: Dangerous tools ──
+
+  const tier3Tools = [
+    "execute_shell",
+    "execute_python",
+    "execute_javascript",
+    "run_command",
+  ];
+
+  for (const tool of tier3Tools) {
+    it(`${tool} → Tier 3 (DANGER)`, () => {
+      expect(engine.getTier(tool)).toBe(APPROVAL_TIERS.DANGER);
+    });
+  }
+
+  // ── Unknown tools default to Tier 2 ──
+
+  it("unknown tool defaults to Tier 2 (WRITE)", () => {
+    expect(engine.getTier("custom_unknown_tool")).toBe(APPROVAL_TIERS.WRITE);
+  });
+
+  it("MCP-namespaced tool defaults to Tier 2", () => {
+    expect(engine.getTier("mcp__server__tool")).toBe(APPROVAL_TIERS.WRITE);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// getTier() — Tier Overrides
+// ═══════════════════════════════════════════════════════════════
+
+describe("getTier — tier overrides", () => {
+  it("overrides a Tier 1 tool to Tier 3", () => {
+    const engine = new AutoApprovalEngine({
+      tierOverrides: { read_file: APPROVAL_TIERS.DANGER },
+    });
+    expect(engine.getTier("read_file")).toBe(APPROVAL_TIERS.DANGER);
+  });
+
+  it("overrides a Tier 3 tool to Tier 1", () => {
+    const engine = new AutoApprovalEngine({
+      tierOverrides: { execute_shell: APPROVAL_TIERS.AUTO },
+    });
+    expect(engine.getTier("execute_shell")).toBe(APPROVAL_TIERS.AUTO);
+  });
+
+  it("override only affects the specified tool", () => {
+    const engine = new AutoApprovalEngine({
+      tierOverrides: { write_file: APPROVAL_TIERS.AUTO },
+    });
+    expect(engine.getTier("write_file")).toBe(APPROVAL_TIERS.AUTO);
+    expect(engine.getTier("str_replace_file")).toBe(APPROVAL_TIERS.WRITE); // Unaffected
+    expect(engine.getTier("execute_shell")).toBe(APPROVAL_TIERS.DANGER); // Unaffected
+  });
+
+  it("override for unknown tool takes precedence over default", () => {
+    const engine = new AutoApprovalEngine({
+      tierOverrides: { custom_tool: APPROVAL_TIERS.AUTO },
+    });
+    expect(engine.getTier("custom_tool")).toBe(APPROVAL_TIERS.AUTO);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// getTierLabel()
+// ═══════════════════════════════════════════════════════════════
+
+describe("getTierLabel", () => {
+  const engine = new AutoApprovalEngine();
+
+  it('returns "auto" for Tier 1 tools', () => {
+    expect(engine.getTierLabel("read_file")).toBe("auto");
+  });
+
+  it('returns "write" for Tier 2 tools', () => {
+    expect(engine.getTierLabel("write_file")).toBe("write");
+  });
+
+  it('returns "danger" for Tier 3 tools', () => {
+    expect(engine.getTierLabel("execute_shell")).toBe("danger");
+  });
+
+  it('returns "write" for unknown tools', () => {
+    expect(engine.getTierLabel("unknown_tool")).toBe("write");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// check() — Standard Mode (no fullAuto)
+// ═══════════════════════════════════════════════════════════════
+
+describe("check — standard mode", () => {
+  const engine = new AutoApprovalEngine();
+
+  it("auto-approves Tier 1 tools", () => {
+    const result = engine.check({ name: "read_file", args: {}, id: "tc1" });
+    expect(result.approved).toBe(true);
+    expect(result.tier).toBe(APPROVAL_TIERS.AUTO);
+    expect(result.tierLabel).toBe("auto");
+    expect(result.reason).toBe("read_only");
+  });
+
+  it("requires approval for Tier 2 tools", () => {
+    const result = engine.check({ name: "write_file", args: {}, id: "tc2" });
+    expect(result.approved).toBe(false);
+    expect(result.tier).toBe(APPROVAL_TIERS.WRITE);
+    expect(result.tierLabel).toBe("write");
+    expect(result.reason).toBe("requires_approval");
+  });
+
+  it("requires approval for Tier 3 tools", () => {
+    const result = engine.check({ name: "execute_shell", args: {}, id: "tc3" });
+    expect(result.approved).toBe(false);
+    expect(result.tier).toBe(APPROVAL_TIERS.DANGER);
+    expect(result.tierLabel).toBe("danger");
+    expect(result.reason).toBe("requires_approval");
+  });
+
+  it("requires approval for unknown tools (default Tier 2)", () => {
+    const result = engine.check({ name: "some_new_tool", args: {}, id: "tc4" });
+    expect(result.approved).toBe(false);
+    expect(result.tier).toBe(APPROVAL_TIERS.WRITE);
+    expect(result.reason).toBe("requires_approval");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// check() — Full Auto Mode
+// ═══════════════════════════════════════════════════════════════
+
+describe("check — full auto mode", () => {
+  const engine = new AutoApprovalEngine({ fullAuto: true });
+
+  it("auto-approves Tier 1 tools with full_auto reason", () => {
+    const result = engine.check({ name: "read_file", args: {}, id: "tc1" });
+    expect(result.approved).toBe(true);
+    expect(result.reason).toBe("full_auto");
+  });
+
+  it("auto-approves Tier 2 tools with full_auto reason", () => {
+    const result = engine.check({ name: "write_file", args: {}, id: "tc2" });
+    expect(result.approved).toBe(true);
+    expect(result.reason).toBe("full_auto");
+  });
+
+  it("auto-approves Tier 3 tools with full_auto reason", () => {
+    const result = engine.check({ name: "execute_shell", args: {}, id: "tc3" });
+    expect(result.approved).toBe(true);
+    expect(result.reason).toBe("full_auto");
+  });
+
+  it("auto-approves unknown tools with full_auto reason", () => {
+    const result = engine.check({ name: "unknown_tool", args: {}, id: "tc4" });
+    expect(result.approved).toBe(true);
+    expect(result.reason).toBe("full_auto");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// checkBatch()
+// ═══════════════════════════════════════════════════════════════
+
+describe("checkBatch", () => {
+  it("separates auto-approved from needs-approval", () => {
+    const engine = new AutoApprovalEngine();
+    const toolCalls = [
+      { name: "read_file", args: { path: "test.js" }, id: "tc1" },
+      { name: "write_file", args: { path: "out.js", content: "x" }, id: "tc2" },
+      { name: "grep_search", args: { query: "TODO" }, id: "tc3" },
+      { name: "execute_shell", args: { command: "ls" }, id: "tc4" },
+    ];
+
+    const { autoApproved, needsApproval } = engine.checkBatch(toolCalls);
+
+    expect(autoApproved).toHaveLength(2);
+    expect(needsApproval).toHaveLength(2);
+
+    // Auto-approved should be the read-only tools
+    expect(autoApproved.map((t) => t.name)).toEqual(
+      expect.arrayContaining(["read_file", "grep_search"]),
+    );
+
+    // Needs approval should be write + danger
+    expect(needsApproval.map((t) => t.name)).toEqual(
+      expect.arrayContaining(["write_file", "execute_shell"]),
+    );
+  });
+
+  it("all auto-approved in full auto mode", () => {
+    const engine = new AutoApprovalEngine({ fullAuto: true });
+    const toolCalls = [
+      { name: "read_file", args: {}, id: "tc1" },
+      { name: "write_file", args: {}, id: "tc2" },
+      { name: "execute_shell", args: {}, id: "tc3" },
+    ];
+
+    const { autoApproved, needsApproval } = engine.checkBatch(toolCalls);
+
+    expect(autoApproved).toHaveLength(3);
+    expect(needsApproval).toHaveLength(0);
+  });
+
+  it("attaches _approval metadata to each tool call", () => {
+    const engine = new AutoApprovalEngine();
+    const toolCalls = [
+      { name: "read_file", args: {}, id: "tc1" },
+      { name: "execute_shell", args: {}, id: "tc2" },
+    ];
+
+    const { autoApproved, needsApproval } = engine.checkBatch(toolCalls);
+
+    expect(autoApproved[0]._approval).toEqual({
+      approved: true,
+      tier: APPROVAL_TIERS.AUTO,
+      tierLabel: "auto",
+      reason: "read_only",
+    });
+
+    expect(needsApproval[0]._approval).toEqual({
+      approved: false,
+      tier: APPROVAL_TIERS.DANGER,
+      tierLabel: "danger",
+      reason: "requires_approval",
+    });
+  });
+
+  it("handles empty batch", () => {
+    const engine = new AutoApprovalEngine();
+    const { autoApproved, needsApproval } = engine.checkBatch([]);
+
+    expect(autoApproved).toHaveLength(0);
+    expect(needsApproval).toHaveLength(0);
+  });
+
+  it("handles batch with all read-only tools", () => {
+    const engine = new AutoApprovalEngine();
+    const toolCalls = [
+      { name: "read_file", args: {}, id: "tc1" },
+      { name: "list_directory", args: {}, id: "tc2" },
+      { name: "grep_search", args: {}, id: "tc3" },
+    ];
+
+    const { autoApproved, needsApproval } = engine.checkBatch(toolCalls);
+
+    expect(autoApproved).toHaveLength(3);
+    expect(needsApproval).toHaveLength(0);
+  });
+
+  it("handles batch with all dangerous tools", () => {
+    const engine = new AutoApprovalEngine();
+    const toolCalls = [
+      { name: "execute_shell", args: {}, id: "tc1" },
+      { name: "execute_python", args: {}, id: "tc2" },
+      { name: "run_command", args: {}, id: "tc3" },
+    ];
+
+    const { autoApproved, needsApproval } = engine.checkBatch(toolCalls);
+
+    expect(autoApproved).toHaveLength(0);
+    expect(needsApproval).toHaveLength(3);
+  });
+
+  it("preserves original tool call properties", () => {
+    const engine = new AutoApprovalEngine();
+    const toolCalls = [
+      { name: "read_file", args: { path: "/foo/bar.js" }, id: "tc-abc-123" },
+    ];
+
+    const { autoApproved } = engine.checkBatch(toolCalls);
+
+    expect(autoApproved[0].name).toBe("read_file");
+    expect(autoApproved[0].args).toEqual({ path: "/foo/bar.js" });
+    expect(autoApproved[0].id).toBe("tc-abc-123");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// createHook()
+// ═══════════════════════════════════════════════════════════════
+
+describe("createHook", () => {
+  it("returns a function", () => {
+    const engine = new AutoApprovalEngine();
+    const hook = engine.createHook();
+    expect(typeof hook).toBe("function");
+  });
+
+  it("hook returns check result for auto-approved tool", async () => {
+    const engine = new AutoApprovalEngine();
+    const hook = engine.createHook();
+
+    const result = await hook({ name: "read_file", args: {}, id: "tc1" }, {});
+
+    expect(result.approved).toBe(true);
+    expect(result.tier).toBe(APPROVAL_TIERS.AUTO);
+  });
+
+  it("hook returns check result for requiring-approval tool", async () => {
+    const engine = new AutoApprovalEngine();
+    const hook = engine.createHook();
+
+    const result = await hook({ name: "execute_shell", args: {}, id: "tc2" }, {});
+
+    expect(result.approved).toBe(false);
+    expect(result.tier).toBe(APPROVAL_TIERS.DANGER);
+  });
+
+  it("hook respects fullAuto mode set on engine", async () => {
+    const engine = new AutoApprovalEngine({ fullAuto: true });
+    const hook = engine.createHook();
+
+    const result = await hook({ name: "execute_shell", args: {}, id: "tc3" }, {});
+
+    expect(result.approved).toBe(true);
+    expect(result.reason).toBe("full_auto");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Constructor Defaults
+// ═══════════════════════════════════════════════════════════════
+
+describe("Constructor defaults", () => {
+  it("fullAuto defaults to false", () => {
+    const engine = new AutoApprovalEngine();
+    expect(engine.fullAuto).toBe(false);
+  });
+
+  it("tierOverrides defaults to empty object", () => {
+    const engine = new AutoApprovalEngine();
+    expect(engine.tierOverrides).toEqual({});
+  });
+
+  it("accepts empty options object", () => {
+    const engine = new AutoApprovalEngine({});
+    expect(engine.fullAuto).toBe(false);
+    expect(engine.tierOverrides).toEqual({});
+  });
+
+  it("accepts no arguments", () => {
+    const engine = new AutoApprovalEngine();
+    expect(engine).toBeInstanceOf(AutoApprovalEngine);
+  });
+});

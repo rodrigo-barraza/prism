@@ -147,9 +147,13 @@ describe("ContextWindowManager.enforce — fast path", () => {
 
 describe("ContextWindowManager.enforce — tool result truncation", () => {
   it("truncates large tool results in old messages", () => {
-    const bigResult = "x".repeat(10_000);
+    // Budget at 32k with 5 tools:
+    // floor((32000 - 8192 - (2000 + 5*150)) * 0.80) = floor(21058 * 0.80) = 16846 tokens
+    // We need total estimated tokens > 16846 to trigger truncation.
+    // 80k chars ≈ 22857 tokens in tool results alone → exceeds budget.
+    const bigResult = "x".repeat(80_000);
     const messages = [
-      { role: "system", content: "System prompt" },
+      { role: "system", content: "System prompt ".repeat(200) },
       { role: "user", content: "Do something" },
       {
         role: "assistant",
@@ -164,21 +168,18 @@ describe("ContextWindowManager.enforce — tool result truncation", () => {
       { role: "assistant", content: "Here's my answer" },
     ];
 
-    // Use a small context window to force truncation
     const result = ContextWindowManager.enforce(messages, {
-      maxInputTokens: 16_000,
-      maxOutputTokens: 2_000,
+      maxInputTokens: 32_000,
       toolCount: 5,
     });
 
-    if (result.truncated && result.strategy === "tool_truncation") {
+    expect(result.truncated).toBe(true);
+    if (result.strategy === "tool_truncation") {
       // The old tool result should be capped at 3000 chars
       const truncatedTc = result.messages[2].toolCalls[0];
       expect(truncatedTc.result.length).toBeLessThanOrEqual(3100); // 3000 + truncation notice
       expect(truncatedTc.result).toContain("truncated");
     }
-    // Strategy may escalate to assistant_compression or sliding_window if 16k is too small
-    expect(result.truncated).toBe(true);
   });
 
   it("preserves recent tool results (protected turns)", () => {
@@ -288,21 +289,22 @@ describe("ContextWindowManager.enforce — assistant compression", () => {
 
 describe("ContextWindowManager.enforce — sliding window", () => {
   it("drops middle turns and inserts context note", () => {
-    // Build a gigantic conversation that exceeds even compression
+    // Build a gigantic conversation that exceeds even compression.
+    // Budget at 32k: floor((32000 - 8192 - 2000) * 0.80) ≈ 17445 tokens
+    // Each assistant response = "Response ".repeat(2000) = 16000 chars ≈ 4571 tokens
+    // 50 turns × 4571 ≈ 228k tokens → way over 17k budget
     const messages = [
       { role: "system", content: "System prompt" },
       { role: "user", content: "First question" },
     ];
 
-    // Add 50 turns of substantial conversation
     for (let i = 0; i < 50; i++) {
-      messages.push({ role: "assistant", content: "Response ".repeat(500) });
+      messages.push({ role: "assistant", content: "Response ".repeat(2000) });
       messages.push({ role: "user", content: `Follow-up question ${i}` });
     }
 
     const result = ContextWindowManager.enforce(messages, {
-      maxInputTokens: 8_000, // Very small window
-      maxOutputTokens: 2_000,
+      maxInputTokens: 32_000,
     });
 
     expect(result.truncated).toBe(true);
@@ -325,13 +327,14 @@ describe("ContextWindowManager.enforce — sliding window", () => {
   });
 
   it("preserves the most recent messages", () => {
+    // Budget at 32k ≈ 17445 tokens. 30 turns × ~1143 tokens each ≈ 34k tokens → forces sliding window
     const messages = [
       { role: "system", content: "System" },
       { role: "user", content: "Old question" },
     ];
 
     for (let i = 0; i < 30; i++) {
-      messages.push({ role: "assistant", content: "Long answer ".repeat(200) });
+      messages.push({ role: "assistant", content: "Long answer ".repeat(1000) });
       messages.push({ role: "user", content: `Question ${i}` });
     }
 
@@ -339,7 +342,7 @@ describe("ContextWindowManager.enforce — sliding window", () => {
     messages.push({ role: "assistant", content: "FINAL_ANSWER_MARKER" });
 
     const result = ContextWindowManager.enforce(messages, {
-      maxInputTokens: 8_000,
+      maxInputTokens: 32_000,
     });
 
     expect(result.truncated).toBe(true);
@@ -446,7 +449,9 @@ describe("Budget calculation", () => {
 
 describe("Strategy escalation", () => {
   it("escalates from tool_truncation → assistant_compression → sliding_window", () => {
-    // Build messages where tool truncation alone doesn't suffice
+    // Build messages where tool truncation alone doesn't suffice.
+    // Budget at 32k ≈ 17445 tokens.
+    // 40 turns × (1900 chars content + 2600 chars result) ≈ 40 × 1286 tokens ≈ 51k tokens → way over
     const messages = [
       { role: "system", content: "System" },
     ];
@@ -455,9 +460,9 @@ describe("Strategy escalation", () => {
       messages.push({ role: "user", content: `Question ${i}` });
       messages.push({
         role: "assistant",
-        content: "Analysis complete. ".repeat(100),
+        content: "Analysis complete. ".repeat(500),
         toolCalls: [
-          { name: "read_file", args: '{"path": "test.js"}', result: "file content ".repeat(200) },
+          { name: "read_file", args: '{"path": "test.js"}', result: "file content ".repeat(500) },
         ],
       });
     }
@@ -465,11 +470,10 @@ describe("Strategy escalation", () => {
     messages.push({ role: "user", content: "Final question" });
 
     const result = ContextWindowManager.enforce(messages, {
-      maxInputTokens: 8_000,
+      maxInputTokens: 32_000,
     });
 
     expect(result.truncated).toBe(true);
-    // With 40 turns of substantial content in an 8k window, should hit sliding_window
     expect(result.strategy).toBe("sliding_window");
     expect(result.messages.length).toBeLessThan(messages.length);
   });

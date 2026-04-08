@@ -307,17 +307,17 @@ Every agentic iteration is individually logged via `RequestLogger.logChatGenerat
 
 Identified gaps between the current implementation and production-grade robustness, ordered by impact.
 
-### 🔲 Test Coverage for Critical Paths
-**Impact**: High — `AgenticLoopService`, `ContextWindowManager`, and `AutoApprovalEngine` are the three most critical services in the agent stack, and none have automated tests.
+### ⚠️ Test Coverage for Critical Paths
+**Impact**: High — `AgenticLoopService` and `SystemPromptAssembler` lack automated tests. `ContextWindowManager` and `AutoApprovalEngine` now have full unit test coverage.
 
-| Service | Testability | Notes |
+| Service | Testability | Status |
 |---|---|---|
-| `ContextWindowManager` | Pure logic, no I/O | Ideal unit test candidate — deterministic input/output, no mocks needed |
-| `AutoApprovalEngine` | Pure logic, no I/O | Ideal unit test candidate — tier assignment + batch checking |
-| `AgenticLoopService` | Requires mocking | Integration tests: mock provider streams, tool executor, hooks. Verify iteration counting, exhaustion recovery, approval flow |
-| `SystemPromptAssembler` | Requires mocking | Integration tests: mock tools-api, MongoDB, embedding service |
+| `ContextWindowManager` | Pure logic, no I/O | ✅ 27 tests — token estimation, all 3 truncation strategies, budget math, edge cases |
+| `AutoApprovalEngine` | Pure logic, no I/O | ✅ 59 tests — tier assignments (all 23 tools), overrides, labels, check/checkBatch, fullAuto, createHook |
+| `AgenticLoopService` | Requires mocking | 🔲 Integration tests needed: mock provider streams, tool executor, hooks. Verify iteration counting, exhaustion recovery, approval flow |
+| `SystemPromptAssembler` | Requires mocking | 🔲 Integration tests needed: mock tools-api, MongoDB, embedding service |
 
-**Recommendation**: Start with `ContextWindowManager` and `AutoApprovalEngine` (zero dependencies, fast), then `AgenticLoopService` integration tests.
+**Files**: `tests/contextWindowManager.test.js`, `tests/autoApprovalEngine.test.js`
 
 ### 🔲 Abort Propagation to Tool Processes
 **Impact**: Medium — When a user aborts an agentic session (via disconnect or cancel), the `AbortController` signal stops the LLM stream and breaks the loop, but **in-flight tool executions may continue running** on `tools-api`.
