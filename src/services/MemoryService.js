@@ -262,7 +262,7 @@ const MemoryService = {
    * @param {string} [params.conversationId] - Source conversation
    * @returns {Promise<object|null>} Stored memory document, or null if duplicate
    */
-  async store({ agent, project, username, type, title, content, embedding, metadata = {}, conversationId }) {
+  async store({ agent, project, username, type, title, content, embedding, metadata = {}, conversationId, sessionId, endpoint }) {
     if (!agent) throw new Error("MemoryService.store requires an agent identifier");
     if (!content) throw new Error("MemoryService.store requires content");
 
@@ -276,7 +276,10 @@ const MemoryService = {
 
     // Generate embedding if not provided
     if (!embedding) {
-      embedding = await generateEmbedding(embedText, { project });
+      const embedOpts = { project };
+      if (sessionId) embedOpts.sessionId = sessionId;
+      if (endpoint) embedOpts.endpoint = endpoint;
+      embedding = await generateEmbedding(embedText, embedOpts);
     }
 
     // Duplicate detection — compare against existing memories for the same agent

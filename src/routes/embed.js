@@ -31,6 +31,7 @@ router.post("/", async (req, res, next) => {
       pdf,
       taskType,
       dimensions,
+      sessionId,
     } = req.body;
 
     if (!pName) {
@@ -111,6 +112,7 @@ router.post("/", async (req, res, next) => {
       clientIp: req.clientIp,
       source: "api",
       endpoint: "/embed",
+      sessionId: sessionId || null,
     });
 
     res.json(result);

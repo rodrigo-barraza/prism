@@ -236,6 +236,8 @@ export default class SessionSummarizer {
           title: mem.title,
           content: mem.content,
           conversationId,
+          sessionId,
+          endpoint: endpoint || "/agent",
         });
         if (result) stored.push(result);
       }
@@ -289,6 +291,7 @@ export default class SessionSummarizer {
             broadcast,
             endpoint: ctx.endpoint || "/agent",
             agent: ctx.agent || null,
+            sessionId: ctx.sessionId || null,
           });
         })
         .catch((err) =>

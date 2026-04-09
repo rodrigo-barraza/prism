@@ -170,13 +170,15 @@ export default class SystemPromptAssembler {
    * @param {number} [limit=5]
    * @returns {Promise<string>}
    */
-  async fetchMemories(agent, project, queryText, limit = 5) {
+  async fetchMemories(agent, project, queryText, limit = 5, { sessionId, endpoint } = {}) {
     try {
       const memories = await MemoryService.search({
         agent,
         project,
         queryText,
         limit,
+        sessionId: sessionId || null,
+        endpoint: endpoint || "/agent",
       });
 
       if (!memories || memories.length === 0) return "";
@@ -196,7 +198,7 @@ export default class SystemPromptAssembler {
    * @param {string} queryText - The user's latest message (used for relevance matching)
    * @returns {Promise<Array<{ name: string, content: string, score: number }>>}
    */
-  async fetchSkills(project, username, queryText) {
+  async fetchSkills(project, username, queryText, { sessionId, endpoint } = {}) {
     try {
       const client = MongoWrapper.getClient(MONGO_DB_NAME);
       if (!client) return [];
@@ -222,7 +224,7 @@ export default class SystemPromptAssembler {
       // Generate query embedding
       let queryEmbedding;
       try {
-        queryEmbedding = await EmbeddingService.embed(queryText, { source: "skill-relevance", project, endpoint: "/agent" });
+        queryEmbedding = await EmbeddingService.embed(queryText, { source: "skill-relevance", project, endpoint: endpoint || "/agent", sessionId: sessionId || null });
       } catch (err) {
         logger.warn(`[SystemPromptAssembler] Query embedding failed: ${err.message} — returning all skills`);
         return skills.map((s) => ({ name: s.name, content: s.content, description: s.description, score: 1 }));
@@ -376,7 +378,7 @@ export default class SystemPromptAssembler {
       .find((m) => m.role === "user");
     const queryText = lastUserMsg?.content || "";
 
-    const skills = await this.fetchSkills(ctx.project, ctx.username, queryText);
+    const skills = await this.fetchSkills(ctx.project, ctx.username, queryText, { sessionId: ctx.sessionId, endpoint: "/agent" });
     const skillNames = [];
     if (skills.length > 0) {
       const skillBlocks = skills.map((s) => {
@@ -390,7 +392,7 @@ export default class SystemPromptAssembler {
     const memoryQuery = queryText || ctx.project || "";
 
     if (memoryQuery) {
-      const memories = await this.fetchMemories(agentId, ctx.project, memoryQuery);
+      const memories = await this.fetchMemories(agentId, ctx.project, memoryQuery, 5, { sessionId: ctx.sessionId, endpoint: "/agent" });
       if (memories) {
         sections.push(`## Session Memory (from past conversations)\n` + memories);
       }
