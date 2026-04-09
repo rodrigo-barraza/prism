@@ -1,10 +1,8 @@
 import ConversationService from "../services/ConversationService.js";
-import MongoWrapper from "../wrappers/MongoWrapper.js";
-import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "./logger.js";
 
 // ============================================================
-// Conversation & session persistence helpers
+// Conversation persistence helpers
 // ============================================================
 
 /**
@@ -28,32 +26,6 @@ export function markGenerating(conversationId, project, username, generating) {
       `Failed to ${generating ? "set" : "clear"} isGenerating: ${err.message}`,
     ),
   );
-}
-
-/**
- * Link a conversation to a session via $addToSet. Fire-and-forget.
- *
- * @param {string} sessionId
- * @param {string} conversationId
- */
-export function linkConversationToSession(sessionId, conversationId) {
-  if (!sessionId || !conversationId) return;
-  try {
-    const sessionDb = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
-    if (sessionDb) {
-      sessionDb.collection("sessions").updateOne(
-        { id: sessionId },
-        {
-          $addToSet: { conversationIds: conversationId },
-          $set: { updatedAt: new Date().toISOString() },
-        },
-      ).catch((err) =>
-        logger.error(`Failed to link conversation to session: ${err.message}`),
-      );
-    }
-  } catch (err) {
-    logger.error(`Failed to link conversation to session: ${err.message}`);
-  }
 }
 
 /**
@@ -89,3 +61,4 @@ export function appendAndFinalize(conversationId, project, username, messagesToA
       ),
     );
 }
+

@@ -44,7 +44,7 @@ import skillsRouter from "./routes/skills.js";
 import agentMemoriesRouter from "./routes/agent-memories.js";
 import mcpServersRouter from "./routes/mcp-servers.js";
 import favoritesRouter from "./routes/favorites.js";
-import sessionsRouter from "./routes/sessions.js";
+
 import statsRouter from "./routes/stats.js";
 import benchmarkRouter from "./routes/benchmark.js";
 import synthesisRouter from "./routes/synthesis.js";
@@ -81,7 +81,7 @@ const ENDPOINTS = {
     "/agent-memories",
     "/mcp-servers",
     "/favorites",
-    "/sessions",
+
     "/stats",
     "/benchmark",
     "/synthesis",
@@ -130,7 +130,7 @@ app.use("/skills", skillsRouter);
 app.use("/agent-memories", agentMemoriesRouter);
 app.use("/mcp-servers", mcpServersRouter);
 app.use("/favorites", favoritesRouter);
-app.use("/sessions", sessionsRouter);
+
 app.use("/stats", statsRouter);
 app.use("/benchmark", benchmarkRouter);
 app.use("/synthesis", synthesisRouter);
@@ -166,8 +166,7 @@ setupWebSocket(wss);
         db.collection("conversations").createIndex({ updatedAt: -1 }),
         db.collection("conversations").createIndex({ project: 1, username: 1, updatedAt: -1 }),
         db.collection("conversations").createIndex({ sessionId: 1 }),
-        // sessions — used by findOne and list queries
-        db.collection("sessions").createIndex({ id: 1 }, { unique: true }),
+
         // workflows — used by conversationIds lookup
         db.collection("workflows").createIndex({ id: 1 }, { unique: true }),
         // benchmarks

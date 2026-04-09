@@ -8,8 +8,6 @@ import ConversationService from "../services/ConversationService.js";
 import FileService from "../services/FileService.js";
 import logger from "../utils/logger.js";
 import RequestLogger from "../services/RequestLogger.js";
-import MongoWrapper from "../wrappers/MongoWrapper.js";
-import { MONGO_DB_NAME } from "../../secrets.js";
 import { formatCostTag } from "../utils/utilities.js";
 
 const router = express.Router();
@@ -49,7 +47,6 @@ export async function handleVoice(params, emitBinary, emitJSON) {
     conversationId: incomingConversationId,
     conversationMeta: incomingConversationMeta,
     sessionId: incomingSessionId,
-    createSession: incomingCreateSession,
     skipConversation,
     project = "unknown",
     username = "unknown",
@@ -65,27 +62,9 @@ export async function handleVoice(params, emitBinary, emitJSON) {
     conversationMeta = conversationMeta || { title: titleSnippet };
   }
 
-  // ── Session: create or reuse ────────────────────────────────
-  // Sessions group requests across a single interaction cycle,
-  // even when skipConversation is set.
-  let sessionId = incomingSessionId || null;
-  if (!sessionId && incomingCreateSession) {
-    sessionId = crypto.randomUUID();
-    try {
-      const sessionDb = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
-      if (sessionDb) {
-        const now = new Date().toISOString();
-        await sessionDb.collection("sessions").insertOne({
-          id: sessionId,
-          conversationIds: [],
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
-    } catch (err) {
-      logger.error(`Failed to create session: ${err.message}`);
-    }
-  }
+  // ── Session: passthrough ────────────────────────────────────
+  // SessionId is generated client-side and passed on every request.
+  const sessionId = incomingSessionId || null;
 
   // Inject sessionId into conversationMeta for storage
   if (sessionId && conversationMeta) {
@@ -241,25 +220,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
         );
     }
 
-    // ── Link conversation to session ────────────────────────────
-    if (sessionId && conversationId) {
-      try {
-        const sessionDb = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
-        if (sessionDb) {
-          sessionDb.collection("sessions").updateOne(
-            { id: sessionId },
-            {
-              $addToSet: { conversationIds: conversationId },
-              $set: { updatedAt: new Date().toISOString() },
-            },
-          ).catch((err) =>
-            logger.error(`Failed to link conversation to session: ${err.message}`),
-          );
-        }
-      } catch (err) {
-        logger.error(`Failed to link conversation to session: ${err.message}`);
-      }
-    }
+
 
     return contentType;
   } catch (error) {
@@ -361,7 +322,6 @@ router.post("/", async (req, res, next) => {
     conversationId: incomingConversationId,
     conversationMeta: incomingConversationMeta,
     sessionId: incomingSessionId,
-    createSession: incomingCreateSession,
     skipConversation,
   } = req.body;
 
@@ -373,27 +333,9 @@ router.post("/", async (req, res, next) => {
     conversationMeta = conversationMeta || { title: "Audio Transcription" };
   }
 
-  // ── Session: create or reuse ────────────────────────────────
-  // Sessions group requests across a single interaction cycle,
-  // even when skipConversation is set.
-  let sessionId = incomingSessionId || null;
-  if (!sessionId && incomingCreateSession) {
-    sessionId = crypto.randomUUID();
-    try {
-      const sessionDb = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
-      if (sessionDb) {
-        const now = new Date().toISOString();
-        await sessionDb.collection("sessions").insertOne({
-          id: sessionId,
-          conversationIds: [],
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
-    } catch (err) {
-      logger.error(`Failed to create session: ${err.message}`);
-    }
-  }
+  // ── Session: passthrough ────────────────────────────────────
+  // SessionId is generated client-side and passed on every request.
+  const sessionId = incomingSessionId || null;
 
   // Inject sessionId into conversationMeta for storage
   if (sessionId && conversationMeta) {
@@ -558,25 +500,7 @@ router.post("/", async (req, res, next) => {
         );
     }
 
-    // ── Link conversation to session ────────────────────────────
-    if (sessionId && conversationId) {
-      try {
-        const sessionDb = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
-        if (sessionDb) {
-          sessionDb.collection("sessions").updateOne(
-            { id: sessionId },
-            {
-              $addToSet: { conversationIds: conversationId },
-              $set: { updatedAt: new Date().toISOString() },
-            },
-          ).catch((err) =>
-            logger.error(`Failed to link conversation to session: ${err.message}`),
-          );
-        }
-      } catch (err) {
-        logger.error(`Failed to link conversation to session: ${err.message}`);
-      }
-    }
+
 
     res.json({
       text: result.text,

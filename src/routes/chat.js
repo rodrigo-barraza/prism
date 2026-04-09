@@ -24,11 +24,9 @@ import { formatCostTag } from "../utils/utilities.js";
 
 import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
 import localModelQueue from "../services/LocalModelQueue.js";
-import MongoWrapper from "../wrappers/MongoWrapper.js";
-import { MONGO_DB_NAME } from "../../secrets.js";
+
 import {
   markGenerating,
-  linkConversationToSession,
   appendAndFinalize,
 } from "../utils/ConversationUtilities.js";
 import {
@@ -244,7 +242,6 @@ export async function handleChat(params, emit, { signal } = {}) {
     conversationId: incomingConversationId,
     conversationMeta: incomingConversationMeta,
     sessionId: incomingSessionId,
-    createSession: incomingCreateSession,
     project = "unknown",
     username = "unknown",
     clientIp = null,
@@ -311,30 +308,10 @@ export async function handleChat(params, emit, { signal } = {}) {
     conversationMeta = conversationMeta || { title: titleSnippet };
   }
 
-  // ── Session: create or reuse ────────────────────────────────
-  // Pass createSession: true on the first call → Prism creates a
-  // minimal session doc and returns the sessionId.
-  // Subsequent calls pass the returned sessionId to join the session.
-  // Sessions group requests across a single interaction cycle (e.g.
-  // a Discord message in Lupos), even when skipConversation is set.
-  let sessionId = incomingSessionId || null;
-  if (!sessionId && incomingCreateSession) {
-    sessionId = crypto.randomUUID();
-    try {
-      const sessionDb = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
-      if (sessionDb) {
-        const now = new Date().toISOString();
-        await sessionDb.collection("sessions").insertOne({
-          id: sessionId,
-          conversationIds: [],
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
-    } catch (err) {
-      logger.error(`Failed to create session: ${err.message}`);
-    }
-  }
+  // ── Session: passthrough ────────────────────────────────────
+  // SessionId is generated client-side and passed on every request.
+  // Sessions are derived views over requests — no separate collection.
+  const sessionId = incomingSessionId || null;
 
   // Inject sessionId into conversationMeta for storage on the conversation doc
   if (sessionId && conversationMeta) {
@@ -771,7 +748,7 @@ async function handleImageAPIModel(ctx) {
   });
 
   // Link conversation to session
-  linkConversationToSession(sessionId, conversationId);
+
 
   // Auto-append to conversation
   if (conversationId) {
@@ -1022,7 +999,7 @@ export async function finalizeTextGeneration(
   }
 
   // ── Link conversation to session ──────────────────────────────
-  linkConversationToSession(sessionId, conversationId);
+
 
   // ── Conversation persistence ──────────────────────────────────
   if (conversationId) {

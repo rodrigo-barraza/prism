@@ -11,7 +11,7 @@ import { COLLECTIONS, COST_SUM_EXPR } from "../constants.js";
 import os from "os";
 
 const router = express.Router();
-const { REQUESTS: REQUESTS_COL, CONVERSATIONS: CONVERSATIONS_COL, WORKFLOWS: WORKFLOWS_COL, SESSIONS: SESSIONS_COL } = COLLECTIONS;
+const { REQUESTS: REQUESTS_COL, CONVERSATIONS: CONVERSATIONS_COL, WORKFLOWS: WORKFLOWS_COL } = COLLECTIONS;
 
 // ── Helper: get DB handle ────────────────────────────────────
 function getDb() {
@@ -147,29 +147,32 @@ router.get("/requests/:id/associations", async (req, res, next) => {
         source: w.source || "retina",
       }));
 
-      // Find sessions linked to this conversation
+      // Derive sessions from requests — sessions are no longer a collection
       const sessionIds = new Set();
       for (const c of conversations) {
         if (c.sessionId) sessionIds.add(c.sessionId);
       }
       if (sessionIds.size > 0) {
-        sessions = await db
-          .collection("sessions")
-          .find({ id: { $in: [...sessionIds] } })
-          .project({
-            id: 1,
-            project: 1,
-            username: 1,
-            conversationIds: 1,
-            createdAt: 1,
-            updatedAt: 1,
-          })
+        // Count requests per sessionId to build session summary
+        const sessionAgg = await db
+          .collection(REQUESTS_COL)
+          .aggregate([
+            { $match: { sessionId: { $in: [...sessionIds] } } },
+            { $group: {
+              _id: "$sessionId",
+              requestCount: { $sum: 1 },
+              project: { $first: "$project" },
+              username: { $first: "$username" },
+              createdAt: { $min: "$timestamp" },
+              updatedAt: { $max: "$timestamp" },
+            }},
+          ])
           .toArray();
-        sessions = sessions.map((s) => ({
-          id: s.id,
+        sessions = sessionAgg.map((s) => ({
+          id: s._id,
           project: s.project,
           username: s.username,
-          conversationCount: (s.conversationIds || []).length,
+          requestCount: s.requestCount,
           createdAt: s.createdAt,
           updatedAt: s.updatedAt,
         }));
@@ -243,27 +246,23 @@ router.get("/stats", async (req, res, next) => {
       if (to) convMatch.createdAt.$lte = to;
     }
 
-    // Sessions: filter by matching conversations that pass the same filters
-    const sessionPipeline = [
-      {
-        $lookup: {
-          from: CONVERSATIONS_COL,
-          localField: "conversationIds",
-          foreignField: "id",
-          as: "_convs",
-          pipeline: [
-            { $match: convMatch },
-            { $project: { _id: 1 } },
-          ],
-        },
-      },
-      { $match: { "_convs.0": { $exists: true } } },
+    // Sessions: count distinct sessionIds from requests that match filters
+    const sessionMatch = { sessionId: { $ne: null } };
+    if (project) sessionMatch.project = project;
+    if (from || to) {
+      sessionMatch.timestamp = {};
+      if (from) sessionMatch.timestamp.$gte = from;
+      if (to) sessionMatch.timestamp.$lte = to;
+    }
+    const sessionCountPipeline = [
+      { $match: sessionMatch },
+      { $group: { _id: "$sessionId" } },
       { $count: "total" },
     ];
 
     const [result, sessionResult, conversationCount] = await Promise.all([
       db.collection(REQUESTS_COL).aggregate(pipeline).toArray().then((r) => r[0]),
-      db.collection(SESSIONS_COL).aggregate(sessionPipeline).toArray(),
+      db.collection(REQUESTS_COL).aggregate(sessionCountPipeline).toArray(),
       db.collection(CONVERSATIONS_COL).countDocuments(convMatch),
     ]);
     const sessionCount = sessionResult[0]?.total || 0;
@@ -375,28 +374,18 @@ router.get("/stats/projects", async (req, res, next) => {
     ];
 
     // Count sessions per project
+    // Count sessions per project — derived from requests
     const sessionPipeline = [
-      {
-        $lookup: {
-          from: CONVERSATIONS_COL,
-          localField: "conversationIds",
-          foreignField: "id",
-          as: "_convs",
-          pipeline: [{ $project: { project: 1 } }],
-        },
-      },
-      { $unwind: "$_convs" },
-      {
-        $group: { _id: "$_convs.project", sessionIds: { $addToSet: "$_id" } },
-      },
-      { $project: { _id: 1, sessionCount: { $size: "$sessionIds" } } },
+      { $match: { sessionId: { $ne: null } } },
+      { $group: { _id: { project: "$project", sessionId: "$sessionId" } } },
+      { $group: { _id: "$_id.project", sessionCount: { $sum: 1 } } },
     ];
 
     const [results, workflowCounts, convCounts, sessionCounts] = await Promise.all([
       db.collection(REQUESTS_COL).aggregate(pipeline).toArray(),
       db.collection(WORKFLOWS_COL).aggregate(workflowPipeline).toArray(),
       db.collection(CONVERSATIONS_COL).aggregate(convPipeline).toArray(),
-      db.collection(SESSIONS_COL).aggregate(sessionPipeline).toArray(),
+      db.collection(REQUESTS_COL).aggregate(sessionPipeline).toArray(),
     ]);
 
     // Build a project → workflowCount map
@@ -2306,7 +2295,7 @@ router.get("/text", async (req, res, next) => {
   }
 });
 // ============================================================
-// GET /admin/sessions — paginated session list
+// GET /admin/sessions — paginated session list (derived from requests)
 // ============================================================
 router.get("/sessions", async (req, res, next) => {
   try {
@@ -2318,31 +2307,20 @@ router.get("/sessions", async (req, res, next) => {
       limit = 50,
       project,
       username,
-      source,
-      search,
       from,
       to,
       sort = "createdAt",
       order = "desc",
     } = req.query;
 
-    // Sessions don't store `project` directly — it's derived from conversations.
-    // Apply project filter after the $lookup + $addFields stages.
-    const filter = {};
-    if (username) filter.username = username;
-    if (source) filter.source = source;
+    // Base filter: only requests with a sessionId
+    const match = { sessionId: { $ne: null } };
+    if (project) match.project = project;
+    if (username) match.username = username;
     if (from || to) {
-      filter.createdAt = {};
-      if (from) filter.createdAt.$gte = from;
-      if (to) filter.createdAt.$lte = to;
-    }
-    if (search) {
-      filter.$or = [
-        { "trigger.userName": { $regex: search, $options: "i" } },
-        { "trigger.userContent": { $regex: search, $options: "i" } },
-        { "trigger.guildName": { $regex: search, $options: "i" } },
-        { "trigger.channelName": { $regex: search, $options: "i" } },
-      ];
+      match.timestamp = {};
+      if (from) match.timestamp.$gte = from;
+      if (to) match.timestamp.$lte = to;
     }
 
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
@@ -2350,354 +2328,95 @@ router.get("/sessions", async (req, res, next) => {
     const sortDir = order === "asc" ? 1 : -1;
 
     const pipeline = [
-      ...(Object.keys(filter).length ? [{ $match: filter }] : []),
-      // Look up linked conversations for live cost + count
+      { $match: match },
+      // Group all requests by sessionId
       {
-        $lookup: {
-          from: CONVERSATIONS_COL,
-          localField: "conversationIds",
-          foreignField: "id",
-          as: "conversations",
-          pipeline: [
-            { $project: { totalCost: 1, title: 1, id: 1, modalities: 1, providers: 1, project: 1, username: 1, source: 1, createdAt: 1, updatedAt: 1 } },
-          ],
-        },
-      },
-      // Look up requests by sessionId (works for all projects, including
-      // those using skipConversation like Lupos where conversationId is null)
-      {
-        $lookup: {
-          from: "requests",
-          localField: "id",
-          foreignField: "sessionId",
-          as: "_requests",
-          pipeline: [
-            {
-              $project: {
-                requestId: 1,
-                conversationId: 1,
-                sessionId: 1,
-                inputTokens: 1,
-                outputTokens: 1,
-                model: 1,
-                provider: 1,
-                project: 1,
-                username: 1,
-                endpoint: 1,
-                operation: 1,
-                estimatedCost: 1,
-                success: 1,
-                modalities: 1,
-                messageCount: 1,
-                tokensPerSec: 1,
-                totalTime: 1,
-                toolsUsed: 1,
-                toolNames: 1,
-                agent: 1,
-                timestamp: 1,
-              },
+        $group: {
+          _id: "$sessionId",
+          project: { $first: "$project" },
+          username: { $first: "$username" },
+          createdAt: { $min: "$timestamp" },
+          updatedAt: { $max: "$timestamp" },
+          requestCount: { $sum: 1 },
+          totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
+          totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
+          totalCost: COST_SUM_EXPR,
+          totalLatency: { $sum: { $ifNull: ["$totalTime", 0] } },
+          totalMessages: { $sum: { $ifNull: ["$messageCount", 0] } },
+          _models: { $addToSet: "$model" },
+          _providers: { $addToSet: "$provider" },
+          _agents: { $addToSet: "$agent" },
+          _toolArrays: { $push: { $ifNull: ["$toolNames", []] } },
+          _tpsValues: { $push: "$tokensPerSec" },
+          _modalities: { $push: "$modalities" },
+          _requests: {
+            $push: {
+              requestId: "$requestId",
+              conversationId: "$conversationId",
+              sessionId: "$sessionId",
+              inputTokens: "$inputTokens",
+              outputTokens: "$outputTokens",
+              model: "$model",
+              provider: "$provider",
+              project: "$project",
+              username: "$username",
+              endpoint: "$endpoint",
+              operation: "$operation",
+              estimatedCost: "$estimatedCost",
+              success: "$success",
+              modalities: "$modalities",
+              messageCount: "$messageCount",
+              tokensPerSec: "$tokensPerSec",
+              totalTime: "$totalTime",
+              toolsUsed: "$toolsUsed",
+              toolNames: "$toolNames",
+              agent: "$agent",
+              timestamp: "$timestamp",
             },
-          ],
+          },
         },
       },
-      // Enrich each conversation with per-conversation request stats
+      // Shape the output
       {
         $addFields: {
-          conversations: {
-            $map: {
-              input: "$conversations",
-              as: "conv",
-              in: {
-                $let: {
-                  vars: {
-                    cReqs: {
-                      $filter: {
-                        input: "$_requests",
-                        as: "req",
-                        cond: {
-                          $eq: ["$$req.conversationId", "$$conv.id"],
-                        },
-                      },
-                    },
-                  },
-                  in: {
-                    $mergeObjects: [
-                      "$$conv",
-                      {
-                        inputTokens: {
-                          $reduce: {
-                            input: "$$cReqs",
-                            initialValue: 0,
-                            in: {
-                              $add: [
-                                "$$value",
-                                { $ifNull: ["$$this.inputTokens", 0] },
-                              ],
-                            },
-                          },
-                        },
-                        outputTokens: {
-                          $reduce: {
-                            input: "$$cReqs",
-                            initialValue: 0,
-                            in: {
-                              $add: [
-                                "$$value",
-                                { $ifNull: ["$$this.outputTokens", 0] },
-                              ],
-                            },
-                          },
-                        },
-                        requestCount: { $size: "$$cReqs" },
-                        models: {
-                          $setUnion: {
-                            $filter: {
-                              input: "$$cReqs.model",
-                              as: "m",
-                              cond: { $ne: ["$$m", null] },
-                            },
-                          },
-                        },
-                        avgTokensPerSec: {
-                          $cond: [
-                            { $gt: [{ $size: "$$cReqs" }, 0] },
-                            {
-                              $avg: {
-                                $filter: {
-                                  input: "$$cReqs.tokensPerSec",
-                                  as: "tps",
-                                  cond: {
-                                    $and: [
-                                      { $ne: ["$$tps", null] },
-                                      { $gt: ["$$tps", 0] },
-                                    ],
-                                  },
-                                },
-                              },
-                            },
-                            null,
-                          ],
-                        },
-                        totalLatency: {
-                          $reduce: {
-                            input: "$$cReqs",
-                            initialValue: 0,
-                            in: {
-                              $add: [
-                                "$$value",
-                                { $ifNull: ["$$this.totalTime", 0] },
-                              ],
-                            },
-                          },
-                        },
-                        toolNames: {
-                          $setUnion: {
-                            $reduce: {
-                              input: "$$cReqs",
-                              initialValue: [],
-                              in: {
-                                $concatArrays: [
-                                  "$$value",
-                                  { $ifNull: ["$$this.toolNames", []] },
-                                ],
-                              },
-                            },
-                          },
-                        },
-                      },
-                    ],
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      {
-        $addFields: {
-          conversationCount: { $size: "$conversations" },
-          totalCost: {
-            $cond: [
-              { $gt: [{ $size: "$conversations" }, 0] },
-              {
-                $reduce: {
-                  input: "$conversations",
-                  initialValue: 0,
-                  in: { $add: ["$$value", { $ifNull: ["$$this.totalCost", 0] }] },
-                },
-              },
-              {
-                $reduce: {
-                  input: "$_requests",
-                  initialValue: 0,
-                  in: { $add: ["$$value", { $ifNull: ["$$this.estimatedCost", 0] }] },
-                },
-              },
-            ],
-          },
-          // Derive session-level project and username — prefer conversations,
-          // fall back to first request (for skipConversation callers like Lupos)
-          project: {
-            $ifNull: [
-              { $arrayElemAt: ["$conversations.project", 0] },
-              { $arrayElemAt: ["$_requests.project", 0] },
-            ],
-          },
-          username: {
-            $ifNull: [
-              { $arrayElemAt: ["$conversations.username", 0] },
-              { $arrayElemAt: ["$_requests.username", 0] },
-            ],
-          },
-          source: { $arrayElemAt: ["$conversations.source", 0] },
-          // Collect all distinct agents from requests
-          agents: {
-            $setUnion: {
-              $filter: {
-                input: "$_requests.agent",
-                cond: { $ne: ["$$this", null] },
-              },
-            },
-          },
-          // Aggregate stats from requests
-          requestCount: { $size: "$_requests" },
-          totalInputTokens: {
-            $reduce: {
-              input: "$_requests",
-              initialValue: 0,
-              in: { $add: ["$$value", { $ifNull: ["$$this.inputTokens", 0] }] },
-            },
-          },
-          totalOutputTokens: {
-            $reduce: {
-              input: "$_requests",
-              initialValue: 0,
-              in: { $add: ["$$value", { $ifNull: ["$$this.outputTokens", 0] }] },
-            },
-          },
-          totalMessages: {
-            $reduce: {
-              input: "$_requests",
-              initialValue: 0,
-              in: { $add: ["$$value", { $ifNull: ["$$this.messageCount", 0] }] },
-            },
-          },
-          models: {
-            $setUnion: {
-              $filter: {
-                input: "$_requests.model",
-                cond: { $ne: ["$$this", null] },
-              },
-            },
-          },
-          // Roll up providers — from conversations when available,
-          // otherwise derive from requests
-          providers: {
-            $cond: [
-              { $gt: [{ $size: "$conversations" }, 0] },
-              {
-                $setUnion: {
-                  $reduce: {
-                    input: "$conversations",
-                    initialValue: [],
-                    in: {
-                      $concatArrays: [
-                        "$$value",
-                        {
-                          $cond: [
-                            { $isArray: "$$this.providers" },
-                            "$$this.providers",
-                            {
-                              $cond: [
-                                { $ne: ["$$this.providers", null] },
-                                ["$$this.providers"],
-                                [],
-                              ],
-                            },
-                          ],
-                        },
-                      ],
-                    },
-                  },
-                },
-              },
-              {
-                $setUnion: {
-                  $filter: {
-                    input: "$_requests.provider",
-                    cond: { $ne: ["$$this", null] },
-                  },
-                },
-              },
-            ],
-          },
-          // Roll up unique tool names from requests
+          id: "$_id",
+          models: { $setDifference: ["$_models", [null]] },
+          providers: { $setDifference: ["$_providers", [null]] },
+          agents: { $setDifference: ["$_agents", [null]] },
           toolNames: {
             $setUnion: {
               $reduce: {
-                input: "$_requests",
+                input: "$_toolArrays",
                 initialValue: [],
-                in: {
-                  $concatArrays: [
-                    "$$value",
-                    { $ifNull: ["$$this.toolNames", []] },
-                  ],
-                },
+                in: { $concatArrays: ["$$value", "$$this"] },
               },
             },
           },
-          // Average tokens-per-second across requests that have it
           avgTokensPerSec: {
-            $cond: [
-              { $gt: [{ $size: "$_requests" }, 0] },
-              {
-                $avg: {
-                  $filter: {
-                    input: "$_requests.tokensPerSec",
-                    as: "tps",
-                    cond: {
-                      $and: [
-                        { $ne: ["$$tps", null] },
-                        { $gt: ["$$tps", 0] },
-                      ],
-                    },
-                  },
-                },
-              },
-              null,
-            ],
-          },
-          // Total latency across all requests
-          totalLatency: {
-            $reduce: {
-              input: "$_requests",
-              initialValue: 0,
-              in: {
-                $add: [
-                  "$$value",
-                  { $ifNull: ["$$this.totalTime", 0] },
-                ],
+            $avg: {
+              $filter: {
+                input: "$_tpsValues",
+                as: "tps",
+                cond: { $and: [{ $ne: ["$$tps", null] }, { $gt: ["$$tps", 0] }] },
               },
             },
           },
-          // Derive start/finish timestamps from earliest/latest request
-          startedAt: { $min: "$_requests.timestamp" },
-          finishedAt: { $max: "$_requests.timestamp" },
-          // Merge modalities from all requests into a session-level object
+          startedAt: "$createdAt",
+          finishedAt: "$updatedAt",
           modalities: {
             $reduce: {
-              input: "$_requests",
+              input: "$_modalities",
               initialValue: {},
               in: {
                 $mergeObjects: [
                   "$$value",
                   {
                     $cond: [
-                      { $ne: ["$$this.modalities", null] },
+                      { $ne: ["$$this", null] },
                       {
                         $arrayToObject: {
                           $filter: {
-                            input: { $objectToArray: "$$this.modalities" },
+                            input: { $objectToArray: "$$this" },
                             as: "kv",
                             cond: { $eq: ["$$kv.v", true] },
                           },
@@ -2710,26 +2429,23 @@ router.get("/sessions", async (req, res, next) => {
               },
             },
           },
+          requests: "$_requests",
         },
       },
-      // Rename _requests to requests for the frontend
-      { $addFields: { requests: "$_requests" } },
-      { $project: { _requests: 0 } },
-      // Apply project filter after conversations are joined and project is derived
-      ...(project ? [{ $match: { project } }] : []),
+      // Remove intermediate fields
+      { $project: { _id: 0, _models: 0, _providers: 0, _agents: 0, _toolArrays: 0, _tpsValues: 0, _modalities: 0, _requests: 0 } },
       { $sort: { [sort]: sortDir } },
     ];
 
-    // Count total matching sessions (with project filter if applicable)
-    const countPipeline = [...pipeline]; // reuse the same aggregation minus skip/limit
-    countPipeline.push({ $count: "total" });
+    // Count total matching sessions
+    const countPipeline = [...pipeline, { $count: "total" }];
 
     // Add pagination to the data pipeline
     pipeline.push({ $skip: skip }, { $limit: lim });
 
     const [docs, countResult] = await Promise.all([
-      db.collection("sessions").aggregate(pipeline).toArray(),
-      db.collection("sessions").aggregate(countPipeline).toArray(),
+      db.collection(REQUESTS_COL).aggregate(pipeline).toArray(),
+      db.collection(REQUESTS_COL).aggregate(countPipeline).toArray(),
     ]);
     const total = countResult[0]?.total || 0;
 
@@ -2741,50 +2457,37 @@ router.get("/sessions", async (req, res, next) => {
 });
 
 // ============================================================
-// GET /admin/sessions/:id — single session with conversations
+// GET /admin/sessions/:id — single session derived from requests
 // ============================================================
 router.get("/sessions/:id", async (req, res, next) => {
   try {
     const db = getDb();
     if (!db) return res.status(503).json({ error: "Database not available" });
 
-    const session = await db
-      .collection("sessions")
-      .findOne({ id: req.params.id });
-    if (!session) return res.status(404).json({ error: "Session not found" });
+    const requests = await db
+      .collection(REQUESTS_COL)
+      .find({ sessionId: req.params.id })
+      .toArray();
 
-    // Fetch linked conversations (without full message bodies for performance)
-    let conversations = [];
-    if (
-      Array.isArray(session.conversationIds) &&
-      session.conversationIds.length > 0
-    ) {
-      conversations = await db
-        .collection(CONVERSATIONS_COL)
-        .find({ id: { $in: session.conversationIds } })
-        .project({
-          id: 1,
-          title: 1,
-          project: 1,
-          username: 1,
-          modalities: 1,
-          providers: 1,
-          totalCost: 1,
-          createdAt: 1,
-          updatedAt: 1,
-          messageCount: { $size: { $ifNull: ["$messages", []] } },
-        })
-        .toArray();
-
-      // Compute totalCost from conversations (source of truth)
-      session.totalCost = conversations.reduce(
-        (sum, c) => sum + (c.totalCost || 0),
-        0,
-      );
-      session.conversationCount = conversations.length;
+    if (requests.length === 0) {
+      return res.status(404).json({ error: "Session not found" });
     }
 
-    res.json({ ...session, conversations });
+    // Derive session metadata from requests
+    const session = {
+      id: req.params.id,
+      project: requests[0].project,
+      username: requests[0].username,
+      requestCount: requests.length,
+      totalCost: requests.reduce((sum, r) => sum + (r.estimatedCost || 0), 0),
+      totalInputTokens: requests.reduce((sum, r) => sum + (r.inputTokens || 0), 0),
+      totalOutputTokens: requests.reduce((sum, r) => sum + (r.outputTokens || 0), 0),
+      createdAt: requests.reduce((min, r) => (!min || r.timestamp < min ? r.timestamp : min), null),
+      updatedAt: requests.reduce((max, r) => (!max || r.timestamp > max ? r.timestamp : max), null),
+      requests,
+    };
+
+    res.json(session);
   } catch (error) {
     logger.error(`Admin /sessions/:id error: ${error.message}`);
     next(error);
@@ -2792,3 +2495,4 @@ router.get("/sessions/:id", async (req, res, next) => {
 });
 
 export default router;
+
