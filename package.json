@@ -30,14 +30,14 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.78.0",
-    "@google/genai": "^1.44.0",
+    "@anthropic-ai/sdk": "^0.86.1",
+    "@google/genai": "^1.49.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "minio": "^8.0.7",
     "mongodb": "^7.1.0",
-    "openai": "^6.25.0",
+    "openai": "^6.34.0",
     "sharp": "^0.34.5",
     "ws": "^8.19.0"
   },

@@ -460,6 +460,9 @@ const anthropicProvider = {
       if (citations.length > 0) result.citations = citations;
       if (toolCalls.length > 0) result.toolCalls = toolCalls;
       if (rateLimits) result.rateLimits = rateLimits;
+      // Forward structured stop details for observability (SDK 0.82+)
+      if (response.stop_reason) result.stopReason = response.stop_reason;
+      if (response.stop_details) result.stopDetails = response.stop_details;
       return result;
     } catch (error) {
       throw new ProviderError(
@@ -766,16 +769,25 @@ const anthropicProvider = {
           continue;
         }
 
-        // Message delta (final usage) — carries output_tokens only
-        if (chunk.type === "message_delta" && chunk.usage) {
-          usage = {
-            inputTokens: messageStartUsage?.input_tokens ?? 0,
-            outputTokens: chunk.usage.output_tokens ?? 0,
-            cacheReadInputTokens:
-              messageStartUsage?.cache_read_input_tokens ?? 0,
-            cacheCreationInputTokens:
-              messageStartUsage?.cache_creation_input_tokens ?? 0,
-          };
+        // Message delta (final usage + stop details) — carries output_tokens only
+        if (chunk.type === "message_delta") {
+          if (chunk.usage) {
+            usage = {
+              inputTokens: messageStartUsage?.input_tokens ?? 0,
+              outputTokens: chunk.usage.output_tokens ?? 0,
+              cacheReadInputTokens:
+                messageStartUsage?.cache_read_input_tokens ?? 0,
+              cacheCreationInputTokens:
+                messageStartUsage?.cache_creation_input_tokens ?? 0,
+            };
+          }
+          // Forward structured stop details for observability (SDK 0.82+)
+          if (chunk.delta?.stop_reason) {
+            yield { type: "stopReason", stopReason: chunk.delta.stop_reason };
+          }
+          if (chunk.delta?.stop_details) {
+            yield { type: "stopDetails", stopDetails: chunk.delta.stop_details };
+          }
         }
       }
 

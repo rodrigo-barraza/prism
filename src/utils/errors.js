@@ -5,6 +5,8 @@ export class ProviderError extends Error {
     this.provider = provider;
     this.statusCode = statusCode;
     this.originalError = originalError;
+    // Structured error type from provider SDKs (e.g. Anthropic's "rate_limit_error")
+    this.errorType = originalError?.type || null;
   }
 
   toJSON() {
@@ -13,6 +15,7 @@ export class ProviderError extends Error {
       provider: this.provider,
       message: this.message,
       statusCode: this.statusCode,
+      ...(this.errorType && { errorType: this.errorType }),
     };
   }
 }
