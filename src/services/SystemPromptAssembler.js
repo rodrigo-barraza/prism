@@ -198,7 +198,7 @@ export default class SystemPromptAssembler {
    * @param {string} queryText - The user's latest message (used for relevance matching)
    * @returns {Promise<Array<{ name: string, content: string, score: number }>>}
    */
-  async fetchSkills(project, username, queryText, { sessionId, endpoint } = {}) {
+  async fetchSkills(project, username, queryText, { sessionId, endpoint, agent } = {}) {
     try {
       const client = MongoWrapper.getClient(MONGO_DB_NAME);
       if (!client) return [];
@@ -224,7 +224,7 @@ export default class SystemPromptAssembler {
       // Generate query embedding
       let queryEmbedding;
       try {
-        queryEmbedding = await EmbeddingService.embed(queryText, { source: "skill-relevance", project, endpoint: endpoint || "/agent", sessionId: sessionId || null });
+        queryEmbedding = await EmbeddingService.embed(queryText, { source: "skill-relevance", project, endpoint: endpoint || "/agent", sessionId: sessionId || null, agent: agent || null });
       } catch (err) {
         logger.warn(`[SystemPromptAssembler] Query embedding failed: ${err.message} — returning all skills`);
         return skills.map((s) => ({ name: s.name, content: s.content, description: s.description, score: 1 }));
@@ -378,7 +378,7 @@ export default class SystemPromptAssembler {
       .find((m) => m.role === "user");
     const queryText = lastUserMsg?.content || "";
 
-    const skills = await this.fetchSkills(ctx.project, ctx.username, queryText, { sessionId: ctx.sessionId, endpoint: "/agent" });
+    const skills = await this.fetchSkills(ctx.project, ctx.username, queryText, { sessionId: ctx.sessionId, endpoint: "/agent", agent: agentId });
     const skillNames = [];
     if (skills.length > 0) {
       const skillBlocks = skills.map((s) => {

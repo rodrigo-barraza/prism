@@ -92,6 +92,7 @@ function freshnessCaveat(createdAt) {
  */
 async function extractFactsFromConversation(messages, participants, meta = {}) {
   const endpoint = meta.endpoint || null;
+  const agent = meta.agent || null;
   const provider = getProvider(EXTRACTION_PROVIDER);
   const requestId = crypto.randomUUID();
   const requestStart = performance.now();
@@ -181,6 +182,7 @@ ${participantList}`;
       provider: EXTRACTION_PROVIDER,
       model: EXTRACTION_MODEL,
       sessionId: meta.sessionId || null,
+      agent,
       success,
       errorMessage,
       estimatedCost,
@@ -280,6 +282,7 @@ const MemoryService = {
       const embedOpts = { project };
       if (sessionId) embedOpts.sessionId = sessionId;
       if (endpoint) embedOpts.endpoint = endpoint;
+      if (agent) embedOpts.agent = agent;
       embedding = await generateEmbedding(embedText, embedOpts);
     }
 
@@ -354,7 +357,7 @@ const MemoryService = {
     endpoint,
   }) {
     // Extract facts from the conversation via AI
-    const facts = await extractFactsFromConversation(messages, participants, { project, sessionId, endpoint });
+    const facts = await extractFactsFromConversation(messages, participants, { project, sessionId, endpoint, agent: "LUPOS" });
     if (facts.length === 0) {
       logger.info(
         "[MemoryService] No personal facts extracted from conversation.",
@@ -370,7 +373,7 @@ const MemoryService = {
 
     for (const fact of facts) {
       try {
-        const embedding = await generateEmbedding(fact.fact, { project, sessionId, endpoint });
+        const embedding = await generateEmbedding(fact.fact, { project, sessionId, endpoint, agent: "LUPOS" });
 
         const memory = await this.store({
           agent: "LUPOS",
@@ -431,6 +434,7 @@ const MemoryService = {
     if (sessionId) embeddingOpts.sessionId = sessionId;
     if (project) embeddingOpts.project = project;
     if (endpoint) embeddingOpts.endpoint = endpoint;
+    if (agent) embeddingOpts.agent = agent;
     const queryEmbedding = await generateEmbedding(queryText, embeddingOpts);
 
     // Build the filter — always scoped by agent

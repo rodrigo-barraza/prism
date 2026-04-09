@@ -31,6 +31,7 @@ const EmbeddingService = {
    * @param {string} [options.username]    - Username (for request log)
    * @param {string} [options.clientIp]    - Client IP (for request log)
    * @param {string} [options.source]      - Caller identifier, e.g. "memory", "agent-memory", "skill-relevance", "api"
+   * @param {string} [options.agent]       - Agent identifier (e.g. "CODING", "LUPOS")
    * @returns {Promise<{ embedding: number[], dimensions: number, provider: string, model: string }>}
    */
   async generate(content, options = {}) {
@@ -106,6 +107,7 @@ const EmbeddingService = {
         project: options.project || null,
         username: options.username || "system",
         clientIp: options.clientIp || null,
+        agent: options.agent || null,
         provider: providerName,
         model: resolvedModel,
         sessionId: options.sessionId || null,
