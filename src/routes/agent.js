@@ -74,7 +74,7 @@ router.post("/", async (req, res, next) => {
     project: req.body.project || req.project,
     username: req.username,
     clientIp: req.clientIp,
-    agent: req.agent || null,
+    agent: req.body.agent || req.agent || null,
   };
 
   if (req.query.stream !== "false") {
