@@ -192,12 +192,13 @@ const MemoryService = {
     messages,
     participants,
     sourceMessageId,
+    sessionId,
     project,
   }) {
     const collection = MongoWrapper.getCollection(MONGO_DB_NAME, LUPOS_COLLECTION);
 
     // Extract facts from the conversation via AI
-    const facts = await extractFactsFromConversation(messages, participants, { project });
+    const facts = await extractFactsFromConversation(messages, participants, { project, sessionId });
     if (facts.length === 0) {
       logger.info(
         "[MemoryService] No personal facts extracted from conversation.",
@@ -215,7 +216,7 @@ const MemoryService = {
     for (const fact of facts) {
       try {
         // Generate embedding (needed for both dedup check and storage)
-        const embedding = await generateEmbedding(fact.fact, { project });
+        const embedding = await generateEmbedding(fact.fact, { project, sessionId });
 
         // Check for duplicate facts (same user + very similar content)
         const existingMemories = await collection
