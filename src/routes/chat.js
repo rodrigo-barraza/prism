@@ -281,7 +281,11 @@ export async function handleChat(params, emit, { signal } = {}) {
     skipConversation,
     autoApprove,
     planFirst,
-    customSystemPrompt,
+    agentContext,
+    // customSystemPrompt is deprecated — the assembler always runs and
+    // loads the correct persona via AgentPersonaRegistry. Kept here to
+    // avoid breaking old callers silently; the value is simply ignored.
+    customSystemPrompt: _deprecatedCustomSystemPrompt,
     // systemPrompt arrives in two places by design:
     //  - messages[0] with role:"system" → what the LLM actually sees
     //  - conversationMeta.systemPrompt → stored as top-level DB field for quick UI access
@@ -371,7 +375,7 @@ export async function handleChat(params, emit, { signal } = {}) {
     ...(textOnly && { textOnly }),
     ...(autoApprove && { autoApprove }),
     ...(planFirst && { planFirst }),
-    ...(customSystemPrompt && { customSystemPrompt }),
+    ...(agentContext && { agentContext }),
     ...(extraParams.systemPrompt && { systemPrompt: extraParams.systemPrompt }),
   };
 

@@ -99,6 +99,7 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
       return true;
 
     case "thinking":
+      if (!state.firstTokenTime) state.firstTokenTime = performance.now();
       state.generationEnd = performance.now();
       state.thinking += chunk.content;
       emit({ type: "thinking", content: chunk.content });
@@ -144,6 +145,10 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
       return true;
 
     case "toolCall":
+      // Tool call chunks indicate model output — track generation timing
+      if (!state.firstTokenTime) state.firstTokenTime = performance.now();
+      state.generationEnd = performance.now();
+
       if (chunk.status === "done" || chunk.status === "error") {
         const existing = state.toolCalls.find(
           (tc) =>

@@ -9,10 +9,36 @@ import { cosineSimilarity, calculateTokensPerSec } from "../utils/math.js";
 import { estimateTokens } from "../utils/CostCalculator.js";
 import { TYPES, getPricing } from "../config.js";
 
-const LUPOS_COLLECTION = "lupos_memories";
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+/** Single unified collection for all agent memories. */
+const COLLECTION = "memories";
+
 const EXTRACTION_PROVIDER = "anthropic";
 const EXTRACTION_MODEL = "claude-haiku-4-5-20251001";
 
+/**
+ * Duplicate detection threshold — two memories with cosine similarity above
+ * this are considered duplicates and the newer one is skipped.
+ */
+const DUPLICATE_THRESHOLD = 0.92;
+
+/**
+ * Minimum cosine similarity for a memory to be considered relevant during search.
+ */
+const RELEVANCE_THRESHOLD = 0.3;
+
+/**
+ * Valid memory types — inspired by Claude Code's memdir taxonomy.
+ *
+ * Memories are constrained to these types. LUPOS additionally uses its own
+ * category values (personal, preference, gaming, etc.) stored in the `type`
+ * field — the schema is flexible per agent.
+ */
+const CODING_MEMORY_TYPES = ["user", "feedback", "project", "reference"];
+
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
  * Generate an embedding for text via EmbeddingService.
@@ -23,6 +49,38 @@ const EXTRACTION_MODEL = "claude-haiku-4-5-20251001";
 async function generateEmbedding(text, options = {}) {
   return EmbeddingService.embed(text, { source: "memory", ...options });
 }
+
+/**
+ * Calculate days elapsed since a timestamp.
+ */
+function memoryAgeDays(createdAt) {
+  const ms = Date.now() - new Date(createdAt).getTime();
+  return Math.max(0, Math.floor(ms / 86_400_000));
+}
+
+/**
+ * Human-readable age string. Models are poor at date arithmetic —
+ * "47 days ago" triggers staleness reasoning better than a raw ISO timestamp.
+ */
+function memoryAge(createdAt) {
+  const d = memoryAgeDays(createdAt);
+  if (d === 0) return "today";
+  if (d === 1) return "yesterday";
+  return `${d} days ago`;
+}
+
+/**
+ * Staleness caveat for memories >1 day old.
+ * Returns empty string for fresh memories.
+ */
+function freshnessCaveat(createdAt) {
+  const d = memoryAgeDays(createdAt);
+  if (d <= 1) return "";
+  return ` ⚠️ ${d} days old — verify against current code before acting on this.`;
+}
+
+
+// ─── LUPOS Fact Extraction ────────────────────────────────────────────────────
 
 /**
  * Call an AI provider to extract facts from a conversation.
@@ -172,12 +230,106 @@ ${participantList}`;
   }
 }
 
+
+// ─── Unified Memory Service ──────────────────────────────────────────────────
+
 /**
- * MemoryService — manages long-term user memories in MongoDB.
+ * MemoryService — unified, agent-scoped memory system.
+ *
+ * All memories live in a single `memories` collection. Every document carries
+ * an `agent` field ("LUPOS", "CODING", etc.) and all queries filter by it,
+ * ensuring complete isolation between agents.
+ *
+ * LUPOS memories: personal facts about Discord users (guild-scoped)
+ * CODING memories: project knowledge from coding sessions (project-scoped)
  */
 const MemoryService = {
+
+  // ── Store ──────────────────────────────────────────────────────────────────
+
   /**
-   * Extract and store memories from a conversation chunk.
+   * Store a single memory with embedding generation and duplicate detection.
+   *
+   * @param {object} params
+   * @param {string} params.agent - Agent identifier ("LUPOS", "CODING", etc.)
+   * @param {string} [params.project] - Project identifier
+   * @param {string} [params.username] - Who created this memory
+   * @param {string} [params.type] - Memory type (e.g. "user", "feedback", "project", "reference", "personal")
+   * @param {string} [params.title] - Short name (used for relevance scanning)
+   * @param {string} params.content - Full memory text
+   * @param {number[]} [params.embedding] - Pre-computed embedding (if omitted, generated from title+content)
+   * @param {object} [params.metadata] - Agent-specific metadata (guildId, aboutUserId, etc.)
+   * @param {string} [params.conversationId] - Source conversation
+   * @returns {Promise<object|null>} Stored memory document, or null if duplicate
+   */
+  async store({ agent, project, username, type, title, content, embedding, metadata = {}, conversationId }) {
+    if (!agent) throw new Error("MemoryService.store requires an agent identifier");
+    if (!content) throw new Error("MemoryService.store requires content");
+
+    // Validate type for CODING agent
+    if (agent === "CODING") {
+      type = CODING_MEMORY_TYPES.includes(type) ? type : "project";
+    }
+
+    const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
+    const embedText = title ? `${title}: ${content}` : content;
+
+    // Generate embedding if not provided
+    if (!embedding) {
+      embedding = await generateEmbedding(embedText, { project });
+    }
+
+    // Duplicate detection — compare against existing memories for the same agent
+    const dedupFilter = { agent };
+    if (project) dedupFilter.project = project;
+    if (metadata.guildId) dedupFilter.guildId = metadata.guildId;
+    if (metadata.aboutUserId) dedupFilter.aboutUserId = metadata.aboutUserId;
+
+    const existing = await collection
+      .find(dedupFilter)
+      .project({ embedding: 1 })
+      .toArray();
+
+    const isDuplicate = existing.some((doc) => {
+      if (!doc.embedding) return false;
+      return cosineSimilarity(embedding, doc.embedding) > DUPLICATE_THRESHOLD;
+    });
+
+    if (isDuplicate) {
+      logger.info(
+        `[MemoryService] Skipping duplicate for ${agent}: "${(title || content).substring(0, 60)}"`,
+      );
+      return null;
+    }
+
+    const now = new Date().toISOString();
+    const memory = {
+      id: crypto.randomUUID(),
+      agent,
+      project: project || null,
+      username: username || null,
+      type: type || "other",
+      title: title || null,
+      content,
+      embedding,
+      conversationId: conversationId || null,
+      createdAt: now,
+      updatedAt: now,
+      // Spread agent-specific metadata at top level for efficient querying
+      ...metadata,
+    };
+
+    await collection.insertOne(memory);
+    logger.info(
+      `[MemoryService] Stored [${agent}/${memory.type}] "${(title || content).substring(0, 60)}"`,
+    );
+    return memory;
+  },
+
+  // ── LUPOS: Extract & Store ─────────────────────────────────────────────────
+
+  /**
+   * Extract and store LUPOS memories from a Discord conversation chunk.
    *
    * @param {object} params
    * @param {string} params.guildId
@@ -197,8 +349,6 @@ const MemoryService = {
     project,
     endpoint,
   }) {
-    const collection = MongoWrapper.getCollection(MONGO_DB_NAME, LUPOS_COLLECTION);
-
     // Extract facts from the conversation via AI
     const facts = await extractFactsFromConversation(messages, participants, { project, sessionId, endpoint });
     if (facts.length === 0) {
@@ -213,54 +363,37 @@ const MemoryService = {
     );
 
     const storedMemories = [];
-    const now = new Date().toISOString();
 
     for (const fact of facts) {
       try {
-        // Generate embedding (needed for both dedup check and storage)
         const embedding = await generateEmbedding(fact.fact, { project, sessionId, endpoint });
 
-        // Check for duplicate facts (same user + very similar content)
-        const existingMemories = await collection
-          .find({ guildId, aboutUserId: fact.aboutUserId })
-          .toArray();
-
-        if (existingMemories.length > 0) {
-          const isDuplicate = existingMemories.some((existing) => {
-            if (!existing.embedding) return false;
-            return cosineSimilarity(embedding, existing.embedding) > 0.92;
-          });
-
-          if (isDuplicate) {
-            logger.info(
-              `[MemoryService] Skipping duplicate fact: "${fact.fact.substring(0, 60)}..."`,
-            );
-            continue;
-          }
-        }
-
-        const memory = {
-          id: crypto.randomUUID(),
-          guildId,
-          channelId,
-          aboutUserId: fact.aboutUserId,
-          aboutUsername: fact.aboutUsername,
-          sourceUserId: fact.sourceUserId,
-          sourceUsername: fact.sourceUsername,
-          fact: fact.fact,
-          category: fact.category || "other",
+        const memory = await this.store({
+          agent: "LUPOS",
+          project: project || null,
+          username: fact.sourceUsername || null,
+          type: fact.category || "other",
+          title: null,
+          content: fact.fact,
           embedding,
-          confidence: fact.confidence,
-          sourceMessageId: sourceMessageId || null,
-          createdAt: now,
-          updatedAt: now,
-        };
+          metadata: {
+            guildId,
+            channelId,
+            aboutUserId: fact.aboutUserId,
+            aboutUsername: fact.aboutUsername,
+            sourceUserId: fact.sourceUserId,
+            sourceUsername: fact.sourceUsername,
+            confidence: fact.confidence,
+            sourceMessageId: sourceMessageId || null,
+          },
+        });
 
-        await collection.insertOne(memory);
-        storedMemories.push(memory);
-        logger.info(
-          `[MemoryService] Stored: "${fact.fact.substring(0, 60)}..." (about: ${fact.aboutUsername})`,
-        );
+        if (memory) {
+          storedMemories.push(memory);
+          logger.info(
+            `[MemoryService] Stored: "${fact.fact.substring(0, 60)}..." (about: ${fact.aboutUsername})`,
+          );
+        }
       } catch (err) {
         logger.error(`[MemoryService] Failed to store fact: ${err.message}`);
       }
@@ -269,18 +402,25 @@ const MemoryService = {
     return storedMemories;
   },
 
+  // ── Search ─────────────────────────────────────────────────────────────────
+
   /**
    * Search for relevant memories using cosine similarity.
+   * Always scoped by `agent`.
    *
    * @param {object} params
-   * @param {string} params.guildId
-   * @param {string[]} [params.userIds] - Filter to memories about these users
+   * @param {string} params.agent - Agent identifier
+   * @param {string} [params.project] - Project identifier
+   * @param {string} [params.guildId] - Guild filter (LUPOS)
+   * @param {string[]} [params.userIds] - Filter to memories about these users (LUPOS)
    * @param {string} params.queryText - Text to search for
    * @param {number} [params.limit=10]
    * @returns {Promise<Array>} Relevant memories sorted by relevance
    */
-  async search({ guildId, userIds, queryText, limit = 10, sessionId, project, endpoint }) {
-    const collection = MongoWrapper.getCollection(MONGO_DB_NAME, LUPOS_COLLECTION);
+  async search({ agent, project, guildId, userIds, queryText, limit = 10, sessionId, endpoint }) {
+    if (!agent) throw new Error("MemoryService.search requires an agent identifier");
+
+    const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
 
     // Generate embedding for the search query
     const embeddingOpts = {};
@@ -289,8 +429,10 @@ const MemoryService = {
     if (endpoint) embeddingOpts.endpoint = endpoint;
     const queryEmbedding = await generateEmbedding(queryText, embeddingOpts);
 
-    // Build the filter
-    const filter = { guildId };
+    // Build the filter — always scoped by agent
+    const filter = { agent };
+    if (project) filter.project = project;
+    if (guildId) filter.guildId = guildId;
     if (userIds && userIds.length > 0) {
       filter.aboutUserId = { $in: userIds };
     }
@@ -300,12 +442,16 @@ const MemoryService = {
       .find(filter, {
         projection: {
           embedding: 1,
-          fact: 1,
+          type: 1,
+          title: 1,
+          content: 1,
           aboutUserId: 1,
           aboutUsername: 1,
-          category: 1,
           confidence: 1,
           createdAt: 1,
+          // Backward compat: read old-schema fields too
+          fact: 1,
+          category: 1,
         },
       })
       .toArray();
@@ -317,38 +463,51 @@ const MemoryService = {
       .filter((m) => m.embedding && m.embedding.length > 0)
       .map((m) => ({
         id: m._id,
-        fact: m.fact,
+        type: m.type || m.category || "other",
+        title: m.title || (m.content ? m.content.substring(0, 60) : m.fact ? m.fact.substring(0, 60) : "untitled"),
+        content: m.content || m.fact || "",
         aboutUserId: m.aboutUserId,
         aboutUsername: m.aboutUsername,
-        category: m.category,
         confidence: m.confidence,
         createdAt: m.createdAt,
+        age: memoryAge(m.createdAt),
+        ageDays: memoryAgeDays(m.createdAt),
         score: cosineSimilarity(queryEmbedding, m.embedding),
       }))
-      .filter((m) => m.score > 0.3) // Minimum relevance threshold
+      .filter((m) => m.score > RELEVANCE_THRESHOLD)
       .sort((a, b) => b.score - a.score)
       .slice(0, limit);
 
     logger.info(
-      `[MemoryService] Search found ${scored.length} relevant memories (from ${memories.length} total)`,
+      `[MemoryService] Search found ${scored.length} relevant memories for ${agent} (from ${memories.length} total)`,
     );
 
     return scored;
   },
 
+  // ── List ────────────────────────────────────────────────────────────────────
+
   /**
-   * List all memories for a user in a guild.
+   * List memories for a specific agent, optionally filtered by project/guild/user.
    *
-   * @param {string} guildId
-   * @param {string} userId
-   * @param {number} [limit=50]
-   * @param {number} [skip=0]
+   * @param {object} params
+   * @param {string} params.agent - Agent identifier
+   * @param {string} [params.project] - Project filter
+   * @param {string} [params.guildId] - Guild filter (LUPOS)
+   * @param {string} [params.userId] - User filter (LUPOS — aboutUserId)
+   * @param {number} [params.limit=50]
+   * @param {number} [params.skip=0]
    * @returns {Promise<{ memories: Array, total: number }>}
    */
-  async list(guildId, userId, limit = 50, skip = 0) {
-    const collection = MongoWrapper.getCollection(MONGO_DB_NAME, LUPOS_COLLECTION);
+  async list({ agent, project, guildId, userId, limit = 50, skip = 0 }) {
+    if (!agent) throw new Error("MemoryService.list requires an agent identifier");
 
-    const filter = { guildId, aboutUserId: userId };
+    const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
+
+    const filter = { agent };
+    if (project) filter.project = project;
+    if (guildId) filter.guildId = guildId;
+    if (userId) filter.aboutUserId = userId;
 
     const [memories, total] = await Promise.all([
       collection
@@ -363,6 +522,8 @@ const MemoryService = {
     return { memories, total };
   },
 
+  // ── Delete / Remove ────────────────────────────────────────────────────────
+
   /**
    * Delete a specific memory by its id field.
    *
@@ -370,26 +531,91 @@ const MemoryService = {
    * @returns {Promise<boolean>} Whether a document was deleted
    */
   async delete(memoryId) {
-    const collection = MongoWrapper.getCollection(MONGO_DB_NAME, LUPOS_COLLECTION);
-
+    const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
     const result = await collection.deleteOne({ id: memoryId });
     return result.deletedCount > 0;
   },
 
   /**
-   * Ensure indexes exist on the lupos_memories collection.
+   * Alias for delete — used by callers that preferred the AgentMemoryService naming.
+   */
+  async remove(memoryId) {
+    return this.delete(memoryId);
+  },
+
+  // ── Update ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Update an existing memory.
+   *
+   * @param {string} memoryId
+   * @param {object} updates - Fields to update (title, content, type)
+   * @returns {Promise<boolean>}
+   */
+  async update(memoryId, { title, content, type }) {
+    const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
+
+    const $set = { updatedAt: new Date().toISOString() };
+    if (title !== undefined) $set.title = title;
+    if (content !== undefined) $set.content = content;
+    if (type !== undefined) $set.type = type;
+
+    // Re-generate embedding if content changed
+    if (content !== undefined) {
+      const doc = await collection.findOne({ id: memoryId }, { projection: { project: 1, title: 1 } });
+      const embedText = (title || doc?.title) ? `${title || doc?.title}: ${content}` : content;
+      $set.embedding = await generateEmbedding(embedText, { project: doc?.project });
+    }
+
+    const result = await collection.updateOne({ id: memoryId }, { $set });
+    return result.modifiedCount > 0;
+  },
+
+  // ── Format ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Format memories for injection into the system prompt.
+   * Adds type badges and staleness caveats.
+   *
+   * @param {Array} memories - Array from search()
+   * @returns {string} Formatted text block
+   */
+  formatForPrompt(memories) {
+    if (!memories || memories.length === 0) return "";
+
+    return memories
+      .map((m) => {
+        const badge = `[${m.type}]`;
+        const age = m.age !== "today" ? ` (${m.age})` : "";
+        const caveat = freshnessCaveat(m.createdAt);
+        return `- ${badge} **${m.title}**${age}: ${m.content}${caveat}`;
+      })
+      .join("\n");
+  },
+
+  // ── Indexes ────────────────────────────────────────────────────────────────
+
+  /**
+   * Ensure indexes exist on the unified memories collection.
    */
   async ensureIndexes() {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return;
 
-    const luposCol = db.collection(LUPOS_COLLECTION);
+    const collection = db.collection(COLLECTION);
 
-    await luposCol.createIndex({ guildId: 1, aboutUserId: 1 });
-    await luposCol.createIndex({ guildId: 1 });
-    await luposCol.createIndex({ id: 1 }, { unique: true });
+    // Primary lookup: by agent + project (covers CODING queries)
+    await collection.createIndex({ agent: 1, project: 1 });
+    // LUPOS queries: agent + guild + user
+    await collection.createIndex({ agent: 1, guildId: 1, aboutUserId: 1 });
+    // Type-filtered queries
+    await collection.createIndex({ agent: 1, project: 1, type: 1 });
+    // Unique ID
+    await collection.createIndex({ id: 1 }, { unique: true });
+    // Chronological listing
+    await collection.createIndex({ createdAt: -1 });
 
-    logger.info("[MemoryService] Indexes ensured on lupos_memories collection.");
+    logger.info("[MemoryService] Indexes ensured on unified memories collection.");
   },
 };
 

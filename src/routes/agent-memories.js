@@ -1,21 +1,23 @@
 import express from "express";
-import AgentMemoryService from "../services/AgentMemoryService.js";
+import MemoryService from "../services/MemoryService.js";
 import MemoryConsolidationService from "../services/MemoryConsolidationService.js";
 import logger from "../utils/logger.js";
 
 const router = express.Router();
 
 /**
- * GET /agent-memories?project=<project>&limit=100&skip=0
+ * GET /agent-memories?project=<project>&agent=<agent>&limit=100&skip=0
  * List all agent memories for a project (read-only).
+ * Defaults to agent="CODING" for backward compatibility.
  */
 router.get("/", async (req, res, next) => {
   try {
     const project = req.query.project || req.project || "default";
+    const agent = req.query.agent || "CODING";
     const limit = parseInt(req.query.limit) || 100;
     const skip = parseInt(req.query.skip) || 0;
 
-    const result = await AgentMemoryService.list({ project, limit, skip });
+    const result = await MemoryService.list({ agent, project, limit, skip });
     res.json(result);
   } catch (error) {
     logger.error(`[agent-memories] ${error.message}`);
@@ -29,7 +31,7 @@ router.get("/", async (req, res, next) => {
  */
 router.delete("/:id", async (req, res, next) => {
   try {
-    const deleted = await AgentMemoryService.remove(req.params.id);
+    const deleted = await MemoryService.remove(req.params.id);
     if (!deleted) {
       return res.status(404).json({ error: "Memory not found" });
     }
@@ -64,9 +66,11 @@ router.get("/consolidation-history", async (req, res, next) => {
 router.post("/consolidate", async (req, res, next) => {
   try {
     const project = req.body.project || req.query.project || "default";
+    const agent = req.body.agent || "CODING";
     const username = req.body.username || "system";
 
     const result = await MemoryConsolidationService.consolidate({
+      agent,
       project,
       username,
       trigger: "manual",

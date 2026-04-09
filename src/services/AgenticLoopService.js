@@ -15,6 +15,7 @@ import ContextWindowManager from "../utils/ContextWindowManager.js";
 import AgentHooks from "./AgentHooks.js";
 import AutoApprovalEngine from "./AutoApprovalEngine.js";
 import SystemPromptAssembler from "./SystemPromptAssembler.js";
+import AgentPersonaRegistry from "./AgentPersonaRegistry.js";
 import PlanningModeService from "./PlanningModeService.js";
 import SessionSummarizer from "./SessionSummarizer.js";
 
@@ -107,11 +108,21 @@ export default class AgenticLoopService {
       logger.info(`[AgenticLoop] Merged ${mcpTools.length} MCP tools from connected servers`);
     }
 
-    // If options.enabledTools is passed, filter out any tool not in the array
+    // If options.enabledTools is passed, filter out any tool not in the array.
+    // If none are passed, fall back to the persona's enabledTools (if any).
     // MCP tools (mcp__*) are always included — managed by connect/disconnect
+    let resolvedEnabledTools = options.enabledTools;
+    if (!resolvedEnabledTools && agent) {
+      const persona = AgentPersonaRegistry.get(agent);
+      if (persona?.enabledTools) {
+        resolvedEnabledTools = persona.enabledTools;
+        logger.info(`[AgenticLoop] Using persona "${agent}" enabledTools: [${resolvedEnabledTools.join(", ")}]`);
+      }
+    }
+
     let finalTools = dynamicTools;
-    if (options.enabledTools && Array.isArray(options.enabledTools)) {
-      const enabledSet = new Set(options.enabledTools);
+    if (resolvedEnabledTools && Array.isArray(resolvedEnabledTools)) {
+      const enabledSet = new Set(resolvedEnabledTools);
       finalTools = finalTools.filter((t) => enabledSet.has(t.name) || t.name.startsWith("mcp__"));
     }
 
@@ -155,11 +166,10 @@ export default class AgenticLoopService {
     hooks.register("beforeToolCall", approvalEngine.createHook(), "AutoApprovalEngine");
 
     // Dynamic System Prompt Assembly
-    // Skip when caller provides their own system prompt (e.g. Lupos personality)
-    if (!options.customSystemPrompt) {
-      const assembler = new SystemPromptAssembler();
-      hooks.register("beforePrompt", assembler.createHook(), "SystemPromptAssembler");
-    }
+    // Always active — the assembler loads the correct persona via AgentPersonaRegistry
+    // based on ctx.agent (e.g. "CODING", "LUPOS"). Callers no longer bypass this.
+    const assembler = new SystemPromptAssembler();
+    hooks.register("beforePrompt", assembler.createHook(), "SystemPromptAssembler");
 
     // Session Summarization (fire-and-forget on loop exit)
     hooks.register("afterResponse", SessionSummarizer.createHook(), "SessionSummarizer");
@@ -176,7 +186,9 @@ export default class AgenticLoopService {
         messages: planningMessages,
         project,
         username,
-        enabledTools: options.enabledTools,
+        agent,
+        agentContext: options.agentContext,
+        enabledTools: resolvedEnabledTools,
       });
 
       // Generate plan (single non-looping LLM call)
@@ -255,7 +267,9 @@ export default class AgenticLoopService {
             messages: currentMessages,
             project,
             username,
-            enabledTools: options.enabledTools,
+            agent,
+            agentContext: options.agentContext,
+            enabledTools: resolvedEnabledTools,
           };
           await hooks.run("beforePrompt", hookCtx);
 

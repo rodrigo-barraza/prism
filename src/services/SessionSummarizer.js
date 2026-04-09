@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { getProvider } from "../providers/index.js";
-import AgentMemoryService from "./AgentMemoryService.js";
+import MemoryService from "./MemoryService.js";
 import MemoryConsolidationService from "./MemoryConsolidationService.js";
 import RequestLogger from "./RequestLogger.js";
 import logger from "../utils/logger.js";
@@ -225,10 +225,11 @@ export default class SessionSummarizer {
         return [];
       }
 
-      // Store via AgentMemoryService
+      // Store via unified MemoryService (agent-scoped)
       const stored = [];
       for (const mem of validMemories) {
-        const result = await AgentMemoryService.store({
+        const result = await MemoryService.store({
+          agent: agent || "CODING",
           project,
           username,
           type: mem.type,

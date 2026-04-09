@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import ToolOrchestratorService from "./ToolOrchestratorService.js";
-import AgentMemoryService from "./AgentMemoryService.js";
+import MemoryService from "./MemoryService.js";
+import AgentPersonaRegistry from "./AgentPersonaRegistry.js";
 import EmbeddingService from "./EmbeddingService.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { TOOLS_API_URL, WORKSPACE_ROOT as WORKSPACE_ROOT_RAW, MONGO_DB_NAME } from "../../secrets.js";
@@ -23,6 +24,11 @@ const DEFAULT_WORKSPACE_ROOT = WORKSPACE_ROOT_RAW
  * Assembles identity, coding guidelines, tool descriptions, project
  * structure, environment info, and session memory into a single coherent
  * system message. Registered as a `beforePrompt` hook in AgentHooks.
+ *
+ * When an `agent` identifier is present in the request context, the
+ * assembler loads the matching persona from AgentPersonaRegistry and
+ * uses its identity, guidelines, tool policy, and capabilities instead
+ * of the default coding agent sections.
  */
 export default class SystemPromptAssembler {
   /**
@@ -158,14 +164,16 @@ export default class SystemPromptAssembler {
   /**
    * Fetch relevant project memories.
    *
+   * @param {string} agent - Agent identifier
    * @param {string} project - Project identifier
    * @param {string} queryText - Query for semantic search
    * @param {number} [limit=5]
    * @returns {Promise<string>}
    */
-  async fetchMemories(project, queryText, limit = 5) {
+  async fetchMemories(agent, project, queryText, limit = 5) {
     try {
-      const memories = await AgentMemoryService.search({
+      const memories = await MemoryService.search({
+        agent,
         project,
         queryText,
         limit,
@@ -173,7 +181,7 @@ export default class SystemPromptAssembler {
 
       if (!memories || memories.length === 0) return "";
 
-      return AgentMemoryService.formatForPrompt(memories);
+      return MemoryService.formatForPrompt(memories);
     } catch (err) {
       logger.warn(`[SystemPromptAssembler] Memory fetch error: ${err.message}`);
       return "";
@@ -245,52 +253,108 @@ export default class SystemPromptAssembler {
   /**
    * Assemble the complete agent system prompt.
    *
-   * Sections (in order):
-   *   1. Agent identity + coding guidelines
-   *   2. Available tools (domain-grouped with parameters)
-   *   3. Environment info (date/time, OS, workspace)
-   *   4. Project directory tree
-   *   5. Session memory from past conversations
+   * When `ctx.agent` is set, loads the matching persona from
+   * AgentPersonaRegistry. Otherwise falls back to the CODING agent.
+   *
+   * Persona-aware sections:
+   *   1. Agent identity (from persona or default)
+   *   2. Agent context (runtime data from caller, e.g. Discord info)
+   *   3. Guidelines (coding guidelines for CODING, none for LUPOS)
+   *   4. Tool policy (persona-specific tool use rules)
+   *   5. Available tools (domain-grouped with parameters)
+   *   6. Environment info (date/time, OS, workspace)
+   *   7. Project directory tree (CODING only)
+   *   8. Project skills (relevance-filtered)
+   *   9. Session memory from past conversations
    *
    * @param {object} ctx - Request context
    * @param {string} ctx.project - Project identifier
    * @param {string} ctx.username - Username
+   * @param {string} [ctx.agent] - Agent identifier (e.g. "LUPOS", "CODING")
+   * @param {object} [ctx.agentContext] - Runtime context from caller
    * @param {Array} ctx.messages - Current messages array
    * @param {Array} [ctx.enabledTools] - Enabled tool names
    * @returns {Promise<{ prompt: string, skillNames: string[] }>} Complete system prompt + skill names for UI emission
    */
   async assemble(ctx) {
     const sections = [];
+    const agentId = ctx.agent || "CODING";
+    const persona = AgentPersonaRegistry.get(agentId);
+
+    // If no persona found, fall back to CODING defaults
+    const codingFallback = !persona || persona.id === "CODING";
 
     // ── 1. Agent Identity ────────────────────────────────────────
-    sections.push(
-      `You are a highly capable coding agent with access to file system, git, command execution, and web tools.`,
-    );
-
-    // ── 2. Available Tools (domain-grouped) ──────────────────────
-    const toolDescs = this.buildToolDescriptions(ctx.enabledTools);
-    if (toolDescs) {
-      const schemas = ToolOrchestratorService.getToolSchemas();
-      const count = ctx.enabledTools
-        ? schemas.filter((t) => new Set(ctx.enabledTools).has(t.name)).length
-        : schemas.length;
-      sections.push(`## Available Tools (${count})\n` + toolDescs);
+    if (persona) {
+      const identityText = typeof persona.identity === "function"
+        ? persona.identity(ctx)
+        : persona.identity;
+      sections.push(identityText);
+    } else {
+      sections.push(
+        `You are a highly capable coding agent with access to file system, git, command execution, and web tools.`,
+      );
     }
 
-    // ── 3. Coding Guidelines ─────────────────────────────────────
-    sections.push(
-      `## Coding Guidelines\n` +
-      `1. Always read relevant files before making edits to understand context\n` +
-      `2. Prefer str_replace_file over write_file for editing existing code — it's safer and preserves unchanged content\n` +
-      `3. Use multi_file_read when you need to inspect several files at once\n` +
-      `4. After making changes, verify them by reading the modified section\n` +
-      `5. Use project_summary to understand unfamiliar codebases before diving in\n` +
-      `6. Check git_status before and after edits to track your changes\n` +
-      `7. When searching, use includes filters to narrow results (e.g. [".js", ".ts"])\n` +
-      `8. Keep your explanations concise and technical`,
-    );
+    // ── 2. Agent Context (runtime data from caller) ──────────────
+    // Only injected when the caller provides agentContext (e.g. Lupos
+    // sends Discord server/channel/participant info, trending data, etc.)
+    if (ctx.agentContext) {
+      const ac = ctx.agentContext;
 
-    // ── 4. Environment ───────────────────────────────────────────
+      // Structured context blocks — each is a pre-formatted text block
+      // assembled by the caller (Lupos/Retina/etc.)
+      if (ac.discordContext) {
+        sections.push(ac.discordContext);
+      }
+      if (ac.serverContext) {
+        sections.push(ac.serverContext);
+      }
+      if (ac.trendingData) {
+        sections.push(ac.trendingData);
+      }
+      if (ac.imageContext) {
+        sections.push(ac.imageContext);
+      }
+      if (ac.clockCrewContext) {
+        sections.push(ac.clockCrewContext);
+      }
+    }
+
+    // ── 3. Tool Policy (persona-specific) ────────────────────────
+    if (persona?.toolPolicy) {
+      sections.push(persona.toolPolicy);
+    }
+
+    // ── 4. Available Tools (domain-grouped) ──────────────────────
+    if (codingFallback || persona?.usesTools) {
+      const toolDescs = this.buildToolDescriptions(ctx.enabledTools);
+      if (toolDescs) {
+        const schemas = ToolOrchestratorService.getToolSchemas();
+        const count = ctx.enabledTools
+          ? schemas.filter((t) => new Set(ctx.enabledTools).has(t.name)).length
+          : schemas.length;
+        sections.push(`## Available Tools (${count})\n` + toolDescs);
+      }
+    }
+
+    // ── 5. Coding Guidelines ─────────────────────────────────────
+    if (codingFallback || persona?.usesCodingGuidelines) {
+      const guidelines = persona?.guidelines || (
+        `## Coding Guidelines\n` +
+        `1. Always read relevant files before making edits to understand context\n` +
+        `2. Prefer str_replace_file over write_file for editing existing code — it's safer and preserves unchanged content\n` +
+        `3. Use multi_file_read when you need to inspect several files at once\n` +
+        `4. After making changes, verify them by reading the modified section\n` +
+        `5. Use project_summary to understand unfamiliar codebases before diving in\n` +
+        `6. Check git_status before and after edits to track your changes\n` +
+        `7. When searching, use includes filters to narrow results (e.g. [".js", ".ts"])\n` +
+        `8. Keep your explanations concise and technical`
+      );
+      sections.push(guidelines);
+    }
+
+    // ── 6. Environment ───────────────────────────────────────────
     sections.push(
       `## Environment\n` +
       `- Date/Time: ${new Date().toLocaleString("en-US", { dateStyle: "full", timeStyle: "long" })}\n` +
@@ -298,13 +362,15 @@ export default class SystemPromptAssembler {
       `- Workspace: ${this.workspaceRoot}`,
     );
 
-    // ── 5. Project Structure (cached) ────────────────────────────
-    const dirTree = await this.fetchDirectoryTree();
-    if (dirTree) {
-      sections.push(`## Project Structure\n` + dirTree);
+    // ── 7. Project Structure (cached) ────────────────────────────
+    if (codingFallback || persona?.usesDirectoryTree) {
+      const dirTree = await this.fetchDirectoryTree();
+      if (dirTree) {
+        sections.push(`## Project Structure\n` + dirTree);
+      }
     }
 
-    // ── 6. Project Skills (relevance-filtered) ────────────────────
+    // ── 8. Project Skills (relevance-filtered) ────────────────────
     const lastUserMsg = [...(ctx.messages || [])]
       .reverse()
       .find((m) => m.role === "user");
@@ -320,11 +386,11 @@ export default class SystemPromptAssembler {
       sections.push(`## Project Skills (${skills.length})\n` + skillBlocks.join("\n\n"));
     }
 
-    // ── 7. Session Memory ────────────────────────────────────────
+    // ── 9. Session Memory ────────────────────────────────────────
     const memoryQuery = queryText || ctx.project || "";
 
     if (memoryQuery) {
-      const memories = await this.fetchMemories(ctx.project, memoryQuery);
+      const memories = await this.fetchMemories(agentId, ctx.project, memoryQuery);
       if (memories) {
         sections.push(`## Session Memory (from past conversations)\n` + memories);
       }
@@ -360,7 +426,7 @@ export default class SystemPromptAssembler {
         }
 
         logger.info(
-          `[SystemPromptAssembler] Assembled ${systemPrompt.length} char system prompt (${skillNames.length} skills)`,
+          `[SystemPromptAssembler] Assembled ${systemPrompt.length} char system prompt for agent="${ctx.agent || "CODING"}" (${skillNames.length} skills)`,
         );
       } catch (err) {
         logger.error(`[SystemPromptAssembler] Assembly failed: ${err.message}`);

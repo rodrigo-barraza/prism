@@ -2552,8 +2552,15 @@ router.get("/sessions", async (req, res, next) => {
             ],
           },
           source: { $arrayElemAt: ["$conversations.source", 0] },
-          // Derive agent from first request
-          agent: { $arrayElemAt: ["$_requests.agent", 0] },
+          // Collect all distinct agents from requests
+          agents: {
+            $setUnion: {
+              $filter: {
+                input: "$_requests.agent",
+                cond: { $ne: ["$$this", null] },
+              },
+            },
+          },
           // Aggregate stats from requests
           requestCount: { $size: "$_requests" },
           totalInputTokens: {

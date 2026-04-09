@@ -14,7 +14,7 @@ const DEFAULT_MODEL = "gemini-embedding-2-preview";
  *
  * Wraps the provider's `generateEmbedding()` with RequestLogger tracking,
  * ensuring both HTTP `/embed` requests and internal callers (MemoryService,
- * AgentMemoryService, SystemPromptAssembler) flow through the same path.
+ * SystemPromptAssembler) flow through the same path.
  */
 const EmbeddingService = {
   /**

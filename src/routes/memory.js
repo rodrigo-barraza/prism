@@ -54,6 +54,7 @@ router.post("/search", async (req, res, next) => {
     }
 
     const memories = await MemoryService.search({
+      agent: "LUPOS",
       guildId,
       userIds,
       queryText,
@@ -80,7 +81,13 @@ router.get("/list/:guildId/:userId", async (req, res, next) => {
     const limit = parseInt(req.query.limit) || 50;
     const skip = parseInt(req.query.skip) || 0;
 
-    const result = await MemoryService.list(guildId, userId, limit, skip);
+    const result = await MemoryService.list({
+      agent: "LUPOS",
+      guildId,
+      userId,
+      limit,
+      skip,
+    });
     res.json(result);
   } catch (error) {
     logger.error(`[memory/list] ${error.message}`);

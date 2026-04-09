@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { getProvider } from "../providers/index.js";
-import AgentMemoryService from "./AgentMemoryService.js";
+import MemoryService from "./MemoryService.js";
 import RequestLogger from "./RequestLogger.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
@@ -171,7 +171,7 @@ function buildConsolidationInput(clusters, allMemories) {
 
 // ─── Action Execution ────────────────────────────────────────────────────────
 
-async function applyActions(actions, project, username) {
+async function applyActions(actions, agent, project, username) {
   const results = { merged: 0, deleted: 0, errors: 0 };
 
   for (const action of actions) {
@@ -179,11 +179,12 @@ async function applyActions(actions, project, username) {
       if (action.type === "merge" && action.sourceIds?.length >= 2 && action.merged) {
         // Delete source memories
         for (const id of action.sourceIds) {
-          await AgentMemoryService.remove(id);
+          await MemoryService.remove(id);
         }
 
         // Store consolidated memory
-        await AgentMemoryService.store({
+        await MemoryService.store({
+          agent,
           project,
           username: username || "system",
           type: action.merged.type || "project",
@@ -197,7 +198,7 @@ async function applyActions(actions, project, username) {
           `[MemoryConsolidation] Merged ${action.sourceIds.length} → "${action.merged.title}" (${action.reason || ""})`,
         );
       } else if (action.type === "delete" && action.id) {
-        await AgentMemoryService.remove(action.id);
+        await MemoryService.remove(action.id);
         results.deleted++;
         logger.info(
           `[MemoryConsolidation] Deleted "${action.id}" (${action.reason || ""})`,
@@ -313,16 +314,17 @@ async function canRunToday(project) {
 
 const MemoryConsolidationService = {
   /**
-   * Run memory consolidation for a project.
+   * Run memory consolidation for a specific agent within a project.
    *
    * @param {object} params
+   * @param {string} params.agent - Agent identifier
    * @param {string} params.project - Project identifier
    * @param {string} [params.username] - For attribution on merged memories
    * @param {string} [params.trigger="manual"] - What triggered the run ("manual", "scheduled", "session_threshold")
    * @param {function} [params.broadcast] - Optional callback for real-time WebSocket notifications
    * @returns {Promise<object>} Consolidation results
    */
-  async consolidate({ project, username, trigger = "manual", broadcast, endpoint, agent }) {
+  async consolidate({ agent = "CODING", project, username, trigger = "manual", broadcast, endpoint }) {
     const startTime = performance.now();
     logger.info(`[MemoryConsolidation] Starting consolidation for project "${project}" (trigger: ${trigger})`);
 
@@ -336,9 +338,10 @@ const MemoryConsolidationService = {
     if (!client) throw new Error("Database not available");
 
     const db = client.db(MONGO_DB_NAME);
+    const agentId = agent || "CODING";
     const allMemories = await db
-      .collection("agent_memories")
-      .find({ project })
+      .collection("memories")
+      .find({ agent: agentId, project })
       .project({ embedding: 1, id: 1, type: 1, title: 1, content: 1, createdAt: 1 })
       .toArray();
 
@@ -451,7 +454,7 @@ const MemoryConsolidationService = {
     }
 
     // Phase 4: Apply changes
-    const results = await applyActions(actions, project, username);
+    const results = await applyActions(actions, agentId, project, username);
     await resetRunCount(project);
 
     const summary = parsed.summary || `Merged ${results.merged}, deleted ${results.deleted}`;
@@ -506,12 +509,12 @@ const MemoryConsolidationService = {
         );
         // Fire-and-forget
         MemoryConsolidationService.consolidate({
+          agent: agent || "CODING",
           project,
           username,
           trigger: "session_threshold",
           broadcast,
           endpoint: endpoint || "/agent",
-          agent: agent || null,
         }).catch((err) =>
           logger.error(`[MemoryConsolidation] Background consolidation failed: ${err.message}`),
         );

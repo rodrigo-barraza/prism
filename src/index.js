@@ -34,7 +34,6 @@ import conversationsRouter from "./routes/conversations.js";
 import filesRouter from "./routes/files.js";
 import memoryRouter from "./routes/memory.js";
 import MemoryService from "./services/MemoryService.js";
-import AgentMemoryService from "./services/AgentMemoryService.js";
 import adminRouter from "./routes/admin.js";
 import workflowsRouter from "./routes/workflows.js";
 import mediaRouter from "./routes/media.js";
@@ -149,7 +148,6 @@ setupWebSocket(wss);
 (async () => {
   await MongoWrapper.createClient(MONGO_DB_NAME, MONGO_URI);
   await MemoryService.ensureIndexes();
-  await AgentMemoryService.ensureIndexes();
 
   // ── Ensure collection indexes ──────────────────────────────────
   // Critical for $lookup aggregation performance (conversations ↔ requests).
@@ -229,10 +227,10 @@ setupWebSocket(wss);
       if (!db) return;
 
       // Find all distinct projects with at least some memories
-      const projects = await db.collection("agent_memories").distinct("project");
+      const projects = await db.collection("memories").distinct("project");
 
       for (const project of projects) {
-        const count = await db.collection("agent_memories").countDocuments({ project });
+        const count = await db.collection("memories").countDocuments({ project });
         if (count < 10) continue; // Skip projects with few memories
 
         logger.info(`[AutoDream] Scheduled consolidation for project "${project}" (${count} memories)`);
