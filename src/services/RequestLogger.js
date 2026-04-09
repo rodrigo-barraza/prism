@@ -3,6 +3,7 @@ import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 import { getTotalInputTokens } from "../utils/CostCalculator.js";
 import { computeModalities } from "./ConversationService.js";
+import { requestContext } from "../utils/RequestContext.js";
 
 const COLLECTION = "requests";
 
@@ -54,6 +55,7 @@ const RequestLogger = {
     project,
     username,
     clientIp = null,
+    agent = null,
     provider,
     model,
     conversationId = null,
@@ -99,6 +101,7 @@ const RequestLogger = {
         project,
         username,
         clientIp,
+        agent: agent || requestContext.getStore()?.agent || null,
         provider,
         model,
         conversationId,
@@ -147,6 +150,7 @@ const RequestLogger = {
     project,
     username,
     clientIp = null,
+    agent = null,
     provider,
     model,
     conversationId = null,
@@ -201,6 +205,7 @@ const RequestLogger = {
       project,
       username,
       clientIp,
+      agent,
       provider,
       model,
       conversationId,

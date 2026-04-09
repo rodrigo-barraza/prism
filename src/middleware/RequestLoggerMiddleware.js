@@ -37,6 +37,7 @@ export function requestLoggerMiddleware(req, res, next) {
     req.clientIp ||
     req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
     req.ip;
+  const agent = req.headers["x-agent"] || null;
 
   // Log on response finish
   res.on("finish", () => {
@@ -75,8 +76,11 @@ export function requestLoggerMiddleware(req, res, next) {
     );
   });
 
+  // Attach agent to req for downstream route handlers
+  if (agent) req.agent = agent;
+
   // Run the rest of the middleware chain inside AsyncLocalStorage context
-  requestContext.run({ project, username, clientIp }, () => {
+  requestContext.run({ project, username, clientIp, agent }, () => {
     next();
   });
 }

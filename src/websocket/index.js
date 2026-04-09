@@ -36,16 +36,17 @@ export function setupWebSocket(wss) {
       req.headers["x-username"] ||
       url.searchParams.get("username") ||
       clientIp;
+    const agent = req.headers["x-agent"] || null;
     logger.info(
       `WebSocket connection on ${pathname} (project: ${project}, user: ${username})`,
     );
 
     if (pathname === "/ws/chat") {
-      handleWsChat(ws, project, username, clientIp);
+      handleWsChat(ws, project, username, clientIp, agent);
     } else if (pathname === "/ws/text-to-audio") {
-      handleWsVoice(ws, project, username, clientIp);
+      handleWsVoice(ws, project, username, clientIp, agent);
     } else if (pathname === "/ws/live") {
-      handleWsLive(ws, project, username, clientIp);
+      handleWsLive(ws, project, username, clientIp, agent);
     } else {
       ws.send(
         JSON.stringify({
@@ -61,7 +62,7 @@ export function setupWebSocket(wss) {
 /**
  * WebSocket chat handler — delegates to shared handleChat() from chat.js.
  */
-function handleWsChat(ws, project, username, clientIp) {
+function handleWsChat(ws, project, username, clientIp, agent) {
   ws.on("message", async (rawData) => {
     let data;
     try {
@@ -71,7 +72,7 @@ function handleWsChat(ws, project, username, clientIp) {
       return;
     }
 
-    await handleChat({ ...data, project, username, clientIp }, (event) => {
+    await handleChat({ ...data, project, username, clientIp, agent }, (event) => {
       if (ws.readyState === ws.OPEN) {
         ws.send(JSON.stringify(event));
       }
@@ -83,7 +84,7 @@ function handleWsChat(ws, project, username, clientIp) {
  * WebSocket voice handler — delegates to shared handleVoice() from voice.js.
  * Sends binary audio frames for audio data, JSON for control events.
  */
-function handleWsVoice(ws, project, username, clientIp) {
+function handleWsVoice(ws, project, username, clientIp, agent) {
   ws.on("message", async (rawData) => {
     let data;
     try {
@@ -95,7 +96,7 @@ function handleWsVoice(ws, project, username, clientIp) {
 
     try {
       await handleVoice(
-        { ...data, project, username, clientIp },
+        { ...data, project, username, clientIp, agent },
         (chunk) => {
           if (ws.readyState === ws.OPEN) {
             ws.send(chunk); // Binary audio frame
@@ -139,7 +140,7 @@ function handleWsVoice(ws, project, username, clientIp) {
  *   { type: "interrupted" }                — Model was interrupted
  *   { type: "error", message }             — Error
  */
-function handleWsLive(ws, project, username, _clientIp) {
+function handleWsLive(ws, project, username, _clientIp, agent) {
   let liveSession = null;
   /** @type {string[]} Accumulated base64 PCM audio chunks for current turn (model output, 24kHz) */
   let turnAudioChunks = [];
@@ -575,6 +576,7 @@ function handleWsLive(ws, project, username, _clientIp) {
                     project,
                     username,
                     clientIp: _clientIp,
+                    agent,
                     provider: "google",
                     model: activeModel,
                     conversationId: activeConversationId || null,

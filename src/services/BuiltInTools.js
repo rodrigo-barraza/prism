@@ -145,7 +145,7 @@ export default class BuiltInTools {
    */
   static async _executeGenerateImage(args, ctx) {
     const { prompt } = args;
-    const { messages, project, username, sessionId, conversationId, clientIp, requestId, agenticIteration } = ctx;
+    const { messages, project, username, sessionId, conversationId, clientIp, agent, requestId, agenticIteration } = ctx;
 
     if (!prompt) {
       return { error: "Missing required parameter: prompt" };
@@ -255,6 +255,7 @@ export default class BuiltInTools {
         project,
         username,
         clientIp: clientIp || null,
+        agent: agent || null,
         provider: IMAGE_PROVIDER,
         model: IMAGE_MODEL,
         conversationId: conversationId || null,
@@ -308,7 +309,7 @@ export default class BuiltInTools {
    */
   static async _executeDescribeImage(args, ctx) {
     const { imageUrls, context = "general" } = args;
-    const { project, username, sessionId, conversationId, clientIp, requestId, agenticIteration } = ctx;
+    const { project, username, sessionId, conversationId, clientIp, agent, requestId, agenticIteration } = ctx;
 
     if (!imageUrls || !Array.isArray(imageUrls) || imageUrls.length === 0) {
       return { error: "Missing required parameter: imageUrls (array of URLs)" };
@@ -380,6 +381,7 @@ export default class BuiltInTools {
             project,
             username,
             clientIp: clientIp || null,
+            agent: agent || null,
             provider: VISION_PROVIDER,
             model: result.model || VISION_MODEL,
             conversationId: conversationId || null,

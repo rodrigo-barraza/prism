@@ -247,6 +247,7 @@ export async function handleChat(params, emit, { signal } = {}) {
     project = "unknown",
     username = "unknown",
     clientIp = null,
+    agent = null,
     // Generation options — flat at top-level (OpenAI-style)
     tools,
     temperature,
@@ -554,6 +555,7 @@ export async function handleChat(params, emit, { signal } = {}) {
             project,
             username,
             clientIp,
+            agent,
             requestId,
             requestStart,
             emit,
@@ -575,6 +577,7 @@ export async function handleChat(params, emit, { signal } = {}) {
             project,
             username,
             clientIp,
+            agent,
             requestId,
             requestStart,
             emit,
@@ -597,6 +600,7 @@ export async function handleChat(params, emit, { signal } = {}) {
           project,
           username,
           clientIp,
+          agent,
           requestId,
           requestStart,
           emit,
@@ -841,6 +845,7 @@ export async function finalizeTextGeneration(
     project,
     username,
     clientIp,
+    agent,
     requestId,
     emit,
     signal,
@@ -965,6 +970,7 @@ export async function finalizeTextGeneration(
       project,
       username,
       clientIp,
+      agent,
       provider: providerName,
       model: resolvedModel,
       conversationId: conversationId || null,
@@ -1387,6 +1393,7 @@ router.post("/", async (req, res, next) => {
     project: req.body.project || req.project,
     username: req.username,
     clientIp: req.clientIp,
+    agent: req.agent || null,
   };
 
   if (req.query.stream !== "false") {

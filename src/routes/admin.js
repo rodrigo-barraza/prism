@@ -2393,6 +2393,7 @@ router.get("/sessions", async (req, res, next) => {
                 totalTime: 1,
                 toolsUsed: 1,
                 toolNames: 1,
+                agent: 1,
                 timestamp: 1,
               },
             },
@@ -2549,6 +2550,8 @@ router.get("/sessions", async (req, res, next) => {
             ],
           },
           source: { $arrayElemAt: ["$conversations.source", 0] },
+          // Derive agent from first request
+          agent: { $arrayElemAt: ["$_requests.agent", 0] },
           // Aggregate stats from requests
           requestCount: { $size: "$_requests" },
           totalInputTokens: {
