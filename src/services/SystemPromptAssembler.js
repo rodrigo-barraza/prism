@@ -261,9 +261,9 @@ export default class SystemPromptAssembler {
    * Persona-aware sections:
    *   1. Agent identity (from persona or default)
    *   2. Agent context (runtime data from caller, e.g. Discord info)
-   *   3. Guidelines (coding guidelines for CODING, none for LUPOS)
-   *   4. Tool policy (persona-specific tool use rules)
-   *   5. Available tools (domain-grouped with parameters)
+   *   3. Tool policy (persona-specific tool use rules)
+   *   4. Available tools (always injected — domain-grouped with parameters)
+   *   5. Coding guidelines (CODING only)
    *   6. Environment info (date/time, OS, workspace)
    *   7. Project directory tree (CODING only)
    *   8. Project skills (relevance-filtered)
@@ -329,7 +329,10 @@ export default class SystemPromptAssembler {
     }
 
     // ── 4. Available Tools (domain-grouped) ──────────────────────
-    if (codingFallback || persona?.usesTools) {
+    // Always inject tool descriptions for any agent that has enabled tools.
+    // This ensures every persona (CODING, LUPOS, future agents) gets the
+    // same domain-grouped tool documentation in its system prompt.
+    {
       const toolDescs = this.buildToolDescriptions(ctx.enabledTools);
       if (toolDescs) {
         const schemas = ToolOrchestratorService.getToolSchemas();

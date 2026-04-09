@@ -212,7 +212,6 @@ const LUPOS_ENABLED_TOOLS = [
  * @property {string} capabilities - Generative capabilities description
  * @property {boolean} usesDirectoryTree - Whether to inject project directory tree
  * @property {boolean} usesCodingGuidelines - Whether to inject coding guidelines
- * @property {boolean} usesTools - Whether to inject tool descriptions
  */
 
 const PERSONAS = new Map();
@@ -286,7 +285,6 @@ PERSONAS.set("CODING", {
   capabilities: "",
   usesDirectoryTree: true,
   usesCodingGuidelines: true,
-  usesTools: true,
 });
 
 // ── LUPOS Agent (Discord) ────────────────────────────────────────
@@ -336,7 +334,6 @@ PERSONAS.set("LUPOS", {
   capabilities: "",
   usesDirectoryTree: false,
   usesCodingGuidelines: false,
-  usesTools: false, // Lupos doesn't need tool descriptions in system prompt — tools are in enabled list
 });
 
 // ── Registry API ─────────────────────────────────────────────────
