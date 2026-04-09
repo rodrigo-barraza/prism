@@ -101,7 +101,7 @@ export default class SessionSummarizer {
    * @param {string} [params.conversationId] - Conversation ID for tracking
    * @returns {Promise<Array>} Stored memory documents
    */
-  static async summarizeAndStore({ project, username, messages, sessionId, conversationId, endpoint }) {
+  static async summarizeAndStore({ project, username, messages, sessionId, conversationId, endpoint, agent }) {
     if (!messages || messages.length < MIN_MESSAGES_FOR_SUMMARY) {
       logger.info(
         `[SessionSummarizer] Skipping — only ${messages?.length || 0} messages (min: ${MIN_MESSAGES_FOR_SUMMARY})`,
@@ -167,6 +167,7 @@ export default class SessionSummarizer {
           sessionId: sessionId || null,
           username: username || "system",
           clientIp: null,
+          agent: agent || null,
           provider: SUMMARIZATION_PROVIDER,
           model: SUMMARIZATION_MODEL,
           success,
@@ -264,6 +265,7 @@ export default class SessionSummarizer {
         sessionId: ctx.sessionId,
         conversationId: ctx.conversationId,
         endpoint: ctx.endpoint || "/agent",
+        agent: ctx.agent || null,
       })
         .then((stored) => {
           if (stored?.length > 0 && ctx.emit) {
@@ -285,6 +287,7 @@ export default class SessionSummarizer {
             username: ctx.username,
             broadcast,
             endpoint: ctx.endpoint || "/agent",
+            agent: ctx.agent || null,
           });
         })
         .catch((err) =>
