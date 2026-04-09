@@ -217,6 +217,52 @@ const LUPOS_ENABLED_TOOLS = [
 
 const PERSONAS = new Map();
 
+// ── CODING Agent enabled tools ───────────────────────────────────
+const CODING_ENABLED_TOOLS = [
+  // File operations
+  "read_file",
+  "write_file",
+  "edit_file",
+  "search_file",
+  "str_replace_file",
+  "patch_file",
+  "multi_file_read",
+  "file_info",
+  "file_diff",
+  "move_file",
+  "delete_file",
+  "create_directory",
+  // Search & discovery
+  "list_directory",
+  "grep_search",
+  "glob_files",
+  "project_summary",
+  // Web
+  "fetch_url",
+  "web_search",
+  // Command execution
+  "run_command",
+  // Git (unified)
+  "git",
+  // Browser automation
+  "browser_action",
+  // Compute
+  "execute_javascript",
+  "execute_shell",
+  "convert_units",
+  "parse_datetime",
+  "transform_json",
+  "generate_csv",
+  "generate_qr_code",
+  "render_latex",
+  "generate_diagram",
+  "diff_text",
+  "generate_hash",
+  "regex_tester",
+  "encode_decode",
+  "convert_color",
+];
+
 // ── CODING Agent (Retina) ────────────────────────────────────────
 // This is the existing behavior — SystemPromptAssembler's default.
 // We define it explicitly so the registry is the single source of truth.
@@ -236,7 +282,7 @@ PERSONAS.set("CODING", {
 8. Keep your explanations concise and technical`,
   interactionRules: "",
   toolPolicy: "",
-  enabledTools: null, // null = all tools enabled
+  enabledTools: CODING_ENABLED_TOOLS,
   capabilities: "",
   usesDirectoryTree: true,
   usesCodingGuidelines: true,

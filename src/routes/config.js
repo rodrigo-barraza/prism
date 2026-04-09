@@ -12,6 +12,7 @@ import { getProvider } from "../providers/index.js";
 import { ARENA_SCORES } from "../arrays.js";
 import logger from "../utils/logger.js";
 import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
+import AgentPersonaRegistry from "../services/AgentPersonaRegistry.js";
 import rateLimitStore from "../services/RateLimitStore.js";
 import {
   OPENAI_API_KEY,
@@ -855,11 +856,21 @@ export { localConfigRouter };
 
 /**
  * GET /config/tools
- * Returns the tool schemas fetched on startup.
+ * Returns tool schemas. Optionally filter by agent persona via ?agent=CODING.
  */
 router.get("/tools", (_req, res) => {
-  const schemas = ToolOrchestratorService.getToolSchemas();
-  res.json(schemas || []);
+  const schemas = ToolOrchestratorService.getToolSchemas() || [];
+  const agentId = _req.query.agent;
+
+  if (agentId) {
+    const persona = AgentPersonaRegistry.get(agentId);
+    if (persona?.enabledTools) {
+      const enabledSet = new Set(persona.enabledTools);
+      return res.json(schemas.filter((t) => enabledSet.has(t.name)));
+    }
+  }
+
+  res.json(schemas);
 });
 
 /**
