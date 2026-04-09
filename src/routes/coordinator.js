@@ -25,7 +25,7 @@ router.post("/plan", async (req, res, next) => {
       return res.status(400).json({ error: "'files' (non-empty array) is required" });
     }
 
-    const plan = await CoordinatorService.decompose({ task, files, repoPath });
+    const plan = await CoordinatorService.decompose({ task, files, repoPath, endpoint: "/coordinator/plan" });
     res.json(plan);
   } catch (error) {
     logger.error(`[coordinator] PLAN ${error.message}`);

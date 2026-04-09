@@ -32,6 +32,7 @@ async function generateEmbedding(text, options = {}) {
  * @returns {Promise<Array>}
  */
 async function extractFactsFromConversation(messages, participants, meta = {}) {
+  const endpoint = meta.endpoint || null;
   const provider = getProvider(EXTRACTION_PROVIDER);
   const requestId = crypto.randomUUID();
   const requestStart = performance.now();
@@ -113,7 +114,7 @@ ${participantList}`;
 
     RequestLogger.log({
       requestId,
-      endpoint: null,
+      endpoint,
       operation: "memory:extract",
       project: meta.project || null,
       username: meta.username || "system",
@@ -194,11 +195,12 @@ const MemoryService = {
     sourceMessageId,
     sessionId,
     project,
+    endpoint,
   }) {
     const collection = MongoWrapper.getCollection(MONGO_DB_NAME, LUPOS_COLLECTION);
 
     // Extract facts from the conversation via AI
-    const facts = await extractFactsFromConversation(messages, participants, { project, sessionId });
+    const facts = await extractFactsFromConversation(messages, participants, { project, sessionId, endpoint });
     if (facts.length === 0) {
       logger.info(
         "[MemoryService] No personal facts extracted from conversation.",
@@ -216,7 +218,7 @@ const MemoryService = {
     for (const fact of facts) {
       try {
         // Generate embedding (needed for both dedup check and storage)
-        const embedding = await generateEmbedding(fact.fact, { project, sessionId });
+        const embedding = await generateEmbedding(fact.fact, { project, sessionId, endpoint });
 
         // Check for duplicate facts (same user + very similar content)
         const existingMemories = await collection
@@ -277,13 +279,14 @@ const MemoryService = {
    * @param {number} [params.limit=10]
    * @returns {Promise<Array>} Relevant memories sorted by relevance
    */
-  async search({ guildId, userIds, queryText, limit = 10, sessionId, project }) {
+  async search({ guildId, userIds, queryText, limit = 10, sessionId, project, endpoint }) {
     const collection = MongoWrapper.getCollection(MONGO_DB_NAME, LUPOS_COLLECTION);
 
     // Generate embedding for the search query
     const embeddingOpts = {};
     if (sessionId) embeddingOpts.sessionId = sessionId;
     if (project) embeddingOpts.project = project;
+    if (endpoint) embeddingOpts.endpoint = endpoint;
     const queryEmbedding = await generateEmbedding(queryText, embeddingOpts);
 
     // Build the filter

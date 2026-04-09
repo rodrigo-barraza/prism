@@ -97,10 +97,11 @@ export default class SessionSummarizer {
    * @param {string} params.project - Project identifier
    * @param {string} params.username - Username
    * @param {Array} params.messages - Full conversation messages
+   * @param {string} [params.sessionId] - Session ID for attribution
    * @param {string} [params.conversationId] - Conversation ID for tracking
    * @returns {Promise<Array>} Stored memory documents
    */
-  static async summarizeAndStore({ project, username, messages, conversationId }) {
+  static async summarizeAndStore({ project, username, messages, sessionId, conversationId, endpoint }) {
     if (!messages || messages.length < MIN_MESSAGES_FOR_SUMMARY) {
       logger.info(
         `[SessionSummarizer] Skipping — only ${messages?.length || 0} messages (min: ${MIN_MESSAGES_FOR_SUMMARY})`,
@@ -160,9 +161,10 @@ export default class SessionSummarizer {
 
         RequestLogger.log({
           requestId,
-          endpoint: null,
+          endpoint: endpoint || "/agent",
           operation: "session:summarize",
           project,
+          sessionId: sessionId || null,
           username: username || "system",
           clientIp: null,
           provider: SUMMARIZATION_PROVIDER,
@@ -180,6 +182,7 @@ export default class SessionSummarizer {
             operation: "session:summarize",
             messageCount: messages.length,
             conversationId: conversationId || null,
+            messages: aiMessages,
           },
           responsePayload: success
             ? { textPreview: (result?.text || "").slice(0, 200) }
@@ -258,7 +261,9 @@ export default class SessionSummarizer {
         project: ctx.project,
         username: ctx.username,
         messages: messages || ctx.messages,
+        sessionId: ctx.sessionId,
         conversationId: ctx.conversationId,
+        endpoint: ctx.endpoint || "/agent",
       })
         .then((stored) => {
           if (stored?.length > 0 && ctx.emit) {
@@ -279,6 +284,7 @@ export default class SessionSummarizer {
             project: ctx.project,
             username: ctx.username,
             broadcast,
+            endpoint: ctx.endpoint || "/agent",
           });
         })
         .catch((err) =>

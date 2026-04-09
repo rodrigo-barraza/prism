@@ -322,7 +322,7 @@ const MemoryConsolidationService = {
    * @param {function} [params.broadcast] - Optional callback for real-time WebSocket notifications
    * @returns {Promise<object>} Consolidation results
    */
-  async consolidate({ project, username, trigger = "manual", broadcast }) {
+  async consolidate({ project, username, trigger = "manual", broadcast, endpoint }) {
     const startTime = performance.now();
     logger.info(`[MemoryConsolidation] Starting consolidation for project "${project}" (trigger: ${trigger})`);
 
@@ -401,7 +401,7 @@ const MemoryConsolidationService = {
 
       RequestLogger.log({
         requestId: llmRequestId,
-        endpoint: null,
+        endpoint: endpoint || null,
         operation: "memory:consolidate",
         project,
         username: username || "system",
@@ -494,7 +494,7 @@ const MemoryConsolidationService = {
    * @param {string} [params.username] - Username for attribution
    * @param {function} [params.broadcast] - Optional broadcast callback for WebSocket notifications
    */
-  async checkAndRun({ project, username, broadcast }) {
+  async checkAndRun({ project, username, broadcast, endpoint }) {
     try {
       await incrementRunCount(project);
       const count = await getRunCount(project);
@@ -509,6 +509,7 @@ const MemoryConsolidationService = {
           username,
           trigger: "session_threshold",
           broadcast,
+          endpoint: endpoint || "/agent",
         }).catch((err) =>
           logger.error(`[MemoryConsolidation] Background consolidation failed: ${err.message}`),
         );

@@ -16,7 +16,7 @@ async function generateSkillEmbedding(skill) {
   const text = [skill.name, skill.description, skill.content]
     .filter(Boolean)
     .join("\n");
-  return EmbeddingService.embed(text, { source: "skill-creation" });
+  return EmbeddingService.embed(text, { source: "skill-creation", endpoint: "/skills" });
 }
 
 /**

@@ -28,6 +28,7 @@ router.post("/extract", async (req, res, next) => {
       sourceMessageId,
       sessionId: sessionId || null,
       project: req.project || null,
+      endpoint: "/memory/extract",
     });
 
     res.json({ memories, count: memories.length });
@@ -59,6 +60,7 @@ router.post("/search", async (req, res, next) => {
       limit: limit || 10,
       sessionId: sessionId || null,
       project: req.project || null,
+      endpoint: "/memory/search",
     });
 
     res.json({ memories, count: memories.length });

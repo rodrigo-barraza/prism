@@ -70,6 +70,7 @@ router.post("/consolidate", async (req, res, next) => {
       project,
       username,
       trigger: "manual",
+      endpoint: "/agent-memories/consolidate",
     });
     res.json(result);
   } catch (error) {

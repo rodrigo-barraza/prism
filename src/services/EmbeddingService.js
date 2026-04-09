@@ -100,7 +100,7 @@ const EmbeddingService = {
 
       RequestLogger.log({
         requestId,
-        endpoint: source === "api" ? "/embed" : null,
+        endpoint: options.endpoint || null,
         operation: `embed:${source}`,
         project: options.project || null,
         username: options.username || "system",
@@ -137,7 +137,7 @@ const EmbeddingService = {
           contentType,
           ...(options.taskType ? { taskType: options.taskType } : {}),
           ...(options.dimensions ? { dimensions: options.dimensions } : {}),
-          ...(contentType === "text" ? { textPreview: (typeof content === "string" ? content : "").slice(0, 200) } : {}),
+          ...(contentType === "text" ? { text: typeof content === "string" ? content : "" } : {}),
         },
         responsePayload: success
           ? {

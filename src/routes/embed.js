@@ -110,6 +110,7 @@ router.post("/", async (req, res, next) => {
       username: req.username,
       clientIp: req.clientIp,
       source: "api",
+      endpoint: "/embed",
     });
 
     res.json(result);
