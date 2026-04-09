@@ -190,12 +190,32 @@ const LUPOS_TOOL_POLICY = `# Tool Use Policy
 - If the image generation tool fails due to content safety, try rephrasing the prompt creatively — describe the same scene differently, avoiding potentially flagged terms while preserving the artistic intent.`;
 
 const LUPOS_ENABLED_TOOLS = [
+  // Generative
   "generate_image",
+  // Web & search
   "web_search",
   "fetch_url",
+  // Trends
   "get_trends",
   "get_hot_trends",
   "get_top_trends",
+  // Media & entertainment
+  "search_media",
+  "get_trending_media",
+  // Knowledge & reference
+  "get_youtube_video",
+  "get_on_this_day",
+  "get_wikipedia_summary",
+  // Products
+  "search_products",
+  // Health & fitness
+  "search_gym_exercises",
+  "rank_foods",
+  "search_usda_nutrition",
+  // Weather
+  "get_weather",
+  // Compute
+  "precise_calculator",
 ];
 
 // ── Persona Definitions ──────────────────────────────────────────
