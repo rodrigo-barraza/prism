@@ -4,6 +4,7 @@ import { MONGO_DB_NAME } from "../../secrets.js";
 import { getProvider } from "../providers/index.js";
 import ChangeStreamService from "../services/ChangeStreamService.js";
 import BenchmarkService from "../services/BenchmarkService.js";
+import ActiveGenerationTracker from "../services/ActiveGenerationTracker.js";
 import logger from "../utils/logger.js";
 import { resolveArchParams, estimateMemory } from "../utils/gguf-arch.js";
 import os from "os";
@@ -1453,7 +1454,7 @@ router.get("/conversations/stats", async (req, res, next) => {
         .countDocuments({ ...filter, updatedAt: { $gte: oneHourAgo } }),
     ]);
 
-    res.json({ generatingCount: generatingCount + BenchmarkService.activeGenerationCount, recentCount });
+    res.json({ generatingCount: generatingCount + BenchmarkService.activeGenerationCount + ActiveGenerationTracker.count, recentCount });
   } catch (error) {
     logger.error(`Admin /conversations/stats error: ${error.message}`);
     next(error);
@@ -1507,7 +1508,7 @@ router.get("/conversations/stream", async (req, res) => {
         })
         .catch(() => {});
 
-      const payload = JSON.stringify({ generatingCount: generatingCount + BenchmarkService.activeGenerationCount, recentCount });
+      const payload = JSON.stringify({ generatingCount: generatingCount + BenchmarkService.activeGenerationCount + ActiveGenerationTracker.count, recentCount });
       // Only send if data changed
       if (payload !== lastPayload) {
         lastPayload = payload;
@@ -1530,14 +1531,15 @@ router.get("/conversations/stream", async (req, res) => {
     };
     ChangeStreamService.subscribe(onEvent);
 
-    // Secondary poll: catch benchmark generation activity (not tracked
-    // via Change Streams since benchmarks skip conversation persistence).
-    // Tracks previous count to push one final update when benchmarks end.
-    let prevBenchmarkCount = 0;
-    const benchmarkPoll = setInterval(() => {
-      const count = BenchmarkService.activeGenerationCount;
-      if (count > 0 || prevBenchmarkCount > 0) sendStats();
-      prevBenchmarkCount = count;
+    // Secondary poll: catch generation activity not tracked via Change
+    // Streams (benchmarks skip conversation persistence, and provider
+    // calls from skipConversation requests like Lupos are tracked by
+    // ActiveGenerationTracker instead of isGenerating on a conversation doc).
+    let prevNonConvCount = 0;
+    const generationPoll = setInterval(() => {
+      const count = BenchmarkService.activeGenerationCount + ActiveGenerationTracker.count;
+      if (count > 0 || prevNonConvCount > 0) sendStats();
+      prevNonConvCount = count;
     }, 1000);
 
     const keepAlive = setInterval(() => {
@@ -1546,7 +1548,7 @@ router.get("/conversations/stream", async (req, res) => {
 
     req.on("close", () => {
       ChangeStreamService.unsubscribe(onEvent);
-      clearInterval(benchmarkPoll);
+      clearInterval(generationPoll);
       clearInterval(keepAlive);
     });
   } else {

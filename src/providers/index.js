@@ -7,6 +7,7 @@ import lmStudioProvider from "./lm-studio.js";
 import vllmProvider from "./vllm.js";
 import ollamaProvider from "./ollama.js";
 import llamaCppProvider from "./llama-cpp.js";
+import ActiveGenerationTracker from "../services/ActiveGenerationTracker.js";
 
 const providers = {
   openai: openaiProvider,
@@ -20,13 +21,97 @@ const providers = {
   "llama-cpp": llamaCppProvider,
 };
 
+/**
+ * Method name prefixes that represent a provider API call.
+ * Any method starting with one of these will be automatically
+ * wrapped with ActiveGenerationTracker increment/decrement.
+ */
+const TRACKED_PREFIXES = ["generate", "transcribe"];
+
+/**
+ * Check if a method name represents a tracked provider call.
+ */
+function isTrackedMethod(name) {
+  return typeof name === "string" && TRACKED_PREFIXES.some((p) => name.startsWith(p));
+}
+
+/**
+ * Wrap an async generator (generateTextStream, generateTextStreamLive)
+ * so the tracker stays incremented for the entire iteration lifetime.
+ */
+async function* wrapAsyncGenerator(gen) {
+  try {
+    yield* gen;
+  } finally {
+    ActiveGenerationTracker.decrement();
+  }
+}
+
+/**
+ * Wrap a provider object so all generate/transcribe calls
+ * auto-increment/decrement ActiveGenerationTracker.
+ *
+ * - Async generators (streams): decrement when the iterator finishes/returns
+ * - Promises (generateText, generateImage, etc.): decrement on settle
+ */
+function wrapProvider(provider) {
+  return new Proxy(provider, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof value !== "function" || !isTrackedMethod(prop)) {
+        return value;
+      }
+
+      // Return a wrapper that tracks the call
+      return function trackedProviderCall(...args) {
+        ActiveGenerationTracker.increment();
+        let result;
+        try {
+          result = value.apply(target, args);
+        } catch (err) {
+          // Synchronous throw (rare but possible)
+          ActiveGenerationTracker.decrement();
+          throw err;
+        }
+
+        // Async generator — wrap the iterator
+        if (result && typeof result[Symbol.asyncIterator] === "function") {
+          return wrapAsyncGenerator(result);
+        }
+
+        // Promise — decrement on settle
+        if (result && typeof result.then === "function") {
+          result.then(
+            () => ActiveGenerationTracker.decrement(),
+            () => ActiveGenerationTracker.decrement(),
+          );
+          return result;
+        }
+
+        // Synchronous return (shouldn't happen for provider calls)
+        ActiveGenerationTracker.decrement();
+        return result;
+      };
+    },
+  });
+}
+
+/** Per-name proxy cache so we don't create a new Proxy on every getProvider call. */
+const wrappedCache = new Map();
+
 export function getProvider(name) {
   const provider = providers[name];
   if (!provider) {
     const available = Object.keys(providers).join(", ");
     throw new Error(`Unknown provider "${name}". Available: ${available}`);
   }
-  return provider;
+
+  // Return cached proxy
+  if (wrappedCache.has(name)) return wrappedCache.get(name);
+
+  const wrapped = wrapProvider(provider);
+  wrappedCache.set(name, wrapped);
+  return wrapped;
 }
 
 export function listProviders() {
