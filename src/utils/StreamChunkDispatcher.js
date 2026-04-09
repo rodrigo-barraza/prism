@@ -81,7 +81,7 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
     const chunkStr = typeof chunk === "string" ? chunk : "";
     state.outputCharacters += chunkStr.length;
     state.text += chunkStr;
-    emit({ type: "chunk", content: chunk });
+    emit({ type: "chunk", content: chunkStr });
     return true;
   }
 
@@ -194,7 +194,7 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
       const chunkStr = typeof chunk === "string" ? chunk : "";
       state.outputCharacters += chunkStr.length;
       state.text += chunkStr;
-      emit({ type: "chunk", content: chunk });
+      emit({ type: "chunk", content: chunkStr });
       return true;
     }
   }

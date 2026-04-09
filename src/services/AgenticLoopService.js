@@ -43,6 +43,7 @@ export default class AgenticLoopService {
       messages,
       options,
       conversationId,
+      sessionId,
       project,
       username,
       agent,
@@ -187,6 +188,7 @@ export default class AgenticLoopService {
         project,
         username,
         agent,
+        sessionId,
         agentContext: options.agentContext,
         enabledTools: resolvedEnabledTools,
       });
@@ -207,7 +209,7 @@ export default class AgenticLoopService {
         }
         const chunkStr = typeof chunk === "string" ? chunk : "";
         planText += chunkStr;
-        emit({ type: "chunk", content: chunk });
+        emit({ type: "chunk", content: chunkStr });
       }
 
       // Emit plan for approval
@@ -268,6 +270,7 @@ export default class AgenticLoopService {
             project,
             username,
             agent,
+            sessionId,
             agentContext: options.agentContext,
             enabledTools: resolvedEnabledTools,
           };
@@ -489,7 +492,7 @@ export default class AgenticLoopService {
           passOutputCharacters += chunkStr.length;
           finalStreamedText = passStreamedText + chunkStr;
           passStreamedText += chunkStr;
-          emit({ type: "chunk", content: chunk });
+          emit({ type: "chunk", content: chunkStr });
         }
 
         if (signal?.aborted) break;
@@ -512,7 +515,7 @@ export default class AgenticLoopService {
           provider: providerName,
           model: resolvedModel,
           conversationId,
-          sessionId: ctx.sessionId || null,
+          sessionId: sessionId || null,
           success: true,
           usage: passUsage,
           estimatedCost: passEstimatedCost,
@@ -589,7 +592,7 @@ export default class AgenticLoopService {
                      project,
                      username,
                      agent: agent || null,
-                     sessionId: ctx.sessionId || null,
+                     sessionId: sessionId || null,
                      conversationId,
                      clientIp: ctx.clientIp || null,
                      requestId: ctx.requestId,
@@ -772,7 +775,7 @@ export default class AgenticLoopService {
           const chunkStr = typeof chunk === "string" ? chunk : "";
           overallOutputCharacters += chunkStr.length;
           finalStreamedText += chunkStr;
-          emit({ type: "chunk", content: chunk });
+          emit({ type: "chunk", content: chunkStr });
         }
       }
 
