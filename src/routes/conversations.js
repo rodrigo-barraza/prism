@@ -6,10 +6,11 @@ import ConversationService, {
   computeTotalCost,
 } from "../services/ConversationService.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
+import { COLLECTIONS } from "../constants.js";
 import logger from "../utils/logger.js";
 
 const router = express.Router();
-const COLLECTION = "conversations";
+const COLLECTION = COLLECTIONS.CONVERSATIONS;
 
 /**
  * GET /conversations

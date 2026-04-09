@@ -248,15 +248,6 @@ export function inferMimeFromUrl(url) {
   return "unknown";
 }
 
-/**
- * Resolves after `ms` milliseconds.
- * @param {number} ms
- * @returns {Promise<void>}
- */
-export function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
 // ── Video Frame Extraction ──────────────────────────────────
 
 /**

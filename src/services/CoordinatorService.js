@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { TOOLS_API_URL, WORKSPACE_ROOT as WORKSPACE_ROOT_RAW } from "../../secrets.js";
 import { resolve } from "node:path";
 import logger from "../utils/logger.js";
@@ -132,7 +131,7 @@ export default class CoordinatorService {
       { role: "user", content: userMessage },
     ];
 
-    const requestId = randomUUID();
+    const requestId = crypto.randomUUID();
     const requestStart = performance.now();
     let llmSuccess = true;
     let llmError = null;
@@ -202,12 +201,12 @@ export default class CoordinatorService {
     // Validate and cap sub-tasks
     const subTasks = (parsed.subTasks || []).slice(0, MAX_WORKERS);
     for (const st of subTasks) {
-      if (!st.id) st.id = `task-${randomUUID().slice(0, 8)}`;
+      if (!st.id) st.id = `task-${crypto.randomUUID().slice(0, 8)}`;
       st.branchName = `coordinator/${st.id}`;
     }
 
     return {
-      taskId: randomUUID(),
+      taskId: crypto.randomUUID(),
       task,
       repoPath: repoPath || DEFAULT_WORKSPACE_ROOT,
       subTasks,

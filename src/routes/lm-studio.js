@@ -2,6 +2,8 @@ import express from "express";
 import { getProvider } from "../providers/index.js";
 import logger from "../utils/logger.js";
 import { resolveArchParams, estimateMemory } from "../utils/gguf-arch.js";
+import { sleep } from "../utils/utilities.js";
+import { initSseResponse } from "../utils/SseUtilities.js";
 
 const router = express.Router();
 
@@ -77,11 +79,8 @@ router.post("/load-stream", async (req, res) => {
   }
 
   // Set up SSE — use setHeader pattern (not writeHead) to match /chat endpoint
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
+  initSseResponse(res);
   res.setHeader("X-Accel-Buffering", "no");
-  res.flushHeaders();
 
   const send = (data) => {
     if (!res.writableEnded) {
@@ -150,7 +149,7 @@ router.post("/load-stream", async (req, res) => {
     let lastPct = 0;
 
     while (!loadDone && !aborted) {
-      await new Promise((r) => setTimeout(r, 300));
+      await sleep(300);
       if (loadDone || aborted) break;
 
       const elapsed = Date.now() - startTime;

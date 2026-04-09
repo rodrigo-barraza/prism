@@ -4,7 +4,9 @@ import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 
 const router = express.Router();
-const COLLECTION = "synthesis";
+import { COLLECTIONS } from "../constants.js";
+
+const COLLECTION = COLLECTIONS.SYNTHESIS;
 
 /**
  * GET /synthesis

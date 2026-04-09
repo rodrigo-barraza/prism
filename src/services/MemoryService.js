@@ -8,11 +8,12 @@ import logger from "../utils/logger.js";
 import { cosineSimilarity, calculateTokensPerSec } from "../utils/math.js";
 import { estimateTokens } from "../utils/CostCalculator.js";
 import { TYPES, getPricing } from "../config.js";
+import { COLLECTIONS } from "../constants.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /** Single unified collection for all agent memories. */
-const COLLECTION = "memories";
+const COLLECTION = COLLECTIONS.MEMORIES;
 
 const EXTRACTION_PROVIDER = "anthropic";
 const EXTRACTION_MODEL = "claude-haiku-4-5-20251001";

@@ -2,8 +2,9 @@ import MongoWrapper from "../wrappers/MongoWrapper.js";
 import FileService from "./FileService.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
+import { COLLECTIONS } from "../constants.js";
 
-const COLLECTION = "conversations";
+const COLLECTION = COLLECTIONS.CONVERSATIONS;
 
 /**
  * Upload any base64 data URLs in message images/audio to external storage.

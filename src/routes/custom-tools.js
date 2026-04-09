@@ -5,7 +5,9 @@ import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 
 const router = express.Router();
-const COLLECTION = "custom_tools";
+import { COLLECTIONS } from "../constants.js";
+
+const COLLECTION = COLLECTIONS.CUSTOM_TOOLS;
 
 /**
  * GET /custom-tools

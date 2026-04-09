@@ -8,6 +8,7 @@ import logger from "../utils/logger.js";
 import { cosineSimilarity, calculateTokensPerSec } from "../utils/math.js";
 import { estimateTokens } from "../utils/CostCalculator.js";
 import { TYPES, getPricing } from "../config.js";
+import { COLLECTIONS } from "../constants.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -29,8 +30,8 @@ const SESSIONS_BETWEEN_RUNS = 5;
 /** Max consolidation runs per project per day (cost guard) */
 const DAILY_MAX_CONSOLIDATIONS = 3;
 
-const RUNS_COLLECTION = "memory_consolidation_runs";
-const HISTORY_COLLECTION = "memory_consolidation_history";
+const RUNS_COLLECTION = COLLECTIONS.MEMORY_CONSOLIDATION_RUNS;
+const HISTORY_COLLECTION = COLLECTIONS.MEMORY_CONSOLIDATION_HISTORY;
 
 
 function daysSince(isoDate) {
@@ -342,7 +343,7 @@ const MemoryConsolidationService = {
     const db = client.db(MONGO_DB_NAME);
     const agentId = agent || "CODING";
     const allMemories = await db
-      .collection("memories")
+      .collection(COLLECTIONS.MEMORIES)
       .find({ agent: agentId, project })
       .project({ embedding: 1, id: 1, type: 1, title: 1, content: 1, createdAt: 1 })
       .toArray();

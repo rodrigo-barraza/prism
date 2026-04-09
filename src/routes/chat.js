@@ -20,6 +20,7 @@ import FileService from "../services/FileService.js";
 import { createStreamState, dispatchChunk } from "../utils/StreamChunkDispatcher.js";
 import { calculateTokensPerSec } from "../utils/math.js";
 import { compressImageForSizeLimit } from "../utils/media.js";
+import { formatCostTag } from "../utils/utilities.js";
 
 import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
 import localModelQueue from "../services/LocalModelQueue.js";
@@ -703,7 +704,7 @@ async function handleImageAPIModel(ctx) {
     clientIp,
     `[chat/image-api] ${providerName} ${resolvedModel} — ` +
       `total: ${totalSec.toFixed(2)}s` +
-      (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
+      formatCostTag(estimatedCost),
   );
 
   // Upload generated image to MinIO
@@ -917,7 +918,7 @@ export async function finalizeTextGeneration(
       `ttg: ${timeToGenerationSec !== null ? timeToGenerationSec.toFixed(2) + "s" : "N/A"}, ` +
       `generation: ${generationSec !== null ? generationSec.toFixed(2) + "s" : "N/A"}, ` +
       `total: ${totalSec.toFixed(2)}s` +
-      (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
+      formatCostTag(estimatedCost),
   );
 
   // ── Build WAV from accumulated PCM audio chunks ───────────────

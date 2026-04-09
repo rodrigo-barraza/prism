@@ -4,7 +4,9 @@ import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 
 const router = Router();
-const COLLECTION = "vram_benchmarks";
+import { COLLECTIONS } from "../constants.js";
+
+const COLLECTION = COLLECTIONS.VRAM_BENCHMARKS;
 
 function getDb() {
   const client = MongoWrapper.getClient(MONGO_DB_NAME);

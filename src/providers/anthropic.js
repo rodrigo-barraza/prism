@@ -3,6 +3,7 @@ import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
 import { extractAnthropicRateLimits } from "../utils/rateLimits.js";
 import { compressImageForSizeLimit } from "../utils/media.js";
+import { EMPTY_USAGE } from "../utils/openai-compat.js";
 import { ANTHROPIC_API_KEY } from "../../secrets.js";
 import { TYPES, getDefaultModels } from "../config.js";
 
@@ -598,23 +599,7 @@ const anthropicProvider = {
         delete streamPayload.top_k;
       }
 
-      // ── Final safety net: enforce 5 MB limit on ALL image blocks ──
       await enforceImageSizeLimits(streamPayload.messages);
-
-      // DEBUG: dump image block sizes right before API call
-      for (let mi = 0; mi < streamPayload.messages.length; mi++) {
-        const msg = streamPayload.messages[mi];
-        if (!Array.isArray(msg.content)) continue;
-        for (let bi = 0; bi < msg.content.length; bi++) {
-          const block = msg.content[bi];
-          if (block.type === "image") {
-            const sz = Buffer.byteLength(block.source?.data || "", "base64");
-            console.error(`[ANTHROPIC-DEBUG] messages[${mi}].content[${bi}]: type=image, media_type=${block.source?.media_type}, source_type=${block.source?.type}, decoded_size=${sz} bytes (${(sz/1024/1024).toFixed(2)} MB)`);
-          } else {
-            console.error(`[ANTHROPIC-DEBUG] messages[${mi}].content[${bi}]: type=${block.type}`);
-          }
-        }
-      }
 
       const stream = getClient().messages.stream(streamPayload, {
         ...(options.signal && { signal: options.signal }),
@@ -806,7 +791,7 @@ const anthropicProvider = {
       if (usage) {
         yield { type: "usage", usage };
       } else {
-        yield { type: "usage", usage: { inputTokens: 0, outputTokens: 0 } };
+        yield { type: "usage", usage: EMPTY_USAGE };
       }
       if (rateLimits) {
         yield { type: "rateLimits", rateLimits };

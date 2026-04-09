@@ -3,8 +3,9 @@ import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 import { getTotalInputTokens } from "../utils/CostCalculator.js";
 import { computeModalities } from "./ConversationService.js";
+import { COLLECTIONS } from "../constants.js";
 
-const COLLECTION = "requests";
+const COLLECTION = COLLECTIONS.REQUESTS;
 
 const API_TO_CANONICAL = {
   googleSearch: "Google Search",

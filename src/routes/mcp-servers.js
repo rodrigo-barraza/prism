@@ -6,7 +6,9 @@ import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 
 const router = express.Router();
-const COLLECTION = "mcp_servers";
+import { COLLECTIONS } from "../constants.js";
+
+const COLLECTION = COLLECTIONS.MCP_SERVERS;
 
 /**
  * GET /mcp-servers

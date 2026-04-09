@@ -5,6 +5,7 @@ import { estimateTokens } from "../utils/CostCalculator.js";
 import RequestLogger from "./RequestLogger.js";
 import logger from "../utils/logger.js";
 import { calculateTokensPerSec } from "../utils/math.js";
+import { formatCostTag } from "../utils/utilities.js";
 
 const DEFAULT_PROVIDER = "google";
 const DEFAULT_MODEL = "gemini-embedding-2-preview";
@@ -95,7 +96,7 @@ const EmbeddingService = {
           (success
             ? `dims: ${result?.dimensions}, total: ${totalSec.toFixed(2)}s`
             : `FAILED: ${errorMessage}`) +
-          (estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : ""),
+          formatCostTag(estimatedCost),
       );
 
       RequestLogger.log({

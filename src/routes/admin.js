@@ -7,13 +7,11 @@ import BenchmarkService from "../services/BenchmarkService.js";
 import ActiveGenerationTracker from "../services/ActiveGenerationTracker.js";
 import logger from "../utils/logger.js";
 import { resolveArchParams, estimateMemory } from "../utils/gguf-arch.js";
+import { COLLECTIONS, COST_SUM_EXPR } from "../constants.js";
 import os from "os";
 
 const router = express.Router();
-const REQUESTS_COL = "requests";
-const CONVERSATIONS_COL = "conversations";
-const WORKFLOWS_COL = "workflows";
-const SESSIONS_COL = "sessions";
+const { REQUESTS: REQUESTS_COL, CONVERSATIONS: CONVERSATIONS_COL, WORKFLOWS: WORKFLOWS_COL, SESSIONS: SESSIONS_COL } = COLLECTIONS;
 
 // ── Helper: get DB handle ────────────────────────────────────
 function getDb() {
@@ -210,7 +208,7 @@ router.get("/stats", async (req, res, next) => {
           totalRequests: { $sum: 1 },
           totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
           totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
-          totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
+          totalCost: COST_SUM_EXPR,
           avgLatency: { $avg: { $ifNull: ["$totalTime", 0] } },
           avgTokensPerSec: {
             $avg: {
@@ -322,7 +320,7 @@ router.get("/stats/projects", async (req, res, next) => {
               ],
             },
           },
-          totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
+          totalCost: COST_SUM_EXPR,
           avgLatency: { $avg: { $ifNull: ["$totalTime", 0] } },
           avgTokensPerSec: {
             $avg: {
@@ -466,7 +464,7 @@ router.get("/stats/users", async (req, res, next) => {
               ],
             },
           },
-          totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
+          totalCost: COST_SUM_EXPR,
           avgLatency: { $avg: { $ifNull: ["$totalTime", 0] } },
           lastRequest: { $max: "$timestamp" },
         },
@@ -528,7 +526,7 @@ router.get("/stats/models", async (req, res, next) => {
               ],
             },
           },
-          totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
+          totalCost: COST_SUM_EXPR,
           avgLatency: { $avg: { $ifNull: ["$totalTime", 0] } },
           avgTokensPerSec: {
             $avg: {
@@ -664,7 +662,7 @@ router.get("/stats/endpoints", async (req, res, next) => {
               ],
             },
           },
-          totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
+          totalCost: COST_SUM_EXPR,
           avgLatency: { $avg: { $ifNull: ["$totalTime", 0] } },
           successRate: { $avg: { $cond: [{ $eq: ["$success", true] }, 1, 0] } },
         },
@@ -729,7 +727,7 @@ router.get("/stats/costs", async (req, res, next) => {
           {
             $group: {
               _id: null,
-              totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
+              totalCost: COST_SUM_EXPR,
               totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
               totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
               totalRequests: { $sum: 1 },
@@ -760,7 +758,7 @@ router.get("/stats/costs", async (req, res, next) => {
           {
             $group: {
               _id: "$project",
-              totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
+              totalCost: COST_SUM_EXPR,
               totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
               totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
               totalRequests: { $sum: 1 },
@@ -792,7 +790,7 @@ router.get("/stats/costs", async (req, res, next) => {
           {
             $group: {
               _id: "$provider",
-              totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
+              totalCost: COST_SUM_EXPR,
               totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
               totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
               totalRequests: { $sum: 1 },
@@ -824,7 +822,7 @@ router.get("/stats/costs", async (req, res, next) => {
           {
             $group: {
               _id: { model: "$model", provider: "$provider" },
-              totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
+              totalCost: COST_SUM_EXPR,
               totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
               totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
               totalRequests: { $sum: 1 },
@@ -856,7 +854,7 @@ router.get("/stats/costs", async (req, res, next) => {
           {
             $group: {
               _id: "$endpoint",
-              totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
+              totalCost: COST_SUM_EXPR,
               totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
               totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
               totalRequests: { $sum: 1 },
@@ -888,7 +886,7 @@ router.get("/stats/costs", async (req, res, next) => {
           {
             $group: {
               _id: { project: "$project", provider: "$provider" },
-              totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
+              totalCost: COST_SUM_EXPR,
               totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
               totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
               totalRequests: { $sum: 1 },
@@ -920,7 +918,7 @@ router.get("/stats/costs", async (req, res, next) => {
           {
             $group: {
               _id: { project: "$project", endpoint: "$endpoint" },
-              totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
+              totalCost: COST_SUM_EXPR,
               totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
               totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
               totalRequests: { $sum: 1 },
@@ -956,7 +954,7 @@ router.get("/stats/costs", async (req, res, next) => {
                 model: "$model",
                 provider: "$provider",
               },
-              totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
+              totalCost: COST_SUM_EXPR,
               totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
               totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
               totalRequests: { $sum: 1 },
@@ -1190,7 +1188,7 @@ router.get("/stats/timeline", async (req, res, next) => {
               ],
             },
           },
-          cost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
+          cost: COST_SUM_EXPR,
           avgLatency: { $avg: { $ifNull: ["$totalTime", null] } },
           successes: {
             $sum: { $cond: [{ $eq: ["$success", true] }, 1, 0] },

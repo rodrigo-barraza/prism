@@ -6,7 +6,9 @@ import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 
 const router = express.Router();
-const COLLECTION = "agent_skills";
+import { COLLECTIONS } from "../constants.js";
+
+const COLLECTION = COLLECTIONS.AGENT_SKILLS;
 
 /**
  * Generate an embedding vector for skill content.

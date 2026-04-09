@@ -15,13 +15,14 @@ import { getProvider } from "../providers/index.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
-import { sleep } from "../utils/media.js";
+import { sleep } from "../utils/utilities.js";
+import { COLLECTIONS } from "../constants.js";
 
 // Providers that run on local GPU — grouped into a single sequential bucket
 const LOCAL_PROVIDERS = new Set(["lm-studio", "vllm", "ollama", "llama-cpp"]);
 
-const BENCHMARKS_COL = "benchmarks";
-const RUNS_COL = "benchmark_runs";
+const BENCHMARKS_COL = COLLECTIONS.BENCHMARKS;
+const RUNS_COL = COLLECTIONS.BENCHMARK_RUNS;
 
 // In-memory counter: how many benchmark model calls are actively generating
 let activeGenerationCount = 0;

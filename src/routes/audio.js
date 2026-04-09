@@ -10,6 +10,7 @@ import logger from "../utils/logger.js";
 import RequestLogger from "../services/RequestLogger.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
+import { formatCostTag } from "../utils/utilities.js";
 
 const router = express.Router();
 
@@ -467,8 +468,7 @@ router.post("/", async (req, res, next) => {
     const estimatedCost = calculateAudioCost(result.usage, pricing);
 
     // ── Logging ────────────────────────────────────────────────
-    const costStr =
-      estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : "";
+    const costStr = formatCostTag(estimatedCost);
     logger.request(
       req.project,
       req.username,

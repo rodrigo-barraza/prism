@@ -1,6 +1,7 @@
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
+import { COLLECTIONS } from "../constants.js";
 
 /**
  * ChangeStreamService — watches MongoDB collections via Change Streams
@@ -21,7 +22,7 @@ let available = false;
 let staleGeneratingInterval = null;
 
 // Collections to watch
-const WATCHED_COLLECTIONS = ["conversations", "sessions", "requests"];
+const WATCHED_COLLECTIONS = [COLLECTIONS.CONVERSATIONS, COLLECTIONS.SESSIONS, COLLECTIONS.REQUESTS];
 
 /**
  * Attempt to open a Change Stream on a single collection.
@@ -46,7 +47,7 @@ function openStream(db, collectionName) {
       };
 
       // Enrich with isGenerating state for conversations
-      if (collectionName === "conversations") {
+      if (collectionName === COLLECTIONS.CONVERSATIONS) {
         if (event.updateDescription?.updatedFields?.isGenerating !== undefined) {
           payload.isGenerating = event.updateDescription.updatedFields.isGenerating;
         } else if (event.fullDocument?.isGenerating !== undefined) {
@@ -145,7 +146,7 @@ const ChangeStreamService = {
       try {
         const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
         const { modifiedCount } = await db
-          .collection("conversations")
+          .collection(COLLECTIONS.CONVERSATIONS)
           .updateMany(
             { isGenerating: true, updatedAt: { $lt: fiveMinAgo } },
             { $set: { isGenerating: false } },
