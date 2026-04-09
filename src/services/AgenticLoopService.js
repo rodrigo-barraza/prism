@@ -142,6 +142,16 @@ export default class AgenticLoopService {
     const isLocalProvider = providerName === "lm-studio" || providerName === "vllm" || providerName === "ollama";
     let hasCalledTools = false;
 
+    // Resolve max iterations from client or fall back to the module constant.
+    // 0 = unlimited (∞ mode from the frontend), positive values clamped 1–100,
+    // undefined/null = default constant (25).
+    const clientMax = options.maxIterations;
+    const resolvedMaxIterations = clientMax === 0
+      ? Infinity
+      : clientMax
+        ? Math.min(100, Math.max(1, clientMax))
+        : MAX_TOOL_ITERATIONS;
+
     let iterations = 0;
     let currentMessages = [...messages];
 
@@ -257,11 +267,11 @@ export default class AgenticLoopService {
     const toolErrorCounts = new Map();
 
     try {
-      while (iterations < MAX_TOOL_ITERATIONS) {
+      while (iterations < resolvedMaxIterations) {
         iterations++;
 
         // ── Emit iteration progress ──────────────────────────
-        emit({ type: "status", message: `iteration_progress`, iteration: iterations, maxIterations: MAX_TOOL_ITERATIONS });
+        emit({ type: "status", message: `iteration_progress`, iteration: iterations, maxIterations: resolvedMaxIterations });
 
         // ── beforePrompt hook: inject dynamic context ─────────
         if (iterations === 1) {
@@ -723,7 +733,7 @@ export default class AgenticLoopService {
       // model was still calling tools), run one final tool-free pass so
       // the model can summarize what it accomplished rather than leaving
       // the user with a silent, mid-task cutoff.
-      if (iterations >= MAX_TOOL_ITERATIONS && !finalStreamedText?.trim()) {
+      if (iterations >= resolvedMaxIterations && !finalStreamedText?.trim()) {
         emit({ type: "status", message: "iteration_limit_reached" });
 
         currentMessages.push({

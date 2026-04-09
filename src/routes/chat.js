@@ -279,6 +279,7 @@ export async function handleChat(params, emit, { signal } = {}) {
     skipConversation,
     autoApprove,
     planFirst,
+    maxIterations,
     agentContext,
     // customSystemPrompt is deprecated — the assembler always runs and
     // loads the correct persona via AgentPersonaRegistry. Kept here to
@@ -353,6 +354,7 @@ export async function handleChat(params, emit, { signal } = {}) {
     ...(textOnly && { textOnly }),
     ...(autoApprove && { autoApprove }),
     ...(planFirst && { planFirst }),
+    ...(maxIterations !== undefined && { maxIterations }),
     ...(agentContext && { agentContext }),
     ...(extraParams.systemPrompt && { systemPrompt: extraParams.systemPrompt }),
   };
