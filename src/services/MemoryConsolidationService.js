@@ -143,7 +143,7 @@ function buildConsolidationInput(clusters, allMemories) {
       sections.push(`### Cluster ${i + 1} (${cluster.length} memories, likely overlap):`);
       cluster.forEach((m) => {
         const age = daysSince(m.createdAt);
-        sections.push(`- **ID**: ${m.id}\n  **Type**: ${m.type}\n  **Title**: ${m.title}\n  **Content**: ${m.content}\n  **Age**: ${age} days`);
+        sections.push(`- **ID**: ${m.id}\n  **Type**: ${m.type}\n  **Title**: ${m.title || (m.content ? m.content.substring(0, 60) : "untitled")}\n  **Content**: ${m.content}\n  **Age**: ${age} days`);
       });
       sections.push("");
     });
@@ -159,7 +159,7 @@ function buildConsolidationInput(clusters, allMemories) {
     sections.push("## Potentially Stale Memories (>30 days old, ephemeral types)\n");
     staleMemories.forEach((m) => {
       const age = daysSince(m.createdAt);
-      sections.push(`- **ID**: ${m.id}\n  **Type**: ${m.type}\n  **Title**: ${m.title}\n  **Content**: ${m.content}\n  **Age**: ${age} days`);
+      sections.push(`- **ID**: ${m.id}\n  **Type**: ${m.type}\n  **Title**: ${m.title || (m.content ? m.content.substring(0, 60) : "untitled")}\n  **Content**: ${m.content}\n  **Age**: ${age} days`);
     });
   }
 
