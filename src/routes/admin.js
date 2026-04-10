@@ -2009,6 +2009,7 @@ router.get("/workflows/:id", async (req, res, next) => {
 
 // ============================================================
 // GET /admin/media — extract media from all conversations
+// AND from agent image generation requests (for skipConversation callers)
 // ============================================================
 router.get("/media", async (req, res, next) => {
   try {
@@ -2030,10 +2031,14 @@ router.get("/media", async (req, res, next) => {
     const lim = parseInt(limit, 10);
 
     // Get distinct projects and usernames for filter dropdowns
-    const [projects, usernames] = await Promise.all([
+    const [convProjects, convUsernames, reqProjects, reqUsernames] = await Promise.all([
       db.collection(CONVERSATIONS_COL).distinct("project"),
       db.collection(CONVERSATIONS_COL).distinct("username"),
+      db.collection(REQUESTS_COL).distinct("project", { operation: "agent:image", success: true }),
+      db.collection(REQUESTS_COL).distinct("username", { operation: "agent:image", success: true }),
     ]);
+    const allProjects = [...new Set([...convProjects, ...reqProjects])].filter(Boolean).sort();
+    const allUsernames = [...new Set([...convUsernames, ...reqUsernames])].filter(Boolean).sort();
 
     // Use aggregation to unwind messages and extract media in one query
     const preMatch = {};
@@ -2152,24 +2157,80 @@ router.get("/media", async (req, res, next) => {
       pipeline.push({ $match: { role: "assistant" } });
     }
 
-    // Count total before pagination
-    const countPipeline = [...pipeline, { $count: "total" }];
-    const [countResult] = await db
-      .collection(CONVERSATIONS_COL)
-      .aggregate(countPipeline)
-      .toArray();
-    const total = countResult?.total || 0;
-
-    // Apply pagination
-    pipeline.push({ $skip: skip }, { $limit: lim });
-
-    const items = await db
+    // ── Conversation-based media ──────────────────────────────
+    const convItems = await db
       .collection(CONVERSATIONS_COL)
       .aggregate(pipeline)
       .toArray();
 
-    // Categorize origin
-    const data = items.map((item) => ({
+    // ── Agent-generated images from requests (captures skipConversation callers) ──
+    let requestGenItems = [];
+    if (!type || type === "image") {
+      if (origin !== "user") {
+        const reqMatch = {
+          operation: "agent:image",
+          success: true,
+          "responsePayload.images": { $exists: true, $ne: [] },
+        };
+        if (project) reqMatch.project = project;
+        if (username) reqMatch.username = username;
+        if (from || to) {
+          reqMatch.timestamp = {};
+          if (from) reqMatch.timestamp.$gte = from;
+          if (to) reqMatch.timestamp.$lte = to;
+        }
+        if (search) {
+          reqMatch["requestPayload.messages.content"] = { $regex: search, $options: "i" };
+        }
+
+        const reqPipeline = [
+          { $match: reqMatch },
+          { $unwind: "$responsePayload.images" },
+          { $match: { "responsePayload.images": { $regex: "^(minio://|https?://|data:)" } } },
+          {
+            $project: {
+              url: "$responsePayload.images",
+              mediaType: "image",
+              convId: { $ifNull: ["$conversationId", null] },
+              convTitle: "Agent Generation",
+              project: 1,
+              username: 1,
+              role: "assistant",
+              timestamp: 1,
+              model: 1,
+              agent: 1,
+            },
+          },
+          { $sort: { timestamp: -1 } },
+        ];
+
+        requestGenItems = await db
+          .collection(REQUESTS_COL)
+          .aggregate(reqPipeline)
+          .toArray();
+      }
+    }
+
+    // ── Merge and deduplicate ──────────────────────────────────
+    const seenUrls = new Set(convItems.map((i) => i.url));
+    const mergedItems = [...convItems];
+    for (const item of requestGenItems) {
+      if (!seenUrls.has(item.url)) {
+        seenUrls.add(item.url);
+        mergedItems.push(item);
+      }
+    }
+
+    mergedItems.sort((a, b) => {
+      const ta = a.timestamp || "";
+      const tb = b.timestamp || "";
+      return ta < tb ? 1 : ta > tb ? -1 : 0;
+    });
+
+    const total = mergedItems.length;
+    const paginatedItems = mergedItems.slice(skip, skip + lim);
+
+    const data = paginatedItems.map((item) => ({
       url: item.url,
       mediaType: item.mediaType,
       origin: item.role === "assistant" ? "ai" : "user",
@@ -2179,6 +2240,7 @@ router.get("/media", async (req, res, next) => {
       username: item.username,
       model: item.model,
       timestamp: item.timestamp,
+      ...(item.agent && { agent: item.agent }),
     }));
 
     res.json({
@@ -2186,8 +2248,8 @@ router.get("/media", async (req, res, next) => {
       total,
       page: parseInt(page, 10),
       limit: lim,
-      projects: projects.filter(Boolean).sort(),
-      usernames: usernames.filter(Boolean).sort(),
+      projects: allProjects,
+      usernames: allUsernames,
     });
   } catch (error) {
     logger.error(`Admin /media error: ${error.message}`);

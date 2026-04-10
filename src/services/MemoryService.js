@@ -457,9 +457,6 @@ const MemoryService = {
           aboutUsername: 1,
           confidence: 1,
           createdAt: 1,
-          // Backward compat: read old-schema fields too
-          fact: 1,
-          category: 1,
         },
       })
       .toArray();
@@ -471,9 +468,9 @@ const MemoryService = {
       .filter((m) => m.embedding && m.embedding.length > 0)
       .map((m) => ({
         id: m._id,
-        type: m.type || m.category || "other",
-        title: m.title || (m.content ? m.content.substring(0, 60) : m.fact ? m.fact.substring(0, 60) : "untitled"),
-        content: m.content || m.fact || "",
+        type: m.type || "other",
+        title: m.title || (m.content ? m.content.substring(0, 60) : "untitled"),
+        content: m.content || "",
         aboutUserId: m.aboutUserId,
         aboutUsername: m.aboutUsername,
         confidence: m.confidence,

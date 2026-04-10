@@ -2,6 +2,9 @@ import crypto from "crypto";
 import { getProvider } from "../providers/index.js";
 import MemoryService from "./MemoryService.js";
 import MemoryConsolidationService from "./MemoryConsolidationService.js";
+import EpisodicMemoryService from "./EpisodicMemoryService.js";
+import SemanticMemoryService from "./SemanticMemoryService.js";
+import ProceduralMemoryService from "./ProceduralMemoryService.js";
 import RequestLogger from "./RequestLogger.js";
 import logger from "../utils/logger.js";
 import { estimateTokens } from "../utils/CostCalculator.js";
@@ -19,69 +22,46 @@ const MIN_MESSAGES_FOR_SUMMARY = 4;
  * current project state. Code patterns, architecture, git history, and file
  * structure are derivable (via grep/git/file reads) and should NOT be saved.
  */
-const EXTRACTION_PROMPT = `You are a memory extraction agent. Analyze this coding conversation and extract memories worth preserving for future sessions.
+const EXTRACTION_PROMPT = `You are a memory extraction agent for a multi-system memory architecture. Analyze this conversation and extract three categories of memories.
 
-## Memory Types
+## Category 1: Semantic Memories (Facts & Knowledge)
+Stable facts, preferences, rules, and references that will be useful in future sessions.
 
-There are exactly 4 types of memory you can extract:
+Types: "preference", "fact", "rule", "reference"
 
-<types>
-<type>
-  <name>user</name>
-  <description>Information about the user's role, goals, responsibilities, and expertise. Great user memories help tailor future behavior to the user's preferences and perspective.</description>
-  <when_to_save>When you learn details about the user's role, preferences, responsibilities, or knowledge.</when_to_save>
-  <examples>
-  - "User is an experienced full-stack engineer with an arts background, high CSS standards"
-  - "User prefers concise explanations — expert-level, no hand-holding"
-  </examples>
-</type>
-<type>
-  <name>feedback</name>
-  <description>Guidance the user has given about how to approach work — both what to avoid AND what to keep doing. Record from failure AND success: if you only save corrections, you'll avoid past mistakes but drift away from validated approaches.</description>
-  <when_to_save>Any time the user corrects your approach ("no not that", "don't", "stop doing X") OR confirms a non-obvious approach worked ("yes exactly", "perfect, keep doing that"). Include *why* so you can judge edge cases later.</when_to_save>
-  <examples>
-  - "Don't mock the database in tests — previous incident where mock/prod divergence masked a broken migration"
-  - "User prefers one bundled PR over many small ones for refactors — confirmed after I chose this approach"
-  </examples>
-</type>
-<type>
-  <name>project</name>
-  <description>Information about ongoing work, goals, initiatives, bugs, or incidents that is NOT derivable from the code or git history. Project memories help understand broader context and motivation.</description>
-  <when_to_save>When you learn who is doing what, why, or by when. Convert relative dates to absolute dates. These states change quickly so keep them current.</when_to_save>
-  <examples>
-  - "Auth middleware rewrite is driven by legal/compliance requirements, not tech-debt cleanup"
-  - "Merge freeze begins 2026-03-05 for mobile release cut"
-  </examples>
-</type>
-<type>
-  <name>reference</name>
-  <description>Pointers to where information can be found in external systems. These let you remember where to look for information outside the project directory.</description>
-  <when_to_save>When you learn about resources in external systems and their purpose.</when_to_save>
-  <examples>
-  - "Pipeline bugs tracked in Linear project 'INGEST'"
-  - "VRAM benchmark data stored in MongoDB prism.vram_benchmarks collection"
-  </examples>
-</type>
-</types>
+Examples:
+- {"category": "semantic", "type": "preference", "title": "CSS animation standards", "content": "User requires GPU-accelerated CSS animations using transform/opacity"}
+- {"category": "semantic", "type": "rule", "title": "No database mocks in tests", "content": "Don't mock databases in tests — mock/prod divergence masked a broken migration"}
+
+## Category 2: Procedural Memories (Learned Patterns)
+Successful approaches, tool sequences, or problem-solving strategies that worked.
+
+Examples:
+- {"category": "procedural", "trigger": "WebSocket disconnection during streaming", "procedure": ["Check AbortController signal chain", "Verify stream.return() on abort", "Check orphaned event listeners"], "toolSequence": ["grep_search", "read_file", "str_replace_file"]}
+
+## Category 3: Episode Summary
+A narrative summary of what happened in this session as a whole.
+
+Example:
+- {"category": "episode", "summary": "Debugged WebSocket reconnection issue in AgenticLoopService", "narrative": "User reported streaming drops. Found AbortController wasn't passed through stream chain. Fixed by threading signal through all async generators.", "outcome": "resolved", "satisfaction": "positive", "keyDecisions": ["Choose AbortController over setTimeout for cleanup"], "tags": ["websocket", "debugging"]}
 
 ## What NOT to Save
-
-- Code patterns, conventions, architecture, file paths, or project structure — derivable by reading the code
-- Git history, recent changes, or who-changed-what — git log/blame are authoritative
-- Debugging solutions or fix recipes — the fix is in the code, the commit message has context
-- Ephemeral task details: in-progress work, temporary state, current conversation context
-- File changes — these are already tracked by version control
-
-These exclusions apply even for seemingly important items. Only save what will be useful in FUTURE conversations.
+- Code patterns derivable by reading the code
+- Git history, file changes, or project structure
+- Ephemeral task details or current conversation context
+- Debugging solutions (the fix is in the code)
 
 ## Output Format
+Respond ONLY with a JSON object:
+\`\`\`json
+{
+  "episode": { "summary": "...", "narrative": "...", "outcome": "resolved|partial|abandoned|deferred", "satisfaction": "positive|neutral|negative", "keyDecisions": [], "tags": [] },
+  "semantic": [ { "type": "...", "title": "...", "content": "..." } ],
+  "procedural": [ { "trigger": "...", "procedure": ["step1", "step2"], "toolSequence": ["tool1"] } ]
+}
+\`\`\`
 
-Respond ONLY with a JSON array. Each object must have:
-- "type": one of "user", "feedback", "project", "reference"
-- "title": short name (under 60 chars) used for scanning relevance
-- "content": full memory text, structured as: fact/rule, then why, then how to apply
-
-If no meaningful information was found, return an empty array: []`;
+Omit any section if nothing meaningful was found. Minimally, always try to produce an episode summary.`;
 
 /**
  * SessionSummarizer — extracts and stores memories from agentic conversations.
@@ -215,35 +195,123 @@ export default class SessionSummarizer {
         return [];
       }
 
-      // Filter valid entries
-      const validMemories = memories.filter(
-        (m) => m.content && m.title && m.type,
-      );
-
-      if (validMemories.length === 0) {
-        logger.info("[SessionSummarizer] No valid memories extracted");
+      // Handle both legacy (array) and new (object with sections) formats
+      let parsed;
+      if (Array.isArray(memories)) {
+        // Legacy format — treat as semantic memories
+        parsed = {
+          semantic: memories.filter((m) => m.content && m.title && m.type),
+          episode: null,
+          procedural: [],
+        };
+      } else if (typeof memories === "object") {
+        parsed = memories;
+      } else {
+        logger.warn("[SessionSummarizer] Unexpected response format");
         return [];
       }
 
-      // Store via unified MemoryService (agent-scoped)
+      const agentId = agent || "CODING";
       const stored = [];
-      for (const mem of validMemories) {
-        const result = await MemoryService.store({
-          agent: agent || "CODING",
-          project,
-          username,
-          type: mem.type,
-          title: mem.title,
-          content: mem.content,
-          conversationId,
-          sessionId,
-          endpoint: endpoint || "/agent",
-        });
-        if (result) stored.push(result);
+      let episodeId = null;
+
+      // ── 1. Store Episode (episodic memory) ────────────────────────
+      if (parsed.episode?.summary) {
+        try {
+          const ep = await EpisodicMemoryService.store({
+            agent: agentId,
+            project,
+            sessionId,
+            conversationId,
+            username,
+            summary: parsed.episode.summary,
+            narrative: parsed.episode.narrative || null,
+            outcome: parsed.episode.outcome || "resolved",
+            satisfaction: parsed.episode.satisfaction || "neutral",
+            keyDecisions: parsed.episode.keyDecisions || [],
+            tags: parsed.episode.tags || [],
+          });
+          episodeId = ep.id;
+          stored.push({ type: "episode", id: ep.id });
+          logger.info(`[SessionSummarizer] Stored episode: "${parsed.episode.summary.substring(0, 60)}"`);
+        } catch (err) {
+          logger.error(`[SessionSummarizer] Episode storage failed: ${err.message}`);
+        }
+      }
+
+      // ── 2. Store Semantic Memories ─────────────────────────────────
+      const semanticIds = [];
+      if (parsed.semantic?.length > 0) {
+        for (const mem of parsed.semantic) {
+          if (!mem.content) continue;
+          try {
+            // Store in new semantic system
+            const semResult = await SemanticMemoryService.store({
+              agent: agentId,
+              project,
+              type: mem.type || "fact",
+              title: mem.title,
+              content: mem.content,
+              sourceEpisodeId: episodeId,
+              username,
+            });
+            if (semResult) semanticIds.push(semResult.id);
+
+            // Also store in legacy MemoryService for backward compatibility
+            await MemoryService.store({
+              agent: agentId,
+              project,
+              username,
+              type: mem.type || "fact",
+              title: mem.title,
+              content: mem.content,
+              conversationId,
+              sessionId,
+              endpoint: endpoint || "/agent",
+            });
+
+            stored.push({ type: "semantic", id: semResult?.id });
+          } catch (err) {
+            logger.error(`[SessionSummarizer] Semantic storage failed: ${err.message}`);
+          }
+        }
+      }
+
+      // ── 3. Store Procedural Memories ───────────────────────────────
+      const proceduralIds = [];
+      if (parsed.procedural?.length > 0) {
+        for (const proc of parsed.procedural) {
+          if (!proc.trigger || !proc.procedure?.length) continue;
+          try {
+            const procResult = await ProceduralMemoryService.store({
+              agent: agentId,
+              project,
+              trigger: proc.trigger,
+              procedure: proc.procedure,
+              toolSequence: proc.toolSequence || [],
+              sourceEpisodeId: episodeId,
+            });
+            if (procResult) proceduralIds.push(procResult.id);
+            stored.push({ type: "procedural", id: procResult?.id });
+          } catch (err) {
+            logger.error(`[SessionSummarizer] Procedural storage failed: ${err.message}`);
+          }
+        }
+      }
+
+      // ── 4. Cross-reference episode with extracted IDs ──────────────
+      if (episodeId && (semanticIds.length > 0 || proceduralIds.length > 0)) {
+        EpisodicMemoryService.linkExtracted(episodeId, {
+          semanticIds,
+          proceduralIds,
+        }).catch((err) =>
+          logger.error(`[SessionSummarizer] Episode cross-ref failed: ${err.message}`),
+        );
       }
 
       logger.info(
-        `[SessionSummarizer] Stored ${stored.length} memories from conversation ${conversationId || "unknown"}`,
+        `[SessionSummarizer] Stored ${stored.length} memories from conversation ${conversationId || "unknown"} ` +
+        `(ep:${episodeId ? 1 : 0} sem:${semanticIds.length} proc:${proceduralIds.length})`,
       );
       return stored;
     } catch (err) {

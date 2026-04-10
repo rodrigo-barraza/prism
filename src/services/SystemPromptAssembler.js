@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import ToolOrchestratorService from "./ToolOrchestratorService.js";
 import MemoryService from "./MemoryService.js";
+import WorkingMemoryService from "./WorkingMemoryService.js";
 import AgentPersonaRegistry from "./AgentPersonaRegistry.js";
 import EmbeddingService from "./EmbeddingService.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
@@ -162,30 +163,58 @@ export default class SystemPromptAssembler {
   }
 
   /**
-   * Fetch relevant project memories.
+   * Fetch relevant memories via the multi-system working memory pipeline.
+   * Queries episodic, semantic, procedural, and prospective memory stores
+   * through WorkingMemoryService, which manages capacity-limited slots.
+   *
+   * Falls back to legacy MemoryService.search if WorkingMemoryService fails.
    *
    * @param {string} agent - Agent identifier
    * @param {string} project - Project identifier
    * @param {string} queryText - Query for semantic search
-   * @param {number} [limit=5]
-   * @returns {Promise<string>}
+   * @param {string} [sessionId] - Session identifier for working memory
+   * @param {string} [endpoint] - Request endpoint
+   * @param {string} [username] - Username
+   * @returns {Promise<string>} Formatted memory sections for the system prompt
    */
-  async fetchMemories(agent, project, queryText, limit = 5, { sessionId, endpoint } = {}) {
+  async fetchMemories(agent, project, queryText, { sessionId, endpoint, username } = {}) {
+    // If we have a sessionId, use the full working memory pipeline
+    if (sessionId) {
+      try {
+        const result = await WorkingMemoryService.load({
+          agent,
+          project,
+          sessionId,
+          queryText,
+          username,
+        });
+
+        if (result.prompt) {
+          logger.info(
+            `[SystemPromptAssembler] Working memory loaded: ${result.slotCount}/${result.maxSlots} slots`,
+          );
+          return result.prompt;
+        }
+      } catch (err) {
+        logger.warn(`[SystemPromptAssembler] Working memory failed, falling back to legacy: ${err.message}`);
+      }
+    }
+
+    // Fallback: legacy flat memory search
     try {
       const memories = await MemoryService.search({
         agent,
         project,
         queryText,
-        limit,
+        limit: 5,
         sessionId: sessionId || null,
         endpoint: endpoint || "/agent",
       });
 
       if (!memories || memories.length === 0) return "";
-
       return MemoryService.formatForPrompt(memories);
     } catch (err) {
-      logger.warn(`[SystemPromptAssembler] Memory fetch error: ${err.message}`);
+      logger.warn(`[SystemPromptAssembler] Legacy memory fetch error: ${err.message}`);
       return "";
     }
   }
@@ -391,13 +420,17 @@ export default class SystemPromptAssembler {
       sections.push(`## Project Skills (${skills.length})\n` + skillBlocks.join("\n\n"));
     }
 
-    // ── 9. Session Memory ────────────────────────────────────────
+    // ── 9. Session Memory (multi-system) ─────────────────────────
     const memoryQuery = queryText || ctx.project || "";
 
     if (memoryQuery) {
-      const memories = await this.fetchMemories(agentId, ctx.project, memoryQuery, 5, { sessionId: ctx.sessionId, endpoint: "/agent" });
+      const memories = await this.fetchMemories(agentId, ctx.project, memoryQuery, {
+        sessionId: ctx.sessionId,
+        endpoint: "/agent",
+        username: ctx.username,
+      });
       if (memories) {
-        sections.push(`## Session Memory (from past conversations)\n` + memories);
+        sections.push(`## Agent Memory\n` + memories);
       }
     }
 

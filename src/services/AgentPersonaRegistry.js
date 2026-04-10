@@ -216,6 +216,7 @@ const LUPOS_ENABLED_TOOLS = [
   "get_weather",
   // Compute
   "precise_calculator",
+  "execute_javascript",
 ];
 
 // ── Persona Definitions ──────────────────────────────────────────
