@@ -381,7 +381,15 @@ export default class SystemPromptAssembler {
         `5. Use project_summary to understand unfamiliar codebases before diving in\n` +
         `6. Check git_status before and after edits to track your changes\n` +
         `7. When searching, use includes filters to narrow results (e.g. [".js", ".ts"])\n` +
-        `8. Keep your explanations concise and technical`
+        `8. Keep your explanations concise and technical\n\n` +
+        `## Task Management\n` +
+        `You have persistent task tools (task_create, task_list, task_update) that survive across conversations.\n` +
+        `Use them proactively:\n` +
+        `- At the START of a session, call task_list to check for in-progress or pending tasks from prior sessions\n` +
+        `- When starting complex multi-step work (3+ files, multi-phase refactors, migrations), create a task with task_create to track progress\n` +
+        `- Update task status to "in_progress" when you begin working on it, "completed" when done\n` +
+        `- Break large tasks into subtasks — use metadata to link related tasks\n` +
+        `- Do NOT create tasks for simple, single-step requests — only for work that benefits from tracking`
       );
       sections.push(guidelines);
     }
