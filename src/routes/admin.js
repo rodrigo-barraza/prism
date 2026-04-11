@@ -1237,7 +1237,27 @@ router.get("/conversations", async (req, res, next) => {
     if (session) filter.sessionId = session;
     if (project) filter.project = project;
     if (username) filter.username = username;
-    if (search) filter.title = { $regex: search, $options: "i" };
+    if (search) {
+      const regex = { $regex: search, $options: "i" };
+      const orClauses = [
+        { title: regex },
+        { project: regex },
+        { username: regex },
+      ];
+
+      // IP lives on requests, not conversations — resolve matching
+      // conversationIds first, then fold them into the $or filter.
+      if (/^[\d.:a-f]+$/i.test(search.trim())) {
+        const matchingConvIds = await db
+          .collection(REQUESTS_COL)
+          .distinct("conversationId", { clientIp: regex });
+        if (matchingConvIds.length > 0) {
+          orClauses.push({ id: { $in: matchingConvIds } });
+        }
+      }
+
+      filter.$or = orClauses;
+    }
     if (provider) filter.providers = provider;
     if (model) filter["messages.model"] = model;
     if (from || to) {
