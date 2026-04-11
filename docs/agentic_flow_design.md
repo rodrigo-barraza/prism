@@ -121,6 +121,21 @@ Additionally, custom tools can be defined per-project in MongoDB (`custom_tools`
    - **Implementation**: `AgenticBrowserService` in `tools-api` manages a Playwright browser instance via `browser_action` tool. Supports `navigate`, `click`, `type`, `screenshot`, `scroll`, `evaluate`, `get_elements` (DOM inspection with CSS selectors). Screenshots uploaded to MinIO as `screenshotRef` values and promoted into conversation `images` arrays.
    - **Files**: `tools-api/services/AgenticBrowserService.js`, `AgenticRoutes.js` (`/agentic/browser/action`), `retina/src/components/ToolResultRenderers.js`
 
+3. 🔲 **Semantic Code Navigation (LSP)**:
+   - **What**: Exposing Language Server Protocol (LSP) capabilities to the agent instead of relying purely on regex `grep_search`.
+   - **Why**: Allows the agent to precisely find definitions, trace references across files, and inspect type signatures natively, massively reducing hallucination on complex codebases.
+   - **Implementation**: New `AgenticLspService` in `tools-api` wrapping standard LSP binaries (like `tsserver`, `pyright`) with tools like `lsp_definition`, `lsp_references`, and `lsp_hover`.
+
+4. 🔲 **Task & State Management**:
+   - **What**: A persistent, MongoDB-backed ToDo list capability.
+   - **Why**: As contexts slide and memory gets consolidated, agents lose track of complex multi-stage tasks. A persistent scratchpad acts as long-term Working Memory.
+   - **Implementation**: New `AgenticTaskService` with tools like `task_create`, `task_list`, and `task_update`, persisting to a `tasks` collection in the MongoDB database.
+
+5. 🔲 **Background Execution Monitoring (Terminal Capture)**:
+   - **What**: The ability to inspect the output of persistent daemon processes (like `npm run dev` or a Python server).
+   - **Why**: `execute_shell` relies on the process exiting to read output. Agents need to "glance" at long-running logs to debug errors from background servers.
+   - **Implementation**: Terminal tail wrapping in `AgenticCommandService` via a `capture_terminal` tool.
+
 > **Design principle**: Optimize for the *right* tools at each capability tier, not raw count. Claude Code ships ~15 tools. Cursor ships fewer. Coverage of capability categories (filesystem, search, execution, network, browser) matters more than quantity.
 
 ---
