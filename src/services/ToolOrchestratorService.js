@@ -117,7 +117,7 @@ const ARG_REMAPS = {
   search_products: { query: "q" },
 };
 
-async function executeToolGeneric(name, args = {}) {
+async function executeToolGeneric(name, args = {}, ctx = {}) {
   const schema = toolMap.get(name);
   if (!schema || !schema.endpoint) {
     return { error: `Unknown tool: ${name}` };
@@ -135,19 +135,41 @@ async function executeToolGeneric(name, args = {}) {
     }
   }
 
+  // Build caller-context headers for tools-api telemetry
+  const contextHeaders = buildContextHeaders(ctx);
+
   // POST-method tools send args as JSON body
   if (schema.endpoint.method === "POST") {
     const url = `${TOOLS_API_URL}${schema.endpoint.path}`;
-    return fetchJsonPost(url, resolvedArgs);
+    return fetchJsonPost(url, resolvedArgs, contextHeaders);
   }
 
   const url = buildUrlFromEndpoint(schema.endpoint, resolvedArgs);
-  return fetchJson(url);
+  return fetchJson(url, contextHeaders);
 }
 
-async function fetchJson(url) {
+/**
+ * Build X-context headers from the caller context object.
+ * These are consumed by tools-api's ToolCallLoggerMiddleware.
+ * @param {object} ctx - Caller context
+ * @returns {object} Headers object
+ */
+function buildContextHeaders(ctx = {}) {
+  const headers = {};
+  if (ctx.project) headers["X-Project"] = ctx.project;
+  if (ctx.username) headers["X-Username"] = ctx.username;
+  if (ctx.agent) headers["X-Agent"] = ctx.agent;
+  if (ctx.requestId) headers["X-Request-Id"] = ctx.requestId;
+  if (ctx.conversationId) headers["X-Conversation-Id"] = ctx.conversationId;
+  if (ctx.iteration !== undefined && ctx.iteration !== null) headers["X-Iteration"] = String(ctx.iteration);
+  return headers;
+}
+
+async function fetchJson(url, extraHeaders = {}) {
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: { ...extraHeaders },
+    });
     if (!res.ok) {
       try {
         const errBody = await res.json();
@@ -162,11 +184,11 @@ async function fetchJson(url) {
   }
 }
 
-async function fetchJsonPost(url, body) {
+async function fetchJsonPost(url, body, extraHeaders = {}) {
   try {
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...extraHeaders },
       body: JSON.stringify(body),
     });
     if (!res.ok) {
@@ -242,7 +264,7 @@ export default class ToolOrchestratorService {
       return ToolOrchestratorService.executeMCPTool(name, args);
     }
 
-    const result = await executeToolGeneric(name, args);
+    const result = await executeToolGeneric(name, args, ctx);
 
     // Post-process: upload browser screenshots to MinIO
     if (name === "browser_action" && result.screenshot && !result.error) {
@@ -308,12 +330,13 @@ export default class ToolOrchestratorService {
    * @param {string} name - tool name (must be in STREAMABLE_TOOLS)
    * @param {object} args - tool arguments (code, command, etc.)
    * @param {function} onChunk - (event: "stdout"|"stderr"|"start"|"exit", data?: string, meta?: object) => void
+   * @param {object} [ctx] - Caller context for telemetry headers
    * @returns {Promise<object>} final result
    */
-  static async executeToolStreaming(name, args = {}, onChunk) {
+  static async executeToolStreaming(name, args = {}, onChunk, ctx = {}) {
     const streamPath = ToolOrchestratorService.STREAMABLE_TOOLS[name];
     if (!streamPath) {
-      return ToolOrchestratorService.executeTool(name, args);
+      return ToolOrchestratorService.executeTool(name, args, ctx);
     }
 
     const remaps = ARG_REMAPS[name];
@@ -329,6 +352,7 @@ export default class ToolOrchestratorService {
     }
 
     const url = `${TOOLS_API_URL}${streamPath}`;
+    const contextHeaders = buildContextHeaders(ctx);
 
     try {
       const controller = new AbortController();
@@ -336,7 +360,7 @@ export default class ToolOrchestratorService {
 
       const res = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...contextHeaders },
         body: JSON.stringify(resolvedArgs),
         signal: controller.signal,
       });

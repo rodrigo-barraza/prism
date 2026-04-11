@@ -630,12 +630,12 @@ export default class AgenticLoopService {
                            data: data || undefined,
                            meta: meta || undefined,
                        });
-                   });
+                   }, { project, username, agent, requestId: ctx.requestId, conversationId, iteration: iterations });
                    await hooks.run("afterToolCall", tc, result, ctx);
                    return { name: tc.name, id: tc.id, result };
                }
 
-               const result = await ToolOrchestratorService.executeTool(tc.name, tc.args, { project, username });
+               const result = await ToolOrchestratorService.executeTool(tc.name, tc.args, { project, username, agent, requestId: ctx.requestId, conversationId, iteration: iterations });
                await hooks.run("afterToolCall", tc, result, ctx);
                return { name: tc.name, id: tc.id, result };
             })
