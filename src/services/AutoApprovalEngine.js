@@ -30,6 +30,12 @@ const DEFAULT_TIER_MAP = {
   git_log: APPROVAL_TIERS.AUTO,
   project_summary: APPROVAL_TIERS.AUTO,
 
+  // Tier 1 — task management (agent's own scratchpad, not user files)
+  task_create: APPROVAL_TIERS.AUTO,
+  task_get: APPROVAL_TIERS.AUTO,
+  task_list: APPROVAL_TIERS.AUTO,
+  task_update: APPROVAL_TIERS.AUTO,
+
   // Tier 2 — write operations
   write_file: APPROVAL_TIERS.WRITE,
   str_replace_file: APPROVAL_TIERS.WRITE,

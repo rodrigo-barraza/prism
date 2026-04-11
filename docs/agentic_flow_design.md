@@ -105,6 +105,7 @@ Prism dynamically loads tool schemas from `tools-api/admin/tool-schemas` at boot
 | `AgenticWebService` | `fetch_url`, `web_search` |
 | `AgenticGitService` | `git_status`, `git_diff`, `git_log` (+ worktree ops) |
 | `AgenticBrowserService` | `browser_action` |
+| `AgenticTaskService` | `task_create`, `task_get`, `task_list`, `task_update` |
 
 Additionally, custom tools can be defined per-project in MongoDB (`custom_tools` collection) with arbitrary HTTP endpoints.
 
@@ -127,10 +128,18 @@ Additionally, custom tools can be defined per-project in MongoDB (`custom_tools`
    - **Implementation**: `AgenticLspService` in `tools-api` wrapping LSP servers (`typescript-language-server`, `pyright-langserver`) via `vscode-jsonrpc` stdio transport. Single `lsp_action` tool with operation enum: `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `goToImplementation`. Servers lazy-started on first request per language. `LspClient` handles JSON-RPC framing, `LspServerInstance` manages lifecycle with exponential backoff retry, `LspServerManager` routes requests by file extension.
    - **Files**: `tools-api/services/lsp/LspClient.js`, `LspServerInstance.js`, `LspServerManager.js`, `lspConfig.js`, `AgenticLspService.js`, `AgenticRoutes.js` (`/agentic/lsp/action`, `/agentic/lsp/health`, `/agentic/lsp/shutdown`)
 
-4. 🔲 **Task & State Management**:
-   - **What**: A persistent, MongoDB-backed ToDo list capability.
-   - **Why**: As contexts slide and memory gets consolidated, agents lose track of complex multi-stage tasks. A persistent scratchpad acts as long-term Working Memory.
-   - **Implementation**: New `AgenticTaskService` with tools like `task_create`, `task_list`, and `task_update`, persisting to a `tasks` collection in the MongoDB database.
+4. ✅ **Task & State Management**:
+   - **What**: A persistent, MongoDB-backed task list that survives context window truncation and memory consolidation — functioning as reliable **Working Memory** for multi-step agent workflows.
+   - **Why**: As contexts slide and memory gets consolidated, agents lose track of complex multi-stage tasks. A persistent scratchpad decouples task tracking from the ephemeral conversation window.
+   - **Implementation**: `AgenticTaskService` in `tools-api` with four tools: `task_create` (with subject, description, status, metadata), `task_get` (single task by ID), `task_list` (filterable by status, returns summary counts), `task_update` (status transitions, metadata merge). MongoDB `agent_tasks` collection with project-scoped isolation, monotonic IDs via `agent_task_counters`. Schema pre-wired for future swarm support with `owner`, `blocks`, `blockedBy` fields (unused in single-agent mode). All four tools registered as **Tier 1 (auto-approve)** in `AutoApprovalEngine` since they only modify the agent's own scratchpad, not user files. 200-task-per-project cap.
+   - **Files**: `tools-api/services/AgenticTaskService.js`, `AgenticRoutes.js` (`/agentic/task/{create,list,get,update,delete}`), `ToolSchemaService.js`, `prism/src/services/AutoApprovalEngine.js`
+   - **Future (Swarm Extensions)**: When Coordinator workers are wired to `AgenticLoopService`, the task system will serve as a shared work queue. Planned additions:
+     - `task_claim` — Atomic acquisition with agent-busy check and file locking (prevents two workers from claiming the same task). Modeled after Claude Code's `claimTask()` with retry-backoff semantics.
+     - `task_stop` / `task_output` — Allow workers to report results and completion status back to the coordinator.
+     - `blocks` / `blockedBy` DAG enforcement — Tasks can declare dependencies; `task_claim` checks that all blockers are `completed` before allowing acquisition.
+     - `owner` field activation — Workers identify themselves via `agentId`; tasks track which worker is operating on them.
+     - `activeForm` field — Present-continuous spinner text for Retina UI (e.g., "Running tests", "Refactoring auth module").
+     - Coordinator WebSocket integration — `notifyTasksUpdated()` broadcasts real-time task state changes to Retina via existing WebSocket infrastructure.
 
 5. 🔲 **Background Execution Monitoring (Terminal Capture)**:
    - **What**: The ability to inspect the output of persistent daemon processes (like `npm run dev` or a Python server).
@@ -243,7 +252,7 @@ A **rule-based** permission system for tool execution, replacing the need for ex
 
 | Tier | Risk | Tools | Behavior |
 |---|---|---|---|
-| **Tier 1: Auto-Approve** | Read-only | `read_file`, `list_directory`, `grep_search`, `glob_files`, `web_search`, `fetch_url`, `multi_file_read`, `file_info`, `file_diff`, `git_status`, `git_diff`, `git_log`, `project_summary` | Always execute without prompting |
+| **Tier 1: Auto-Approve** | Read-only / Scratchpad | `read_file`, `list_directory`, `grep_search`, `glob_files`, `web_search`, `fetch_url`, `multi_file_read`, `file_info`, `file_diff`, `git_status`, `git_diff`, `git_log`, `project_summary`, `task_create`, `task_get`, `task_list`, `task_update` | Always execute without prompting |
 | **Tier 2: Configurable** | Write | `write_file`, `str_replace_file`, `patch_file`, `move_file`, `delete_file`, `browser_action` | Auto-approve when user enables "Auto Mode" toggle; otherwise prompt |
 | **Tier 3: Always Prompt** | Destructive / Arbitrary | `execute_shell`, `execute_python`, `execute_javascript`, `run_command` | Always require explicit user approval |
 
@@ -310,12 +319,14 @@ Every agentic iteration is individually logged via `RequestLogger.logChatGenerat
 5. ✅ **Request Iteration Logging** — Per-pass `RequestLogger.logChatGeneration()` with agenticIteration number, per-pass and overall usage aggregation
 6. ✅ **Benchmarking System** — `BenchmarkService`: custom LLM accuracy benchmarking with multi-model comparison, provider-bucketed execution, multi-assertion evaluation, abort support, full UI dashboard
 7. ✅ **Visual Workflow System** — `WorkflowAssembler` + `workflows.js`: node-based visual graph engine, MinIO file handling, full editor UI in Retina
-8. 🔲 **Coordinator Worker Loop** — Wire `AgenticLoopService.runAgenticLoop()` into `CoordinatorService._runWorker()` so workers autonomously edit files
-9. 🔲 **Slash Commands** — Parameterized prompt templates with `$1`, `$@` argument substitution
-10. 🔲 **Per-Tool Tier Overrides UI** — Retina settings panel to customize Auto-Approval tiers per tool
-11. 🔲 **Coordinator Conflict Resolution** — Interactive diff merge UI for worktree conflicts
-12. 🔲 **Boot-Time Cleanup** — Prune orphan worktrees from `/tmp/prism-worktrees/` on Prism startup
-13. 🔲 **Full Auto Confirmation Dialog** — Retina modal confirming the user wants to activate `autoApprove` mode before enabling it
+8. ✅ **Task & State Management** — `AgenticTaskService`: MongoDB-backed persistent task list with `task_create`, `task_get`, `task_list`, `task_update`. Project-scoped, monotonic IDs, Tier 1 auto-approve. Schema pre-wired for swarm (`owner`, `blocks`, `blockedBy`)
+9. 🔲 **Coordinator Worker Loop** — Wire `AgenticLoopService.runAgenticLoop()` into `CoordinatorService._runWorker()` so workers autonomously edit files
+10. 🔲 **Slash Commands** — Parameterized prompt templates with `$1`, `$@` argument substitution
+11. 🔲 **Per-Tool Tier Overrides UI** — Retina settings panel to customize Auto-Approval tiers per tool
+12. 🔲 **Coordinator Conflict Resolution** — Interactive diff merge UI for worktree conflicts
+13. 🔲 **Boot-Time Cleanup** — Prune orphan worktrees from `/tmp/prism-worktrees/` on Prism startup
+14. 🔲 **Full Auto Confirmation Dialog** — Retina modal confirming the user wants to activate `autoApprove` mode before enabling it
+15. 🔲 **Task Swarm Extensions** — `task_claim` (atomic acquisition + agent-busy check), `task_stop`/`task_output` (worker reporting), `blocks`/`blockedBy` DAG enforcement, `owner` field activation, `activeForm` spinner text, Coordinator WebSocket broadcast of task state changes
 
 ---
 
