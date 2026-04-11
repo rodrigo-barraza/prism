@@ -134,6 +134,20 @@ export default class AgenticLoopService {
       finalTools = finalTools.filter((t) => t.name !== "web_search");
     }
 
+    // When the model natively outputs images (e.g. GPT Image 1.5,
+    // Gemini 3 Pro Image), remove the generate_image tool — the model
+    // can generate images inline without a round-trip through tools-api.
+    if (modelDef?.outputTypes?.includes(TYPES.IMAGE)) {
+      finalTools = finalTools.filter((t) => t.name !== "generate_image");
+    }
+
+    // When the model has native vision (inputTypes includes IMAGE),
+    // remove describe_image — the model can already see images in the
+    // conversation context without needing to call an external tool.
+    if (modelDef?.inputTypes?.includes(TYPES.IMAGE)) {
+      finalTools = finalTools.filter((t) => t.name !== "describe_image");
+    }
+
     // If the model is local (e.g. LM Studio / vLLM / Ollama), we only feed it tools for the first pass
     // to force an eventual text response and avoid infinite loops.
     const isLocalProvider = providerName === "lm-studio" || providerName === "vllm" || providerName === "ollama";
