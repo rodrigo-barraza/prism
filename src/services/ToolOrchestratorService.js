@@ -18,6 +18,9 @@ let cachedClientSchemas = [];
 /** @type {Map<string, object>} Tool name → full schema (for routing) */
 const toolMap = new Map();
 
+/** @type {string[]} Allowed workspace root paths (fetched from tools-api) */
+let cachedWorkspaceRoots = [];
+
 /** @type {boolean} Whether initial fetch has completed */
 let initialized = false;
 
@@ -72,6 +75,24 @@ async function fetchSchemas() {
     logger.info(
       `[ToolOrchestrator] Loaded ${schemas.length} tool schemas from tools-api`,
     );
+
+    // Fetch workspace config from tools-api (single source of truth)
+    try {
+      const configRes = await fetch(`${TOOLS_API_URL}/admin/config`, {
+        signal: AbortSignal.timeout(3000),
+      });
+      if (configRes.ok) {
+        const config = await configRes.json();
+        if (Array.isArray(config.workspaceRoots)) {
+          cachedWorkspaceRoots = config.workspaceRoots;
+          logger.info(
+            `[ToolOrchestrator] Workspace roots: ${cachedWorkspaceRoots.join(", ")}`,
+          );
+        }
+      }
+    } catch (cfgErr) {
+      logger.warn(`[ToolOrchestrator] Could not fetch workspace config: ${cfgErr.message}`);
+    }
   } catch (err) {
     logger.warn(
       `[ToolOrchestrator] Could not reach tools-api for schemas: ${err.message}`,
@@ -230,6 +251,16 @@ export default class ToolOrchestratorService {
   /** Client-facing schemas (with domain/dataSource/labels, no endpoint) — for Retina UI */
   static getClientToolSchemas() {
     return cachedClientSchemas;
+  }
+
+  /** Workspace root paths from tools-api (single source of truth) */
+  static getWorkspaceRoots() {
+    return cachedWorkspaceRoots;
+  }
+
+  /** Primary workspace root (first entry) */
+  static getWorkspaceRoot() {
+    return cachedWorkspaceRoots[0] || null;
   }
 
   static getToolFields(toolName) {

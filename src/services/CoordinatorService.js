@@ -1,4 +1,4 @@
-import { TOOLS_API_URL, WORKSPACE_ROOT as WORKSPACE_ROOT_RAW } from "../../secrets.js";
+import { TOOLS_API_URL } from "../../secrets.js";
 import { resolve } from "node:path";
 import logger from "../utils/logger.js";
 import mutationQueue from "./MutationQueue.js";
@@ -7,6 +7,7 @@ import RequestLogger from "./RequestLogger.js";
 import { estimateTokens } from "../utils/CostCalculator.js";
 import { TYPES, getPricing } from "../config.js";
 import { calculateTokensPerSec } from "../utils/math.js";
+import ToolOrchestratorService from "./ToolOrchestratorService.js";
 
 // ────────────────────────────────────────────────────────────
 // CoordinatorService — Multi-Agent Orchestration
@@ -21,9 +22,10 @@ import { calculateTokensPerSec } from "../utils/math.js";
 //   → Unified Diff → User Approval → Git Merge
 // ────────────────────────────────────────────────────────────
 
-const DEFAULT_WORKSPACE_ROOT = WORKSPACE_ROOT_RAW
-  ? resolve(WORKSPACE_ROOT_RAW.split(",")[0].trim())
-  : resolve(process.env.HOME || "/home");
+function getDefaultWorkspaceRoot() {
+  return ToolOrchestratorService.getWorkspaceRoot()
+    || resolve(process.env.HOME || "/home");
+}
 
 /** Max parallel workers */
 const MAX_WORKERS = 5;
@@ -208,7 +210,7 @@ export default class CoordinatorService {
     return {
       taskId: crypto.randomUUID(),
       task,
-      repoPath: repoPath || DEFAULT_WORKSPACE_ROOT,
+      repoPath: repoPath || getDefaultWorkspaceRoot(),
       subTasks,
       summary: parsed.summary || `Decomposed into ${subTasks.length} sub-tasks`,
       status: "planned",
@@ -401,7 +403,7 @@ export default class CoordinatorService {
 
     for (const worker of completedWorkers) {
       const mergeResult = await mergeWorktree(
-        task.repoPath || DEFAULT_WORKSPACE_ROOT,
+        task.repoPath || getDefaultWorkspaceRoot(),
         worker.branchName,
         `[coordinator] ${worker.id}: ${worker.instruction.slice(0, 80)}`,
       );
@@ -450,7 +452,7 @@ export default class CoordinatorService {
     const task = activeTasks.get(taskId);
     if (!task) return;
 
-    const repoPath = task.repoPath || DEFAULT_WORKSPACE_ROOT;
+    const repoPath = task.repoPath || getDefaultWorkspaceRoot();
 
     for (const worker of task.workers) {
       if (worker.worktreePath) {

@@ -1,11 +1,10 @@
-import { resolve } from "node:path";
 import ToolOrchestratorService from "./ToolOrchestratorService.js";
 import MemoryService from "./MemoryService.js";
 import WorkingMemoryService from "./WorkingMemoryService.js";
 import AgentPersonaRegistry from "./AgentPersonaRegistry.js";
 import EmbeddingService from "./EmbeddingService.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
-import { TOOLS_API_URL, WORKSPACE_ROOT as WORKSPACE_ROOT_RAW, MONGO_DB_NAME } from "../../secrets.js";
+import { TOOLS_API_URL, MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 import { cosineSimilarity } from "../utils/math.js";
 
@@ -14,10 +13,6 @@ const SKILL_RELEVANCE_THRESHOLD = 0.3;
 
 
 
-/** Workspace root from secrets.js — must match tools-api WORKSPACE_ROOT */
-const DEFAULT_WORKSPACE_ROOT = WORKSPACE_ROOT_RAW
-  ? resolve(WORKSPACE_ROOT_RAW.split(",")[0].trim())
-  : resolve(process.env.HOME || "/home");
 
 /**
  * SystemPromptAssembler — sole owner of the agent's system prompt.
@@ -37,7 +32,10 @@ export default class SystemPromptAssembler {
    * @param {string} [options.workspaceRoot] - Workspace root path
    */
   constructor(options = {}) {
-    this.workspaceRoot = options.workspaceRoot || DEFAULT_WORKSPACE_ROOT;
+    this.workspaceRoot = options.workspaceRoot
+      || ToolOrchestratorService.getWorkspaceRoot()
+      || process.env.HOME
+      || "/home";
     this._directoryCache = null;
     this._directoryCacheTime = 0;
     this._directoryCacheTTL = 60_000; // 1 minute
