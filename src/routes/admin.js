@@ -1298,6 +1298,7 @@ router.get("/conversations", async (req, res, next) => {
                 tokensPerSec: 1,
                 totalTime: 1,
                 toolNames: 1,
+                toolCallNames: 1,
               },
             },
           ],
@@ -1337,6 +1338,20 @@ router.get("/conversations", async (req, res, next) => {
                   $concatArrays: [
                     "$$value",
                     { $ifNull: ["$$this.toolNames", []] },
+                  ],
+                },
+              },
+            },
+          },
+          toolCallNames: {
+            $setUnion: {
+              $reduce: {
+                input: "$_requests",
+                initialValue: [],
+                in: {
+                  $concatArrays: [
+                    "$$value",
+                    { $ifNull: ["$$this.toolCallNames", []] },
                   ],
                 },
               },
@@ -2409,6 +2424,7 @@ router.get("/sessions", async (req, res, next) => {
           _providers: { $addToSet: "$provider" },
           _agents: { $addToSet: "$agent" },
           _toolArrays: { $push: { $ifNull: ["$toolNames", []] } },
+          _toolCallArrays: { $push: { $ifNull: ["$toolCallNames", []] } },
           _tpsValues: { $push: "$tokensPerSec" },
           _modalities: { $push: "$modalities" },
           _requests: {
@@ -2432,6 +2448,7 @@ router.get("/sessions", async (req, res, next) => {
               totalTime: "$totalTime",
               toolsUsed: "$toolsUsed",
               toolNames: "$toolNames",
+              toolCallNames: "$toolCallNames",
               agent: "$agent",
               timestamp: "$timestamp",
             },
@@ -2449,6 +2466,15 @@ router.get("/sessions", async (req, res, next) => {
             $setUnion: {
               $reduce: {
                 input: "$_toolArrays",
+                initialValue: [],
+                in: { $concatArrays: ["$$value", "$$this"] },
+              },
+            },
+          },
+          toolCallNames: {
+            $setUnion: {
+              $reduce: {
+                input: "$_toolCallArrays",
                 initialValue: [],
                 in: { $concatArrays: ["$$value", "$$this"] },
               },
@@ -2495,7 +2521,7 @@ router.get("/sessions", async (req, res, next) => {
         },
       },
       // Remove intermediate fields
-      { $project: { _id: 0, _models: 0, _providers: 0, _agents: 0, _toolArrays: 0, _tpsValues: 0, _modalities: 0, _requests: 0 } },
+      { $project: { _id: 0, _models: 0, _providers: 0, _agents: 0, _toolArrays: 0, _toolCallArrays: 0, _tpsValues: 0, _modalities: 0, _requests: 0 } },
       { $sort: { [sort]: sortDir } },
     ];
 
