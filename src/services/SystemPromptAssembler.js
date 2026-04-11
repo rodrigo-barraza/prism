@@ -388,6 +388,7 @@ export default class SystemPromptAssembler {
         `- At the START of a session, call task_list to check for in-progress or pending tasks from prior sessions\n` +
         `- When starting complex multi-step work (3+ files, multi-phase refactors, migrations), create a task with task_create to track progress\n` +
         `- Update task status to "in_progress" when you begin working on it, "completed" when done\n` +
+        `- Always set activeForm when creating or updating to "in_progress" — a present-continuous phrase shown as a spinner (e.g. "Running tests", "Refactoring auth module")\n` +
         `- Break large tasks into subtasks — use metadata to link related tasks\n` +
         `- Do NOT create tasks for simple, single-step requests — only for work that benefits from tracking`
       );

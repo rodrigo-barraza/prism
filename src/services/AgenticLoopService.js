@@ -693,6 +693,14 @@ export default class AgenticLoopService {
               }
           }
 
+          // Notify the client when task tools fired — auto-expand tasks panel
+          const taskToolsUsed = passPendingToolCalls.some(
+            (tc) => tc.name.startsWith("task_"),
+          );
+          if (taskToolsUsed) {
+            emit({ type: "status", message: "tasks_updated" });
+          }
+
           // Append to context for next pass
           const assistantMsg = {
              role: "assistant",
