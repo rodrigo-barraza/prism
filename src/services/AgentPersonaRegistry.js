@@ -266,6 +266,8 @@ const CODING_ENABLED_TOOLS = [
   "git",
   // Browser automation
   "browser_action",
+  // Code intelligence (LSP)
+  "lsp_action",
   // Compute
   "execute_javascript",
   "execute_shell",
