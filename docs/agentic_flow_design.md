@@ -121,10 +121,11 @@ Additionally, custom tools can be defined per-project in MongoDB (`custom_tools`
    - **Implementation**: `AgenticBrowserService` in `tools-api` manages a Playwright browser instance via `browser_action` tool. Supports `navigate`, `click`, `type`, `screenshot`, `scroll`, `evaluate`, `get_elements` (DOM inspection with CSS selectors). Screenshots uploaded to MinIO as `screenshotRef` values and promoted into conversation `images` arrays.
    - **Files**: `tools-api/services/AgenticBrowserService.js`, `AgenticRoutes.js` (`/agentic/browser/action`), `retina/src/components/ToolResultRenderers.js`
 
-3. 🔲 **Semantic Code Navigation (LSP)**:
-   - **What**: Exposing Language Server Protocol (LSP) capabilities to the agent instead of relying purely on regex `grep_search`.
+3. ✅ **Semantic Code Navigation (LSP)**:
+   - **What**: Exposing Language Server Protocol (LSP) capabilities to the agent for compiler-grade code intelligence instead of relying purely on regex `grep_search`.
    - **Why**: Allows the agent to precisely find definitions, trace references across files, and inspect type signatures natively, massively reducing hallucination on complex codebases.
-   - **Implementation**: New `AgenticLspService` in `tools-api` wrapping standard LSP binaries (like `tsserver`, `pyright`) with tools like `lsp_definition`, `lsp_references`, and `lsp_hover`.
+   - **Implementation**: `AgenticLspService` in `tools-api` wrapping LSP servers (`typescript-language-server`, `pyright-langserver`) via `vscode-jsonrpc` stdio transport. Single `lsp_action` tool with operation enum: `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `goToImplementation`. Servers lazy-started on first request per language. `LspClient` handles JSON-RPC framing, `LspServerInstance` manages lifecycle with exponential backoff retry, `LspServerManager` routes requests by file extension.
+   - **Files**: `tools-api/services/lsp/LspClient.js`, `LspServerInstance.js`, `LspServerManager.js`, `lspConfig.js`, `AgenticLspService.js`, `AgenticRoutes.js` (`/agentic/lsp/action`, `/agentic/lsp/health`, `/agentic/lsp/shutdown`)
 
 4. 🔲 **Task & State Management**:
    - **What**: A persistent, MongoDB-backed ToDo list capability.
