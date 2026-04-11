@@ -797,7 +797,7 @@ export default class AgenticLoopService {
       }
 
       const now = performance.now();
-      
+
       // We construct the modified context that finalizes and commits the DB
       // However, since we bypassed handleStreamingText entirely, we must manually finalize
       // We can just call finalizeTextGeneration and pass the collected metrics!

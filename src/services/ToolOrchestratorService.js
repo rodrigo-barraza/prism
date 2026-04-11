@@ -12,6 +12,9 @@ let cachedSchemas = [];
 /** @type {Array} Clean schemas for LLM (without endpoint metadata) */
 let cachedAISchemas = [];
 
+/** @type {Array} Client-facing schemas (with domain/dataSource/labels, without endpoint) */
+let cachedClientSchemas = [];
+
 /** @type {Map<string, object>} Tool name → full schema (for routing) */
 const toolMap = new Map();
 
@@ -47,6 +50,11 @@ async function fetchSchemas() {
     }
 
     cachedSchemas = schemas;
+
+    // Client-facing schemas: keep domain/dataSource/labels for UI grouping, strip only endpoint
+    cachedClientSchemas = schemas.map(
+      ({ endpoint: _e, ...rest }) => rest,
+    );
 
     // Strip endpoint, dataSource, domain, and labels metadata for LLM consumption
     cachedAISchemas = schemas.map(
@@ -214,8 +222,14 @@ async function fetchJsonPost(url, body, extraHeaders = {}) {
 // ────────────────────────────────────────────────────────────
 
 export default class ToolOrchestratorService {
+  /** AI-clean schemas (no endpoint/domain/dataSource/labels) — for LLM tool arrays */
   static getToolSchemas() {
     return cachedAISchemas;
+  }
+
+  /** Client-facing schemas (with domain/dataSource/labels, no endpoint) — for Retina UI */
+  static getClientToolSchemas() {
+    return cachedClientSchemas;
   }
 
   static getToolFields(toolName) {

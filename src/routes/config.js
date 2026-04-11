@@ -859,7 +859,7 @@ export { localConfigRouter };
  * Returns tool schemas. Optionally filter by agent persona via ?agent=CODING.
  */
 router.get("/tools", (_req, res) => {
-  const schemas = ToolOrchestratorService.getToolSchemas() || [];
+  const schemas = ToolOrchestratorService.getClientToolSchemas() || [];
   const agentId = _req.query.agent;
 
   if (agentId) {

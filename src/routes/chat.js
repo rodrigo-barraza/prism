@@ -1016,7 +1016,13 @@ export async function finalizeTextGeneration(
         ...(thinkingSignature && { thinkingSignature }),
         ...(images.length > 0 && { images }),
         ...(audioRef && { audio: audioRef }),
-        // We do not append toolCalls here because overrideMessagesToAppend handles intermediate tool iterations
+        // Include toolCalls on the final message if no intermediate message
+        // already persists them. The regular agentic loop embeds toolCalls in
+        // intermediate assistant messages (overrideMessagesToAppend), but
+        // native MCP tool calls (e.g. LM Studio) bypass that path — without
+        // this, tool calls vanish on page refresh.
+        ...(!overrideMessagesToAppend.some((m) => m.role === "assistant" && m.toolCalls?.length > 0) &&
+          toolCalls.length > 0 && { toolCalls }),
         model: resolvedModel,
         provider: providerName,
         timestamp: new Date().toISOString(),
