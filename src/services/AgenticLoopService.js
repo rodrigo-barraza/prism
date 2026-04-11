@@ -1,5 +1,4 @@
 import ToolOrchestratorService from "./ToolOrchestratorService.js";
-import BuiltInTools from "./BuiltInTools.js";
 import { expandMessagesForFC, truncateToolResult as _truncateToolResult } from "../utils/FunctionCallingUtilities.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
@@ -51,11 +50,9 @@ export default class AgenticLoopService {
       emit,
       signal,
     } = ctx;
-    // Load tool schemas from tools-api
+    // Load tool schemas from tools-api (includes Prism-local tools like
+    // generate_image — ToolOrchestratorService routes them in-process)
     const toolsApiSchemas = ToolOrchestratorService.getToolSchemas();
-
-    // Load built-in tools (generate_image, etc.) — handled natively by the loop
-    const builtInSchemas = BuiltInTools.getSchemas();
 
     // Load custom tools from MongoDB
     let customToolsData = [];
@@ -74,7 +71,7 @@ export default class AgenticLoopService {
 
     // Build the dynamic tool map
     const customToolMap = new Map();
-    const dynamicTools = [...toolsApiSchemas, ...builtInSchemas];
+    const dynamicTools = [...toolsApiSchemas];
     
     for (const t of customToolsData) {
       customToolMap.set(t.name, t);
@@ -595,23 +592,6 @@ export default class AgenticLoopService {
                // Run beforeToolCall hook (for logging/tracking)
                await hooks.run("beforeToolCall", tc, ctx);
 
-               // Built-in tools (generate_image, etc.) — handled natively
-               if (BuiltInTools.isBuiltIn(tc.name)) {
-                   const result = await BuiltInTools.execute(tc.name, tc.args, {
-                     messages: currentMessages,
-                     project,
-                     username,
-                     agent: agent || null,
-                     sessionId: sessionId || null,
-                     conversationId,
-                     clientIp: ctx.clientIp || null,
-                     requestId: ctx.requestId,
-                     agenticIteration: iterations,
-                   });
-                   await hooks.run("afterToolCall", tc, result, ctx);
-                   return { name: tc.name, id: tc.id, result };
-               }
-
                const customDef = customToolMap.get(tc.name);
                if (customDef) {
                    const result = await ToolOrchestratorService.executeCustomTool(customDef, tc.args);
@@ -635,7 +615,20 @@ export default class AgenticLoopService {
                    return { name: tc.name, id: tc.id, result };
                }
 
-               const result = await ToolOrchestratorService.executeTool(tc.name, tc.args, { project, username, agent, requestId: ctx.requestId, conversationId, iteration: iterations });
+               // All tools (including Prism-local executor:"prism" tools) route
+               // through executeTool — the orchestrator handles dispatch.
+               const result = await ToolOrchestratorService.executeTool(tc.name, tc.args, {
+                 messages: currentMessages,
+                 project,
+                 username,
+                 agent: agent || null,
+                 sessionId: sessionId || null,
+                 conversationId,
+                 clientIp: ctx.clientIp || null,
+                 requestId: ctx.requestId,
+                 agenticIteration: iterations,
+                 iteration: iterations,
+               });
                await hooks.run("afterToolCall", tc, result, ctx);
                return { name: tc.name, id: tc.id, result };
             })

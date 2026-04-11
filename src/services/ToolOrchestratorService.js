@@ -1,5 +1,6 @@
 import { TOOLS_API_URL } from "../../secrets.js";
 import MCPClientService from "./MCPClientService.js";
+import BuiltInTools from "./BuiltInTools.js";
 import logger from "../utils/logger.js";
 
 // ────────────────────────────────────────────────────────────
@@ -48,8 +49,10 @@ async function fetchSchemas() {
 
     cachedSchemas = schemas;
 
-    // Strip endpoint metadata for LLM consumption
-    cachedAISchemas = schemas.map(({ endpoint: _endpoint, ...rest }) => rest);
+    // Strip endpoint, dataSource, domain, and labels metadata for LLM consumption
+    cachedAISchemas = schemas.map(
+      ({ endpoint: _e, dataSource: _ds, domain: _d, labels: _l, ...rest }) => rest,
+    );
 
     // Build lookup map for executor
     toolMap.clear();
@@ -58,8 +61,14 @@ async function fetchSchemas() {
     }
 
     initialized = true;
+
+    // Count Prism-local tools for diagnostics
+    const prismLocalCount = schemas.filter(
+      (s) => s.endpoint?.executor === "prism",
+    ).length;
     logger.info(
-      `[ToolOrchestrator] Loaded ${schemas.length} tool schemas from tools-api`,
+      `[ToolOrchestrator] Loaded ${schemas.length} tool schemas from tools-api` +
+        (prismLocalCount > 0 ? ` (${prismLocalCount} Prism-local)` : ""),
     );
   } catch (err) {
     logger.warn(
@@ -207,6 +216,83 @@ async function fetchJsonPost(url, body, extraHeaders = {}) {
 }
 
 // ────────────────────────────────────────────────────────────
+// Prism-local tool telemetry — fire-and-forget to tools-api
+// ────────────────────────────────────────────────────────────
+
+const MAX_ARG_LOG_LENGTH = 500;
+
+/**
+ * Sanitize tool result for telemetry storage.
+ * Strips base64 image data, caps long strings, keeps structure readable.
+ */
+function sanitizeResultForTelemetry(result) {
+  if (!result || typeof result !== "object") return result;
+  const sanitized = {};
+  for (const [key, value] of Object.entries(result)) {
+    // Skip private fields like _image (contains raw base64)
+    if (key.startsWith("_")) {
+      sanitized[key] = "[stripped]";
+    } else if (typeof value === "string" && value.length > MAX_ARG_LOG_LENGTH) {
+      sanitized[key] = value.slice(0, MAX_ARG_LOG_LENGTH) + `… [${value.length} chars]`;
+    } else if (typeof value === "string" && value.startsWith("data:")) {
+      sanitized[key] = "[base64 data]";
+    } else {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
+
+/**
+ * Report a Prism-local tool execution to tools-api's telemetry endpoint.
+ * Fire-and-forget — errors are logged but never block the caller.
+ */
+function reportPrismToolCall({ toolName, domain, elapsedMs, success, errorMessage, args, result, ctx }) {
+  // Sanitize args for storage
+  const sanitizedArgs = {};
+  if (args && typeof args === "object") {
+    for (const [key, value] of Object.entries(args)) {
+      if (typeof value === "string" && value.length > MAX_ARG_LOG_LENGTH) {
+        sanitizedArgs[key] = value.slice(0, MAX_ARG_LOG_LENGTH) + `… [${value.length} chars]`;
+      } else {
+        sanitizedArgs[key] = value;
+      }
+    }
+  }
+
+  const entry = {
+    toolName,
+    domain,
+    method: "PRISM_LOCAL",
+    path: `executor:prism/${toolName}`,
+    status: success ? 200 : 500,
+    success,
+    errorMessage,
+    elapsedMs,
+    inBytes: 0,
+    outBytes: 0,
+    args: sanitizedArgs,
+    result,
+    callerProject: ctx.project || null,
+    callerUsername: ctx.username || null,
+    callerAgent: ctx.agent || null,
+    callerRequestId: ctx.requestId || null,
+    callerConversationId: ctx.conversationId || null,
+    callerIteration: ctx.iteration ?? ctx.agenticIteration ?? null,
+    clientIp: ctx.clientIp || null,
+    timestamp: new Date(),
+  };
+
+  fetch(`${TOOLS_API_URL}/admin/tool-calls/ingest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(entry),
+  }).catch((err) => {
+    logger.warn(`[ToolOrchestrator] Failed to report Prism-local tool telemetry: ${err.message}`);
+  });
+}
+
+// ────────────────────────────────────────────────────────────
 // Public API
 // ────────────────────────────────────────────────────────────
 
@@ -262,6 +348,31 @@ export default class ToolOrchestratorService {
     // Route MCP tools to MCPClientService
     if (MCPClientService.isMCPTool(name)) {
       return ToolOrchestratorService.executeMCPTool(name, args);
+    }
+
+    // Route Prism-local tools (executor: "prism") to BuiltInTools
+    // These need direct LLM provider access (image generation, vision)
+    // and cannot be executed via HTTP to tools-api.
+    const schema = toolMap.get(name);
+    if (schema?.endpoint?.executor === "prism") {
+      const start = performance.now();
+      const result = await BuiltInTools.execute(name, args, ctx);
+      const elapsedMs = Math.round((performance.now() - start) * 100) / 100;
+
+      // Fire-and-forget telemetry to tools-api so Prism-local tool calls
+      // appear in the unified tool_calls collection alongside HTTP-routed tools.
+      reportPrismToolCall({
+        toolName: name,
+        domain: schema.domain || "Creative",
+        elapsedMs,
+        success: !result?.error,
+        errorMessage: result?.error || null,
+        args,
+        result: sanitizeResultForTelemetry(result),
+        ctx,
+      });
+
+      return result;
     }
 
     const result = await executeToolGeneric(name, args, ctx);

@@ -8,79 +8,19 @@ import { getModelByName } from "../config.js";
 import { calculateTokensPerSec } from "../utils/math.js";
 
 // ────────────────────────────────────────────────────────────
-// Built-in tools — handled natively by the agentic loop
-// instead of routing through tools-api.
+// Prism-local tool executor — handles tools that need direct
+// access to LLM providers (image generation, vision).
+//
+// Schemas are defined in tools-api's ToolSchemaService and
+// discovered by Prism via /admin/tool-schemas. Execution is
+// routed here by ToolOrchestratorService when it detects
+// endpoint.executor === "prism" in the schema metadata.
 // ────────────────────────────────────────────────────────────
 
 const IMAGE_MODEL = "gemini-3.1-flash-image-preview";
 const IMAGE_PROVIDER = "google";
 const VISION_MODEL = "gemini-3-flash-preview";
 const VISION_PROVIDER = "google";
-
-/**
- * Tool schemas — same format as tools-api schemas (without endpoint metadata).
- * These get merged into the LLM's tool list alongside tools-api and MCP tools.
- */
-const BUILT_IN_SCHEMAS = [
-  {
-    name: "generate_image",
-    description:
-      "Generate an image from a detailed text prompt using AI image generation. " +
-      "Can also edit or redraw existing images from the conversation when reference images are available. " +
-      "Always provide a highly detailed, descriptive prompt for best results — include specifics about style, " +
-      "composition, subjects, colors, mood, lighting, and artistic direction. " +
-      "The generated image will be delivered to the user automatically. " +
-      "IMPORTANT: Do NOT call this tool unless the user's current message explicitly asks for an " +
-      "image, drawing, painting, illustration, or artwork. Never call it for greetings, " +
-      "questions, or casual conversation.",
-    parameters: {
-      type: "object",
-      properties: {
-        prompt: {
-          type: "string",
-          description:
-            "A detailed text prompt describing the image to generate. " +
-            "Be specific about style, composition, subjects, colors, mood, " +
-            "lighting, perspective, and artistic direction. The more detail, the better the result.",
-        },
-      },
-      required: ["prompt"],
-    },
-  },
-  {
-    name: "describe_image",
-    description:
-      "Describe the visual contents of one or more images (avatars, banners, photos, etc.) " +
-      "by URL. Returns a text description of each image. Use this when you need to understand " +
-      "what someone looks like (their avatar or banner) before generating artwork, or when " +
-      "you need to describe any image from a URL. IMPORTANT: Always batch ALL image URLs " +
-      "into a single call — pass all URLs in the imageUrls array at once. " +
-      "Never make multiple separate calls for individual URLs.",
-    parameters: {
-      type: "object",
-      properties: {
-        imageUrls: {
-          type: "array",
-          items: { type: "string" },
-          description:
-            "Array of image URLs to describe. Can be Discord avatar URLs, " +
-            "banner URLs, or any publicly accessible image URL.",
-        },
-        context: {
-          type: "string",
-          enum: ["avatar", "banner", "photo", "general"],
-          description:
-            "What kind of image this is, to tailor the description. " +
-            "Use 'avatar' for profile pictures, 'banner' for profile banners, " +
-            "'photo' for user-uploaded photos, 'general' for anything else.",
-        },
-      },
-      required: ["imageUrls"],
-    },
-  },
-];
-
-const builtInMap = new Map(BUILT_IN_SCHEMAS.map((t) => [t.name, t]));
 
 // Per-request vision dedup cache: prevents the agent from describing the
 // same image URL multiple times within one agentic session.
@@ -94,24 +34,7 @@ const VISION_CACHE_TTL_MS = 5 * 60 * 1000; // Auto-cleanup after 5 min
 
 export default class BuiltInTools {
   /**
-   * Get all built-in tool schemas (for merging into the LLM tool list).
-   * @returns {Array<object>}
-   */
-  static getSchemas() {
-    return BUILT_IN_SCHEMAS;
-  }
-
-  /**
-   * Check if a tool name is a built-in tool.
-   * @param {string} name
-   * @returns {boolean}
-   */
-  static isBuiltIn(name) {
-    return builtInMap.has(name);
-  }
-
-  /**
-   * Execute a built-in tool.
+   * Execute a Prism-local tool.
    *
    * @param {string} name   - Tool name
    * @param {object} args   - Tool arguments
@@ -128,7 +51,7 @@ export default class BuiltInTools {
     if (name === "describe_image") {
       return BuiltInTools._executeDescribeImage(args, ctx);
     }
-    return { error: `Unknown built-in tool: ${name}` };
+    return { error: `Unknown Prism-local tool: ${name}` };
   }
 
   // ────────────────────────────────────────────────────────────
