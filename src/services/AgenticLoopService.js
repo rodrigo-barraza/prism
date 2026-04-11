@@ -50,8 +50,8 @@ export default class AgenticLoopService {
       emit,
       signal,
     } = ctx;
-    // Load tool schemas from tools-api (includes Prism-local tools like
-    // generate_image — ToolOrchestratorService routes them in-process)
+    // Load tool schemas from tools-api (all tools including creative tools
+    // like generate_image are served as HTTP endpoints by tools-api)
     const toolsApiSchemas = ToolOrchestratorService.getToolSchemas();
 
     // Load custom tools from MongoDB
@@ -615,8 +615,8 @@ export default class AgenticLoopService {
                    return { name: tc.name, id: tc.id, result };
                }
 
-               // All tools (including Prism-local executor:"prism" tools) route
-               // through executeTool — the orchestrator handles dispatch.
+               // All tools route through executeTool — the orchestrator
+               // dispatches to tools-api via HTTP.
                const result = await ToolOrchestratorService.executeTool(tc.name, tc.args, {
                  messages: currentMessages,
                  project,
@@ -650,10 +650,10 @@ export default class AgenticLoopService {
                 streamedImages.push(res.result.screenshotRef);
               }
 
-              // Handle built-in generate_image results — emit image event
+              // Handle generate_image results — emit image event
               // and track in streamedImages, then strip heavy data from context
-              if (res?.result?._image) {
-                const img = res.result._image;
+              if (res?.result?.image?.data) {
+                const img = res.result.image;
                 streamedImages.push(img.minioRef || `data:${img.mimeType};base64,${img.data}`);
                 emit({
                   type: "image",
@@ -663,7 +663,7 @@ export default class AgenticLoopService {
                 });
                 // Strip heavy image data from the tool result before it enters
                 // the LLM context — only keep the metadata
-                delete res.result._image;
+                delete res.result.image;
               }
 
               // Track consecutive errors per tool for retry budgeting
