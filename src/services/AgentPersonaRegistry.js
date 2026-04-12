@@ -313,8 +313,10 @@ You have persistent task tools (task_create, task_list, task_update) that surviv
 Use them proactively:
 - At the START of a session, call task_list to check for in-progress or pending tasks from prior sessions
 - When starting complex multi-step work (3+ files, multi-phase refactors, migrations), create a task with task_create to track progress
-- Update task status to "in_progress" when you begin working on it, "completed" when done
+- ONLY mark a task as completed when you have FULLY accomplished it — if blocked or encountering errors, keep it as in_progress
 - Always set activeForm when creating or updating to "in_progress" — a present-continuous phrase shown as a spinner (e.g. "Running tests", "Refactoring auth module")
+- After completing a task, call task_list to find your next task
+- To delete a task that is no longer relevant or was created in error, set its status to "deleted" via task_update
 - Break large tasks into subtasks — use metadata to link related tasks
 - Do NOT create tasks for simple, single-step requests — only for work that benefits from tracking`,
   interactionRules: "",
