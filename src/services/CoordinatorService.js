@@ -260,6 +260,8 @@ export default class CoordinatorService {
       error: null,
       startedAt: Date.now(),
       durationMs: 0,
+      totalCost: null,
+      usage: null,
       abortController: new AbortController(),
       messages: [],
       files: files || [],
@@ -401,6 +403,8 @@ export default class CoordinatorService {
       branchName: w.branchName,
       toolCallCount: w.toolCalls?.length || 0,
       durationMs: w.status === "running" ? Date.now() - w.startedAt : w.durationMs,
+      totalCost: w.totalCost || null,
+      usage: w.usage || null,
       sessionId: w.sessionId,
       providerName: w.providerName,
       resolvedModel: w.resolvedModel,
@@ -447,6 +451,10 @@ export default class CoordinatorService {
         workerOutput += event.content || "";
       } else if (event.type === "tool_execution" && event.status === "calling") {
         workerToolCalls.push({ name: event.tool?.name, args: event.tool?.args });
+      } else if (event.type === "done") {
+        // Capture cost and usage from finalizeTextGeneration
+        worker.totalCost = event.estimatedCost || null;
+        worker.usage = event.usage || null;
       }
     };
 

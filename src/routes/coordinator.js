@@ -125,9 +125,31 @@ router.post("/abort/:taskId", async (req, res, next) => {
  * List all active workers spawned via chat tools.
  * Optional query: ?sessionId=xxx to filter by coordinator session.
  */
-router.get("/workers", (req, res) => {
+router.get("/workers", async (req, res) => {
   const { sessionId } = req.query;
-  res.json({ workers: CoordinatorService.listWorkers({ sessionId }) });
+  let workers = CoordinatorService.listWorkers({ sessionId });
+
+  // Fall back to persisted workers from the agent_session document
+  // when in-memory is empty (page refresh, server restart)
+  if (workers.length === 0 && sessionId) {
+    try {
+      const { default: MongoWrapper } = await import("../wrappers/MongoWrapper.js");
+      const { MONGO_DB_NAME } = await import("../../secrets.js");
+      const { COLLECTIONS } = await import("../constants.js");
+      const col = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTIONS.AGENT_SESSIONS);
+      const session = await col.findOne(
+        { id: sessionId },
+        { projection: { workers: 1 } },
+      );
+      if (session?.workers?.length > 0) {
+        workers = session.workers;
+      }
+    } catch (err) {
+      logger.warn(`[coordinator] Failed to load persisted workers: ${err.message}`);
+    }
+  }
+
+  res.json({ workers });
 });
 
 /**

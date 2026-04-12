@@ -914,6 +914,27 @@ export default class AgenticLoopService {
           rateLimits: lastRateLimits,
       }, currentMessages, true); // <--- pass true to skip the overall request logging so we don't duplicate
 
+      // ── Persist worker snapshots to the parent session ──────────
+      // Workers live in-memory during execution but must be persisted
+      // so they survive page refreshes and server restarts.
+      if (hasSpawnedWorkers && agentSessionId) {
+        try {
+          const { default: CoordinatorService } = await import("./CoordinatorService.js");
+          const { COLLECTIONS } = await import("../constants.js");
+          const workers = CoordinatorService.listWorkers({ sessionId: agentSessionId });
+          if (workers.length > 0) {
+            const col = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTIONS.AGENT_SESSIONS);
+            await col.updateOne(
+              { id: agentSessionId, project, username },
+              { $set: { workers, workersUpdatedAt: new Date().toISOString() } },
+            );
+            logger.info(`[AgenticLoop] Persisted ${workers.length} worker(s) to session ${agentSessionId}`);
+          }
+        } catch (err) {
+          logger.error(`[AgenticLoop] Failed to persist workers: ${err.message}`);
+        }
+      }
+
       // ── afterResponse hook: session summarization ───────────
       hooks.run("afterResponse", ctx, {
         text: finalStreamedText,
