@@ -123,11 +123,11 @@ router.post("/abort/:taskId", async (req, res, next) => {
 /**
  * GET /coordinator/workers
  * List all active workers spawned via chat tools.
- * Optional query: ?sessionId=xxx to filter by coordinator session.
+ * Optional query: ?sessionId=xxx to filter by parent coordinator session.
  */
 router.get("/workers", async (req, res) => {
   const { sessionId } = req.query;
-  let workers = CoordinatorService.listWorkers({ sessionId });
+  let workers = CoordinatorService.listWorkers({ parentAgentSessionId: sessionId });
 
   // Fall back to persisted workers from the agent_session document
   // when in-memory is empty (page refresh, server restart)

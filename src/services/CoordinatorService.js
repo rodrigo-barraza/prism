@@ -409,13 +409,13 @@ export default class CoordinatorService {
   /**
    * List all active workers spawned via chat tools.
    * @param {object} [options]
-   * @param {string} [options.sessionId] - Filter workers by coordinator session ID
+   * @param {string} [options.parentAgentSessionId] - Filter workers by parent coordinator session
    * @returns {Array}
    */
-  static listWorkers({ sessionId } = {}) {
+  static listWorkers({ parentAgentSessionId } = {}) {
     let workers = Array.from(activeWorkers.values());
-    if (sessionId) {
-      workers = workers.filter((w) => w.sessionId === sessionId);
+    if (parentAgentSessionId) {
+      workers = workers.filter((w) => w.parentAgentSessionId === parentAgentSessionId);
     }
     return workers.map((w) => ({
       agentId: w.agentId,
