@@ -182,6 +182,15 @@ export default class AgenticLoopService {
     let audioSampleRate = 24000;
     let lastRateLimits = null;
 
+    // ── Display segment tracking ─────────────────────────────────
+    // Mirrors the client-side contentSegments system so the
+    // interleaving order (thinking ↔ tools ↔ text) survives DB
+    // round-trips for proper rendering on session restore.
+    const displaySegments = [];
+    const displayTextFragments = [];
+    const displayThinkingFragments = [];
+    let lastDisplaySegType = null;
+
     // ── Initialize lifecycle hooks ──────────────────────────────
     const hooks = new AgentHooks();
 
@@ -392,6 +401,13 @@ export default class AgenticLoopService {
             passGenerationEnd = performance.now();
             streamedThinking += chunk.content;
             passStreamedThinking += chunk.content;
+            // Display segment tracking
+            if (lastDisplaySegType !== "thinking") {
+              displaySegments.push({ type: "thinking", fragmentIndex: displayThinkingFragments.length });
+              displayThinkingFragments.push("");
+              lastDisplaySegType = "thinking";
+            }
+            displayThinkingFragments[displayThinkingFragments.length - 1] += chunk.content;
             emit({ type: "thinking", content: chunk.content });
             continue;
           }
@@ -416,11 +432,19 @@ export default class AgenticLoopService {
             if (chunk.native) {
               // Track for finalization but don't add to pending execution queue
               if (chunk.status === "calling") {
+                const tcId = chunk.id || `ntc-${streamedToolCalls.length}`;
                 streamedToolCalls.push({
-                  id: chunk.id || null,
+                  id: tcId,
                   name: chunk.name,
                   args: chunk.args || {},
                 });
+                // Display segment tracking
+                if (lastDisplaySegType === "tools") {
+                  displaySegments[displaySegments.length - 1].toolIds.push(tcId);
+                } else {
+                  displaySegments.push({ type: "tools", toolIds: [tcId] });
+                  lastDisplaySegType = "tools";
+                }
               } else if (chunk.status === "done" || chunk.status === "error") {
                 // Update existing entry with result
                 const existing = streamedToolCalls.find(
@@ -445,23 +469,31 @@ export default class AgenticLoopService {
               continue;
             }
 
+            const stdTcId = chunk.id || `tc-${streamedToolCalls.length}`;
             passPendingToolCalls.push({
-              id: chunk.id || null,
+              id: stdTcId,
               responsesItemId: chunk.responsesItemId || undefined,
               name: chunk.name,
               args: chunk.args || {},
               thoughtSignature: chunk.thoughtSignature || undefined,
             });
             streamedToolCalls.push({
-              id: chunk.id || null,
+              id: stdTcId,
               responsesItemId: chunk.responsesItemId || undefined,
               name: chunk.name,
               args: chunk.args || {},
               thoughtSignature: chunk.thoughtSignature || undefined,
             });
+            // Display segment tracking
+            if (lastDisplaySegType === "tools") {
+              displaySegments[displaySegments.length - 1].toolIds.push(stdTcId);
+            } else {
+              displaySegments.push({ type: "tools", toolIds: [stdTcId] });
+              lastDisplaySegType = "tools";
+            }
             emit({
               type: "tool_execution",
-              tool: { name: chunk.name, args: chunk.args || {}, id: chunk.id },
+              tool: { name: chunk.name, args: chunk.args || {}, id: stdTcId },
               status: "calling",
             });
             continue;
@@ -524,6 +556,13 @@ export default class AgenticLoopService {
           passOutputCharacters += chunkStr.length;
           finalStreamedText = passStreamedText + chunkStr;
           passStreamedText += chunkStr;
+          // Display segment tracking
+          if (lastDisplaySegType !== "text") {
+            displaySegments.push({ type: "text", fragmentIndex: displayTextFragments.length });
+            displayTextFragments.push("");
+            lastDisplaySegType = "text";
+          }
+          displayTextFragments[displayTextFragments.length - 1] += chunkStr;
           emit({ type: "chunk", content: chunkStr });
         }
 
@@ -912,6 +951,10 @@ export default class AgenticLoopService {
           generationSec: overallFirstTokenTime && overallGenerationEnd ? (overallGenerationEnd - overallFirstTokenTime) / 1000 : null,
           totalSec: (now - requestStart) / 1000,
           rateLimits: lastRateLimits,
+          // Display segment metadata for Retina rendering
+          contentSegments: displaySegments,
+          textFragments: displayTextFragments,
+          thinkingFragments: displayThinkingFragments,
       }, currentMessages, true); // <--- pass true to skip the overall request logging so we don't duplicate
 
       // ── Persist worker snapshots to the parent session ──────────

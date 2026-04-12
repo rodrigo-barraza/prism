@@ -859,6 +859,10 @@ export async function finalizeTextGeneration(
     generationSec,
     totalSec,
     rateLimits,
+    // Display segment metadata (from AgenticLoopService)
+    contentSegments,
+    textFragments,
+    thinkingFragments,
   },
   overrideMessagesToAppend = null,
   skipRequestLog = false
@@ -1083,6 +1087,10 @@ export async function finalizeTextGeneration(
         totalTime: parseFloat(totalSec.toFixed(3)),
         tokensPerSec,
         estimatedCost,
+        // Display segment metadata — preserves interleaving order for Retina
+        ...(contentSegments?.length > 0 && { contentSegments }),
+        ...(textFragments?.length > 0 && { textFragments }),
+        ...(thinkingFragments?.length > 0 && { thinkingFragments }),
         // Generation settings — source of truth per request
         generationSettings: {
           temperature: options.temperature,
