@@ -768,6 +768,14 @@ export default class AgenticLoopService {
             emit({ type: "status", message: "workers_updated" });
           }
 
+          // Notify the client when memory tools fired — auto-expand memories panel
+          const memoryToolsUsed = passPendingToolCalls.some(
+            (tc) => tc.name === "upsert_memory",
+          );
+          if (memoryToolsUsed) {
+            emit({ type: "status", message: "memories_updated" });
+          }
+
           // Append to context for next pass
           const assistantMsg = {
              role: "assistant",

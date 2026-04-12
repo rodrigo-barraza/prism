@@ -292,6 +292,8 @@ const CODING_ENABLED_TOOLS = [
   "spawn_agent",
   "send_message",
   "stop_agent",
+  // Memory (explicit upsert_memory tool)
+  "upsert_memory",
 ];
 
 // ── CODING Agent (Retina) ────────────────────────────────────────

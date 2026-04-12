@@ -41,6 +41,9 @@ const DEFAULT_TIER_MAP = {
   send_message: APPROVAL_TIERS.AUTO,
   stop_agent: APPROVAL_TIERS.AUTO,
 
+  // Tier 1 — memory management (non-destructive upsert)
+  upsert_memory: APPROVAL_TIERS.AUTO,
+
   // Tier 2 — write operations
   write_file: APPROVAL_TIERS.WRITE,
   str_replace_file: APPROVAL_TIERS.WRITE,

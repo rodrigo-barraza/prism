@@ -6,6 +6,43 @@ import logger from "../utils/logger.js";
 const router = express.Router();
 
 /**
+ * POST /agent-memories
+ * Create a new memory via MemoryService.store() (embedding + dedup).
+ * Called by tools-api's upsert_memory route.
+ */
+router.post("/", async (req, res, next) => {
+  try {
+    const { agent, project, username, content, type, title, agentSessionId } = req.body;
+    if (!content) {
+      return res.status(400).json({ error: "content is required" });
+    }
+
+    const result = await MemoryService.store({
+      agent: agent || "CODING",
+      project: project || "default",
+      username: username || null,
+      content,
+      type: type || "project",
+      title: title || null,
+      sessionId: agentSessionId || null,
+      endpoint: "/agent-memories",
+    });
+
+    if (!result) {
+      // Duplicate detected
+      return res.json({ duplicate: true, message: "Near-duplicate memory already exists" });
+    }
+
+    // Strip embedding from response (large vector, not needed by caller)
+    const { embedding: _emb, ...safe } = result;
+    res.json(safe);
+  } catch (error) {
+    logger.error(`[agent-memories] POST ${error.message}`);
+    next(error);
+  }
+});
+
+/**
  * GET /agent-memories?project=<project>&agent=<agent>&limit=100&skip=0
  * List all agent memories for a project (read-only).
  * Defaults to agent="CODING" for backward compatibility.

@@ -491,7 +491,7 @@ const lmStudioProvider = {
       // to prevent context overflow. The model's loaded context determines the cap.
       if (options.tools && options.tools.length > 0) {
         // Coordinator tools (spawn_agent, send_message, stop_agent) are
-        // Prism-local — they don't exist on the tools-api MCP server.
+        // Prism-local — they don't exisP server.t on the tools-api MC
         // Always filter them out before building the MCP allowed_tools list.
         const PRISM_LOCAL_TOOLS = new Set(["spawn_agent", "send_message", "stop_agent"]);
         let toolNames = options.tools
