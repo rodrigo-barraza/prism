@@ -219,6 +219,10 @@ async function runSingleModel(benchmark, model, project, username, { signal } = 
         username,
         skipConversation: true,
         thinkingEnabled: model.thinkingEnabled || false,
+        ...(model.toolsEnabled && {
+          functionCallingEnabled: true,
+          enabledTools: ["precise_calculator"],
+        }),
       },
       (event) => {
         events.push(event);
@@ -296,12 +300,24 @@ async function runSingleModel(benchmark, model, project, username, { signal } = 
       .map((e) => e.content)
       .join("");
 
+    // Extract tool calls (emitted as type: "toolCall")
+    const toolCallEvents = events.filter((e) => e.type === "toolCall" && e.status === "done");
+    const toolCalls = toolCallEvents.length > 0
+      ? toolCallEvents.map((tc) => ({
+        id: tc.id,
+        name: tc.name,
+        args: tc.args,
+        result: tc.result,
+      }))
+      : null;
+
     return {
       provider: model.provider,
       model: model.model,
       label: model.label,
       response: text || null,
       thinking: thinkingText || null,
+      toolCalls,
       passed,
       matchMode,
       latency: parseFloat(latency.toFixed(3)),
@@ -374,6 +390,7 @@ const BenchmarkService = {
           model: t.model,
           label: def?.label || t.display_name || t.model,
           thinkingEnabled: t.thinkingEnabled || false,
+          toolsEnabled: t.toolsEnabled || false,
         };
       });
     } else {

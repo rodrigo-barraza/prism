@@ -340,11 +340,11 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
     delete options.thinkingBudget;
   }
 
-  // LM Studio models emit thinking tokens by default. Default thinkingEnabled
-  // ON only when the client didn't send a value (undefined). When the client
-  // explicitly sends false (thinking toggle off), respect it — models can
-  // use tools without thinking.
-  if (providerName === "lm-studio" && thinkingEnabled === undefined) {
+  // Local models emit thinking tokens (<think> tags) by default. Default
+  // thinkingEnabled ON only when the client didn't send a value (undefined).
+  // When the client explicitly sends false (thinking toggle off), respect it
+  // — models can use tools without thinking.
+  if ((providerName === "lm-studio" || providerName === "llama-cpp") && thinkingEnabled === undefined) {
     options.thinkingEnabled = true;
   }
 

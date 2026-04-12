@@ -67,7 +67,7 @@ const vllmProvider = {
       );
       const data = await response.json();
       const { text, thinking, usage, toolCalls } =
-        processNonStreamingResponse(data);
+        processNonStreamingResponse(data, { thinkingEnabled: options.thinkingEnabled });
 
       const result = { text, thinking, usage };
       if (toolCalls) result.toolCalls = toolCalls;
@@ -128,7 +128,10 @@ const vllmProvider = {
       );
 
       const reader = response.body.getReader();
-      yield* parseSSEStream(reader, { signal: options.signal });
+      yield* parseSSEStream(reader, {
+        signal: options.signal,
+        thinkingEnabled: options.thinkingEnabled,
+      });
     } catch (error) {
       if (error.name === "AbortError") return; // Client disconnected
       if (error instanceof ProviderError) throw error;

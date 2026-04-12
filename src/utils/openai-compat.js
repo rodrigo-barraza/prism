@@ -317,12 +317,24 @@ export function prepareOpenAICompatMessages(messages, { mediaStrategy = MEDIA_ST
  * Process a non-streaming OpenAI-compatible chat completion response.
  * Extracts text, thinking (native + <think> tags), usage, and tool calls.
  *
+ * When thinkingEnabled is false, thinking content is folded into the text
+ * output and the `thinking` field is null.
+ *
  * @param {object} data - The parsed JSON response body
+ * @param {object} [options]
+ * @param {boolean} [options.thinkingEnabled] - When false, suppress thinking separation
  * @returns {{ text: string, thinking: string|null, usage: object, toolCalls: Array|null }}
  */
-export function processNonStreamingResponse(data) {
+export function processNonStreamingResponse(data, options = {}) {
   const msg = data.choices?.[0]?.message;
   const rawText = msg?.content || "";
+
+  // When thinking is disabled, return raw text without parsing <think> tags
+  if (options.thinkingEnabled === false) {
+    const usage = normalizeUsage(data.usage);
+    const toolCalls = extractToolCallsFromMessage(msg);
+    return { text: rawText, thinking: null, usage, toolCalls };
+  }
 
   // Check native reasoning fields first, fall back to <think> tag parsing
   const nativeThinking = msg?.reasoning_content || msg?.reasoning || null;
@@ -345,9 +357,14 @@ export function processNonStreamingResponse(data) {
  *   - { type: "toolCall", id, name, args }
  *   - { type: "usage", usage }
  *
+ * When thinkingEnabled is false, all thinking content (native reasoning_content
+ * and <think> tag content) is yielded as plain text strings instead of
+ * { type: "thinking" } events.
+ *
  * @param {ReadableStreamDefaultReader} reader - The response body reader
  * @param {object} [options]
  * @param {AbortSignal} [options.signal] - Abort signal
+ * @param {boolean} [options.thinkingEnabled] - When false, emit thinking as text
  * @param {function} [options.onUsage] - Called with raw usage JSON for provider-specific extensions (e.g. llama.cpp timings)
  * @param {function} [options.onChunkJson] - Called with each parsed SSE JSON object for provider-specific processing
  */
@@ -355,7 +372,9 @@ export async function* parseSSEStream(reader, options = {}) {
   const decoder = new TextDecoder();
   let buffer = "";
   let usage = null;
-  const thinkParser = new ThinkTagParser();
+  const suppressThinking = options.thinkingEnabled === false;
+  // Skip ThinkTagParser entirely when thinking is disabled — no overhead
+  const thinkParser = suppressThinking ? null : new ThinkTagParser();
   const pendingToolCalls = {};
 
   try {
@@ -395,18 +414,27 @@ export async function* parseSSEStream(reader, options = {}) {
           // Native reasoning fields (Qwen3.5, DeepSeek, etc.)
           const reasoning = delta?.reasoning_content || delta?.reasoning || "";
           if (reasoning) {
-            yield { type: "thinking", content: reasoning };
+            if (suppressThinking) {
+              yield reasoning; // Emit as plain text
+            } else {
+              yield { type: "thinking", content: reasoning };
+            }
           }
 
           const content = delta?.content || "";
           if (content) {
-            // Parse <think> tags from the streamed content
-            const parts = thinkParser.feed(content);
-            for (const part of parts) {
-              if (part.type === "thinking") {
-                yield { type: "thinking", content: part.content };
-              } else {
-                yield part.content;
+            if (suppressThinking) {
+              // Pass through raw content without <think> tag parsing
+              yield content;
+            } else {
+              // Parse <think> tags from the streamed content
+              const parts = thinkParser.feed(content);
+              for (const part of parts) {
+                if (part.type === "thinking") {
+                  yield { type: "thinking", content: part.content };
+                } else {
+                  yield part.content;
+                }
               }
             }
           }
@@ -455,12 +483,14 @@ export async function* parseSSEStream(reader, options = {}) {
     }
 
     // Flush any remaining buffered content from the think parser
-    const remaining = thinkParser.flush();
-    for (const part of remaining) {
-      if (part.type === "thinking") {
-        yield { type: "thinking", content: part.content };
-      } else {
-        yield part.content;
+    if (thinkParser) {
+      const remaining = thinkParser.flush();
+      for (const part of remaining) {
+        if (part.type === "thinking") {
+          yield { type: "thinking", content: part.content };
+        } else {
+          yield part.content;
+        }
       }
     }
 

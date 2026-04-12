@@ -101,7 +101,7 @@ const llamaCppProvider = {
       );
       const data = await response.json();
       const { text, thinking, usage, toolCalls } =
-        processNonStreamingResponse(data);
+        processNonStreamingResponse(data, { thinkingEnabled: options.thinkingEnabled });
 
       // Extract timings for tok/s reporting (llama.cpp extension)
       if (data.timings?.predicted_per_second) {
@@ -170,6 +170,7 @@ const llamaCppProvider = {
       const reader = response.body.getReader();
       yield* parseSSEStream(reader, {
         signal: options.signal,
+        thinkingEnabled: options.thinkingEnabled,
         // llama.cpp extension: extract timings for tok/s
         onUsage: (json, usage) => {
           if (json.timings?.predicted_per_second) {
