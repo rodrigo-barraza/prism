@@ -38,13 +38,6 @@ const pendingApprovals = new Map();
  */
 export default class AgenticLoopService {
   static async runAgenticLoop(ctx) {
-    // Alias agentSessionId as conversationId so finalizeTextGeneration's
-    // persistence path (which reads ctx.conversationId) writes to the DB.
-    // getCollectionOpts(project) routes agent projects → agent_sessions.
-    if (ctx.agentSessionId && !ctx.conversationId) {
-      ctx.conversationId = ctx.agentSessionId;
-    }
-
     const {
       provider,
       providerName,
@@ -154,7 +147,7 @@ export default class AgenticLoopService {
 
     // When the model has native vision (inputTypes includes IMAGE),
     // remove describe_image — the model can already see images in the
-    // conversation context without needing to call an external tool.
+    // session context without needing to call an external tool.
     if (modelDef?.inputTypes?.includes(TYPES.IMAGE)) {
       finalTools = finalTools.filter((t) => t.name !== "describe_image");
     }
@@ -405,7 +398,7 @@ export default class AgenticLoopService {
 
           // Thinking signature — Anthropic's cryptographic signature for thinking
           // blocks. Must be captured and passed back verbatim for multi-turn
-          // tool use conversations to avoid API 400 errors.
+          // tool use sessions to avoid API 400 errors.
           if (chunk && typeof chunk === "object" && chunk.type === "thinking_signature") {
             passThinkingSignature = chunk.signature;
             continue;
@@ -682,7 +675,7 @@ export default class AgenticLoopService {
               });
 
               // Promote browser screenshots into streamedImages so they persist
-              // into the conversation's images[] array and appear in /admin/media
+              // into the session's images[] array and appear in /admin/media
               if (res?.result?.screenshotRef) {
                 streamedImages.push(res.result.screenshotRef);
               }

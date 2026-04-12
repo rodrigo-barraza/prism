@@ -867,7 +867,8 @@ export async function finalizeTextGeneration(
     messages,
     originalMessages,
     options,
-    conversationId,
+    conversationId: rawConversationId,
+    agentSessionId,
     userMessage,
     conversationMeta,
     sessionId,
@@ -879,6 +880,9 @@ export async function finalizeTextGeneration(
     emit,
     signal,
   } = ctx;
+
+  // Agent sessions use agentSessionId as the persistence key
+  const conversationId = rawConversationId ?? agentSessionId;
 
   // ── Cost calculation ──────────────────────────────────────────
   let estimatedCost = null;
