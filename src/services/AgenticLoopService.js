@@ -152,10 +152,10 @@ export default class AgenticLoopService {
       finalTools = finalTools.filter((t) => t.name !== "describe_image");
     }
 
-    // Signal to providers that this is the agentic loop — providers should
-    // use Prism-managed tool execution (OAI-compat) instead of native MCP
-    // loops, which don't reliably chain multi-step tool calls.
-    options.agenticLoop = true;
+    // If the model is local (e.g. LM Studio / vLLM / Ollama), we only feed it tools for the first pass
+    // to force an eventual text response and avoid infinite loops.
+    const isLocalProvider = providerName === "lm-studio" || providerName === "vllm" || providerName === "ollama";
+    let hasCalledTools = false;
 
     // Resolve max iterations from client or fall back to the module constant.
     // 0 = unlimited (∞ mode from the frontend), positive values clamped 1–100,
@@ -328,8 +328,11 @@ export default class AgenticLoopService {
         let passOutputCharacters = 0;
         const passUsage = { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 };
 
-        const passOptions = { ...options };
-        passOptions.tools = finalTools;
+        const passOptions = { ...options };      if (isLocalProvider && hasCalledTools) {
+          delete passOptions.tools;
+        } else {
+          passOptions.tools = finalTools;
+        }
 
         // ── Context window enforcement ─────────────────────────
         // Enforce token budget before expanding messages. This prevents
@@ -563,7 +566,7 @@ export default class AgenticLoopService {
 
         // If the LLM returned tool calls, we execute them and loop
         if (passPendingToolCalls.length > 0) {
-
+          hasCalledTools = true;
           if (passPendingToolCalls.some((tc) => tc.name === "spawn_agent")) hasSpawnedWorkers = true;
 
           // ── beforeToolCall hook: auto-approval gating ──────

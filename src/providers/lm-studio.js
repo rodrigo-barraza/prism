@@ -491,56 +491,10 @@ const lmStudioProvider = {
       // NOTE: Each MCP tool schema averages ~500 tokens. We cap the tool count
       // to prevent context overflow. The model's loaded context determines the cap.
       if (options.tools && options.tools.length > 0) {
-        // When called from Prism's agentic loop (agenticLoop=true), or when
-        // coordinator tools are present, always use the OAI-compat path.
-        // Prism's loop controls tool execution and multi-step re-prompting,
-        // which is essential for multi-step workflows like browser automation.
-        // LM Studio's native MCP loop doesn't reliably chain tool calls with
-        // small/medium models — it often stops after one tool call.
+        // Coordinator tools (spawn_agent, send_message, stop_agent) are
+        // Prism-local — they don't exist on the tools-api MCP server.
+        // Always filter them out before building the MCP allowed_tools list.
         const PRISM_LOCAL_TOOLS = new Set(["spawn_agent", "send_message", "stop_agent"]);
-        const hasCoordinatorTools = options.tools.some((t) => PRISM_LOCAL_TOOLS.has(t.name));
-        const usePrismLoop = options.agenticLoop || hasCoordinatorTools;
-
-        if (usePrismLoop) {
-          // ── OAI-compat path for Prism-managed agentic loop ──
-          // Uses /v1/chat/completions with OpenAI function calling format.
-          // Prism's agentic loop handles tool execution and re-prompting.
-          const oaiPayload = {
-            messages: prepared,
-            model,
-            ...buildPayloadParams(options),
-            ...(options.topK > 0 && { top_k: options.topK }),
-            ...(options.minP !== undefined && { min_p: options.minP }),
-            ...(options.repeatPenalty !== undefined && options.repeatPenalty !== 1 && { repeat_penalty: options.repeatPenalty }),
-            stream: true,
-          };
-
-          const tools = convertToolsToOpenAI(options.tools);
-          if (tools) oaiPayload.tools = tools;
-
-          logger.info(
-            `[LM-Studio] OAI-compat fallback: ${options.tools.length} tools (coordinator tools detected)`,
-          );
-
-          const oaiResponse = await fetch(`${baseUrl}/v1/chat/completions`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(oaiPayload),
-            ...(options.signal && { signal: options.signal }),
-          });
-
-          if (!oaiResponse.ok) {
-            const errorText = await oaiResponse.text();
-            throw new Error(`API error: ${oaiResponse.status} ${errorText}`);
-          }
-
-          const oaiReader = oaiResponse.body.getReader();
-          yield* parseSSEStream(oaiReader, { signal: options.signal });
-          return;
-        }
-
-        // ── Standard MCP path (no coordinator tools) ──
-        // Exclude Prism-local tools from MCP allowed_tools list.
         let toolNames = options.tools
           .map((t) => t.name)
           .filter((name) => !PRISM_LOCAL_TOOLS.has(name));
