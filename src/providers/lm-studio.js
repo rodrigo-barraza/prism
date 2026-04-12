@@ -19,6 +19,7 @@ import {
   expandVideoToFrames,
   processNonStreamingResponse,
   fetchOpenAICompat,
+  parseSSEStream,
   MEDIA_STRATEGIES,
 } from "../utils/openai-compat.js";
 
@@ -492,9 +493,52 @@ const lmStudioProvider = {
       if (options.tools && options.tools.length > 0) {
         // Coordinator tools (spawn_agent, send_message, stop_agent) are
         // intercepted by Prism's agentic loop — they don't exist on the
-        // tools-api MCP server. Exclude them from allowed_tools to prevent
-        // LM Studio's validation from rejecting the request.
+        // tools-api MCP server. When coordinator tools are present, fall
+        // back to the OAI-compat streaming path which returns tool calls
+        // in OpenAI format that the agentic loop can handle.
         const PRISM_LOCAL_TOOLS = new Set(["spawn_agent", "send_message", "stop_agent"]);
+        const hasCoordinatorTools = options.tools.some((t) => PRISM_LOCAL_TOOLS.has(t.name));
+
+        if (hasCoordinatorTools) {
+          // ── OAI-compat fallback for coordinator tools ──
+          // Uses /v1/chat/completions with OpenAI function calling format.
+          // Prism's agentic loop handles tool execution.
+          const oaiPayload = {
+            messages: prepared,
+            model,
+            ...buildPayloadParams(options),
+            ...(options.topK > 0 && { top_k: options.topK }),
+            ...(options.minP !== undefined && { min_p: options.minP }),
+            ...(options.repeatPenalty !== undefined && options.repeatPenalty !== 1 && { repeat_penalty: options.repeatPenalty }),
+            stream: true,
+          };
+
+          const tools = convertToolsToOpenAI(options.tools);
+          if (tools) oaiPayload.tools = tools;
+
+          logger.info(
+            `[LM-Studio] OAI-compat fallback: ${options.tools.length} tools (coordinator tools detected)`,
+          );
+
+          const oaiResponse = await fetch(`${baseUrl}/v1/chat/completions`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(oaiPayload),
+            ...(options.signal && { signal: options.signal }),
+          });
+
+          if (!oaiResponse.ok) {
+            const errorText = await oaiResponse.text();
+            throw new Error(`API error: ${oaiResponse.status} ${errorText}`);
+          }
+
+          const oaiReader = oaiResponse.body.getReader();
+          yield* parseSSEStream(oaiReader, { signal: options.signal });
+          return;
+        }
+
+        // ── Standard MCP path (no coordinator tools) ──
+        // Exclude Prism-local tools from MCP allowed_tools list.
         let toolNames = options.tools
           .map((t) => t.name)
           .filter((name) => !PRISM_LOCAL_TOOLS.has(name));
