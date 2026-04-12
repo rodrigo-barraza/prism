@@ -192,7 +192,7 @@ function buildContextHeaders(ctx = {}) {
   if (ctx.username) headers["X-Username"] = ctx.username;
   if (ctx.agent) headers["X-Agent"] = ctx.agent;
   if (ctx.requestId) headers["X-Request-Id"] = ctx.requestId;
-  if (ctx.conversationId) headers["X-Conversation-Id"] = ctx.conversationId;
+  if (ctx.conversationId) headers["X-Agent-Session-Id"] = ctx.conversationId;
   if (ctx.iteration !== undefined && ctx.iteration !== null) headers["X-Iteration"] = String(ctx.iteration);
   return headers;
 }

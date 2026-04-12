@@ -49,6 +49,7 @@ import skillsRouter from "./routes/skills.js";
 import agentMemoriesRouter from "./routes/agent-memories.js";
 import mcpServersRouter from "./routes/mcp-servers.js";
 import favoritesRouter from "./routes/favorites.js";
+import agentSessionsRouter from "./routes/agent-sessions.js";
 
 import statsRouter from "./routes/stats.js";
 import benchmarkRouter from "./routes/benchmark.js";
@@ -86,6 +87,7 @@ const ENDPOINTS = {
     "/agent-memories",
     "/mcp-servers",
     "/favorites",
+    "/agent-sessions",
 
     "/stats",
     "/benchmark",
@@ -135,6 +137,7 @@ app.use("/skills", skillsRouter);
 app.use("/agent-memories", agentMemoriesRouter);
 app.use("/mcp-servers", mcpServersRouter);
 app.use("/favorites", favoritesRouter);
+app.use("/agent-sessions", agentSessionsRouter);
 
 app.use("/stats", statsRouter);
 app.use("/benchmark", benchmarkRouter);
@@ -181,6 +184,11 @@ setupWebSocket(wss);
         db.collection("conversations").createIndex({ project: 1, username: 1, updatedAt: -1 }),
         db.collection("conversations").createIndex({ sessionId: 1 }),
 
+        // agent_sessions — same indexes as conversations
+        db.collection("agent_sessions").createIndex({ id: 1 }, { unique: true }),
+        db.collection("agent_sessions").createIndex({ updatedAt: -1 }),
+        db.collection("agent_sessions").createIndex({ project: 1, username: 1, updatedAt: -1 }),
+
         // workflows — used by conversationIds lookup
         db.collection("workflows").createIndex({ id: 1 }, { unique: true }),
         // benchmarks
@@ -210,11 +218,44 @@ setupWebSocket(wss);
         .collection("conversations")
         .updateMany({ isGenerating: true }, { $set: { isGenerating: false } });
       if (modifiedCount > 0) {
-        logger.info(`Cleared ${modifiedCount} stale isGenerating flag(s)`);
+        logger.info(`Cleared ${modifiedCount} stale isGenerating flag(s) in conversations`);
+      }
+      // Also clear in agent_sessions
+      const { modifiedCount: agentCleared } = await db
+        .collection("agent_sessions")
+        .updateMany({ isGenerating: true }, { $set: { isGenerating: false } });
+      if (agentCleared > 0) {
+        logger.info(`Cleared ${agentCleared} stale isGenerating flag(s) in agent_sessions`);
       }
     }
   } catch (err) {
     logger.error(`Failed to clear stale isGenerating flags: ${err.message}`);
+  }
+
+  // ── One-time migration: conversations → agent_sessions ──────────
+  // Move any existing agent project conversations to the new collection.
+  try {
+    const { default: AgentPersonaRegistry } = await import("./services/AgentPersonaRegistry.js");
+    const agentProjects = AgentPersonaRegistry.list().map((p) => {
+      const persona = AgentPersonaRegistry.get(p.id);
+      return persona?.project;
+    }).filter(Boolean);
+
+    const db = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
+    if (db && agentProjects.length > 0) {
+      const agentConvs = await db.collection("conversations")
+        .find({ project: { $in: agentProjects } })
+        .toArray();
+      if (agentConvs.length > 0) {
+        // Strip _id to avoid duplicate key errors on insert
+        const docs = agentConvs.map(({ _id, ...rest }) => rest);
+        await db.collection("agent_sessions").insertMany(docs, { ordered: false }).catch(() => {});
+        await db.collection("conversations").deleteMany({ project: { $in: agentProjects } });
+        logger.info(`Migrated ${agentConvs.length} agent conversation(s) → agent_sessions`);
+      }
+    }
+  } catch (err) {
+    logger.error(`Agent session migration failed: ${err.message}`);
   }
 
   // Initialize Change Streams (requires replica set — graceful fallback)

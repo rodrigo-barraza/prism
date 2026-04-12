@@ -296,6 +296,7 @@ const CODING_ENABLED_TOOLS = [
 PERSONAS.set("CODING", {
   id: "CODING",
   name: "Coding Agent",
+  project: "retina-agent",
   identity: () =>
     `You are a highly capable coding agent with access to file system, git, command execution, and web tools.`,
   guidelines: `## Coding Guidelines
@@ -331,6 +332,7 @@ Use them proactively:
 PERSONAS.set("LUPOS", {
   id: "LUPOS",
   name: "Lupos",
+  project: "lupos",
   identity: (ctx) => {
     const aprilFools = ctx?.agentContext?.aprilFoolsMode === true;
     const isClockCrew = ctx?.agentContext?.guildId === "249010731910037507";
@@ -409,6 +411,19 @@ const AgentPersonaRegistry = {
    */
   has(agentId) {
     return PERSONAS.has((agentId || "").toUpperCase());
+  },
+
+  /**
+   * Check if a project belongs to a registered agent.
+   * @param {string} project
+   * @returns {boolean}
+   */
+  isAgentProject(project) {
+    if (!project) return false;
+    for (const persona of PERSONAS.values()) {
+      if (persona.project === project) return true;
+    }
+    return false;
   },
 };
 

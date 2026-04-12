@@ -13,14 +13,17 @@ import logger from "./logger.js";
  * @param {string}  project
  * @param {string}  username
  * @param {boolean} generating
+ * @param {object}  [opts]
+ * @param {string}  [opts.collection] - Override MongoDB collection
  */
-export function markGenerating(conversationId, project, username, generating) {
+export function markGenerating(conversationId, project, username, generating, opts) {
   if (!conversationId) return;
   ConversationService.setGenerating(
     conversationId,
     project,
     username,
     generating,
+    opts,
   ).catch((err) =>
     logger.error(
       `Failed to ${generating ? "set" : "clear"} isGenerating: ${err.message}`,
@@ -37,8 +40,10 @@ export function markGenerating(conversationId, project, username, generating) {
  * @param {string}        username
  * @param {Array<object>} messagesToAppend
  * @param {object|undefined} meta - conversationMeta with settings
+ * @param {object}  [opts]
+ * @param {string}  [opts.collection] - Override MongoDB collection
  */
-export function appendAndFinalize(conversationId, project, username, messagesToAppend, meta) {
+export function appendAndFinalize(conversationId, project, username, messagesToAppend, meta, opts) {
   if (!conversationId) return;
   ConversationService.appendMessages(
     conversationId,
@@ -46,6 +51,7 @@ export function appendAndFinalize(conversationId, project, username, messagesToA
     username,
     messagesToAppend,
     meta,
+    opts,
   )
     .then(() =>
       ConversationService.setGenerating(
@@ -53,6 +59,7 @@ export function appendAndFinalize(conversationId, project, username, messagesToA
         project,
         username,
         false,
+        opts,
       ),
     )
     .catch((err) =>
@@ -61,4 +68,3 @@ export function appendAndFinalize(conversationId, project, username, messagesToA
       ),
     );
 }
-

@@ -4,7 +4,7 @@ import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 import { COLLECTIONS } from "../constants.js";
 
-const COLLECTION = COLLECTIONS.CONVERSATIONS;
+const DEFAULT_COLLECTION = COLLECTIONS.CONVERSATIONS;
 
 /**
  * Upload any base64 data URLs in message images/audio to external storage.
@@ -232,9 +232,10 @@ const ConversationService = {
     username,
     newMessages,
     conversationMeta = null,
+    { collection = DEFAULT_COLLECTION } = {},
   ) {
     const sessionId = conversationMeta?.sessionId || null;
-    const col = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
+    const col = MongoWrapper.getCollection(MONGO_DB_NAME, collection);
 
     // Auto-create conversation if it doesn't exist
     const existing = await col.findOne({
@@ -346,7 +347,7 @@ const ConversationService = {
    * @param {string} username
    * @param {boolean} generating
    */
-  async setGenerating(conversationId, project, username, generating) {
+  async setGenerating(conversationId, project, username, generating, { collection = DEFAULT_COLLECTION } = {}) {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return;
     const now = new Date().toISOString();
@@ -354,7 +355,7 @@ const ConversationService = {
     if (generating) {
       // Upsert — create a conversation stub if it doesn't exist yet
       // (e.g. Lupos sends a brand-new conversationId that hasn't been persisted)
-      await db.collection(COLLECTION).updateOne(
+      await db.collection(collection).updateOne(
         { id: conversationId, project, username },
         {
           $set: { isGenerating: true, updatedAt: now },
@@ -373,7 +374,7 @@ const ConversationService = {
       );
     } else {
       await db
-        .collection(COLLECTION)
+        .collection(collection)
         .updateOne(
           { id: conversationId, project, username },
           { $set: { isGenerating: false, updatedAt: now } },

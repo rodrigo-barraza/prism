@@ -9,6 +9,7 @@
 export const COLLECTIONS = {
   REQUESTS: "requests",
   CONVERSATIONS: "conversations",
+  AGENT_SESSIONS: "agent_sessions",
   WORKFLOWS: "workflows",
   BENCHMARKS: "benchmarks",
   BENCHMARK_RUNS: "benchmark_runs",

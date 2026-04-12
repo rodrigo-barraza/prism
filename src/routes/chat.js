@@ -33,8 +33,21 @@ import {
   handleSseRequest,
   handleJsonRequest,
 } from "../utils/SseUtilities.js";
+import { COLLECTIONS } from "../constants.js";
+import AgentPersonaRegistry from "../services/AgentPersonaRegistry.js";
 
 const router = express.Router();
+
+/**
+ * Resolve the MongoDB collection for conversation persistence.
+ * Agent projects go to agent_sessions; everything else to conversations.
+ */
+function getCollectionOpts(project) {
+  if (AgentPersonaRegistry.isAgentProject(project)) {
+    return { collection: COLLECTIONS.AGENT_SESSIONS };
+  }
+  return undefined;
+}
 
 // ============================================================
 // Image reference resolution — converts refs for providers & storage
@@ -598,7 +611,7 @@ export async function handleChat(params, emit, { signal } = {}) {
     }
   } catch (error) {
     // Clear generating flag on error
-    markGenerating(conversationId, project, username, false);
+    markGenerating(conversationId, project, username, false, getCollectionOpts(project));
     const totalSec = (performance.now() - requestStart) / 1000;
     RequestLogger.logChatGeneration({
       requestId,
@@ -646,7 +659,7 @@ async function handleImageAPIModel(ctx) {
   } = ctx;
 
   // Mark conversation as generating
-  markGenerating(conversationId, project, username, true);
+  markGenerating(conversationId, project, username, true, getCollectionOpts(project));
   const lastUserMsg = messages.filter((m) => m.role === "user").pop();
   const prompt = lastUserMsg?.content || "";
 
@@ -786,7 +799,7 @@ async function handleImageAPIModel(ctx) {
         }
       : undefined;
 
-    appendAndFinalize(conversationId, project, username, messagesToAppend, meta);
+    appendAndFinalize(conversationId, project, username, messagesToAppend, meta, getCollectionOpts(project));
   }
 }
 
@@ -1084,7 +1097,7 @@ export async function finalizeTextGeneration(
         }
       : undefined;
 
-    appendAndFinalize(conversationId, project, username, messagesToAppend, meta);
+    appendAndFinalize(conversationId, project, username, messagesToAppend, meta, getCollectionOpts(project));
   }
 }
 
@@ -1109,7 +1122,7 @@ async function handleStreamingText(ctx) {
   } = ctx;
 
   // Mark conversation as generating
-  markGenerating(conversationId, project, username, true);
+  markGenerating(conversationId, project, username, true, getCollectionOpts(project));
 
   const stream =
     modelDef?.liveAPI && provider.generateTextStreamLive
@@ -1275,7 +1288,7 @@ async function handleNonStreamingText(ctx) {
   } = ctx;
 
   // Mark conversation as generating
-  markGenerating(conversationId, project, username, true);
+  markGenerating(conversationId, project, username, true, getCollectionOpts(project));
 
   const generationStart = performance.now();
   const genResult = await provider.generateText(
