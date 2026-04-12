@@ -169,6 +169,10 @@ export default class AgenticLoopService {
 
     let iterations = 0;
     let currentMessages = [...messages];
+    // Track the initial message count so we can slice only NEW messages
+    // for DB persistence. The client sends the full history; we must not
+    // re-append already-persisted messages via $push.
+    const originalMessageCount = currentMessages.length;
 
     const overallUsage = { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 };
     let overallFirstTokenTime = null;
@@ -938,9 +942,40 @@ export default class AgenticLoopService {
 
       overallUsage.requests = iterations;
 
+      // ── Clean up display segments before persistence ───────────
+      // Models emit whitespace between tool calls. Trim fragments
+      // and drop empty ones so restored sessions don't show blank
+      // "Thoughts" blocks or leading newlines in content.
+      const cleanSegments = [];
+      const cleanTextFragments = [];
+      const cleanThinkingFragments = [];
+      for (const seg of displaySegments) {
+        if (seg.type === "text") {
+          const trimmed = displayTextFragments[seg.fragmentIndex]?.trim();
+          if (!trimmed) continue;
+          cleanSegments.push({ type: "text", fragmentIndex: cleanTextFragments.length });
+          cleanTextFragments.push(trimmed);
+        } else if (seg.type === "thinking") {
+          const trimmed = displayThinkingFragments[seg.fragmentIndex]?.trim();
+          if (!trimmed) continue;
+          cleanSegments.push({ type: "thinking", fragmentIndex: cleanThinkingFragments.length });
+          cleanThinkingFragments.push(trimmed);
+        } else {
+          cleanSegments.push(seg); // tools segments pass through
+        }
+      }
+
+      // Only pass messages added DURING this turn — not the full history the client sent.
+      // finalizeTextGeneration will append these + the final assistant message via $push;
+      // re-pushing the original history would duplicate everything.
+      // Slice from (originalMessageCount - 1) to include the new user message (always
+      // the last element of the incoming array) while skipping the system prompt and
+      // all previously-persisted history messages.
+      const newTurnMessages = currentMessages.slice(Math.max(0, originalMessageCount - 1));
+
       await finalizeTextGeneration(ctx, {
-          text: finalStreamedText,
-          thinking: streamedThinking,
+          text: finalStreamedText.trim(),
+          thinking: streamedThinking.trim() || "",
           images: streamedImages,
           toolCalls: streamedToolCalls,
           audioChunks: streamedAudioChunks,
@@ -952,10 +987,10 @@ export default class AgenticLoopService {
           totalSec: (now - requestStart) / 1000,
           rateLimits: lastRateLimits,
           // Display segment metadata for Retina rendering
-          contentSegments: displaySegments,
-          textFragments: displayTextFragments,
-          thinkingFragments: displayThinkingFragments,
-      }, currentMessages, true); // <--- pass true to skip the overall request logging so we don't duplicate
+          contentSegments: cleanSegments,
+          textFragments: cleanTextFragments,
+          thinkingFragments: cleanThinkingFragments,
+      }, newTurnMessages, true); // <--- pass true to skip the overall request logging so we don't duplicate
 
       // ── Persist worker snapshots to the parent session ──────────
       // Workers live in-memory during execution but must be persisted
