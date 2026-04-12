@@ -490,7 +490,14 @@ const lmStudioProvider = {
       // NOTE: Each MCP tool schema averages ~500 tokens. We cap the tool count
       // to prevent context overflow. The model's loaded context determines the cap.
       if (options.tools && options.tools.length > 0) {
-        let toolNames = options.tools.map((t) => t.name);
+        // Coordinator tools (spawn_agent, send_message, stop_agent) are
+        // intercepted by Prism's agentic loop — they don't exist on the
+        // tools-api MCP server. Exclude them from allowed_tools to prevent
+        // LM Studio's validation from rejecting the request.
+        const PRISM_LOCAL_TOOLS = new Set(["spawn_agent", "send_message", "stop_agent"]);
+        let toolNames = options.tools
+          .map((t) => t.name)
+          .filter((name) => !PRISM_LOCAL_TOOLS.has(name));
 
         // Cap tool count based on loaded model context
         // ~500 tokens/tool; reserve 50% of context for conversation

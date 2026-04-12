@@ -8,6 +8,7 @@ import RequestLogger from "./RequestLogger.js";
 import { estimateTokens } from "../utils/CostCalculator.js";
 import { TYPES, getPricing } from "../config.js";
 import { calculateTokensPerSec } from "../utils/math.js";
+import localModelQueue from "./LocalModelQueue.js";
 import ToolOrchestratorService from "./ToolOrchestratorService.js";
 import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
 
@@ -68,6 +69,12 @@ const MAX_WORKER_ITERATIONS = 15;
 /** Model used for task decomposition */
 const DECOMPOSITION_PROVIDER = "anthropic";
 const DECOMPOSITION_MODEL = "claude-sonnet-4-20250514";
+
+/** Fallback model/provider for workers when coordinator is on a local GPU model.
+ *  Local models can only serve one request at a time — workers must use a
+ *  cloud model so parallelism actually works. */
+const LOCAL_WORKER_FALLBACK_PROVIDER = "anthropic";
+const LOCAL_WORKER_FALLBACK_MODEL = "claude-haiku-4-5-20251001";
 
 /** Active coordinator tasks keyed by taskId (manual panel flow) */
 const activeTasks = new Map();
@@ -207,6 +214,18 @@ export default class CoordinatorService {
       return { error: `Maximum concurrent workers (${MAX_WORKERS}) reached. Wait for a worker to complete or stop one.` };
     }
 
+    // ── Local model guard ──────────────────────────────────────
+    // Local GPU models (LM Studio, vLLM, Ollama, llama-cpp) can only
+    // serve one request at a time. Workers run in parallel, so we
+    // must fall back to a cloud model for worker inference.
+    let workerProvider = providerName;
+    let workerModel = model || resolvedModel;
+    if (localModelQueue.isLocal(providerName)) {
+      workerProvider = LOCAL_WORKER_FALLBACK_PROVIDER;
+      workerModel = LOCAL_WORKER_FALLBACK_MODEL;
+      logger.info(`[Coordinator] Local provider "${providerName}" detected — workers will use ${LOCAL_WORKER_FALLBACK_MODEL} instead`);
+    }
+
     const agentId = `agent-${(++agentCounter).toString(36)}`;
     const branchName = `coordinator/${agentId}`;
     const workspaceRoot = getDefaultWorkspaceRoot();
@@ -248,8 +267,8 @@ export default class CoordinatorService {
       project,
       username,
       agent,
-      providerName,
-      resolvedModel: model || resolvedModel,
+      providerName: workerProvider,
+      resolvedModel: workerModel,
       sessionId,
     };
 
@@ -748,8 +767,17 @@ export default class CoordinatorService {
         .map((t) => t.name)
         .filter((name) => !coordinatorSet.has(name));
 
-      const resolvedProviderName = providerName || DECOMPOSITION_PROVIDER;
-      const resolvedModel = model || DECOMPOSITION_MODEL;
+      let resolvedProviderName = providerName || DECOMPOSITION_PROVIDER;
+      let resolvedModel = model || DECOMPOSITION_MODEL;
+
+      // Local model guard — same as spawnFromTool: workers must use
+      // a cloud model since local GPUs can't serve parallel requests.
+      if (localModelQueue.isLocal(resolvedProviderName)) {
+        logger.info(`[Coordinator] Panel worker ${worker.id}: local provider "${resolvedProviderName}" → falling back to ${LOCAL_WORKER_FALLBACK_MODEL}`);
+        resolvedProviderName = LOCAL_WORKER_FALLBACK_PROVIDER;
+        resolvedModel = LOCAL_WORKER_FALLBACK_MODEL;
+      }
+
       const workerProvider = getProvider(resolvedProviderName);
       const { getModelByName } = await import("../config.js");
       const workerModelDef = getModelByName(resolvedModel);

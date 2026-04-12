@@ -285,10 +285,14 @@ export default class AgenticLoopService {
     // When coordinator tools spawn workers, workers deliver results
     // as <task-notification> user-role messages via this queue.
     // The loop drains this queue after each tool execution batch.
+    // The wake signal wakes the coordinator wait loop immediately.
     const injectedMessages = [];
+    let _notifyWake = null;
     const injectMessage = (content) => {
       injectedMessages.push({ role: "user", content });
+      if (_notifyWake) { _notifyWake(); _notifyWake = null; }
     };
+    let hasSpawnedWorkers = false;
 
     try {
       while (iterations < resolvedMaxIterations) {
@@ -569,6 +573,7 @@ export default class AgenticLoopService {
         // If the LLM returned tool calls, we execute them and loop
         if (passPendingToolCalls.length > 0) {
           hasCalledTools = true;
+          if (passPendingToolCalls.some((tc) => tc.name === "spawn_agent")) hasSpawnedWorkers = true;
 
           // ── beforeToolCall hook: auto-approval gating ──────
           const { autoApproved: _autoApproved, needsApproval } = approvalEngine.checkBatch(passPendingToolCalls);
@@ -766,8 +771,60 @@ export default class AgenticLoopService {
         }
 
         // If text was returned without new tools, we're done
+        // — unless the coordinator has running workers. In that case,
+        // save the response, wait for worker notifications, then
+        // re-prompt the model so it can synthesize the results.
         if (passStreamedText) {
-           break;
+          if (hasSpawnedWorkers) {
+            const { default: CoordinatorService } = await import("./CoordinatorService.js");
+            const runningWorkers = CoordinatorService.listWorkers().filter((w) => w.status === "running");
+
+            if (runningWorkers.length > 0) {
+              // Save coordinator text as an assistant message
+              currentMessages.push({
+                role: "assistant",
+                content: passStreamedText,
+                ...(passStreamedThinking && { thinking: passStreamedThinking }),
+                ...(passThinkingSignature && { thinkingSignature: passThinkingSignature }),
+              });
+
+              emit({ type: "status", message: "coordinator_waiting", activeWorkers: runningWorkers.length });
+              logger.info(`[AgenticLoop] Coordinator waiting for ${runningWorkers.length} running workers`);
+
+              // Wait for notifications — event-driven with safety poll
+              await new Promise((resolve) => {
+                if (injectedMessages.length > 0 || signal?.aborted) { resolve(); return; }
+                let settled = false;
+                const done = () => { if (settled) return; settled = true; clearInterval(safetyPoll); _notifyWake = null; resolve(); };
+                _notifyWake = done;
+                // Safety poll every 2s in case notification was lost
+                const safetyPoll = setInterval(() => {
+                  if (signal?.aborted || injectedMessages.length > 0) { done(); return; }
+                  const still = CoordinatorService.listWorkers().filter((w) => w.status === "running");
+                  if (still.length === 0) done();
+                }, 2000);
+                // Hard timeout — 5 minutes
+                setTimeout(done, 300_000);
+              });
+
+              if (signal?.aborted) break;
+
+              // Drain all pending notifications
+              if (injectedMessages.length > 0) {
+                const drained = injectedMessages.splice(0, injectedMessages.length);
+                for (const msg of drained) {
+                  currentMessages.push(msg);
+                  emit({ type: "status", message: "worker_notification", agentNotification: msg.content });
+                }
+                logger.info(`[AgenticLoop] Coordinator received ${drained.length} worker notifications, re-prompting`);
+                continue; // Re-prompt model with notifications
+              }
+
+              // All workers done but no notifications (edge case — worker failed silently)
+              logger.warn("[AgenticLoop] All workers completed but no notifications received");
+            }
+          }
+          break;
         }
       }
 
