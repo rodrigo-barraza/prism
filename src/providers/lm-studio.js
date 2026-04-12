@@ -491,18 +491,20 @@ const lmStudioProvider = {
       // NOTE: Each MCP tool schema averages ~500 tokens. We cap the tool count
       // to prevent context overflow. The model's loaded context determines the cap.
       if (options.tools && options.tools.length > 0) {
-        // Coordinator tools (spawn_agent, send_message, stop_agent) are
-        // intercepted by Prism's agentic loop — they don't exist on the
-        // tools-api MCP server. When coordinator tools are present, fall
-        // back to the OAI-compat streaming path which returns tool calls
-        // in OpenAI format that the agentic loop can handle.
+        // When called from Prism's agentic loop (agenticLoop=true), or when
+        // coordinator tools are present, always use the OAI-compat path.
+        // Prism's loop controls tool execution and multi-step re-prompting,
+        // which is essential for multi-step workflows like browser automation.
+        // LM Studio's native MCP loop doesn't reliably chain tool calls with
+        // small/medium models — it often stops after one tool call.
         const PRISM_LOCAL_TOOLS = new Set(["spawn_agent", "send_message", "stop_agent"]);
         const hasCoordinatorTools = options.tools.some((t) => PRISM_LOCAL_TOOLS.has(t.name));
+        const usePrismLoop = options.agenticLoop || hasCoordinatorTools;
 
-        if (hasCoordinatorTools) {
-          // ── OAI-compat fallback for coordinator tools ──
+        if (usePrismLoop) {
+          // ── OAI-compat path for Prism-managed agentic loop ──
           // Uses /v1/chat/completions with OpenAI function calling format.
-          // Prism's agentic loop handles tool execution.
+          // Prism's agentic loop handles tool execution and re-prompting.
           const oaiPayload = {
             messages: prepared,
             model,
