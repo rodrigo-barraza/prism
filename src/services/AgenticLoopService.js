@@ -152,9 +152,12 @@ export default class AgenticLoopService {
       finalTools = finalTools.filter((t) => t.name !== "describe_image");
     }
 
-    // If the model is local (e.g. LM Studio / vLLM / Ollama), we only feed it tools for the first pass
-    // to force an eventual text response and avoid infinite loops.
-    const isLocalProvider = providerName === "lm-studio" || providerName === "vllm" || providerName === "ollama";
+    // If the model uses native MCP tool execution (e.g. LM Studio), we only feed
+    // tools for the first pass to force an eventual text response — the provider's
+    // own internal loop handles multi-step tool calling via native MCP events.
+    // vLLM uses standard OpenAI-compatible function calling and needs Prism's
+    // agentic re-prompting loop (just like cloud providers), so it is NOT included here.
+    const isNativeMCPProvider = providerName === "lm-studio" || providerName === "ollama";
     let hasCalledTools = false;
 
     // Resolve max iterations from client or fall back to the module constant.
@@ -341,7 +344,7 @@ export default class AgenticLoopService {
         let passOutputCharacters = 0;
         const passUsage = { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 };
 
-        const passOptions = { ...options };      if (isLocalProvider && hasCalledTools) {
+        const passOptions = { ...options };      if (isNativeMCPProvider && hasCalledTools) {
           delete passOptions.tools;
         } else {
           passOptions.tools = finalTools;
