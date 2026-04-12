@@ -1,11 +1,15 @@
 // ============================================================
-// LocalModelQueue — Process-level Async Mutex for Local GPU Models
+// LocalModelQueue — Process-level Counting Semaphore for Local GPU Models
 // ============================================================
 // Local inference servers (LM Studio, vLLM, Ollama, llama.cpp) can
-// only serve one request at a time on a single GPU. This module
-// provides a FIFO async mutex that serializes all local model
-// requests across the entire Prism process — whether they originate
-// from concurrent benchmark runs, chat requests, or any other path.
+// serve a limited number of concurrent requests depending on your
+// GPU / VRAM headroom. This module provides a FIFO counting semaphore
+// that serializes local model requests across the entire Prism
+// process — whether they originate from concurrent benchmark runs,
+// chat requests, or any other path.
+//
+// The maximum number of concurrent slots is configured via
+// LOCAL_MODEL_CONCURRENCY in secrets.js (defaults to 1).
 //
 // Usage:
 //   const release = await LocalModelQueue.acquire();
@@ -13,18 +17,25 @@
 //   finally { release(); }
 
 import logger from "../utils/logger.js";
+import { LOCAL_MODEL_CONCURRENCY } from "../../secrets.js";
 
 // Providers that hit the local GPU
 const LOCAL_PROVIDERS = new Set(["lm-studio", "vllm", "ollama", "llama-cpp"]);
 
 class LocalModelQueue {
   constructor() {
+    /** Maximum concurrent requests allowed */
+    this._maxConcurrency = Math.max(1, parseInt(LOCAL_MODEL_CONCURRENCY, 10) || 1);
     /** @type {Array<() => void>} FIFO queue of pending resolve callbacks */
     this._queue = [];
-    /** Whether the lock is currently held */
-    this._locked = false;
+    /** Number of slots currently in use */
+    this._activeCount = 0;
     /** Number of total requests processed (for logging) */
     this._totalProcessed = 0;
+
+    logger.info(
+      `[LocalModelQueue] Initialized with concurrency: ${this._maxConcurrency}`,
+    );
   }
 
   /**
@@ -37,8 +48,8 @@ class LocalModelQueue {
   }
 
   /**
-   * Acquire the mutex. Resolves immediately if unlocked, otherwise
-   * enqueues and waits for its turn (FIFO order).
+   * Acquire a semaphore slot. Resolves immediately if a slot is
+   * available, otherwise enqueues and waits for its turn (FIFO order).
    *
    * @returns {Promise<() => void>} A release function — MUST be called
    *   when inference is complete (use try/finally).
@@ -46,24 +57,24 @@ class LocalModelQueue {
   acquire() {
     return new Promise((resolve) => {
       const release = () => {
+        this._activeCount--;
         this._totalProcessed++;
         const next = this._queue.shift();
         if (next) {
-          // Hand the lock to the next waiter
+          // Hand a slot to the next waiter
+          this._activeCount++;
           next();
-        } else {
-          this._locked = false;
         }
       };
 
-      if (!this._locked) {
-        this._locked = true;
+      if (this._activeCount < this._maxConcurrency) {
+        this._activeCount++;
         resolve(release);
       } else {
         // Enqueue — will be resolved when a previous holder calls release()
         this._queue.push(() => resolve(release));
         logger.info(
-          `[LocalModelQueue] Queued request (${this._queue.length} waiting)`,
+          `[LocalModelQueue] Queued request (${this._queue.length} waiting, ${this._activeCount}/${this._maxConcurrency} active)`,
         );
       }
     });
@@ -74,9 +85,19 @@ class LocalModelQueue {
     return this._queue.length;
   }
 
-  /** Whether the lock is currently held. */
+  /** Whether all slots are currently in use. */
   get busy() {
-    return this._locked;
+    return this._activeCount >= this._maxConcurrency;
+  }
+
+  /** Number of slots currently in use. */
+  get activeCount() {
+    return this._activeCount;
+  }
+
+  /** Maximum concurrent slots. */
+  get maxConcurrency() {
+    return this._maxConcurrency;
   }
 
   /** Total requests processed since process start. */

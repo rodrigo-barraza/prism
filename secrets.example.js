@@ -37,6 +37,9 @@ export const OLLAMA_BASE_URL = 'http://localhost:11434';
 // llama.cpp (Local LLM Server — llama-server default port 8080)
 export const LLAMA_CPP_BASE_URL = 'http://localhost:8080';
 
+// Local Model Concurrency (max simultaneous GPU inference requests)
+export const LOCAL_MODEL_CONCURRENCY = 1;
+
 // Mongo
 export const MONGO_URI = 'mongodb://192.168.86.2:27017/?directConnection=true&replicaSet=rs0';
 export const MONGO_DB_NAME = '';

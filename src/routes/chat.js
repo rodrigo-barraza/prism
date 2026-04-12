@@ -387,8 +387,9 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
   if (localModelQueue.isLocal(providerName)) {
     localRelease = await localModelQueue.acquire();
     logger.info(
-      `[chat] 🔒 Acquired local GPU lock for ${resolvedModel}` +
-      (localModelQueue.pending > 0 ? ` (${localModelQueue.pending} queued)` : ""),
+      `[chat] 🔒 Acquired local GPU slot for ${resolvedModel} ` +
+      `(${localModelQueue.activeCount}/${localModelQueue.maxConcurrency} active` +
+      (localModelQueue.pending > 0 ? `, ${localModelQueue.pending} queued)` : ")"),
     );
   }
 
