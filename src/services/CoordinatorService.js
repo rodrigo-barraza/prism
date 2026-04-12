@@ -385,16 +385,27 @@ export default class CoordinatorService {
 
   /**
    * List all active workers spawned via chat tools.
+   * @param {object} [options]
+   * @param {string} [options.sessionId] - Filter workers by coordinator session ID
    * @returns {Array}
    */
-  static listWorkers() {
-    return Array.from(activeWorkers.values()).map((w) => ({
+  static listWorkers({ sessionId } = {}) {
+    let workers = Array.from(activeWorkers.values());
+    if (sessionId) {
+      workers = workers.filter((w) => w.sessionId === sessionId);
+    }
+    return workers.map((w) => ({
       agentId: w.agentId,
       description: w.description,
       status: w.status,
       branchName: w.branchName,
       toolCallCount: w.toolCalls?.length || 0,
       durationMs: w.status === "running" ? Date.now() - w.startedAt : w.durationMs,
+      sessionId: w.sessionId,
+      providerName: w.providerName,
+      resolvedModel: w.resolvedModel,
+      files: w.files,
+      startedAt: w.startedAt,
     }));
   }
 

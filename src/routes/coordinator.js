@@ -123,9 +123,11 @@ router.post("/abort/:taskId", async (req, res, next) => {
 /**
  * GET /coordinator/workers
  * List all active workers spawned via chat tools.
+ * Optional query: ?sessionId=xxx to filter by coordinator session.
  */
-router.get("/workers", (_req, res) => {
-  res.json({ workers: CoordinatorService.listWorkers() });
+router.get("/workers", (req, res) => {
+  const { sessionId } = req.query;
+  res.json({ workers: CoordinatorService.listWorkers({ sessionId }) });
 });
 
 /**
