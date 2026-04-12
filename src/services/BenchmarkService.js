@@ -5,7 +5,7 @@
 // evaluates responses against expected values, and persists results.
 
 import crypto from "crypto";
-import { handleConversation } from "../routes/chat.js";
+import { handleConversation, handleAgent } from "../routes/chat.js";
 import {
   MODELS,
   MODEL_TYPES,
@@ -208,7 +208,8 @@ async function runSingleModel(benchmark, model, project, username, { signal } = 
 
   try {
     const events = [];
-    await handleConversation(
+    const handler = model.agent ? handleAgent : handleConversation;
+    await handler(
       {
         provider: model.provider,
         model: model.model,
@@ -219,6 +220,12 @@ async function runSingleModel(benchmark, model, project, username, { signal } = 
         username,
         skipConversation: true,
         thinkingEnabled: model.thinkingEnabled || false,
+        ...(model.agent && {
+          agent: model.agent,
+          agenticLoopEnabled: true,
+          autoApprove: true,
+          maxIterations: 10,
+        }),
         ...(model.toolsEnabled && {
           functionCallingEnabled: true,
           enabledTools: ["precise_calculator"],
@@ -391,6 +398,7 @@ const BenchmarkService = {
           label: def?.label || t.display_name || t.model,
           thinkingEnabled: t.thinkingEnabled || false,
           toolsEnabled: t.toolsEnabled || false,
+          ...(t.agent && { agent: t.agent }),
         };
       });
     } else {
