@@ -717,6 +717,14 @@ export default class AgenticLoopService {
             emit({ type: "status", message: "tasks_updated" });
           }
 
+          // Notify the client when coordinator tools fired — auto-expand workers panel
+          const workerToolsUsed = passPendingToolCalls.some(
+            (tc) => tc.name === "spawn_agent" || tc.name === "stop_agent",
+          );
+          if (workerToolsUsed) {
+            emit({ type: "status", message: "workers_updated" });
+          }
+
           // Append to context for next pass
           const assistantMsg = {
              role: "assistant",
