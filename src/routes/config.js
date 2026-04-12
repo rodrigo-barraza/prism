@@ -24,6 +24,7 @@ import {
   VLLM_BASE_URL,
   OLLAMA_BASE_URL,
   LLAMA_CPP_BASE_URL,
+  LOCAL_MODEL_CONCURRENCY,
 } from "../../secrets.js";
 
 const router = express.Router();
@@ -781,6 +782,7 @@ Guidelines:
     providerList: availableProviderList,
     availableProviders: availableProviderList,
     localProviders,
+    localModelConcurrency: Math.max(1, parseInt(LOCAL_MODEL_CONCURRENCY, 10) || 1),
     textToText: {
       models: textToTextModels,
       defaults: filterDefaults(getDefaultModels(TYPES.TEXT, TYPES.TEXT)),

@@ -70,9 +70,10 @@ const MAX_WORKER_ITERATIONS = 15;
 const DECOMPOSITION_PROVIDER = "anthropic";
 const DECOMPOSITION_MODEL = "claude-sonnet-4-20250514";
 
-/** Fallback model/provider for workers when coordinator is on a local GPU model.
- *  Local models can only serve one request at a time — workers must use a
- *  cloud model so parallelism actually works. */
+/** Fallback model/provider for workers when coordinator is on a local GPU model
+ *  AND concurrency is 1 (single-slot). When LOCAL_MODEL_CONCURRENCY >= 2,
+ *  workers use the local model directly, capped at (concurrency - 1) slots
+ *  to reserve one for the coordinator. */
 const LOCAL_WORKER_FALLBACK_PROVIDER = "anthropic";
 const LOCAL_WORKER_FALLBACK_MODEL = "claude-haiku-4-5-20251001";
 
@@ -215,15 +216,31 @@ export default class CoordinatorService {
     }
 
     // ── Local model guard ──────────────────────────────────────
-    // Local GPU models (LM Studio, vLLM, Ollama, llama-cpp) can only
-    // serve one request at a time. Workers run in parallel, so we
-    // must fall back to a cloud model for worker inference.
+    // If LOCAL_MODEL_CONCURRENCY >= 2, workers can share the local
+    // GPU — cap at (concurrency - 1) to reserve a slot for the
+    // coordinator. When concurrency is 1, fall back to a cloud model.
     let workerProvider = providerName;
     let workerModel = model || resolvedModel;
     if (localModelQueue.isLocal(providerName)) {
-      workerProvider = LOCAL_WORKER_FALLBACK_PROVIDER;
-      workerModel = LOCAL_WORKER_FALLBACK_MODEL;
-      logger.info(`[Coordinator] Local provider "${providerName}" detected — workers will use ${LOCAL_WORKER_FALLBACK_MODEL} instead`);
+      const maxLocalWorkers = localModelQueue.maxConcurrency - 1;
+      if (maxLocalWorkers >= 1) {
+        // Enough GPU slots — check how many local workers are already running
+        const localRunning = Array.from(activeWorkers.values()).filter(
+          (w) => w.status === "running" && localModelQueue.isLocal(w.providerName),
+        ).length;
+        if (localRunning >= maxLocalWorkers) {
+          workerProvider = LOCAL_WORKER_FALLBACK_PROVIDER;
+          workerModel = LOCAL_WORKER_FALLBACK_MODEL;
+          logger.info(`[Coordinator] Local slots full (${localRunning}/${maxLocalWorkers}) — worker will use ${LOCAL_WORKER_FALLBACK_MODEL}`);
+        } else {
+          logger.info(`[Coordinator] Local slot available (${localRunning}/${maxLocalWorkers}) — worker will use local model "${workerModel}"`);
+        }
+      } else {
+        // Concurrency 1 — no spare slots, always fall back to cloud
+        workerProvider = LOCAL_WORKER_FALLBACK_PROVIDER;
+        workerModel = LOCAL_WORKER_FALLBACK_MODEL;
+        logger.info(`[Coordinator] Single-slot concurrency — workers will use ${LOCAL_WORKER_FALLBACK_MODEL} instead`);
+      }
     }
 
     const agentId = `agent-${(++agentCounter).toString(36)}`;
@@ -797,12 +814,17 @@ export default class CoordinatorService {
       let resolvedProviderName = providerName || DECOMPOSITION_PROVIDER;
       let resolvedModel = model || DECOMPOSITION_MODEL;
 
-      // Local model guard — same as spawnFromTool: workers must use
-      // a cloud model since local GPUs can't serve parallel requests.
+      // Local model guard — same logic as spawnFromTool:
+      // use local model when concurrency allows, fall back to cloud otherwise.
       if (localModelQueue.isLocal(resolvedProviderName)) {
-        logger.info(`[Coordinator] Panel worker ${worker.id}: local provider "${resolvedProviderName}" → falling back to ${LOCAL_WORKER_FALLBACK_MODEL}`);
-        resolvedProviderName = LOCAL_WORKER_FALLBACK_PROVIDER;
-        resolvedModel = LOCAL_WORKER_FALLBACK_MODEL;
+        const maxLocalWorkers = localModelQueue.maxConcurrency - 1;
+        if (maxLocalWorkers < 1) {
+          logger.info(`[Coordinator] Panel worker ${worker.id}: single-slot concurrency → falling back to ${LOCAL_WORKER_FALLBACK_MODEL}`);
+          resolvedProviderName = LOCAL_WORKER_FALLBACK_PROVIDER;
+          resolvedModel = LOCAL_WORKER_FALLBACK_MODEL;
+        } else {
+          logger.info(`[Coordinator] Panel worker ${worker.id}: local concurrency ${localModelQueue.maxConcurrency} — using local model "${resolvedModel}"`);
+        }
       }
 
       const workerProvider = getProvider(resolvedProviderName);

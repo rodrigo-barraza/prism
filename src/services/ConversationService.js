@@ -246,16 +246,23 @@ const ConversationService = {
     if (!existing) {
       const now = new Date().toISOString();
       const metaSettings = conversationMeta?.settings || {};
-      const metaSysPrompt = conversationMeta?.systemPrompt || "";
       const parentId = conversationMeta?.parentAgentSessionId || null;
+      const isAgentSession = collection === COLLECTIONS.AGENT_SESSIONS;
+
+      // Agent sessions don't need the systemPrompt denormalization —
+      // the system prompt lives in messages[0] with role:"system"
+      const metaSysPrompt = isAgentSession ? undefined : (conversationMeta?.systemPrompt || "");
+
       await col.insertOne({
         id: conversationId,
         project,
         username,
         title: conversationMeta?.title || "New Conversation",
         messages: [],
-        systemPrompt: metaSysPrompt,
-        settings: { ...metaSettings, systemPrompt: metaSysPrompt },
+        ...(!isAgentSession && { systemPrompt: metaSysPrompt }),
+        settings: isAgentSession
+          ? { ...metaSettings }
+          : { ...metaSettings, systemPrompt: metaSysPrompt },
         modalities: computeModalities([]),
         providers: extractProviders([], metaSettings),
         totalCost: 0,
@@ -287,18 +294,22 @@ const ConversationService = {
     }
 
     // Apply conversationMeta if provided (title, settings, systemPrompt, parentAgentSessionId)
+    const isAgentSession = collection === COLLECTIONS.AGENT_SESSIONS;
     if (conversationMeta) {
       if (conversationMeta.title !== undefined) {
         setFields.title = conversationMeta.title;
       }
-      if (conversationMeta.systemPrompt !== undefined) {
+      // Skip systemPrompt for agent sessions — already in messages array
+      if (conversationMeta.systemPrompt !== undefined && !isAgentSession) {
         setFields.systemPrompt = conversationMeta.systemPrompt;
       }
       if (conversationMeta.settings !== undefined) {
-        setFields.settings = {
-          ...conversationMeta.settings,
-          systemPrompt: conversationMeta.systemPrompt || "",
-        };
+        setFields.settings = isAgentSession
+          ? { ...conversationMeta.settings }
+          : {
+              ...conversationMeta.settings,
+              systemPrompt: conversationMeta.systemPrompt || "",
+            };
       }
       if (conversationMeta.parentAgentSessionId) {
         setFields.parentAgentSessionId = conversationMeta.parentAgentSessionId;
@@ -358,8 +369,8 @@ const ConversationService = {
     const now = new Date().toISOString();
 
     if (generating) {
-      // Upsert — create a conversation stub if it doesn't exist yet
-      // (e.g. Lupos sends a brand-new conversationId that hasn't been persisted)
+      // Upsert — create a stub if it doesn't exist yet
+      const isAgentSession = collection === COLLECTIONS.AGENT_SESSIONS;
       await db.collection(collection).updateOne(
         { id: conversationId, project, username },
         {
@@ -367,7 +378,7 @@ const ConversationService = {
           $setOnInsert: {
             title: "New Conversation",
             messages: [],
-            systemPrompt: "",
+            ...(!isAgentSession && { systemPrompt: "" }),
             settings: {},
             modalities: computeModalities([]),
             providers: [],
