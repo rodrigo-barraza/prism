@@ -872,6 +872,7 @@ export async function finalizeTextGeneration(
     options,
     conversationId: rawConversationId,
     agentSessionId,
+    parentAgentSessionId,
     userMessage,
     conversationMeta,
     sessionId,
@@ -1136,7 +1137,12 @@ export async function finalizeTextGeneration(
         }
       : undefined;
 
-    appendAndFinalize(conversationId, project, username, messagesToAppend, meta, getCollectionOpts(project));
+    // Merge parentAgentSessionId into meta for worker sub-agent sessions
+    const finalMeta = parentAgentSessionId
+      ? { ...(meta || {}), parentAgentSessionId }
+      : meta;
+
+    appendAndFinalize(conversationId, project, username, messagesToAppend, finalMeta, getCollectionOpts(project));
   }
 }
 

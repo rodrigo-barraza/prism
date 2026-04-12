@@ -247,6 +247,7 @@ const ConversationService = {
       const now = new Date().toISOString();
       const metaSettings = conversationMeta?.settings || {};
       const metaSysPrompt = conversationMeta?.systemPrompt || "";
+      const parentId = conversationMeta?.parentAgentSessionId || null;
       await col.insertOne({
         id: conversationId,
         project,
@@ -261,6 +262,7 @@ const ConversationService = {
         isGenerating: true,
         ...(conversationMeta?.synthetic && { synthetic: true }),
         ...(sessionId && { sessionId }),
+        ...(parentId && { parentAgentSessionId: parentId }),
 
         createdAt: now,
         updatedAt: now,
@@ -284,7 +286,7 @@ const ConversationService = {
       setFields.sessionId = sessionId;
     }
 
-    // Apply conversationMeta if provided (title, settings, systemPrompt)
+    // Apply conversationMeta if provided (title, settings, systemPrompt, parentAgentSessionId)
     if (conversationMeta) {
       if (conversationMeta.title !== undefined) {
         setFields.title = conversationMeta.title;
@@ -297,6 +299,9 @@ const ConversationService = {
           ...conversationMeta.settings,
           systemPrompt: conversationMeta.systemPrompt || "",
         };
+      }
+      if (conversationMeta.parentAgentSessionId) {
+        setFields.parentAgentSessionId = conversationMeta.parentAgentSessionId;
       }
     }
 

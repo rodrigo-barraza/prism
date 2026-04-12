@@ -206,7 +206,7 @@ export default class CoordinatorService {
    * @returns {Promise<object>} Spawn result with agentId
    */
   static async spawnFromTool({ description, prompt, files, model, coordinatorCtx }) {
-    const { project, username, agent, providerName, resolvedModel, sessionId } = coordinatorCtx;
+    const { project, username, agent, providerName, resolvedModel, sessionId, agentSessionId: parentAgentSessionId } = coordinatorCtx;
 
     // Check concurrency limit
     const runningCount = Array.from(activeWorkers.values()).filter((w) => w.status === "running").length;
@@ -246,8 +246,12 @@ export default class CoordinatorService {
       worktreePath = worktreeResult.worktreePath;
     }
 
+    const workerAgentSessionId = crypto.randomUUID();
+
     const workerState = {
       agentId,
+      workerAgentSessionId,
+      parentAgentSessionId,
       description,
       branchName: worktreeResult.error ? null : branchName,
       worktreePath,
@@ -398,6 +402,8 @@ export default class CoordinatorService {
     }
     return workers.map((w) => ({
       agentId: w.agentId,
+      workerAgentSessionId: w.workerAgentSessionId,
+      parentAgentSessionId: w.parentAgentSessionId,
       description: w.description,
       status: w.status,
       branchName: w.branchName,
@@ -483,7 +489,8 @@ export default class CoordinatorService {
           maxIterations: MAX_WORKER_ITERATIONS,
           maxTokens: 8192,
         },
-        agentSessionId: `worker-${worker.agentId}`,
+        agentSessionId: worker.workerAgentSessionId,
+        parentAgentSessionId: worker.parentAgentSessionId,
         sessionId: worker.sessionId,
         project: worker.project,
         username: worker.username,

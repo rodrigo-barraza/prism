@@ -437,7 +437,8 @@ export default class ToolOrchestratorService {
       agent: ctx.agent,
       providerName: ctx._providerName,
       resolvedModel: ctx._resolvedModel,
-      sessionId: ctx.agentSessionId,
+      agentSessionId: ctx.agentSessionId,
+      sessionId: ctx.sessionId,
       injectMessage: ctx._injectMessage || null,
     };
 
