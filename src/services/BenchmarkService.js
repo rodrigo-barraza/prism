@@ -180,6 +180,7 @@ async function runSingleModel(benchmark, model, project, username, { signal } = 
       model: model.model,
       label: model.label,
       response: null,
+      thinking: null,
       passed: false,
       matchMode: benchmark.matchMode || MATCH_MODES.CONTAINS,
       latency: 0,
@@ -217,7 +218,7 @@ async function runSingleModel(benchmark, model, project, username, { signal } = 
         project,
         username,
         skipConversation: true,
-        thinkingEnabled: false,
+        thinkingEnabled: model.thinkingEnabled || false,
       },
       (event) => {
         events.push(event);
@@ -262,6 +263,7 @@ async function runSingleModel(benchmark, model, project, username, { signal } = 
         model: model.model,
         label: model.label,
         response: null,
+        thinking: null,
         passed: false,
         matchMode: benchmark.matchMode || MATCH_MODES.CONTAINS,
         latency: parseFloat(latency.toFixed(3)),
@@ -288,11 +290,18 @@ async function runSingleModel(benchmark, model, project, username, { signal } = 
     const matchMode = benchmark.matchMode || MATCH_MODES.CONTAINS;
     const passed = evaluateAssertions(text, benchmark);
 
+    // Extract thinking content (emitted as type: "thinking")
+    const thinkingText = events
+      .filter((e) => e.type === "thinking")
+      .map((e) => e.content)
+      .join("");
+
     return {
       provider: model.provider,
       model: model.model,
       label: model.label,
       response: text || null,
+      thinking: thinkingText || null,
       passed,
       matchMode,
       latency: parseFloat(latency.toFixed(3)),
@@ -311,6 +320,7 @@ async function runSingleModel(benchmark, model, project, username, { signal } = 
       model: model.model,
       label: model.label,
       response: null,
+      thinking: null,
       passed: false,
       matchMode: benchmark.matchMode || MATCH_MODES.CONTAINS,
       latency: parseFloat(latency.toFixed(3)),
@@ -363,6 +373,7 @@ const BenchmarkService = {
           provider: t.provider,
           model: t.model,
           label: def?.label || t.display_name || t.model,
+          thinkingEnabled: t.thinkingEnabled || false,
         };
       });
     } else {
