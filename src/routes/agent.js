@@ -1,5 +1,6 @@
 import express from "express";
 import AgenticLoopService from "../services/AgenticLoopService.js";
+import { handleAgent } from "./chat.js";
 import logger from "../utils/logger.js";
 import {
   handleSseRequest,
@@ -16,33 +17,33 @@ const router = express.Router();
  * POST /agent/approve
  *
  * Body:
- *   { conversationId: string, approved: boolean }
+ *   { agentSessionId: string, approved: boolean }
  *
  * Resolves the pending approval promise in AgenticLoopService
  * so the agentic loop can continue (or abort).
  */
 router.post("/approve", async (req, res) => {
-  const { conversationId, approved, approveAll } = req.body;
+  const { agentSessionId, approved, approveAll } = req.body;
 
-  if (!conversationId) {
-    return res.status(400).json({ error: "Missing conversationId" });
+  if (!agentSessionId) {
+    return res.status(400).json({ error: "Missing agentSessionId" });
   }
 
   const resolved = AgenticLoopService.resolveApproval(
-    conversationId,
+    agentSessionId,
     approved !== false,
     { approveAll: approveAll === true },
   );
 
   if (!resolved) {
     return res.status(404).json({
-      error: "No pending approval for this conversation",
-      conversationId,
+      error: "No pending approval for this agent session",
+      agentSessionId,
     });
   }
 
   logger.info(
-    `[agent/approve] ${approved !== false ? "Approved" : "Rejected"}${approveAll ? " (all future)" : ""} for conversation ${conversationId}`,
+    `[agent/approve] ${approved !== false ? "Approved" : "Rejected"}${approveAll ? " (all future)" : ""} for session ${agentSessionId}`,
   );
 
   res.json({ ok: true, approved: approved !== false });
@@ -78,9 +79,9 @@ router.post("/", async (req, res, next) => {
   };
 
   if (req.query.stream !== "false") {
-    await handleSseRequest(req, res, params);
+    await handleSseRequest(req, res, params, handleAgent);
   } else {
-    await handleJsonRequest(req, res, next, params);
+    await handleJsonRequest(req, res, next, params, handleAgent);
   }
 });
 

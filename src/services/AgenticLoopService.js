@@ -26,7 +26,7 @@ const MAX_TOOL_ITERATIONS = 25;
 const MAX_CONSECUTIVE_TOOL_ERRORS = 3;
 
 // ── Approval Resolver Registry ─────────────────────────────
-// Stores pending { resolve, type } objects keyed by conversationId.
+// Stores pending { resolve, type } objects keyed by agentSessionId.
 // The HTTP endpoint resolves these when the client sends approval.
 const pendingApprovals = new Map();
 
@@ -45,7 +45,7 @@ export default class AgenticLoopService {
       modelDef,
       messages,
       options,
-      conversationId,
+      agentSessionId,
       sessionId,
       project,
       username,
@@ -247,13 +247,13 @@ export default class AgenticLoopService {
       // Wait for approval via a Promise that resolves when client responds
       const approved = await new Promise((resolve) => {
         const timeoutId = setTimeout(() => {
-          pendingApprovals.delete(conversationId);
+          pendingApprovals.delete(agentSessionId);
           resolve(false); // Default: reject on timeout (safe)
         }, 120_000);
-        pendingApprovals.set(conversationId, {
+        pendingApprovals.set(agentSessionId, {
           resolve: (val) => {
             clearTimeout(timeoutId);
-            pendingApprovals.delete(conversationId);
+            pendingApprovals.delete(agentSessionId);
             resolve(val);
           },
           type: "plan",
@@ -271,9 +271,9 @@ export default class AgenticLoopService {
       emit({ type: "status", message: "Plan approved — executing..." });
     }
 
-    // Mark conversation as generating
-    if (conversationId) {
-      ConversationService.setGenerating(conversationId, project, username, true).catch((err) =>
+    // Mark agent session as generating
+    if (agentSessionId) {
+      ConversationService.setGenerating(agentSessionId, project, username, true).catch((err) =>
         logger.error(`Failed to set isGenerating: ${err.message}`)
       );
     }
@@ -548,7 +548,7 @@ export default class AgenticLoopService {
           agent: agent || null,
           provider: providerName,
           model: resolvedModel,
-          conversationId,
+          agentSessionId,
           sessionId: sessionId || null,
           success: true,
           usage: passUsage,
@@ -587,13 +587,13 @@ export default class AgenticLoopService {
             // Wait for approval responses via the registry
             const approvalResult = await new Promise((resolve) => {
               const timeoutId = setTimeout(() => {
-                pendingApprovals.delete(conversationId);
+                pendingApprovals.delete(agentSessionId);
                 resolve({ approved: false, reason: "timeout" });
               }, 120_000);
-              pendingApprovals.set(conversationId, {
+              pendingApprovals.set(agentSessionId, {
                 resolve: (val) => {
                   clearTimeout(timeoutId);
-                  pendingApprovals.delete(conversationId);
+                  pendingApprovals.delete(agentSessionId);
                   resolve(val);
                 },
                 type: "tool",
@@ -637,7 +637,7 @@ export default class AgenticLoopService {
                            data: data || undefined,
                            meta: meta || undefined,
                        });
-                   }, { project, username, agent, requestId: ctx.requestId, conversationId, iteration: iterations });
+                   }, { project, username, agent, requestId: ctx.requestId, agentSessionId, iteration: iterations });
                    await hooks.run("afterToolCall", tc, result, ctx);
                    return { name: tc.name, id: tc.id, result };
                }
@@ -650,7 +650,7 @@ export default class AgenticLoopService {
                  username,
                  agent: agent || null,
                  sessionId: sessionId || null,
-                 conversationId,
+                 agentSessionId,
                  clientIp: ctx.clientIp || null,
                  requestId: ctx.requestId,
                  agenticIteration: iterations,
@@ -869,29 +869,29 @@ export default class AgenticLoopService {
       hooks.run("onError", err, ctx).catch((hookErr) =>
         logger.error(`[AgenticLoopService] onError hooks failed: ${hookErr.message}`),
       );
-      throw err; // Re-throw so handleChat's catch handler can log + emit the error event
+      throw err; // Re-throw so handleAgent's catch handler can log + emit the error event
     } finally {
       // Always clear generating flag — covers normal exit, abort, and errors
-      if (conversationId) {
-        ConversationService.setGenerating(conversationId, project, username, false).catch((e) =>
+      if (agentSessionId) {
+        ConversationService.setGenerating(agentSessionId, project, username, false).catch((e) =>
           logger.error(`Failed to clear isGenerating in agentic loop: ${e.message}`)
         );
       }
       // Clean up any lingering approval promises
-      pendingApprovals.delete(conversationId);
+      pendingApprovals.delete(agentSessionId);
     }
   }
 
   /**
-   * Resolve a pending approval for a conversation.
+   * Resolve a pending approval for an agent session.
    * Called by the HTTP endpoint when the client sends an approval response.
    *
-   * @param {string} conversationId
+   * @param {string} agentSessionId
    * @param {boolean} approved
    * @returns {boolean} true if a pending approval was found and resolved
    */
-  static resolveApproval(conversationId, approved, { approveAll = false } = {}) {
-    const entry = pendingApprovals.get(conversationId);
+  static resolveApproval(agentSessionId, approved, { approveAll = false } = {}) {
+    const entry = pendingApprovals.get(agentSessionId);
     if (!entry) return false;
 
     if (entry.type === "plan") {
@@ -903,12 +903,12 @@ export default class AgenticLoopService {
   }
 
   /**
-   * Check if a conversation has a pending approval.
-   * @param {string} conversationId
+   * Check if an agent session has a pending approval.
+   * @param {string} agentSessionId
    * @returns {{ pending: boolean, type?: string, tools?: string[] }}
    */
-  static getPendingApproval(conversationId) {
-    const entry = pendingApprovals.get(conversationId);
+  static getPendingApproval(agentSessionId) {
+    const entry = pendingApprovals.get(agentSessionId);
     if (!entry) return { pending: false };
     return { pending: true, type: entry.type, tools: entry.tools };
   }

@@ -1,4 +1,4 @@
-import { handleChat } from "../routes/chat.js";
+import { handleConversation } from "../routes/chat.js";
 import { handleVoice } from "../routes/audio.js";
 import {
   GoogleGenAI,
@@ -72,7 +72,7 @@ function handleWsChat(ws, project, username, clientIp, agent) {
       return;
     }
 
-    await handleChat({ ...data, project, username, clientIp, agent }, (event) => {
+    await handleConversation({ ...data, project, username, clientIp, agent }, (event) => {
       if (ws.readyState === ws.OPEN) {
         ws.send(JSON.stringify(event));
       }

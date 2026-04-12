@@ -216,36 +216,23 @@ async function resolveMediaRef(ref, project, username) {
 }
 
 // ============================================================
-// Shared core logic — used by both REST (SSE) and WebSocket
+// Shared setup — parameter parsing, validation, model resolution
 // ============================================================
 
 /**
- * Handle a chat request: text generation, image generation (for image-output
- * models), vision/captioning, and audio transcription — all via a unified
- * messages-based API.
+ * Parse and validate incoming request parameters, resolve images,
+ * model, and acquire GPU lock if needed.
  *
- * Payload follows a flat structure inspired by the OpenAI Chat Completions API:
- *   { provider, model, messages, tools?, temperature?, maxTokens?, ... }
+ * Returns a prepared context object shared by handleConversation
+ * and handleAgent, or throws on validation failure.
  *
- * @param {Object}   params              Request parameters
- * @param {string}   params.provider     Provider name (required)
- * @param {string}   [params.model]      Model name (optional, uses default)
- * @param {Array}    params.messages     Messages array (required)
- * @param {Array}    [params.tools]      Tool/function definitions
- * @param {number}   [params.temperature]
- * @param {number}   [params.maxTokens]
- * @param {number}   [params.topP]
- * @param {number}   [params.topK]
- * @param {number}   [params.frequencyPenalty]
- * @param {number}   [params.presencePenalty]
- * @param {Array}    [params.stopSequences]
- * @param {string}   [params.conversationId]  Auto-append to conversation
- * @param {Object}   [params.conversationMeta] Title + systemPrompt for storage
- * @param {string}   params.project      Project identifier
- * @param {string}   params.username     Username identifier
- * @param {Function} emit                Callback to emit events: emit({ type, ...data })
+ * @param {Object}   params   Raw request parameters
+ * @param {Function} emit     Event emitter callback
+ * @param {Object}   [opts]
+ * @param {AbortSignal} [opts.signal]
+ * @returns {Promise<Object>} Prepared generation context
  */
-export async function handleChat(params, emit, { signal } = {}) {
+async function prepareGenerationContext(params, emit, { signal } = {}) {
   const requestStart = performance.now();
   const requestId = crypto.randomUUID();
   const {
@@ -306,34 +293,6 @@ export async function handleChat(params, emit, { signal } = {}) {
     ...extraParams
   } = params;
 
-  // ── Auto-conversation: every AI request gets tracked ────────────
-  // If the caller didn't provide a conversationId, auto-generate one
-  // so that all projects (Stickers, Lupos, etc.) get conversations
-  // persisted without needing to explicitly manage IDs.
-  // When skipConversation is set, skip all conversation persistence
-  // (used by synthesis user-simulation turns that only need generation).
-  let conversationId = skipConversation ? null : incomingConversationId;
-  let conversationMeta = skipConversation ? null : incomingConversationMeta;
-  if (!skipConversation && !conversationId) {
-    conversationId = crypto.randomUUID();
-    const firstUserMsg = messages?.filter((m) => m.role === "user").pop();
-    const titleSnippet =
-      (firstUserMsg?.content || "").slice(0, 100).trim() || "New Conversation";
-    conversationMeta = conversationMeta || { title: titleSnippet };
-  }
-
-  // ── Session: passthrough ────────────────────────────────────
-  // SessionId is generated client-side and passed on every request.
-  // Sessions are derived views over requests — no separate collection.
-  const sessionId = incomingSessionId || null;
-
-  // Inject sessionId into conversationMeta for storage on the conversation doc
-  if (sessionId && conversationMeta) {
-    conversationMeta.sessionId = sessionId;
-  } else if (sessionId) {
-    conversationMeta = { sessionId };
-  }
-
   // Build the internal options object that providers expect
   const options = {
     ...(tools && { tools }),
@@ -388,92 +347,139 @@ export async function handleChat(params, emit, { signal } = {}) {
     options.thinkingEnabled = true;
   }
 
-  // Derive userMessage from the last user message in the messages array
+  // ── Validation ──────────────────────────────────────────────
+  if (!providerName) {
+    throw new ProviderError(
+      "server",
+      "Missing required field: provider",
+      400,
+    );
+  }
+  if (!messages || !Array.isArray(messages)) {
+    throw new ProviderError(
+      "server",
+      "Missing or invalid field: messages (must be an array)",
+      400,
+    );
+  }
+
+  // ── Strip soft-deleted messages ──────────────────────────────
+  const activeMessages = messages.filter((m) => !m.deleted);
+
+  // ── Resolve image refs ─────────────────────────────────────
+  const providerMessages = await resolveImageRefs(
+    activeMessages,
+    project,
+    username,
+  );
+
+  const provider = getProvider(providerName);
+
+  // ── Resolve model ─────────────────────────────────────────
+  const resolvedModel =
+    requestedModel || getDefaultModels(TYPES.TEXT, TYPES.TEXT)[providerName];
+  const modelDef = getModelByName(resolvedModel);
+  const isImageAPIModel = modelDef?.imageAPI && provider.generateImage;
+
+  // ── Local GPU mutex ──────────────────────────────────────
+  let localRelease;
+  if (localModelQueue.isLocal(providerName)) {
+    localRelease = await localModelQueue.acquire();
+    logger.info(
+      `[chat] 🔒 Acquired local GPU lock for ${resolvedModel}` +
+      (localModelQueue.pending > 0 ? ` (${localModelQueue.pending} queued)` : ""),
+    );
+  }
+
+  // Derive userMessage from the last user message
   const userMessage = messages?.filter((m) => m.role === "user").pop() || null;
 
-  let resolvedModel = null;
+  return {
+    provider,
+    providerName,
+    resolvedModel,
+    requestedModel,
+    modelDef,
+    isImageAPIModel,
+    messages: providerMessages,
+    originalMessages: activeMessages,
+    rawMessages: messages,
+    options,
+    userMessage,
+    // Identity
+    incomingConversationId,
+    incomingConversationMeta,
+    incomingSessionId,
+    skipConversation,
+    project,
+    username,
+    clientIp,
+    agent,
+    // Timing
+    requestStart,
+    requestId,
+    // Control
+    emit,
+    signal,
+    localRelease,
+  };
+}
+
+// ============================================================
+// handleConversation — Chat / Conversation persistence path
+// ============================================================
+
+/**
+ * Handle a conversation request: text generation, image generation,
+ * vision/captioning — with conversationId-based persistence.
+ *
+ * Used by the /chat route and any non-agent callers.
+ */
+export async function handleConversation(params, emit, { signal } = {}) {
+  let ctx;
+  try {
+    ctx = await prepareGenerationContext(params, emit, { signal });
+  } catch (error) {
+    emit({ type: "error", message: error.message });
+    return;
+  }
+
+  const {
+    providerName, resolvedModel, requestedModel, options,
+    incomingConversationId, incomingConversationMeta, incomingSessionId,
+    skipConversation, project, username, clientIp,
+    requestStart, requestId, localRelease,
+  } = ctx;
+
+  // ── Conversation identity ──────────────────────────────────
+  let conversationId = skipConversation ? null : incomingConversationId;
+  let conversationMeta = skipConversation ? null : incomingConversationMeta;
+  if (!skipConversation && !conversationId) {
+    conversationId = crypto.randomUUID();
+    const firstUserMsg = ctx.rawMessages?.filter((m) => m.role === "user").pop();
+    const titleSnippet =
+      (firstUserMsg?.content || "").slice(0, 100).trim() || "New Conversation";
+    conversationMeta = conversationMeta || { title: titleSnippet };
+  }
+
+  const sessionId = incomingSessionId || null;
+  if (sessionId && conversationMeta) {
+    conversationMeta.sessionId = sessionId;
+  } else if (sessionId) {
+    conversationMeta = { sessionId };
+  }
+
+  // Merge conversation identity into ctx for sub-handlers
+  const fullCtx = { ...ctx, conversationId, conversationMeta, sessionId };
 
   try {
-    // ── Validation ──────────────────────────────────────────────
-    if (!providerName) {
-      throw new ProviderError(
-        "server",
-        "Missing required field: provider",
-        400,
-      );
-    }
-    if (!messages || !Array.isArray(messages)) {
-      throw new ProviderError(
-        "server",
-        "Missing or invalid field: messages (must be an array)",
-        400,
-      );
-    }
-
-    // ── Strip soft-deleted messages ──────────────────────────────
-    // Deleted messages are kept in the DB for audit / undo, but must
-    // not enter the LLM context window.
-    const activeMessages = messages.filter((m) => !m.deleted);
-
-    // ── Resolve image refs ─────────────────────────────────────
-    // providerMessages has data URLs (for API calls)
-    // messages is mutated to have minio refs (for conversation storage)
-    const providerMessages = await resolveImageRefs(
-      activeMessages,
-      project,
-      username,
-    );
-
-    const provider = getProvider(providerName);
-
-    // ── Resolve model and determine dispatch path ───────────────
-    resolvedModel =
-      requestedModel || getDefaultModels(TYPES.TEXT, TYPES.TEXT)[providerName];
-    const modelDef = getModelByName(resolvedModel);
-
-    // Determine what kind of generation to perform:
-    //  1. imageAPI models (e.g. GPT Image 1.5) → provider.generateImage()
-    //  2. Standard text/multimodal → provider.generateTextStream() or generateText()
-    const isImageAPIModel = modelDef?.imageAPI && provider.generateImage;
-
-    // ── Local GPU mutex: serialize local model requests ─────────
-    // Acquire the process-level lock if this is a local provider so
-    // concurrent chat + benchmark requests don't collide on the GPU.
-    let localRelease;
-    if (localModelQueue.isLocal(providerName)) {
-      localRelease = await localModelQueue.acquire();
-      logger.info(
-        `[chat] 🔒 Acquired local GPU lock for ${resolvedModel}` +
-        (localModelQueue.pending > 0 ? ` (${localModelQueue.pending} queued)` : ""),
-      );
-    }
-
     try {
-      if (isImageAPIModel) {
-        await handleImageAPIModel({
-          provider,
-          providerName,
-          resolvedModel,
-          modelDef,
-          messages: providerMessages,
-          originalMessages: activeMessages,
-          options,
-          conversationId,
-          userMessage,
-          conversationMeta,
-          sessionId,
-          project,
-          username,
-          clientIp,
-          requestId,
-          requestStart,
-          emit,
-        });
+      if (ctx.isImageAPIModel) {
+        await handleImageAPIModel(fullCtx);
         return;
       }
 
-      // ── Standard text/multimodal streaming ───────────────────────
-      if (!provider.generateTextStream && !provider.generateText) {
+      if (!ctx.provider.generateTextStream && !ctx.provider.generateText) {
         throw new ProviderError(
           providerName,
           `Provider "${providerName}" does not support text generation`,
@@ -481,26 +487,14 @@ export async function handleChat(params, emit, { signal } = {}) {
         );
       }
 
-      // Prefer streaming; fall back to non-streaming.
-      // Models with streaming: false (e.g. Gemini image models) should use
-      // non-streaming generateText to get a clean single-response result.
       const useStreaming =
-        provider.generateTextStream &&
-        modelDef?.streaming !== false;
+        ctx.provider.generateTextStream &&
+        ctx.modelDef?.streaming !== false;
 
       if (useStreaming) {
-        // LM Studio supports both native MCP (tool calling handled server-side)
-        // and standard function calling (tool calling managed by Prism).
-        // When agenticLoopEnabled is true (Agent tab), we ALWAYS use Prism's
-        // AgenticLoopService so local models get iteration tracking, context
-        // management, approval gating, planning mode, and memory extraction.
-        // Native MCP is only used for the Chat tab where Prism doesn't
-        // manage the tool loop.
+        // LM Studio native MCP — only on /chat path
         const useLmStudioNativeMcp = providerName === "lm-studio" && !options.agenticLoopEnabled;
 
-        // For LM Studio MCP: populate options.tools with the allowed tool names
-        // so the provider can pass them as `allowed_tools` in the MCP integration.
-        // The MCP server discovers full schemas — Prism only supplies the filter list.
         if (useLmStudioNativeMcp && options.functionCallingEnabled) {
           const builtInTools = ToolOrchestratorService.getToolSchemas();
           let tools = builtInTools;
@@ -509,19 +503,15 @@ export async function handleChat(params, emit, { signal } = {}) {
             tools = tools.filter((t) => enabledSet.has(t.name));
           }
           options.tools = tools;
-          // Pass model context for provider-side tool cap
-          if (modelDef?.contextLength) {
-            options.contextLength = modelDef.contextLength;
+          if (ctx.modelDef?.contextLength) {
+            options.contextLength = ctx.modelDef.contextLength;
           }
           logger.info(`[chat] LM-Studio MCP: ${tools.length} tools enabled, enabledTools=${(options.enabledTools || []).length}, builtIn=${builtInTools.length}, contextLength=${options.contextLength || 'unset'}`);
         } else if (useLmStudioNativeMcp) {
           logger.warn(`[chat] LM-Studio MCP SKIPPED: functionCallingEnabled=${options.functionCallingEnabled}, useLmStudioNativeMcp=${useLmStudioNativeMcp}`);
         }
 
-        // For non-LM-Studio providers on the /chat path: load tool schemas
-        // from ToolOrchestratorService so the provider receives proper function
-        // definitions. Without this, the LLM only sees tool names in the system
-        // prompt and hallucinates XML tool calls instead of structured ones.
+        // Non-LM-Studio FC on /chat path
         if (!useLmStudioNativeMcp && !options.agenticLoopEnabled && options.functionCallingEnabled) {
           const builtInTools = ToolOrchestratorService.getToolSchemas();
           let tools = builtInTools;
@@ -533,75 +523,9 @@ export async function handleChat(params, emit, { signal } = {}) {
           logger.info(`[chat] FC tools injected: ${tools.length} tools enabled for ${providerName} ${resolvedModel}`);
         }
 
-        if (options.agenticLoopEnabled) {
-          // Lazy-load AgenticLoopService — only needed for the agentic path
-          // which is exclusively triggered via the /agent endpoint.
-          const { default: AgenticLoopService } = await import("../services/AgenticLoopService.js");
-          await AgenticLoopService.runAgenticLoop({
-            provider,
-            providerName,
-            resolvedModel,
-            modelDef,
-            messages: providerMessages,
-            originalMessages: activeMessages,
-            options,
-            conversationId,
-            userMessage,
-            conversationMeta,
-            sessionId,
-            project,
-            username,
-            clientIp,
-            agent,
-            requestId,
-            requestStart,
-            emit,
-            signal,
-          });
-        } else {
-          await handleStreamingText({
-            provider,
-            providerName,
-            resolvedModel,
-            modelDef,
-            messages: providerMessages,
-            originalMessages: activeMessages,
-            options,
-            conversationId,
-            userMessage,
-            conversationMeta,
-            sessionId,
-            project,
-            username,
-            clientIp,
-            agent,
-            requestId,
-            requestStart,
-            emit,
-            signal,
-          });
-        }
+        await handleStreamingText(fullCtx);
       } else {
-        await handleNonStreamingText({
-          provider,
-          providerName,
-          resolvedModel,
-          modelDef,
-          messages: providerMessages,
-          originalMessages: activeMessages,
-          options,
-          conversationId,
-          userMessage,
-          conversationMeta,
-          sessionId,
-          project,
-          username,
-          clientIp,
-          agent,
-          requestId,
-          requestStart,
-          emit,
-        });
+        await handleNonStreamingText(fullCtx);
       }
     } finally {
       if (localRelease) {
@@ -610,13 +534,12 @@ export async function handleChat(params, emit, { signal } = {}) {
       }
     }
   } catch (error) {
-    // Clear generating flag on error
     markGenerating(conversationId, project, username, false, getCollectionOpts(project));
     const totalSec = (performance.now() - requestStart) / 1000;
     RequestLogger.logChatGeneration({
       requestId,
-      endpoint: agenticLoopEnabled ? "/agent" : "/chat",
-      operation: agenticLoopEnabled ? "agent" : "chat",
+      endpoint: "/chat",
+      operation: "chat",
       project,
       username,
       clientIp,
@@ -627,11 +550,120 @@ export async function handleChat(params, emit, { signal } = {}) {
       success: false,
       errorMessage: error.message,
       totalSec,
-      messages: messages || [],
+      messages: ctx.rawMessages || [],
       options: {},
     });
     emit({ type: "error", message: error.message });
   }
+}
+
+// ============================================================
+// handleAgent — Agent session path (agentSessionId, no conversationId)
+// ============================================================
+
+/**
+ * Handle an agent request: always dispatches to AgenticLoopService.
+ * Persistence uses agentSessionId (not conversationId).
+ *
+ * Used exclusively by the /agent route.
+ */
+export async function handleAgent(params, emit, { signal } = {}) {
+  let ctx;
+  try {
+    ctx = await prepareGenerationContext(params, emit, { signal });
+  } catch (error) {
+    emit({ type: "error", message: error.message });
+    return;
+  }
+
+  const {
+    providerName, resolvedModel, requestedModel, options,
+    incomingConversationId, incomingConversationMeta, incomingSessionId,
+    project, username, clientIp, agent,
+    requestStart, requestId, localRelease,
+  } = ctx;
+
+  // ── Agent session identity ─────────────────────────────────
+  // The client sends conversationId which IS the agentSessionId
+  const agentSessionId = incomingConversationId || crypto.randomUUID();
+  const sessionId = incomingSessionId || null;
+  const conversationMeta = incomingConversationMeta || null;
+
+  try {
+    try {
+      if (!ctx.provider.generateTextStream && !ctx.provider.generateText) {
+        throw new ProviderError(
+          providerName,
+          `Provider "${providerName}" does not support text generation`,
+          400,
+        );
+      }
+
+      const { default: AgenticLoopService } = await import("../services/AgenticLoopService.js");
+      await AgenticLoopService.runAgenticLoop({
+        provider: ctx.provider,
+        providerName,
+        resolvedModel,
+        modelDef: ctx.modelDef,
+        messages: ctx.messages,
+        originalMessages: ctx.originalMessages,
+        options,
+        agentSessionId,
+        userMessage: ctx.userMessage,
+        conversationMeta,
+        sessionId,
+        project,
+        username,
+        clientIp,
+        agent,
+        requestId,
+        requestStart,
+        emit,
+        signal,
+      });
+    } finally {
+      if (localRelease) {
+        localRelease();
+        logger.info(`[agent] 🔓 Released local GPU lock for ${resolvedModel}`);
+      }
+    }
+  } catch (error) {
+    markGenerating(agentSessionId, project, username, false, getCollectionOpts(project));
+    const totalSec = (performance.now() - requestStart) / 1000;
+    RequestLogger.logChatGeneration({
+      requestId,
+      endpoint: "/agent",
+      operation: "agent",
+      project,
+      username,
+      clientIp,
+      provider: providerName,
+      model: resolvedModel || requestedModel || "unknown",
+      agentSessionId,
+      sessionId: sessionId || null,
+      success: false,
+      errorMessage: error.message,
+      totalSec,
+      messages: ctx.rawMessages || [],
+      options: {},
+    });
+    emit({ type: "error", message: error.message });
+  }
+}
+
+// ============================================================
+// handleChat — @deprecated backward-compat router
+// ============================================================
+
+/**
+ * @deprecated Use handleConversation or handleAgent directly.
+ * Routes to handleAgent when agenticLoopEnabled, otherwise handleConversation.
+ */
+export async function handleChat(params, emit, { signal } = {}) {
+  if (params.agenticLoopEnabled) {
+    return handleAgent(params, emit, { signal });
+  }
+  return handleConversation(params, emit, { signal });
 }
 
 // ============================================================

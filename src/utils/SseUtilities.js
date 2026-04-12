@@ -1,4 +1,4 @@
-import { handleChat } from "../routes/chat.js";
+import { handleConversation } from "../routes/chat.js";
 import { ProviderError } from "./errors.js";
 
 // ============================================================
@@ -95,13 +95,14 @@ export function buildJsonResponseFromEvents(events, reqBody) {
 
 /**
  * Handle a full SSE streaming request lifecycle.
- * Sets up SSE headers, AbortController, runs handleChat, and closes.
+ * Sets up SSE headers, AbortController, runs the handler, and closes.
  *
  * @param {import("express").Request}  req
  * @param {import("express").Response} res
- * @param {object}                     params - Parameters to pass to handleChat
+ * @param {object}                     params  - Parameters to pass to the handler
+ * @param {Function}                   [handler] - Generation handler (default: handleConversation)
  */
-export async function handleSseRequest(req, res, params) {
+export async function handleSseRequest(req, res, params, handler = handleConversation) {
   initSseResponse(res);
 
   const controller = new AbortController();
@@ -109,7 +110,7 @@ export async function handleSseRequest(req, res, params) {
     if (!res.writableFinished) controller.abort();
   });
 
-  await handleChat(
+  await handler(
     params,
     createSseEmitter(res, controller.signal),
     { signal: controller.signal },
@@ -120,16 +121,17 @@ export async function handleSseRequest(req, res, params) {
 
 /**
  * Handle a non-streaming JSON request lifecycle.
- * Collects events from handleChat and returns a flat JSON response.
+ * Collects events from the handler and returns a flat JSON response.
  *
  * @param {import("express").Request}  req
  * @param {import("express").Response} res
  * @param {import("express").NextFunction} next
- * @param {object}                     params - Parameters to pass to handleChat
+ * @param {object}                     params  - Parameters to pass to the handler
+ * @param {Function}                   [handler] - Generation handler (default: handleConversation)
  */
-export async function handleJsonRequest(req, res, next, params) {
+export async function handleJsonRequest(req, res, next, params, handler = handleConversation) {
   const events = [];
-  await handleChat(params, (event) => events.push(event));
+  await handler(params, (event) => events.push(event));
 
   const { error, response } = buildJsonResponseFromEvents(events, req.body);
   if (error) return next(error);

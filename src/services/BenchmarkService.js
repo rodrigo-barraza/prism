@@ -5,7 +5,7 @@
 // evaluates responses against expected values, and persists results.
 
 import crypto from "crypto";
-import { handleChat } from "../routes/chat.js";
+import { handleConversation } from "../routes/chat.js";
 import {
   MODELS,
   MODEL_TYPES,
@@ -207,7 +207,7 @@ async function runSingleModel(benchmark, model, project, username, { signal } = 
 
   try {
     const events = [];
-    await handleChat(
+    await handleConversation(
       {
         provider: model.provider,
         model: model.model,
@@ -406,7 +406,7 @@ const BenchmarkService = {
     );
 
     // Each bucket runs its models sequentially; all buckets run concurrently.
-    // NOTE: The process-level GPU mutex lives in handleChat() (via LocalModelQueue),
+    // NOTE: The process-level GPU mutex lives in prepareGenerationContext() (via LocalModelQueue),
     // so concurrent benchmark runs and chat requests are globally serialized there.
     let aborted = false;
     const bucketPromises = [...buckets.entries()].map(
