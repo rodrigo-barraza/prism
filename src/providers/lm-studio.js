@@ -19,7 +19,6 @@ import {
   expandVideoToFrames,
   processNonStreamingResponse,
   fetchOpenAICompat,
-  parseSSEStream,
   MEDIA_STRATEGIES,
 } from "../utils/openai-compat.js";
 
