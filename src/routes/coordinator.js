@@ -116,4 +116,28 @@ router.post("/abort/:taskId", async (req, res, next) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════
+// Chat-Spawned Worker Endpoints
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * GET /coordinator/workers
+ * List all active workers spawned via chat tools.
+ */
+router.get("/workers", (_req, res) => {
+  res.json({ workers: CoordinatorService.listWorkers() });
+});
+
+/**
+ * GET /coordinator/workers/:agentId
+ * Get the status of a specific chat-spawned worker.
+ */
+router.get("/workers/:agentId", (req, res) => {
+  const status = CoordinatorService.getWorkerStatus(req.params.agentId);
+  if (!status) {
+    return res.status(404).json({ error: "Worker not found" });
+  }
+  res.json(status);
+});
+
 export default router;

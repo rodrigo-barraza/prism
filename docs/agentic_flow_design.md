@@ -167,29 +167,52 @@ For tasks requiring extensive reasoning, the agent enters a dedicated planning l
 **Implementation**: Retina UI flag → Prism wraps the first LLM call with a planning system prompt → response rendered via `PlanCardComponent` → approved plan injected as context for execution calls.
 
 ### ⚠️ Coordinator Mode (Multi-Agent Orchestration)
-Retina can act as a manager, breaking a complex task into pieces and spawning parallel worker agents. **Scoped to file-centric refactoring tasks**: fan-out a task across N files in isolated git worktrees, then merge results.
+The coordinator (lead agent) breaks complex tasks apart, spawns parallel workers in isolated git worktrees, collects results. Based on analysis of Claude Code's public `coordinatorMode.ts`, `src/utils/swarm/`, `AgentTool/`, `TeamCreateTool/`, and `SendMessageTool/` patterns.
 
-**Architecture**: User Request → LLM Decomposition (Claude Sonnet) → N Workers → Git Worktree Isolation → MutationQueue Safety → Unified Diff → User Approval → Git Merge
+**Paradigm shift**: Moving from manual-panel-only decomposition to **chat-triggered subagent orchestration**. The LLM itself decides when to fan out by calling `spawn_agent`, `send_message`, and `stop_agent` tools — identical to how Claude Code's coordinator uses `Agent`, `SendMessage`, and `TaskStop` tool calls.
 
-**Infrastructure** ✅:
-- `CoordinatorService.js`: `decompose()` (LLM-based task decomposition, max 5 sub-tasks), `execute()` (parallel worktree spawning), `approveMerge()`, `abort()`, status polling
+**Current Architecture** (✅ built, workers stubbed):
+User Request → LLM Decomposition (Claude Sonnet) → N Workers → Git Worktree Isolation → MutationQueue Safety → Unified Diff → User Approval → Git Merge
+
+**Target Architecture** (🔲 to build):
+Chat Message → Coordinator System Prompt Injection → LLM calls `spawn_agent` tool → Worker spawned with own `AgenticLoopService.runAgenticLoop()` in isolated git worktree → Worker autonomously uses full tool suite → Worker completes → `<task-notification>` XML injected as user-role message into coordinator's conversation → Coordinator synthesizes results → Optionally continues worker via `send_message` → User reviews unified diffs → Approve & Merge
+
+**Reference Architecture (Claude Code)**:
+- **coordinatorMode.ts**: Feature-gated via `CLAUDE_CODE_COORDINATOR_MODE` env var. `getCoordinatorSystemPrompt()` returns a 300-line system prompt defining the coordinator's role, tool usage examples (`Agent`, `SendMessage`, `TaskStop`), 4-phase workflow (Research → Synthesis → Implementation → Verification), concurrency rules (read-only parallel, write-heavy serial), synthesization anti-patterns, continue-vs-spawn decision matrix
+- **src/utils/swarm/inProcessRunner.ts**: `InProcessRunnerConfig` wraps `runAgent()` with `AsyncLocalStorage`-based context isolation, `TeammateIdentity`, linked `AbortController`, plan mode approval support, idle notification to leader via file-based mailbox, task claiming from team task list
+- **src/utils/swarm/spawnInProcess.ts**: Creates `TeammateContext`, registers `InProcessTeammateTaskState` in `AppState`, returns `InProcessSpawnOutput` with `abortController` and `teammateContext`
+- **AgentTool/**: Coordinator calls `Agent(description, prompt, subagent_type)` → spawns worker. Worker results arrive as `<task-notification>` XML in user-role messages containing `task-id`, `status`, `summary`, `result`, `usage`
+- **TeamCreateTool/**: Higher-level team concept for persistent multi-agent swarms. Creates team file, resets task list, registers cleanup. Beyond our current scope.
+- **Key insight**: Workers **cannot see the coordinator's conversation**. Every prompt must be self-contained. Coordinator must synthesize research findings before delegating implementation — never write "based on your findings."
+
+**Infrastructure** ✅ (already built):
+- `CoordinatorService.js`: `decompose()` (LLM-based task decomposition via Claude Sonnet, max 5 sub-tasks), `execute()` (parallel worktree spawning), `approveMerge()`, `abort()`, status polling, `_runWorker()` stub
 - `MutationQueue.js`: Per-file-path FIFO mutex with `acquire()`/`release()`/`withLock()` — singleton pattern for concurrent write safety
 - `coordinator.js` route: `POST /coordinator/{plan,execute,approve-merge,abort}`, `GET /coordinator/{status/:taskId,tasks}`
 - `AgenticGitService.js` (tools-api): 5 worktree functions — `create`, `remove`, `merge` (`--no-ff`), `diff` (three-dot), `cleanup` (prune orphans from `/tmp/prism-worktrees/`)
 - `AgenticRoutes.js`: `POST /agentic/git/worktree/{create,remove,merge,diff,cleanup}`
 - `CoordinatorPanel.js` + CSS: Full lifecycle UI — Input → Plan Review (complexity badges) → Executing → Diff Review (+/- counts) → Approve & Merge / Reject & Cleanup
 - Wired as `GitBranch` tab in Agent sidebar (`AgentComponent.js`)
+- `AgenticTaskService.js`: Schema pre-wired with `owner`, `blocks`, `blockedBy`, `activeForm` fields for swarm coordination
 
-**Not yet wired** 🔲:
-- `_runWorker()` does not yet invoke `AgenticLoopService.runAgenticLoop()` — currently stages/commits only. Worker loop integration is deferred to keep the infrastructure PR focused.
-- WebSocket progress streaming (currently polling-based)
-- Merge conflict resolution UI
-- Boot-time orphan worktree cleanup
+**Implementation Components** 🔲 (7 components to build):
+
+| # | Component | Description | Key Files |
+|---|-----------|-------------|-----------|
+| 1 | **Coordinator Tools** | `spawn_agent`, `send_message`, `stop_agent` tool schemas + dispatch | `ToolSchemaService`, `ToolOrchestratorService`, `AutoApprovalEngine` |
+| 2 | **Worker Execution Engine** | Wire `AgenticLoopService.runAgenticLoop()` into `_runWorker()` with per-worker conversation context, AbortController, auto-approve, scoped tools | `CoordinatorService.js` |
+| 3 | **Coordinator System Prompt** | Adapted from Claude Code's `getCoordinatorSystemPrompt()`: 4-phase workflow, tool usage examples, synthesization rules, continue-vs-spawn matrix | `CoordinatorPrompt.js` (new), `SystemPromptAssembler.js` |
+| 4 | **Task Notification Pipeline** | `<task-notification>` XML generation + injection into coordinator's active conversation as user-role messages | `AgenticLoopService.js`, `CoordinatorService.js` |
+| 5 | **Task System Activation** | Activate `owner`, `blocks`/`blockedBy` DAG enforcement, `task_claim` tool, `activeForm` UI text | `AgenticTaskService.js` |
+| 6 | **Retina UI Updates** | Live worker status in CoordinatorPanel, tool result renderers for spawn/send/stop, `<task-notification>` card renderer | `CoordinatorPanel.js`, `ToolResultRenderers.js`, `MessageList.js` |
+| 7 | **WebSocket Progress** | Replace polling with `coordinator_worker_update` push events | `coordinator.js` route |
 
 **Design decisions**:
-- Scoped to file mutations only — non-file parallel tasks (test running, research) don't need worktree isolation and should use a simpler fan-out pattern
-- File paths currently required in input — future improvement: let decomposition LLM discover files via `project_summary` + `grep_search`
-- Workers operate on the full tool suite (not just file ops) when loop is wired in
+- **Git worktrees retained** — our differentiator over Claude Code. CC runs all workers against the same filesystem. Our worktree isolation means workers literally cannot interfere with each other
+- **In-process async** — workers are concurrent async loops in the same Node.js process (like Claude Code's `inProcessRunner`), not separate processes. Each gets isolated conversation context
+- **Workers cannot spawn sub-workers** — `spawn_agent`/`send_message`/`stop_agent` excluded from worker tool sets to prevent recursion
+- **Coordinator is a mode, not a persona** — the coordinator system prompt is injected as an addendum to the existing `CODING` persona when coordinator tools are available, not a separate identity
+- **File paths optional for chat-triggered flow** — the coordinator LLM discovers files via its existing tools (`project_summary`, `grep_search`). Manual panel still requires explicit file paths
 
 ### ✅ Persistent Memory (Two-Phase)
 

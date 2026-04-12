@@ -1,6 +1,7 @@
 import { TOOLS_API_URL } from "../../secrets.js";
 import MCPClientService from "./MCPClientService.js";
 import logger from "../utils/logger.js";
+import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
 
 // ────────────────────────────────────────────────────────────
 // Schema Cache — fetched from tools-api at startup
@@ -242,15 +243,65 @@ async function fetchJsonPost(url, body, extraHeaders = {}) {
 // Public API
 // ────────────────────────────────────────────────────────────
 
+// ────────────────────────────────────────────────────────────
+// Coordinator Tool Schemas — Prism-local, not routed to tools-api
+// ────────────────────────────────────────────────────────────
+
+const COORDINATOR_TOOL_SCHEMAS = [
+  {
+    name: "spawn_agent",
+    description: "Spawn a worker agent to execute a task autonomously in an isolated git worktree. Workers have access to the full tool suite (read, write, search, shell). Use for parallelizable research, implementation, or verification tasks.",
+    parameters: {
+      type: "object",
+      properties: {
+        description: { type: "string", description: "Short label for the worker (shown in UI)" },
+        prompt: { type: "string", description: "Self-contained task prompt. Include file paths, line numbers, and exact instructions. Workers cannot see the coordinator's conversation." },
+        files: { type: "array", items: { type: "string" }, description: "Optional: specific file paths the worker should focus on" },
+        model: { type: "string", description: "Optional: model override for the worker (defaults to coordinator's model)" },
+      },
+      required: ["description", "prompt"],
+    },
+  },
+  {
+    name: "send_message",
+    description: "Send a follow-up message to a running or completed worker agent. Use to continue work, provide corrections, or give new instructions.",
+    parameters: {
+      type: "object",
+      properties: {
+        to: { type: "string", description: "Agent ID returned by spawn_agent" },
+        message: { type: "string", description: "Follow-up instructions for the worker" },
+      },
+      required: ["to", "message"],
+    },
+  },
+  {
+    name: "stop_agent",
+    description: "Stop a running worker agent. The worker's worktree is cleaned up.",
+    parameters: {
+      type: "object",
+      properties: {
+        agent_id: { type: "string", description: "Agent ID to stop" },
+      },
+      required: ["agent_id"],
+    },
+  },
+];
+
 export default class ToolOrchestratorService {
   /** AI-clean schemas (no endpoint/domain/dataSource/labels) — for LLM tool arrays */
   static getToolSchemas() {
-    return cachedAISchemas;
+    return [...cachedAISchemas, ...COORDINATOR_TOOL_SCHEMAS];
   }
 
   /** Client-facing schemas (with domain/dataSource/labels, no endpoint) — for Retina UI */
   static getClientToolSchemas() {
-    return cachedClientSchemas;
+    // Coordinator tools are Prism-local — add domain metadata for UI grouping
+    const coordinatorClient = COORDINATOR_TOOL_SCHEMAS.map((t) => ({
+      ...t,
+      domain: "Coordinator",
+      labels: { category: "Orchestration" },
+    }));
+    return [...cachedClientSchemas, ...coordinatorClient];
   }
 
   /** Workspace root paths from tools-api (single source of truth) */
@@ -307,6 +358,11 @@ export default class ToolOrchestratorService {
   }
 
   static async executeTool(name, args = {}, ctx = {}) {
+    // Route coordinator tools to CoordinatorService (Prism-local)
+    if (COORDINATOR_ONLY_TOOLS.includes(name)) {
+      return ToolOrchestratorService.executeCoordinatorTool(name, args, ctx);
+    }
+
     // Route MCP tools to MCPClientService
     if (MCPClientService.isMCPTool(name)) {
       return ToolOrchestratorService.executeMCPTool(name, args);
@@ -360,6 +416,50 @@ export default class ToolOrchestratorService {
     }
 
     return result;
+  }
+
+  /**
+   * Execute a coordinator tool (spawn_agent, send_message, stop_agent).
+   * These are Prism-local — they dispatch to CoordinatorService in-process.
+   *
+   * @param {string} name - Tool name
+   * @param {object} args - Tool arguments
+   * @param {object} ctx - Caller context (carries coordinatorCtx for message injection)
+   * @returns {Promise<object>}
+   */
+  static async executeCoordinatorTool(name, args = {}, ctx = {}) {
+    const { default: CoordinatorService } = await import("./CoordinatorService.js");
+
+    // Build coordinatorCtx from the loop's context
+    const coordinatorCtx = {
+      project: ctx.project,
+      username: ctx.username,
+      agent: ctx.agent,
+      providerName: ctx._providerName,
+      resolvedModel: ctx._resolvedModel,
+      sessionId: ctx.conversationId,
+      injectMessage: ctx._injectMessage || null,
+    };
+
+    switch (name) {
+      case "spawn_agent":
+        return CoordinatorService.spawnFromTool({
+          description: args.description,
+          prompt: args.prompt,
+          files: args.files,
+          model: args.model,
+          coordinatorCtx,
+        });
+
+      case "send_message":
+        return CoordinatorService.sendMessage(args.to, args.message, coordinatorCtx);
+
+      case "stop_agent":
+        return CoordinatorService.stopAgent(args.agent_id);
+
+      default:
+        return { error: `Unknown coordinator tool: ${name}` };
+    }
   }
 
   /**

@@ -288,6 +288,10 @@ const CODING_ENABLED_TOOLS = [
   "task_list",
   "task_get",
   "task_update",
+  // Coordinator (multi-agent orchestration)
+  "spawn_agent",
+  "send_message",
+  "stop_agent",
 ];
 
 // ── CODING Agent (Retina) ────────────────────────────────────────

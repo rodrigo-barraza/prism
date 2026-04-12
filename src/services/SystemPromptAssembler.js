@@ -7,6 +7,7 @@ import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { TOOLS_API_URL, MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 import { cosineSimilarity } from "../utils/math.js";
+import { getCoordinatorPromptAddendum, COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
 
 const SKILL_RELEVANCE_THRESHOLD = 0.3;
 
@@ -395,6 +396,23 @@ export default class SystemPromptAssembler {
         `- Do NOT create tasks for simple, single-step requests — only for work that benefits from tracking`
       );
       sections.push(guidelines);
+    }
+
+    // ── 5b. Coordinator Mode Addendum (when coordinator tools available) ──
+    if (codingFallback || persona?.usesCodingGuidelines) {
+      const enabledSet = ctx.enabledTools ? new Set(ctx.enabledTools) : null;
+      const coordinatorAvailable = enabledSet
+        ? COORDINATOR_ONLY_TOOLS.some((t) => enabledSet.has(t))
+        : true; // No filter = all tools available including coordinator
+
+      if (coordinatorAvailable) {
+        const allSchemas = ToolOrchestratorService.getToolSchemas();
+        const coordinatorSet = new Set(COORDINATOR_ONLY_TOOLS);
+        const workerTools = allSchemas
+          .map((t) => t.name)
+          .filter((name) => !coordinatorSet.has(name));
+        sections.push(getCoordinatorPromptAddendum({ workerTools }));
+      }
     }
 
     // ── 6. Environment ───────────────────────────────────────────

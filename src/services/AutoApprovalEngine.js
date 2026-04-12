@@ -36,6 +36,11 @@ const DEFAULT_TIER_MAP = {
   task_list: APPROVAL_TIERS.AUTO,
   task_update: APPROVAL_TIERS.AUTO,
 
+  // Tier 1 — coordinator orchestration
+  spawn_agent: APPROVAL_TIERS.AUTO,
+  send_message: APPROVAL_TIERS.AUTO,
+  stop_agent: APPROVAL_TIERS.AUTO,
+
   // Tier 2 — write operations
   write_file: APPROVAL_TIERS.WRITE,
   str_replace_file: APPROVAL_TIERS.WRITE,

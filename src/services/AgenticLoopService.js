@@ -17,6 +17,10 @@ import SystemPromptAssembler from "./SystemPromptAssembler.js";
 import AgentPersonaRegistry from "./AgentPersonaRegistry.js";
 import PlanningModeService from "./PlanningModeService.js";
 import SessionSummarizer from "./SessionSummarizer.js";
+import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
+
+/** Coordinator tools bypass the enabledTools filter (always available) */
+const COORDINATOR_TOOL_NAMES = new Set(COORDINATOR_ONLY_TOOLS);
 
 const MAX_TOOL_ITERATIONS = 25;
 const MAX_CONSECUTIVE_TOOL_ERRORS = 3;
@@ -121,7 +125,7 @@ export default class AgenticLoopService {
     let finalTools = dynamicTools;
     if (resolvedEnabledTools && Array.isArray(resolvedEnabledTools)) {
       const enabledSet = new Set(resolvedEnabledTools);
-      finalTools = finalTools.filter((t) => enabledSet.has(t.name) || t.name.startsWith("mcp__"));
+      finalTools = finalTools.filter((t) => enabledSet.has(t.name) || t.name.startsWith("mcp__") || COORDINATOR_TOOL_NAMES.has(t.name));
     }
 
     // ── Native tool collision prevention ────────────────────────
@@ -276,6 +280,15 @@ export default class AgenticLoopService {
 
     // Track consecutive errors per tool name for retry budgeting
     const toolErrorCounts = new Map();
+
+    // ── Message injection queue for coordinator mode ─────────
+    // When coordinator tools spawn workers, workers deliver results
+    // as <task-notification> user-role messages via this queue.
+    // The loop drains this queue after each tool execution batch.
+    const injectedMessages = [];
+    const injectMessage = (content) => {
+      injectedMessages.push({ role: "user", content });
+    };
 
     try {
       while (iterations < resolvedMaxIterations) {
@@ -642,6 +655,10 @@ export default class AgenticLoopService {
                  requestId: ctx.requestId,
                  agenticIteration: iterations,
                  iteration: iterations,
+                 // Coordinator context — used by spawn_agent/send_message/stop_agent
+                 _providerName: providerName,
+                 _resolvedModel: resolvedModel,
+                 _injectMessage: injectMessage,
                });
                await hooks.run("afterToolCall", tc, result, ctx);
                return { name: tc.name, id: tc.id, result };
@@ -732,6 +749,17 @@ export default class AgenticLoopService {
 
           // Clean up empty assistant text content nodes
           currentMessages = currentMessages.filter((m) => !(m.role === "assistant" && !m.content?.trim() && (!m.toolCalls || m.toolCalls.length === 0)));
+
+          // ── Drain coordinator message injection queue ────────
+          // Worker notifications arrive here as user-role messages
+          // containing <task-notification> XML.
+          if (injectedMessages.length > 0) {
+            const drained = injectedMessages.splice(0, injectedMessages.length);
+            for (const msg of drained) {
+              currentMessages.push(msg);
+              emit({ type: "status", message: "worker_notification", agentNotification: msg.content });
+            }
+          }
 
           // Run the next iteration
           continue;
