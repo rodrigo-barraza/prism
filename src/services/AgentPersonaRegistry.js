@@ -283,6 +283,11 @@ const CODING_ENABLED_TOOLS = [
   "regex_tester",
   "encode_decode",
   "convert_color",
+  // Task management
+  "task_create",
+  "task_list",
+  "task_get",
+  "task_update",
 ];
 
 // ── CODING Agent (Retina) ────────────────────────────────────────
@@ -301,7 +306,17 @@ PERSONAS.set("CODING", {
 5. Use project_summary to understand unfamiliar codebases before diving in
 6. Check git_status before and after edits to track your changes
 7. When searching, use includes filters to narrow results (e.g. [".js", ".ts"])
-8. Keep your explanations concise and technical`,
+8. Keep your explanations concise and technical
+
+## Task Management
+You have persistent task tools (task_create, task_list, task_update) that survive across conversations.
+Use them proactively:
+- At the START of a session, call task_list to check for in-progress or pending tasks from prior sessions
+- When starting complex multi-step work (3+ files, multi-phase refactors, migrations), create a task with task_create to track progress
+- Update task status to "in_progress" when you begin working on it, "completed" when done
+- Always set activeForm when creating or updating to "in_progress" — a present-continuous phrase shown as a spinner (e.g. "Running tests", "Refactoring auth module")
+- Break large tasks into subtasks — use metadata to link related tasks
+- Do NOT create tasks for simple, single-step requests — only for work that benefits from tracking`,
   interactionRules: "",
   toolPolicy: "",
   enabledTools: CODING_ENABLED_TOOLS,
