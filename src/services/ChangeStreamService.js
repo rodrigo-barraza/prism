@@ -22,7 +22,7 @@ let available = false;
 let staleGeneratingInterval = null;
 
 // Collections to watch
-const WATCHED_COLLECTIONS = [COLLECTIONS.CONVERSATIONS, COLLECTIONS.SESSIONS, COLLECTIONS.REQUESTS];
+const WATCHED_COLLECTIONS = [COLLECTIONS.CONVERSATIONS, COLLECTIONS.REQUESTS];
 
 /**
  * Attempt to open a Change Stream on a single collection.

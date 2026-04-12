@@ -96,7 +96,7 @@ const ENDPOINTS = {
     "/coordinator",
   ],
   websocket: ["/ws/chat", "/ws/text-to-audio"],
-  admin: ["/admin", "/admin/lm-studio", "/admin/sessions"],
+  admin: ["/admin", "/admin/lm-studio"],
 };
 
 // Health check (public — no auth required)

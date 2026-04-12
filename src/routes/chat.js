@@ -240,6 +240,7 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
     model: requestedModel,
     messages,
     conversationId: incomingConversationId,
+    agentSessionId: incomingAgentSessionId,
     conversationMeta: incomingConversationMeta,
     sessionId: incomingSessionId,
     project = "unknown",
@@ -408,6 +409,7 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
     userMessage,
     // Identity
     incomingConversationId,
+    incomingAgentSessionId,
     incomingConversationMeta,
     incomingSessionId,
     skipConversation,
@@ -578,14 +580,14 @@ export async function handleAgent(params, emit, { signal } = {}) {
 
   const {
     providerName, resolvedModel, requestedModel, options,
-    incomingConversationId, incomingConversationMeta, incomingSessionId,
+    incomingConversationId, incomingAgentSessionId, incomingConversationMeta, incomingSessionId,
     project, username, clientIp, agent,
     requestStart, requestId, localRelease,
   } = ctx;
 
   // ── Agent session identity ─────────────────────────────────
-  // The client sends conversationId which IS the agentSessionId
-  const agentSessionId = incomingConversationId || crypto.randomUUID();
+  // The client sends agentSessionId directly; falls back to conversationId for backward compat
+  const agentSessionId = incomingAgentSessionId || incomingConversationId || crypto.randomUUID();
   const sessionId = incomingSessionId || null;
   const conversationMeta = incomingConversationMeta || null;
 
