@@ -185,6 +185,29 @@ Chat Message → Coordinator System Prompt Injection → LLM calls `spawn_agent`
 - **TeamCreateTool/**: Higher-level team concept for persistent multi-agent swarms. Creates team file, resets task list, registers cleanup. Beyond our current scope.
 - **Key insight**: Workers **cannot see the coordinator's conversation**. Every prompt must be self-contained. Coordinator must synthesize research findings before delegating implementation — never write "based on your findings."
 
+**Architectural Differences: Claude Code vs Prism Notification Delivery**:
+
+Claude Code is a CLI REPL — its main loop is always alive, waiting for user input. Prism is an HTTP server — each agentic loop runs to completion within a single request lifecycle. This fundamentally changes how worker completion notifications reach the coordinator.
+
+| Aspect | Claude Code (CLI REPL) | Prism (HTTP Request) |
+|---|---|---|
+| **Loop lifecycle** | Always alive — REPL event loop waits for input indefinitely | Terminates — agentic loop exits when model returns text |
+| **Notification delivery** | `enqueueAgentNotification()` pushes `<task-notification>` XML into the session's `inputQueue` as a synthetic user message — the REPL naturally drains it on the next iteration | `injectMessage()` pushes to an in-memory array + fires `_notifyWake()` to wake a suspended Promise inside the loop |
+| **Coordinator wait** | Implicit — the REPL is always listening, so notifications are consumed as soon as they arrive | Explicit — when the coordinator outputs text after spawning workers, the loop checks `CoordinatorService.listWorkers()` and suspends via `await new Promise()` with event-driven wake + 2s safety poll + 5min hard timeout |
+| **Re-prompting** | The notification appears as the next user turn — the model responds naturally | After draining notifications into `currentMessages`, the loop `continue`s to re-prompt the model with the new user-role messages |
+| **Multi-round handling** | Each notification triggers a new REPL turn independently | The loop re-checks `listWorkers()` after each model response — if workers are still running, it waits again. Handles N rounds automatically |
+| **Concurrency model** | Workers run as background tasks with their own `AbortController`, decoupled from the parent's lifecycle (`void runWithAgentContext(...)`) | Workers run as concurrent async loops (in-process) via `CoordinatorService._runPanelWorker()`, each with isolated conversation context. Local GPU models force worker fallback to Haiku 4.5 to prevent serialization bottlenecks |
+| **State management** | `AppState` tracks tasks via `registerAsyncAgent()` / `completeAsyncAgent()` / `killAsyncAgent()` with `rootSetAppState` reaching the root store. `agentNameRegistry` maps names → IDs for `SendMessage` routing | `CoordinatorService` maintains an in-memory `workers` Map with status tracking. `listWorkers()` queries live status for the wait-loop poll |
+
+**Reference URLs** (Claude Code source, studied for this design):
+- Coordinator system prompt & mode: https://github.com/razakiau/claude-code/blob/main/src/coordinator/coordinatorMode.ts
+- AgentTool (spawn, async lifecycle, notification enqueue): https://github.com/razakiau/claude-code/blob/main/src/tools/AgentTool/AgentTool.tsx
+- `runAsyncAgentLifecycle` + `enqueueAgentNotification` + `finalizeAgentTool`: https://github.com/razakiau/claude-code/blob/main/src/tools/AgentTool/agentToolUtils.ts
+- TeamCreateTool (higher-level swarm concept): https://github.com/razakiau/claude-code/blob/main/src/tools/TeamCreateTool/TeamCreateTool.ts
+- Swarm utilities directory (inProcessRunner, spawnInProcess, teamHelpers, etc.): https://github.com/razakiau/claude-code/tree/main/src/utils/swarm
+
+**Key takeaway**: Our `injectMessage()` + `_notifyWake()` + coordinator wait pattern is the HTTP-equivalent of Claude Code's always-alive REPL `inputQueue`. Both deliver `<task-notification>` XML as user-role messages — the difference is purely in the transport lifecycle.
+
 **Infrastructure** ✅ (already built):
 - `CoordinatorService.js`: `decompose()` (LLM-based task decomposition via Claude Sonnet, max 5 sub-tasks), `execute()` (parallel worktree spawning), `approveMerge()`, `abort()`, status polling, `_runWorker()` stub
 - `MutationQueue.js`: Per-file-path FIFO mutex with `acquire()`/`release()`/`withLock()` — singleton pattern for concurrent write safety

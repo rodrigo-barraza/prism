@@ -3,7 +3,7 @@ import { expandMessagesForFC, truncateToolResult as _truncateToolResult } from "
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
-import ConversationService from "./ConversationService.js";
+
 import FileService from "./FileService.js";
 import { finalizeTextGeneration } from "../routes/chat.js";
 import RequestLogger from "./RequestLogger.js";
@@ -38,6 +38,13 @@ const pendingApprovals = new Map();
  */
 export default class AgenticLoopService {
   static async runAgenticLoop(ctx) {
+    // Alias agentSessionId as conversationId so finalizeTextGeneration's
+    // persistence path (which reads ctx.conversationId) writes to the DB.
+    // getCollectionOpts(project) routes agent projects → agent_sessions.
+    if (ctx.agentSessionId && !ctx.conversationId) {
+      ctx.conversationId = ctx.agentSessionId;
+    }
+
     const {
       provider,
       providerName,
@@ -271,12 +278,6 @@ export default class AgenticLoopService {
       emit({ type: "status", message: "Plan approved — executing..." });
     }
 
-    // Mark agent session as generating
-    if (agentSessionId) {
-      ConversationService.setGenerating(agentSessionId, project, username, true).catch((err) =>
-        logger.error(`Failed to set isGenerating: ${err.message}`)
-      );
-    }
 
     // Track consecutive errors per tool name for retry budgeting
     const toolErrorCounts = new Map();
@@ -928,12 +929,6 @@ export default class AgenticLoopService {
       );
       throw err; // Re-throw so handleAgent's catch handler can log + emit the error event
     } finally {
-      // Always clear generating flag — covers normal exit, abort, and errors
-      if (agentSessionId) {
-        ConversationService.setGenerating(agentSessionId, project, username, false).catch((e) =>
-          logger.error(`Failed to clear isGenerating in agentic loop: ${e.message}`)
-        );
-      }
       // Clean up any lingering approval promises
       pendingApprovals.delete(agentSessionId);
     }
