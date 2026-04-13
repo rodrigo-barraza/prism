@@ -30,6 +30,142 @@ These are only needed if you plan to use the corresponding providers:
 | **Inworld**      | —        | —         | ✅  | —   | —         | —      | —          | —        | —          | —         |
 | **LM Studio**    | ✅       | ✅        | —   | —   | —         | ✅     | —          | —        | —          | —         |
 
+## 📂 Directory Structure
+
+```
+prism/
+├── src/
+│   ├── index.js                         # Application entry point, route mounting, DB init
+│   ├── config.js                        # Model catalog, pricing, capabilities, arena scores
+│   ├── constants.js                     # Shared constants and enums
+│   ├── arrays.js                        # Static arrays (model lists, etc.)
+│   ├── middleware/
+│   │   ├── AuthMiddleware.js            # API key + admin secret auth
+│   │   └── RequestLoggerMiddleware.js   # Per-request logging to MongoDB
+│   ├── providers/                       # AI provider SDK integrations
+│   │   ├── index.js                     # Provider registry and factory
+│   │   ├── instance-registry.js         # Singleton provider instance cache
+│   │   ├── openai.js                    # OpenAI (GPT, DALL-E, Whisper, TTS, embeddings)
+│   │   ├── anthropic.js                 # Anthropic (Claude models)
+│   │   ├── google.js                    # Google GenAI (Gemini, Imagen, TTS)
+│   │   ├── elevenlabs.js               # ElevenLabs TTS
+│   │   ├── inworld.js                   # Inworld TTS
+│   │   ├── lm-studio.js                # LM Studio local inference
+│   │   ├── ollama.js                    # Ollama local models
+│   │   ├── llama-cpp.js                 # llama.cpp direct inference
+│   │   └── vllm.js                      # vLLM server inference
+│   ├── routes/                          # Express route handlers
+│   │   ├── chat.js                      # /chat — text generation (REST + streaming)
+│   │   ├── agent.js                     # /agent — agentic loop orchestration
+│   │   ├── agent-sessions.js            # /agent-sessions — agent session CRUD
+│   │   ├── agent-memories.js            # /agent-memories — agent memory management
+│   │   ├── audio.js                     # /text-to-audio, /audio-to-text
+│   │   ├── text.js                      # /text — plain text generation
+│   │   ├── media.js                     # /media — image generation and vision
+│   │   ├── embed.js                     # /embed — text embeddings
+│   │   ├── conversations.js             # /conversations — conversation CRUD
+│   │   ├── memory.js                    # /memory — memory management
+│   │   ├── files.js                     # /files — file upload and retrieval
+│   │   ├── config.js                    # /config — model catalog endpoint
+│   │   ├── admin.js                     # /admin — analytics, stats, request logs
+│   │   ├── stats.js                     # /stats — aggregate usage statistics
+│   │   ├── workflows.js                 # /workflows — multi-step workflow management
+│   │   ├── benchmark.js                 # /benchmark — model benchmarking
+│   │   ├── synthesis.js                 # /synthesis — synthesis session management
+│   │   ├── vram-benchmarks.js           # /vram-benchmarks — VRAM usage benchmarks
+│   │   ├── coordinator.js               # /coordinator — multi-agent coordination
+│   │   ├── lm-studio.js                # /lm-studio — local model management
+│   │   ├── custom-tools.js             # /custom-tools — custom tool CRUD
+│   │   ├── skills.js                    # /skills — agent skill definitions
+│   │   ├── mcp-servers.js              # /mcp-servers — MCP server management
+│   │   ├── favorites.js                 # /favorites — user favorites
+│   │   └── settings.js                  # /settings — user settings management
+│   ├── services/                        # Core business logic
+│   │   ├── AgenticLoopService.js        # Agentic tool-use loop orchestrator
+│   │   ├── ToolOrchestratorService.js   # Tool execution dispatcher
+│   │   ├── CoordinatorService.js        # Multi-agent coordination engine
+│   │   ├── CoordinatorPrompt.js         # System prompts for coordinator
+│   │   ├── PlanningModeService.js       # Planning mode for agent sessions
+│   │   ├── AgentPersonaRegistry.js      # Agent persona definitions registry
+│   │   ├── AgentHooks.js                # Pre/post hooks for agent actions
+│   │   ├── AutoApprovalEngine.js        # Auto-approve matching tool calls
+│   │   ├── ConversationService.js       # Conversation CRUD and query
+│   │   ├── MemoryService.js             # Legacy memory store
+│   │   ├── MemoryExtractor.js           # Extracts memories from conversations
+│   │   ├── MemoryConsolidationService.js # Scheduled memory consolidation
+│   │   ├── EpisodicMemoryService.js     # Episodic memory (events, conversations)
+│   │   ├── SemanticMemoryService.js     # Semantic memory (facts, knowledge)
+│   │   ├── ProceduralMemoryService.js   # Procedural memory (how-to, skills)
+│   │   ├── ProspectiveMemoryService.js  # Prospective memory (reminders, intentions)
+│   │   ├── WorkingMemoryService.js      # Working memory (session context)
+│   │   ├── SystemPromptAssembler.js     # Composes system prompts from context
+│   │   ├── WorkflowAssembler.js         # Multi-step workflow assembly
+│   │   ├── EmbeddingService.js          # Text embedding generation
+│   │   ├── FileService.js               # File storage abstraction (MinIO/Mongo)
+│   │   ├── RequestLogger.js             # Request log persistence
+│   │   ├── SettingsService.js           # User settings persistence
+│   │   ├── RateLimitStore.js            # Rate limit tracking
+│   │   ├── BenchmarkService.js          # Model benchmarking engine
+│   │   ├── LocalModelQueue.js           # FIFO queue for local model requests
+│   │   ├── MCPClientService.js          # Model Context Protocol client
+│   │   ├── ChangeStreamService.js       # MongoDB change stream for real-time updates
+│   │   ├── ActiveGenerationTracker.js   # Tracks in-flight generation requests
+│   │   └── MutationQueue.js             # Queued DB mutation processor
+│   ├── utils/                           # Shared utilities
+│   │   ├── utilities.js                 # General helpers
+│   │   ├── errors.js                    # Error handler middleware
+│   │   ├── logger.js                    # Styled console logger
+│   │   ├── math.js                      # Math helpers
+│   │   ├── media.js                     # Media processing helpers
+│   │   ├── CostCalculator.js            # Per-model cost estimation
+│   │   ├── ContextWindowManager.js      # Token budget and context trimming
+│   │   ├── ConversationUtilities.js     # Conversation formatting helpers
+│   │   ├── FunctionCallingUtilities.js  # Tool/function call formatting
+│   │   ├── RequestContext.js            # Per-request context propagation
+│   │   ├── SseUtilities.js              # Server-Sent Events helpers
+│   │   ├── StreamChunkDispatcher.js     # Streaming chunk routing
+│   │   ├── ThinkTagParser.js            # Parses <think> tags from model output
+│   │   ├── openai-compat.js             # OpenAI compatibility layer
+│   │   ├── gguf-arch.js                 # GGUF model architecture parser
+│   │   └── rateLimits.js                # Rate limit utilities
+│   ├── websocket/
+│   │   └── index.js                     # WebSocket server setup (streaming)
+│   └── wrappers/
+│       ├── MongoWrapper.js              # MongoDB connection and DB accessor
+│       └── MinioWrapper.js              # MinIO S3-compatible client wrapper
+├── tests/                               # Vitest test suites
+│   ├── setup.js                         # Test setup and fixtures
+│   ├── auth.test.js                     # Auth middleware tests
+│   ├── config.test.js                   # Config endpoint tests
+│   ├── health.test.js                   # Health check tests
+│   ├── textToText.test.js              # Text generation tests
+│   ├── textToImage.test.js             # Image generation tests
+│   ├── imageToText.test.js             # Vision tests
+│   ├── textToSpeech.test.js            # TTS tests
+│   ├── costCalculation.test.js         # Cost calculation tests
+│   ├── contextWindowManager.test.js    # Context window tests
+│   ├── configUtils.test.js             # Config utility tests
+│   ├── modalityToEmbedding.test.js     # Embedding tests
+│   ├── tokenCostAccuracy.test.js       # Token cost accuracy tests
+│   ├── autoApprovalEngine.test.js      # Auto-approval engine tests
+│   └── live/                            # Live integration tests (require running services)
+├── scripts/                             # Utility and migration scripts
+│   ├── backfill-session-ids.js          # Backfill session IDs migration
+│   ├── migrate-fix-endpoint-operation.js # Fix endpoint operation field migration
+│   ├── migrate-memories.js             # Memory schema migration
+│   ├── migrate-operation-field.js       # Operation field migration
+│   ├── vllm-serve.sh                   # vLLM server launch script
+│   ├── vram-bench.js                   # VRAM benchmarking script
+│   └── vram-chart.html                 # VRAM benchmark visualization
+├── docs/                                # Design documentation
+├── secrets.example.js                   # Template for secrets.js
+├── eslint.config.js                     # ESLint flat config
+├── vitest.config.js                     # Vitest config
+├── vitest.live.config.js               # Vitest config for live tests
+├── .prettierrc                          # Prettier config
+└── package.json                         # Dependencies and npm scripts
+```
+
 ## 🛠️ Tech Stack
 
 | Dependency | Purpose |
