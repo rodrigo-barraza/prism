@@ -25,6 +25,7 @@ const COORDINATOR_TOOL_NAMES = new Set(COORDINATOR_ONLY_TOOLS);
 const MAX_TOOL_ITERATIONS = 25;
 const MAX_CONSECUTIVE_TOOL_ERRORS = 3;
 
+
 // ── Approval Resolver Registry ─────────────────────────────
 // Stores pending { resolve, type } objects keyed by agentSessionId.
 // The HTTP endpoint resolves these when the client sends approval.
@@ -849,17 +850,29 @@ export default class AgenticLoopService {
               emit({ type: "status", message: "coordinator_waiting", activeWorkers: runningWorkers.length });
               logger.info(`[AgenticLoop] Coordinator waiting for ${runningWorkers.length} running workers`);
 
-              // Wait for notifications — event-driven with safety poll
+              // Wait for ALL workers to finish — not just the first.
+              // Waking on the first notification causes a race: subsequent
+              // notifications arrive mid-stream during the re-prompt and
+              // never get delivered as proper user messages. By holding
+              // until every worker reaches a terminal state, all
+              // notifications are batched and drained in one go.
               await new Promise((resolve) => {
-                if (injectedMessages.length > 0 || signal?.aborted) { resolve(); return; }
+                if (signal?.aborted) { resolve(); return; }
                 let settled = false;
                 const done = () => { if (settled) return; settled = true; clearInterval(safetyPoll); _notifyWake = null; resolve(); };
-                _notifyWake = done;
-                // Safety poll every 2s in case notification was lost
-                const safetyPoll = setInterval(() => {
-                  if (signal?.aborted || injectedMessages.length > 0) { done(); return; }
+
+                // Wake callback — re-check worker states when any notification arrives
+                const checkAllDone = () => {
                   const still = CoordinatorService.listWorkers().filter((w) => w.status === "running");
                   if (still.length === 0) done();
+                };
+
+                _notifyWake = checkAllDone;
+
+                // Safety poll every 2s in case notification was lost
+                const safetyPoll = setInterval(() => {
+                  if (signal?.aborted) { done(); return; }
+                  checkAllDone();
                 }, 2000);
                 // Hard timeout — 5 minutes
                 setTimeout(done, 300_000);
@@ -867,7 +880,7 @@ export default class AgenticLoopService {
 
               if (signal?.aborted) break;
 
-              // Drain all pending notifications
+              // Drain all pending notifications — all workers are done at this point
               if (injectedMessages.length > 0) {
                 const drained = injectedMessages.splice(0, injectedMessages.length);
                 for (const msg of drained) {
