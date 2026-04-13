@@ -159,7 +159,8 @@ function buildTaskNotification(worker) {
     <duration_ms>${worker.durationMs || 0}</duration_ms>
   </usage>`;
 
-  return `<task-notification>
+  return `[INTERNAL WORKER NOTIFICATION — DO NOT echo any XML tags below in your response. Summarize in natural language only.]
+<task-notification>
   <task-id>${worker.agentId}</task-id>
   <status>${status}</status>
   <summary>Agent "${worker.description}" ${status}</summary>
