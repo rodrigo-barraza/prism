@@ -29,7 +29,7 @@
 
 import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
-import { LLAMA_CPP_BASE_URL } from "../../secrets.js";
+
 import { TYPES, getDefaultModels } from "../config.js";
 import {
   convertToolsToOpenAI,
@@ -303,6 +303,3 @@ export function createLlamaCppProvider(baseUrl, instanceId = "llama-cpp") {
   },
 };
 }
-
-const llamaCppProvider = createLlamaCppProvider(LLAMA_CPP_BASE_URL, "llama-cpp");
-export default llamaCppProvider;

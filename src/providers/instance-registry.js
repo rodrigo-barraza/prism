@@ -1,28 +1,25 @@
 // ============================================================
 // Instance Registry — Multi-Instance Local Provider Support
 // ============================================================
-// Creates and registers provider instances for local servers.
-// Default instances come from the *_BASE_URL secrets (instance #1).
-// Additional instances come from LOCAL_PROVIDER_INSTANCES in secrets.js.
+// Creates and registers provider instances from PROVIDER_* arrays
+// in secrets.js. Each array entry is an instance: { url, concurrency }.
 //
-// Each instance gets:
-//   - Auto-numbered ID: "lm-studio" (#1), "lm-studio-2" (#2), etc.
-//   - Its own provider object (via factory) targeting its baseUrl
-//   - Its own concurrency setting for LocalModelQueue
+// Instances are auto-numbered per type:
+//   PROVIDER_LM_STUDIO[0] → "lm-studio" (#1)
+//   PROVIDER_LM_STUDIO[1] → "lm-studio-2" (#2)
 //
 // Usage:
-//   getInstanceProvider("lm-studio")   → default LM Studio provider
+//   getInstanceProvider("lm-studio")   → first LM Studio instance
 //   getInstanceProvider("lm-studio-2") → second LM Studio instance
 //   listInstances()                    → all registered instances
 // ============================================================
 
 import logger from "../utils/logger.js";
 import {
-  LM_STUDIO_BASE_URL,
-  VLLM_BASE_URL,
-  OLLAMA_BASE_URL,
-  LLAMA_CPP_BASE_URL,
-  LOCAL_MODEL_CONCURRENCY,
+  PROVIDER_LM_STUDIO,
+  PROVIDER_VLLM,
+  PROVIDER_OLLAMA,
+  PROVIDER_LLAMA_CPP,
 } from "../../secrets.js";
 
 // Import factories
@@ -31,21 +28,20 @@ import { createOllamaProvider } from "./ollama.js";
 import { createVllmProvider } from "./vllm.js";
 import { createLlamaCppProvider } from "./llama-cpp.js";
 
-// Dynamically import LOCAL_PROVIDER_INSTANCES (may not exist in older secrets.js)
-let LOCAL_PROVIDER_INSTANCES = [];
-try {
-  const secrets = await import("../../secrets.js");
-  LOCAL_PROVIDER_INSTANCES = secrets.LOCAL_PROVIDER_INSTANCES || [];
-} catch {
-  // No additional instances configured
-}
-
 // ── Factory map ─────────────────────────────────────────────
 const FACTORIES = {
   "lm-studio": createLmStudioProvider,
   ollama: createOllamaProvider,
   vllm: createVllmProvider,
   "llama-cpp": createLlamaCppProvider,
+};
+
+// ── Provider arrays from secrets ────────────────────────────
+const PROVIDER_ARRAYS = {
+  "lm-studio": PROVIDER_LM_STUDIO || [],
+  vllm: PROVIDER_VLLM || [],
+  ollama: PROVIDER_OLLAMA || [],
+  "llama-cpp": PROVIDER_LLAMA_CPP || [],
 };
 
 // ── Registry ────────────────────────────────────────────────
@@ -63,65 +59,42 @@ const FACTORIES = {
 /** @type {Map<string, InstanceEntry>} */
 const registry = new Map();
 
-/** Track how many instances of each type we've registered. */
-const typeCounters = {};
-
 /**
- * Register a local provider instance.
- * @param {object} config
- * @param {string} config.type       - Provider type
- * @param {string} config.baseUrl    - Server URL
- * @param {number} [config.concurrency] - Max concurrent GPU requests (default: LOCAL_MODEL_CONCURRENCY)
+ * Register all instances for a provider type from its array.
+ * @param {string} type - Provider type key
+ * @param {Array<{url: string, concurrency?: number}>} instances
  */
-function register({ type, baseUrl, concurrency }) {
+function registerType(type, instances) {
   const factory = FACTORIES[type];
-  if (!factory) {
-    logger.warn(`[InstanceRegistry] Unknown provider type "${type}" — skipping`);
-    return;
+  if (!factory) return;
+
+  for (let i = 0; i < instances.length; i++) {
+    const { url, concurrency = 1 } = instances[i];
+    if (!url) continue;
+
+    const instanceNumber = i + 1;
+    const id = instanceNumber === 1 ? type : `${type}-${instanceNumber}`;
+    const maxConcurrency = Math.max(1, parseInt(concurrency, 10) || 1);
+    const provider = factory(url, id);
+
+    registry.set(id, {
+      id,
+      type,
+      baseUrl: url,
+      concurrency: maxConcurrency,
+      instanceNumber,
+      provider,
+    });
+
+    logger.info(
+      `[InstanceRegistry] ${id} → ${url} (concurrency: ${maxConcurrency})`,
+    );
   }
-
-  if (!baseUrl) {
-    // Don't register instances with empty URLs
-    return;
-  }
-
-  // Auto-number: first of this type = "lm-studio" (#1), second = "lm-studio-2" (#2), etc.
-  typeCounters[type] = (typeCounters[type] || 0) + 1;
-  const instanceNumber = typeCounters[type];
-  const id = instanceNumber === 1 ? type : `${type}-${instanceNumber}`;
-
-  const maxConcurrency = Math.max(1, parseInt(concurrency, 10) || parseInt(LOCAL_MODEL_CONCURRENCY, 10) || 1);
-  const provider = factory(baseUrl, id);
-
-  registry.set(id, {
-    id,
-    type,
-    baseUrl,
-    concurrency: maxConcurrency,
-    instanceNumber,
-    provider,
-  });
-
-  logger.info(
-    `[InstanceRegistry] Registered ${id} → ${baseUrl} (concurrency: ${maxConcurrency})`,
-  );
 }
 
-// ── Register default instances from legacy secrets ──────────
-const DEFAULT_INSTANCES = [
-  { type: "lm-studio", baseUrl: LM_STUDIO_BASE_URL },
-  { type: "vllm", baseUrl: VLLM_BASE_URL },
-  { type: "ollama", baseUrl: OLLAMA_BASE_URL },
-  { type: "llama-cpp", baseUrl: LLAMA_CPP_BASE_URL },
-];
-
-for (const inst of DEFAULT_INSTANCES) {
-  register(inst);
-}
-
-// ── Register additional instances ───────────────────────────
-for (const inst of LOCAL_PROVIDER_INSTANCES) {
-  register(inst);
+// ── Register all instances from secrets ─────────────────────
+for (const [type, instances] of Object.entries(PROVIDER_ARRAYS)) {
+  registerType(type, instances);
 }
 
 // ── Public API ──────────────────────────────────────────────

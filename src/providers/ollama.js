@@ -1,6 +1,6 @@
 import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
-import { OLLAMA_BASE_URL } from "../../secrets.js";
+
 import { TYPES, getDefaultModels } from "../config.js";
 
 
@@ -299,6 +299,3 @@ export function createOllamaProvider(baseUrl, instanceId = "ollama") {
   },
 };
 }
-
-const ollamaProvider = createOllamaProvider(OLLAMA_BASE_URL, "ollama");
-export default ollamaProvider;

@@ -8,8 +8,7 @@
 // machines get independent queues with their own concurrency.
 //
 // Each instance's concurrency is configured in secrets.js via
-// LOCAL_MODEL_CONCURRENCY (default) or per-instance in
-// LOCAL_PROVIDER_INSTANCES.
+// PROVIDER_LM_STUDIO, PROVIDER_OLLAMA, etc. arrays.
 //
 // Usage:
 //   const release = await LocalModelQueue.acquire("lm-studio");
@@ -18,7 +17,6 @@
 
 import logger from "../utils/logger.js";
 import { getInstance, isInstance } from "../providers/instance-registry.js";
-import { LOCAL_MODEL_CONCURRENCY } from "../../secrets.js";
 
 // Providers that hit the local GPU
 const LOCAL_PROVIDERS = new Set(["lm-studio", "vllm", "ollama", "llama-cpp"]);
@@ -26,8 +24,8 @@ const LOCAL_PROVIDERS = new Set(["lm-studio", "vllm", "ollama", "llama-cpp"]);
 /** @type {Map<string, InstanceQueue>} Per-instance semaphore queues */
 const queues = new Map();
 
-/** Default concurrency for instances that don't specify their own. */
-const DEFAULT_CONCURRENCY = Math.max(1, parseInt(LOCAL_MODEL_CONCURRENCY, 10) || 1);
+/** Default concurrency for instances not in the registry. */
+const DEFAULT_CONCURRENCY = 1;
 
 class InstanceQueue {
   /**

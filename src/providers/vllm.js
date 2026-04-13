@@ -1,6 +1,6 @@
 import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
-import { VLLM_BASE_URL } from "../../secrets.js";
+
 import { TYPES, getDefaultModels } from "../config.js";
 import {
   convertToolsToOpenAI,
@@ -226,6 +226,3 @@ export function createVllmProvider(baseUrl, instanceId = "vllm") {
   },
 };
 }
-
-const vllmProvider = createVllmProvider(VLLM_BASE_URL, "vllm");
-export default vllmProvider;

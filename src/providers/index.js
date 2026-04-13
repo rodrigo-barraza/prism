@@ -3,23 +3,16 @@ import anthropicProvider from "./anthropic.js";
 import googleProvider from "./google.js";
 import elevenlabsProvider from "./elevenlabs.js";
 import inworldProvider from "./inworld.js";
-import lmStudioProvider from "./lm-studio.js";
-import vllmProvider from "./vllm.js";
-import ollamaProvider from "./ollama.js";
-import llamaCppProvider from "./llama-cpp.js";
 import ActiveGenerationTracker from "../services/ActiveGenerationTracker.js";
 import { getInstanceProvider, isInstance } from "./instance-registry.js";
 
+// Static cloud providers — local providers are resolved via instance registry
 const providers = {
   openai: openaiProvider,
   anthropic: anthropicProvider,
   google: googleProvider,
   elevenlabs: elevenlabsProvider,
   inworld: inworldProvider,
-  "lm-studio": lmStudioProvider,
-  vllm: vllmProvider,
-  ollama: ollamaProvider,
-  "llama-cpp": llamaCppProvider,
 };
 
 /**

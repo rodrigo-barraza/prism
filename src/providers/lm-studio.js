@@ -9,7 +9,7 @@
 import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
 import { resolveArchParams } from "../utils/gguf-arch.js";
-import { LM_STUDIO_BASE_URL, TOOLS_API_URL } from "../../secrets.js";
+import { TOOLS_API_URL } from "../../secrets.js";
 import { TYPES, getDefaultModels } from "../config.js";
 import { sleep } from "../utils/utilities.js";
 
@@ -819,6 +819,3 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
   },
 };
 }
-
-const lmStudioProvider = createLmStudioProvider(LM_STUDIO_BASE_URL, "lm-studio");
-export default lmStudioProvider;

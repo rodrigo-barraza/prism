@@ -25,29 +25,27 @@ export const ELEVENLABS_API_KEY = '';
 // Inworld (Base64-encoded apiKey:apiSecret)
 export const INWORLD_BASIC = '';
 
-// LM Studio (Local LLM Server)
-export const LM_STUDIO_BASE_URL = 'http://localhost:1234';
+// Local Providers
+// Each entry is an instance: { url, concurrency }
+// Multiple entries = multiple instances (auto-numbered #1, #2, ...)
+// Empty array = provider not configured
 
-// vLLM (Local LLM Server)
-export const VLLM_BASE_URL = '';
+// LM Studio
+export const PROVIDER_LM_STUDIO = [
+  { url: 'http://localhost:1234', concurrency: 1 },
+];
 
-// Ollama (Local LLM Server)
-export const OLLAMA_BASE_URL = 'http://localhost:11434';
+// vLLM
+export const PROVIDER_VLLM = [];
 
-// llama.cpp (Local LLM Server — llama-server default port 8080)
-export const LLAMA_CPP_BASE_URL = 'http://localhost:8080';
+// Ollama
+export const PROVIDER_OLLAMA = [
+  { url: 'http://localhost:11434', concurrency: 1 },
+];
 
-// Local Model Concurrency (default for instances that don't specify their own)
-export const LOCAL_MODEL_CONCURRENCY = 1;
-
-// Additional Local Provider Instances (optional)
-// Each entry creates a new provider instance at a different URL.
-// type: lm-studio | ollama | vllm | llama-cpp
-// Instances are auto-numbered: the default (above) is #1, first extra = #2, etc.
-// concurrency: max simultaneous GPU inference requests (defaults to LOCAL_MODEL_CONCURRENCY)
-export const LOCAL_PROVIDER_INSTANCES = [
-  // { type: 'lm-studio', baseUrl: 'http://192.168.86.100:1234', concurrency: 1 },
-  // { type: 'ollama', baseUrl: 'http://192.168.86.100:11434', concurrency: 2 },
+// llama.cpp (llama-server)
+export const PROVIDER_LLAMA_CPP = [
+  { url: 'http://localhost:8080', concurrency: 1 },
 ];
 
 // Mongo

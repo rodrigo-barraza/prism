@@ -72,9 +72,8 @@ import { resolveArchParams, estimateMemory } from "../src/utils/gguf-arch.js";
 import {
   MONGO_URI,
   MONGO_DB_NAME,
-  LM_STUDIO_BASE_URL,
-  OLLAMA_BASE_URL,
-  VLLM_BASE_URL as _VLLM_BASE_URL, // planned — vLLM adapter not yet wired
+  PROVIDER_LM_STUDIO,
+  PROVIDER_OLLAMA,
 } from "../secrets.js";
 
 // ── CLI Argument Parsing ─────────────────────────────────────
@@ -275,7 +274,7 @@ function buildSettingsMatrix() {
 const PROVIDERS = {
   "lm-studio": {
     name: "LM Studio",
-    baseUrl: LM_STUDIO_BASE_URL || "http://localhost:1234",
+    baseUrl: PROVIDER_LM_STUDIO[0]?.url || "http://localhost:1234",
 
     async listModels() {
       const res = await fetch(`${this.baseUrl}/api/v1/models`);
@@ -483,7 +482,7 @@ const PROVIDERS = {
   // ── Ollama Adapter ────────────────────────────────────────
   ollama: {
     name: "Ollama",
-    baseUrl: OLLAMA_BASE_URL || "http://localhost:11434",
+    baseUrl: PROVIDER_OLLAMA[0]?.url || "http://localhost:11434",
     async listModels() {
       const res = await fetch(`${this.baseUrl}/api/tags`);
       if (!res.ok) throw new Error(`Ollama not responding: ${res.status}`);

@@ -21,7 +21,6 @@ import {
   GOOGLE_API_KEY,
   ELEVENLABS_API_KEY,
   INWORLD_BASIC,
-  LOCAL_MODEL_CONCURRENCY,
 } from "../../secrets.js";
 
 const router = express.Router();
@@ -808,7 +807,6 @@ Guidelines:
     providerList: availableProviderList,
     availableProviders: availableProviderList,
     localProviders,
-    localModelConcurrency: Math.max(1, parseInt(LOCAL_MODEL_CONCURRENCY, 10) || 1),
     textToText: {
       models: textToTextModels,
       defaults: filterDefaults(getDefaultModels(TYPES.TEXT, TYPES.TEXT)),
