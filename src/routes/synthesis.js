@@ -19,7 +19,7 @@ router.get("/", async (req, res, next) => {
       return res.status(503).json({ error: "Database not available" });
     }
 
-    const project = req.query.project || req.project || "default";
+    const project = req.project;
     const username = req.username;
     const runs = await client
       .db(MONGO_DB_NAME)
@@ -46,7 +46,7 @@ router.get("/:id", async (req, res, next) => {
       return res.status(503).json({ error: "Database not available" });
     }
 
-    const project = req.query.project || req.project || "default";
+    const project = req.project;
     const username = req.username;
     const run = await client
       .db(MONGO_DB_NAME)
@@ -75,7 +75,7 @@ router.post("/", async (req, res, next) => {
       return res.status(503).json({ error: "Database not available" });
     }
 
-    const project = req.query.project || req.project || "default";
+    const project = req.project;
     const username = req.username;
     const {
       id,
@@ -131,7 +131,7 @@ router.patch("/:id", async (req, res, next) => {
       return res.status(503).json({ error: "Database not available" });
     }
 
-    const project = req.query.project || req.project || "default";
+    const project = req.project;
     const username = req.username;
     const allowedFields = [
       "title",
@@ -184,7 +184,7 @@ router.delete("/:id", async (req, res, next) => {
       return res.status(503).json({ error: "Database not available" });
     }
 
-    const project = req.query.project || req.project || "default";
+    const project = req.project;
     const username = req.username;
     const result = await client
       .db(MONGO_DB_NAME)

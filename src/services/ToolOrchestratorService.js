@@ -174,7 +174,15 @@ async function executeToolGeneric(name, args = {}, ctx = {}) {
   // POST-method tools send args as JSON body
   if (schema.endpoint.method === "POST") {
     const url = `${TOOLS_API_URL}${schema.endpoint.path}`;
-    return fetchJsonPost(url, resolvedArgs, contextHeaders);
+    // Inject trusted session context into body — the model's args never
+    // include these fields (they're stripped from schemas), so they can
+    // only come from the orchestrator's session context.
+    const body = { ...resolvedArgs };
+    if (ctx.project) body.project = ctx.project;
+    if (ctx.agent) body.agent = ctx.agent;
+    if (ctx.username) body.username = ctx.username;
+    console.log(`[TOOL-DEBUG] ${name} body.project=${body.project} ctx.project=${ctx.project}`);
+    return fetchJsonPost(url, body, contextHeaders);
   }
 
   const url = buildUrlFromEndpoint(schema.endpoint, resolvedArgs);

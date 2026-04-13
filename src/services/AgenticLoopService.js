@@ -238,9 +238,10 @@ export default class AgenticLoopService {
       const expandedPlanMsgs = expandMessagesForFC(planningMessages, { filterDeleted: false });
       let planText = "";
 
+      const augmentedPlanningOptions = { ...planningOptions, project, agent, username };
       const planStream = modelDef?.liveAPI && provider.generateTextStreamLive
-        ? provider.generateTextStreamLive(expandedPlanMsgs, resolvedModel, { ...planningOptions, signal })
-        : provider.generateTextStream(expandedPlanMsgs, resolvedModel, { ...planningOptions, signal });
+        ? provider.generateTextStreamLive(expandedPlanMsgs, resolvedModel, { ...augmentedPlanningOptions, signal })
+        : provider.generateTextStream(expandedPlanMsgs, resolvedModel, { ...augmentedPlanningOptions, signal });
 
       for await (const chunk of planStream) {
         if (signal?.aborted) break;
@@ -344,7 +345,8 @@ export default class AgenticLoopService {
         let passOutputCharacters = 0;
         const passUsage = { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 };
 
-        const passOptions = { ...options };      if (isNativeMCPProvider && hasCalledTools) {
+        const passOptions = { ...options, project, agent, username };
+        if (isNativeMCPProvider && hasCalledTools) {
           delete passOptions.tools;
         } else {
           passOptions.tools = finalTools;
@@ -914,10 +916,11 @@ export default class AgenticLoopService {
         }
         const expandedExhaustionMsgs = expandMessagesForFC(currentMessages, { filterDeleted: false });
 
+        const augmentedExhaustionOptions = { ...exhaustionOptions, project, agent, username };
         const exhaustionStream =
           modelDef?.liveAPI && provider.generateTextStreamLive
-            ? provider.generateTextStreamLive(expandedExhaustionMsgs, resolvedModel, { ...exhaustionOptions, signal })
-            : provider.generateTextStream(expandedExhaustionMsgs, resolvedModel, { ...exhaustionOptions, signal });
+            ? provider.generateTextStreamLive(expandedExhaustionMsgs, resolvedModel, { ...augmentedExhaustionOptions, signal })
+            : provider.generateTextStream(expandedExhaustionMsgs, resolvedModel, { ...augmentedExhaustionOptions, signal });
 
         for await (const chunk of exhaustionStream) {
           if (signal?.aborted) break;

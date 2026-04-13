@@ -21,7 +21,7 @@ router.get("/", async (req, res, next) => {
       return res.status(503).json({ error: "Database not available" });
     }
 
-    const project = req.query.project || req.project || "default";
+    const project = req.project;
     const username = req.username;
 
     const servers = await client
@@ -64,7 +64,7 @@ router.post("/", async (req, res, next) => {
       return res.status(503).json({ error: "Database not available" });
     }
 
-    const project = req.body.project || req.project || "default";
+    const project = req.project;
     const username = req.username;
 
     const doc = {

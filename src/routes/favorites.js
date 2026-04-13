@@ -19,7 +19,7 @@ router.get("/", async (req, res, next) => {
       return res.status(503).json({ error: "Database not available" });
     }
 
-    const project = req.project || "default";
+    const project = req.project;
     const username = req.username;
     const filter = { project, username };
     if (req.query.type) filter.type = req.query.type;
@@ -52,7 +52,7 @@ router.post("/", async (req, res, next) => {
       return res.status(503).json({ error: "Database not available" });
     }
 
-    const project = req.project || "default";
+    const project = req.project;
     const username = req.username;
     const { type, key, meta } = req.body;
 
@@ -97,7 +97,7 @@ router.delete("/", async (req, res, next) => {
       return res.status(503).json({ error: "Database not available" });
     }
 
-    const project = req.project || "default";
+    const project = req.project;
     const username = req.username;
     const { type, key } = req.query;
 

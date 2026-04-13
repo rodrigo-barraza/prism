@@ -27,7 +27,7 @@ router.post("/extract", async (req, res, next) => {
       participants,
       sourceMessageId,
       sessionId: sessionId || null,
-      project: req.project || null,
+      project: req.project,
       endpoint: "/memory/extract",
     });
 
@@ -60,7 +60,7 @@ router.post("/search", async (req, res, next) => {
       queryText,
       limit: limit || 10,
       sessionId: sessionId || null,
-      project: req.project || null,
+      project: req.project,
       endpoint: "/memory/search",
     });
 

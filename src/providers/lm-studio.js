@@ -532,7 +532,7 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
             {
               type: "ephemeral_mcp",
               server_label: "tools",
-              server_url: `${MCP_SERVER_URL}/mcp/sse`,
+              server_url: `${MCP_SERVER_URL}/mcp/sse?project=${encodeURIComponent(options.project || "default")}&agent=${encodeURIComponent(options.agent || "CODING")}${options.username ? `&username=${encodeURIComponent(options.username)}` : ""}`,
               allowed_tools: toolNames,
             },
           ];

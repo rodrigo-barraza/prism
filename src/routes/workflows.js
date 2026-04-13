@@ -361,7 +361,7 @@ router.post("/", async (req, res, next) => {
     const db = getDb();
     if (!db) return res.status(503).json({ error: "Database not available" });
 
-    const project = req.project || null;
+    const project = req.project;
     const username = req.username || null;
 
     let { nodes, edges, nodeResults } = req.body;
@@ -440,7 +440,7 @@ router.put("/:id", async (req, res, next) => {
       filter = { workflowId: req.params.id };
     }
 
-    const project = req.project || null;
+    const project = req.project;
     const username = req.username || null;
     const body = { ...req.body };
     if (Array.isArray(body.nodes)) {

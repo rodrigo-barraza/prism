@@ -49,7 +49,7 @@ router.post("/", async (req, res, next) => {
  */
 router.get("/", async (req, res, next) => {
   try {
-    const project = req.query.project || req.project || "default";
+    const project = req.project;
     const agent = req.query.agent || "CODING";
     const limit = parseInt(req.query.limit) || 100;
     const skip = parseInt(req.query.skip) || 0;
@@ -85,7 +85,7 @@ router.delete("/:id", async (req, res, next) => {
  */
 router.get("/consolidation-history", async (req, res, next) => {
   try {
-    const project = req.query.project || req.project || "default";
+    const project = req.project;
     const limit = parseInt(req.query.limit) || 10;
 
     const history = await MemoryConsolidationService.getHistory(project, limit);
@@ -102,7 +102,7 @@ router.get("/consolidation-history", async (req, res, next) => {
  */
 router.post("/consolidate", async (req, res, next) => {
   try {
-    const project = req.body.project || req.query.project || "default";
+    const project = req.project;
     const agent = req.body.agent || "CODING";
     const username = req.body.username || "system";
 

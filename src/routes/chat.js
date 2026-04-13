@@ -1447,7 +1447,7 @@ async function handleNonStreamingText(ctx) {
 router.post("/", async (req, res, next) => {
   const params = {
     ...req.body,
-    project: req.body.project || req.project,
+    project: req.project,
     username: req.username,
     clientIp: req.clientIp,
   };

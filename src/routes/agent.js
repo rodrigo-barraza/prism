@@ -72,7 +72,7 @@ router.post("/", async (req, res, next) => {
     ...req.body,
     functionCallingEnabled: true,
     agenticLoopEnabled: true,
-    project: req.body.project || req.project,
+    project: req.project,
     username: req.username,
     clientIp: req.clientIp,
     agent: req.body.agent || req.agent || null,

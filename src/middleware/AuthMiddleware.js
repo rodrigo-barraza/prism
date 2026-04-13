@@ -5,8 +5,10 @@ import { requestContext } from "../utils/RequestContext.js";
  * to the request.
  */
 export function authMiddleware(req, res, next) {
-  // Attach project + username + client IP for downstream logging / tracking
-  req.project = req.headers["x-project"] || "unknown";
+  // Single source of truth for project resolution.
+  // Priority: query param → body → x-project header → "default"
+  req.project =
+    req.query?.project || req.body?.project || req.headers["x-project"] || "default";
   req.clientIp =
     req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.ip;
   req.username = req.headers["x-username"] || req.clientIp;
