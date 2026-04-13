@@ -62,23 +62,33 @@ router.get("/stats", async (req, res, next) => {
   try {
     const benchmarks = await BenchmarkService.list(req.project);
 
-    // Phase 1: For each benchmark, find the latest result per model.
+    // Phase 1: For each benchmark, find the latest result per model config.
     // getRuns() returns runs sorted by startedAt DESC, so the first
     // occurrence of a model key is its most recent result.
-    // latestResults: Map<"provider:model", Map<benchmarkId, result>>
+    // Composite key: "provider:model:thinking:tools:agent" so the same
+    // model with different configs appears as separate rows.
+    // latestResults: Map<compositeKey, Map<benchmarkId, result>>
     const latestResults = new Map();
-    // allRunTotals: Map<"provider:model", { totalCost, totalLatency, runCount }>
+    // allRunTotals: Map<compositeKey, { totalCost, totalLatency, runCount }>
     const allRunTotals = new Map();
-    // cumulativeBenchmarks: Map<"provider:model::benchmarkId", { name, total, passed, failed, errored }>
+    // cumulativeBenchmarks: Map<"compositeKey::benchmarkId", { name, total, passed, failed, errored }>
     const cumulativeBenchmarks = new Map();
+
+    /** Build a composite grouping key from a result object. */
+    const makeKey = (r) => {
+      const thinking = r.thinkingEnabled ? "T" : "";
+      const tools = r.toolsEnabled ? "F" : "";
+      const agent = r.agent || "";
+      return `${r.provider}:${r.model}:${thinking}:${tools}:${agent}`;
+    };
 
     for (const b of benchmarks) {
       const runs = await BenchmarkService.getRuns(b.id, req.project);
-      const seenForBenchmark = new Set(); // track which models we've already recorded as "latest"
+      const seenForBenchmark = new Set(); // track which model configs we've already recorded as "latest"
 
       for (const run of runs) {
         for (const result of run.models || []) {
-          const modelKey = `${result.provider}:${result.model}`;
+          const modelKey = makeKey(result);
 
           // Accumulate ALL-run cost/latency regardless of dedup
           if (!allRunTotals.has(modelKey)) {
@@ -106,7 +116,7 @@ router.get("/stats", async (req, res, next) => {
           else if (result.passed) cb.passed++;
           else cb.failed++;
 
-          // Only record the first (latest) result per model per benchmark
+          // Only record the first (latest) result per model config per benchmark
           if (seenForBenchmark.has(cumulKey)) continue;
           seenForBenchmark.add(cumulKey);
 
@@ -119,6 +129,9 @@ router.get("/stats", async (req, res, next) => {
             provider: result.provider,
             model: result.model,
             label: result.label || result.model,
+            thinkingEnabled: result.thinkingEnabled || false,
+            toolsEnabled: result.toolsEnabled || false,
+            agent: result.agent || null,
             passed: result.passed,
             error: result.error,
           });
@@ -126,7 +139,7 @@ router.get("/stats", async (req, res, next) => {
       }
     }
 
-    // Phase 2: Build per-model stats from deduplicated latest results
+    // Phase 2: Build per-model-config stats from deduplicated latest results
     const models = [...latestResults.entries()].map(([modelKey, benchmarkMap]) => {
       const benchmarkResults = [...benchmarkMap.values()];
       const first = benchmarkResults[0];
@@ -165,6 +178,9 @@ router.get("/stats", async (req, res, next) => {
         provider: first.provider,
         model: first.model,
         label: first.label,
+        thinkingEnabled: first.thinkingEnabled || false,
+        toolsEnabled: first.toolsEnabled || false,
+        agent: first.agent || null,
         total,
         passed,
         failed,

@@ -7,12 +7,12 @@ import logger from "../utils/logger.js";
 
 const DEFAULTS = {
   memory: {
-    extractionProvider: "anthropic",
-    extractionModel: "claude-haiku-4-5-20251001",
-    consolidationProvider: "anthropic",
-    consolidationModel: "claude-haiku-4-5-20251001",
-    embeddingProvider: "google",
-    embeddingModel: "gemini-embedding-2-preview",
+    extractionProvider: "",
+    extractionModel: "",
+    consolidationProvider: "",
+    consolidationModel: "",
+    embeddingProvider: "",
+    embeddingModel: "",
   },
 };
 

@@ -172,6 +172,12 @@ function getDb() {
 // ============================================================
 
 async function runSingleModel(benchmark, model, project, username, { signal, onEvent } = {}) {
+  // Config flags carried on every result for stats differentiation
+  const configFlags = {
+    thinkingEnabled: model.thinkingEnabled || false,
+    toolsEnabled: model.toolsEnabled || false,
+    ...(model.agent && { agent: model.agent }),
+  };
   // Bail immediately if already aborted
   if (signal?.aborted) {
     logger.info(`[benchmark] ⏭ Skipping ${model.provider}/${model.model} — already aborted`);
@@ -179,6 +185,7 @@ async function runSingleModel(benchmark, model, project, username, { signal, onE
       provider: model.provider,
       model: model.model,
       label: model.label,
+      ...configFlags,
       response: null,
       thinking: null,
       passed: false,
@@ -279,6 +286,7 @@ async function runSingleModel(benchmark, model, project, username, { signal, onE
         provider: model.provider,
         model: model.model,
         label: model.label,
+        ...configFlags,
         response: null,
         thinking: null,
         passed: false,
@@ -328,6 +336,7 @@ async function runSingleModel(benchmark, model, project, username, { signal, onE
       provider: model.provider,
       model: model.model,
       label: model.label,
+      ...configFlags,
       response: text || null,
       thinking: thinkingText || null,
       toolCalls,
@@ -348,6 +357,7 @@ async function runSingleModel(benchmark, model, project, username, { signal, onE
       provider: model.provider,
       model: model.model,
       label: model.label,
+      ...configFlags,
       response: null,
       thinking: null,
       passed: false,

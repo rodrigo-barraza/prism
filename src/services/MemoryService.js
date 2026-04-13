@@ -16,20 +16,15 @@ import SettingsService from "./SettingsService.js";
 /** Single unified collection for all agent memories. */
 const COLLECTION = COLLECTIONS.MEMORIES;
 
-const EXTRACTION_PROVIDER_DEFAULT = "anthropic";
-const EXTRACTION_MODEL_DEFAULT = "claude-haiku-4-5-20251001";
-
 /** Resolve the current extraction provider + model from settings. */
 async function getExtractionConfig() {
-  try {
-    const mem = await SettingsService.getSection("memory");
-    return {
-      provider: mem.extractionProvider || EXTRACTION_PROVIDER_DEFAULT,
-      model: mem.extractionModel || EXTRACTION_MODEL_DEFAULT,
-    };
-  } catch {
-    return { provider: EXTRACTION_PROVIDER_DEFAULT, model: EXTRACTION_MODEL_DEFAULT };
+  const mem = await SettingsService.getSection("memory");
+  const provider = mem.extractionProvider;
+  const model = mem.extractionModel;
+  if (!provider || !model) {
+    throw new Error("Extraction model not configured — set it in Settings → Memory Models");
   }
+  return { provider, model };
 }
 
 /**

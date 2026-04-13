@@ -8,20 +8,15 @@ import { calculateTokensPerSec } from "../utils/math.js";
 import { formatCostTag } from "../utils/utilities.js";
 import SettingsService from "./SettingsService.js";
 
-const DEFAULT_PROVIDER = "google";
-const DEFAULT_MODEL = "gemini-embedding-2-preview";
-
 /** Resolve the current embedding provider + model from settings. */
 async function getEmbeddingConfig() {
-  try {
-    const mem = await SettingsService.getSection("memory");
-    return {
-      provider: mem.embeddingProvider || DEFAULT_PROVIDER,
-      model: mem.embeddingModel || DEFAULT_MODEL,
-    };
-  } catch {
-    return { provider: DEFAULT_PROVIDER, model: DEFAULT_MODEL };
+  const mem = await SettingsService.getSection("memory");
+  const provider = mem.embeddingProvider;
+  const model = mem.embeddingModel;
+  if (!provider || !model) {
+    throw new Error("Embedding model not configured — set it in Settings → Memory Models");
   }
+  return { provider, model };
 }
 
 /**

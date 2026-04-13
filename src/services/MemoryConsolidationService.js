@@ -13,20 +13,15 @@ import SettingsService from "./SettingsService.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const CONSOLIDATION_PROVIDER_DEFAULT = "anthropic";
-const CONSOLIDATION_MODEL_DEFAULT = "claude-haiku-4-5-20251001";
-
 /** Resolve the current consolidation provider + model from settings. */
 async function getConsolidationConfig() {
-  try {
-    const mem = await SettingsService.getSection("memory");
-    return {
-      provider: mem.consolidationProvider || CONSOLIDATION_PROVIDER_DEFAULT,
-      model: mem.consolidationModel || CONSOLIDATION_MODEL_DEFAULT,
-    };
-  } catch {
-    return { provider: CONSOLIDATION_PROVIDER_DEFAULT, model: CONSOLIDATION_MODEL_DEFAULT };
+  const mem = await SettingsService.getSection("memory");
+  const provider = mem.consolidationProvider;
+  const model = mem.consolidationModel;
+  if (!provider || !model) {
+    throw new Error("Consolidation model not configured — set it in Settings → Memory Models");
   }
+  return { provider, model };
 }
 
 /** Cosine similarity above which two memories are clustered together */
