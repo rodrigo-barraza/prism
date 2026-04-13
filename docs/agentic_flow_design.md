@@ -27,7 +27,7 @@ The Retina Agent executes a robust 11-step loop for every user interaction, buil
 7. ✅ **Tool Detection**: Resolves tool call chunks, including native MCP pass-through for LM Studio (`chunk.native === true`). Pre-flight permission checks are implemented via `AutoApprovalEngine` (three-tier system with `beforeToolCall` hook).
 8. ✅ **Tool Loop**: Collects `passPendingToolCalls`, executes via `Promise.all` (with streaming SSE for shell/python/js/command tools), appends results to context, and re-prompts the LLM automatically. Capped at `MAX_TOOL_ITERATIONS = 25`. Consecutive error retry budgeting at `MAX_CONSECUTIVE_TOOL_ERRORS = 3` per tool name. Native web search collision prevention removes custom `web_search` when provider's native search is active.
 9. ✅ **Context Window Enforcement**: Before each LLM call, `ContextWindowManager.enforce()` applies a three-strategy truncation cascade to prevent context overflow: (1) aggressive tool result truncation → (2) old assistant message compression → (3) sliding window turn dropping. Uses ~3.5 chars/token estimation, 80% utilization target, configurable per-model via `maxInputTokens`. Emits `context_truncated` status events to the UI.
-10. ✅ **Exhaustion Recovery**: If the loop exits by hitting `MAX_TOOL_ITERATIONS`, a final tool-free LLM pass is triggered to summarize progress so the user understands where things stand. Emits `iteration_limit_reached` status.
+10. ✅ **Exhaustion Recovery**: If the loop exits by hitting `MAX_TOOL_ITERATIONS`, a final tool-free LLM pass is triggered to summarize progress so the user understands where they stand. Emits `iteration_limit_reached` status.
 11. ✅ **Response Rendering**: Flushes final text to the transport via `emit({ type: "chunk", content })`.
 12. ✅ **Post-Sampling Hooks**: Background processes for memory extraction via `SessionSummarizer`, registered as an `afterResponse` hook. Uses Claude Haiku to extract 4-type memories (user, feedback, project, reference) and stores via `AgentMemoryService`. Also triggers `MemoryConsolidationService.checkAndRun()` for session-threshold consolidation.
 13. ✅ **Await Input**: The WebSocket connection stays open for the next message. REST SSE connections end cleanly.
@@ -131,15 +131,8 @@ Additionally, custom tools can be defined per-project in MongoDB (`custom_tools`
 4. ✅ **Task & State Management**:
    - **What**: A persistent, MongoDB-backed task list that survives context window truncation and memory consolidation — functioning as reliable **Working Memory** for multi-step agent workflows.
    - **Why**: As contexts slide and memory gets consolidated, agents lose track of complex multi-stage tasks. A persistent scratchpad decouples task tracking from the ephemeral conversation window.
-   - **Implementation**: `AgenticTaskService` in `tools-api` with four tools: `task_create` (with subject, description, status, metadata), `task_get` (single task by ID), `task_list` (filterable by status, returns summary counts), `task_update` (status transitions, metadata merge). MongoDB `agent_tasks` collection with project-scoped isolation, monotonic IDs via `agent_task_counters`. Schema pre-wired for future swarm support with `owner`, `blocks`, `blockedBy` fields (unused in single-agent mode). All four tools registered as **Tier 1 (auto-approve)** in `AutoApprovalEngine` since they only modify the agent's own scratchpad, not user files. 200-task-per-project cap.
+   - **Implementation**: `AgenticTaskService` in `tools-api` with four tools: `task_create` (with subject, description, status, metadata), `task_get` (single task by ID), `task_list` (filterable by status, returns summary counts), `task_update` (status transitions, metadata merge). MongoDB `agent_tasks` collection with project-scoped isolation, monotonic IDs via `agent_task_counters`. All four tools registered as **Tier 1 (auto-approve)** in `AutoApprovalEngine` since they only modify the agent's own scratchpad, not user files. 200-task-per-project cap.
    - **Files**: `tools-api/services/AgenticTaskService.js`, `AgenticRoutes.js` (`/agentic/task/{create,list,get,update,delete}`), `ToolSchemaService.js`, `prism/src/services/AutoApprovalEngine.js`
-   - **Future (Swarm Extensions)**: When Coordinator workers are wired to `AgenticLoopService`, the task system will serve as a shared work queue. Planned additions:
-     - `task_claim` — Atomic acquisition with agent-busy check and file locking (prevents two workers from claiming the same task). Modeled after Claude Code's `claimTask()` with retry-backoff semantics.
-     - `task_stop` / `task_output` — Allow workers to report results and completion status back to the coordinator.
-     - `blocks` / `blockedBy` DAG enforcement — Tasks can declare dependencies; `task_claim` checks that all blockers are `completed` before allowing acquisition.
-     - `owner` field activation — Workers identify themselves via `agentId`; tasks track which worker is operating on them.
-     - `activeForm` field — Present-continuous spinner text for Retina UI (e.g., "Running tests", "Refactoring auth module").
-     - Coordinator WebSocket integration — `notifyTasksUpdated()` broadcasts real-time task state changes to Retina via existing WebSocket infrastructure.
 
 5. 🔲 **Background Execution Monitoring (Terminal Capture)**:
    - **What**: The ability to inspect the output of persistent daemon processes (like `npm run dev` or a Python server).
@@ -166,69 +159,75 @@ For tasks requiring extensive reasoning, the agent enters a dedicated planning l
 
 **Implementation**: Retina UI flag → Prism wraps the first LLM call with a planning system prompt → response rendered via `PlanCardComponent` → approved plan injected as context for execution calls.
 
-### ⚠️ Coordinator Mode (Multi-Agent Orchestration)
-The coordinator (lead agent) breaks complex tasks apart, spawns parallel workers in isolated git worktrees, collects results. Based on analysis of Claude Code's public `coordinatorMode.ts`, `src/utils/swarm/`, `AgentTool/`, `TeamCreateTool/`, and `SendMessageTool/` patterns.
+### ✅ Coordinator Mode (Multi-Agent Orchestration)
+The coordinator (lead agent) breaks complex tasks apart, spawns parallel workers in isolated git worktrees, collects results. Adapted from Claude Code's public `coordinatorMode.ts`, `src/utils/swarm/`, `AgentTool/`, `TeamCreateTool/`, and `SendMessageTool/` patterns.
 
-**Paradigm shift**: Moving from manual-panel-only decomposition to **chat-triggered subagent orchestration**. The LLM itself decides when to fan out by calling `spawn_agent`, `send_message`, and `stop_agent` tools — identical to how Claude Code's coordinator uses `Agent`, `SendMessage`, and `TaskStop` tool calls.
+**Paradigm**: Chat-triggered subagent orchestration. The LLM itself decides when to fan out by calling `spawn_agent`, `send_message`, and `stop_agent` tools — identical to how Claude Code's coordinator uses `Agent`, `SendMessage`, and `TaskStop` tool calls.
 
-**Current Architecture** (✅ built, workers stubbed):
-User Request → LLM Decomposition (Claude Sonnet) → N Workers → Git Worktree Isolation → MutationQueue Safety → Unified Diff → User Approval → Git Merge
+**Architecture**:
+Chat Message → Coordinator System Prompt Injection → LLM calls `spawn_agent` tool → Worker spawned with own `AgenticLoopService.runAgenticLoop()` in isolated git worktree → Worker autonomously uses full tool suite → Worker completes → `<task-notification>` XML notification injected as user-role message into coordinator's conversation → Coordinator synthesizes results → Optionally continues worker via `send_message` → User reviews unified diffs → Approve & Merge
 
-**Target Architecture** (🔲 to build):
-Chat Message → Coordinator System Prompt Injection → LLM calls `spawn_agent` tool → Worker spawned with own `AgenticLoopService.runAgenticLoop()` in isolated git worktree → Worker autonomously uses full tool suite → Worker completes → `[WORKER COMPLETED]` plain-text notification injected as user-role message into coordinator's conversation → Coordinator synthesizes results → Optionally continues worker via `send_message` → User reviews unified diffs → Approve & Merge
+**Implementation** (all ✅):
 
-**Reference Architecture (Claude Code)**:
-- **coordinatorMode.ts**: Feature-gated via `CLAUDE_CODE_COORDINATOR_MODE` env var. `getCoordinatorSystemPrompt()` returns a 300-line system prompt defining the coordinator's role, tool usage examples (`Agent`, `SendMessage`, `TaskStop`), 4-phase workflow (Research → Synthesis → Implementation → Verification), concurrency rules (read-only parallel, write-heavy serial), synthesization anti-patterns, continue-vs-spawn decision matrix
-- **src/utils/swarm/inProcessRunner.ts**: `InProcessRunnerConfig` wraps `runAgent()` with `AsyncLocalStorage`-based context isolation, `TeammateIdentity`, linked `AbortController`, plan mode approval support, idle notification to leader via file-based mailbox, task claiming from team task list
-- **src/utils/swarm/spawnInProcess.ts**: Creates `TeammateContext`, registers `InProcessTeammateTaskState` in `AppState`, returns `InProcessSpawnOutput` with `abortController` and `teammateContext`
-- **AgentTool/**: Coordinator calls `Agent(description, prompt, subagent_type)` → spawns worker. Worker results arrive as `[WORKER COMPLETED/FAILED/STOPPED]` plain-text notifications in user-role messages containing agent ID, status, summary, result, usage
-- **TeamCreateTool/**: Higher-level team concept for persistent multi-agent swarms. Creates team file, resets task list, registers cleanup. Beyond our current scope.
-- **Key insight**: Workers **cannot see the coordinator's conversation**. Every prompt must be self-contained. Coordinator must synthesize research findings before delegating implementation — never write "based on your findings."
+| Component | Description | Key Files |
+|---|---|---|
+| **Coordinator Tools** | `spawn_agent`, `send_message`, `stop_agent` tool schemas + dispatch via `ToolOrchestratorService` | `ToolSchemaService`, `ToolOrchestratorService`, `AutoApprovalEngine` |
+| **Worker Execution Engine** | `AgenticLoopService.runAgenticLoop()` in `_runWorkerLoop()` with per-worker conversation context, AbortController, auto-approve, scoped tools | `CoordinatorService.js` |
+| **Coordinator System Prompt** | Adapted from Claude Code's `getCoordinatorSystemPrompt()`: 4-phase workflow, verification guidance, failure handling, stopping workers, synthesization rules, purpose statements, continue-vs-spawn decision matrix | `CoordinatorPrompt.js`, `SystemPromptAssembler.js` |
+| **Task Notification Pipeline** | `<task-notification>` XML generation via `buildTaskNotification()` + injection into coordinator's active conversation as user-role messages via `injectMessage()` + `_notifyWake()` | `AgenticLoopService.js`, `CoordinatorService.js` |
+| **Worker Isolation** | Git worktree-based isolation — each worker runs in its own branch/directory, preventing file conflicts | `AgenticGitService.js`, `CoordinatorService.js` |
+| **Instance Pooling** | Workers distributed across all available local provider instances (e.g. multiple LM Studio), with least-busy routing and fallback to cloud models | `CoordinatorService.js`, `instance-registry.js` |
+| **Retina UI** | Live worker status cards, tool result renderers for spawn/send/stop, `worker_notification` SSE events | `AgentComponent.js`, `ToolResultRenderers.js` |
+| **Worker Persistence** | Worker snapshots persisted to parent session in MongoDB for page refresh survival | `AgenticLoopService.js` |
 
-**Architectural Differences: Claude Code vs Prism Notification Delivery**:
+**Coordinator System Prompt Coverage** (all ✅, adapted from Claude Code):
 
-Claude Code is a CLI REPL — its main loop is always alive, waiting for user input. Prism is an HTTP server — each agentic loop runs to completion within a single request lifecycle. This fundamentally changes how worker completion notifications reach the coordinator.
+| Section | Description |
+|---|---|
+| Role definition | Coordinator identity, synthesize-don't-delegate philosophy |
+| Tool documentation | `spawn_agent`, `send_message`, `stop_agent` with usage rules |
+| Notification format | `<task-notification>` XML schema with field descriptions |
+| 4-phase workflow | Research → Synthesis → Implementation → Verification |
+| Concurrency rules | Read-only parallel, write-heavy serial, verification independent |
+| Verification quality | "Proving the code works" — run tests with feature enabled, investigate errors, be skeptical |
+| Failure handling | Continue failed workers via `send_message` (they have error context) |
+| Stopping workers | `stop_agent` usage with example (direction change mid-flight) |
+| Synthesization rules | Anti-patterns ("based on your findings"), good/bad examples |
+| Purpose statements | Calibrate worker depth: research vs implementation vs quick check |
+| Continue vs. spawn matrix | 6-row decision table based on context overlap |
+| Worker prompt tips | File paths, "done" criteria, verification depth, git precision |
+
+**Notification Flow** (how worker results reach the coordinator):
+
+```
+Worker completes → buildTaskNotification(worker) generates XML
+                 → coordinatorCtx.injectMessage(notification)
+                 → pushes to injectedMessages[] queue with _taskNotification: true
+                 → _notifyWake() fires to wake coordinator's wait loop
+                 → coordinator drains queue after tool batch or wait loop
+                 → emits worker_notification SSE event to Retina
+                 → re-prompts model with notifications as user-role messages
+```
+
+**Key point**: Workers do NOT receive `<task-notification>` messages. They run self-contained agentic loops with standard `tool_result` messages. The coordinator is the only recipient of task notifications — one per worker completion.
+
+**Architectural Differences: Claude Code vs Prism**:
+
+Claude Code is a CLI REPL — its main loop is always alive, waiting for user input. Prism is an HTTP server — each agentic loop runs to completion within a single request lifecycle.
 
 | Aspect | Claude Code (CLI REPL) | Prism (HTTP Request) |
 |---|---|---|
 | **Loop lifecycle** | Always alive — REPL event loop waits for input indefinitely | Terminates — agentic loop exits when model returns text |
-| **Notification delivery** | `enqueueAgentNotification()` pushes `<task-notification>` XML into the session's `inputQueue` as a synthetic user message — the REPL naturally drains it on the next iteration | `injectMessage()` pushes a plain-text `[WORKER COMPLETED]` notification to an in-memory array + fires `_notifyWake()` to wake a suspended Promise inside the loop |
-| **Coordinator wait** | Implicit — the REPL is always listening, so notifications are consumed as soon as they arrive | Explicit — when the coordinator outputs text after spawning workers, the loop checks `CoordinatorService.listWorkers()` and suspends via `await new Promise()` with event-driven wake + 2s safety poll + 5min hard timeout |
-| **Re-prompting** | The notification appears as the next user turn — the model responds naturally | After draining notifications into `currentMessages`, the loop `continue`s to re-prompt the model with the new user-role messages |
-| **Multi-round handling** | Each notification triggers a new REPL turn independently | The loop re-checks `listWorkers()` after each model response — if workers are still running, it waits again. Handles N rounds automatically |
-| **Concurrency model** | Workers run as background tasks with their own `AbortController`, decoupled from the parent's lifecycle (`void runWithAgentContext(...)`) | Workers run as concurrent async loops (in-process) via `CoordinatorService._runPanelWorker()`, each with isolated conversation context. When `LOCAL_MODEL_CONCURRENCY >= 2`, workers use the local model directly (capped at `concurrency - 1` to reserve a slot for the coordinator); when concurrency is 1, workers fall back to Haiku 4.5 |
-| **State management** | `AppState` tracks tasks via `registerAsyncAgent()` / `completeAsyncAgent()` / `killAsyncAgent()` with `rootSetAppState` reaching the root store. `agentNameRegistry` maps names → IDs for `SendMessage` routing | `CoordinatorService` maintains an in-memory `workers` Map with status tracking. `listWorkers()` queries live status for the wait-loop poll |
+| **Notification delivery** | `enqueueAgentNotification()` pushes `<task-notification>` XML into the session's `inputQueue` as a synthetic user message | `injectMessage()` pushes `<task-notification>` XML to an in-memory array + fires `_notifyWake()` to wake a suspended Promise inside the loop |
+| **Coordinator wait** | Implicit — the REPL is always listening | Explicit — loop checks `CoordinatorService.listWorkers()` and suspends via `await new Promise()` with event-driven wake + 2s safety poll + 5min hard timeout |
+| **Re-prompting** | The notification appears as the next user turn | After draining notifications into `currentMessages`, the loop `continue`s to re-prompt the model |
+| **Concurrency model** | Workers run as background tasks with their own `AbortController` | Workers run as concurrent async loops (in-process) via `_runWorkerLoop()`, each with isolated conversation context. Distributed across all available local provider instances with least-busy routing |
 
 **Reference URLs** (Claude Code source, studied for this design):
 - Coordinator system prompt & mode: https://github.com/razakiau/claude-code/blob/main/src/coordinator/coordinatorMode.ts
 - AgentTool (spawn, async lifecycle, notification enqueue): https://github.com/razakiau/claude-code/blob/main/src/tools/AgentTool/AgentTool.tsx
 - `runAsyncAgentLifecycle` + `enqueueAgentNotification` + `finalizeAgentTool`: https://github.com/razakiau/claude-code/blob/main/src/tools/AgentTool/agentToolUtils.ts
-- TeamCreateTool (higher-level swarm concept): https://github.com/razakiau/claude-code/blob/main/src/tools/TeamCreateTool/TeamCreateTool.ts
 - Swarm utilities directory (inProcessRunner, spawnInProcess, teamHelpers, etc.): https://github.com/razakiau/claude-code/tree/main/src/utils/swarm
-
-**Key takeaway**: Our `injectMessage()` + `_notifyWake()` + coordinator wait pattern is the HTTP-equivalent of Claude Code's always-alive REPL `inputQueue`. Claude Code uses `<task-notification>` XML; we use plain-text `[WORKER COMPLETED]` notifications for better model compliance and zero echo risk — the difference is purely in the transport lifecycle.
-
-**Infrastructure** ✅ (already built):
-- `CoordinatorService.js`: `decompose()` (LLM-based task decomposition via Claude Sonnet, max 5 sub-tasks), `execute()` (parallel worktree spawning), `approveMerge()`, `abort()`, status polling, `_runWorker()` stub
-- `MutationQueue.js`: Per-file-path FIFO mutex with `acquire()`/`release()`/`withLock()` — singleton pattern for concurrent write safety
-- `coordinator.js` route: `POST /coordinator/{plan,execute,approve-merge,abort}`, `GET /coordinator/{status/:taskId,tasks}`
-- `AgenticGitService.js` (tools-api): 5 worktree functions — `create`, `remove`, `merge` (`--no-ff`), `diff` (three-dot), `cleanup` (prune orphans from `/tmp/prism-worktrees/`)
-- `AgenticRoutes.js`: `POST /agentic/git/worktree/{create,remove,merge,diff,cleanup}`
-- `CoordinatorPanel.js` + CSS: Full lifecycle UI — Input → Plan Review (complexity badges) → Executing → Diff Review (+/- counts) → Approve & Merge / Reject & Cleanup
-- Wired as `GitBranch` tab in Agent sidebar (`AgentComponent.js`)
-- `AgenticTaskService.js`: Schema pre-wired with `owner`, `blocks`, `blockedBy`, `activeForm` fields for swarm coordination
-
-**Implementation Components** 🔲 (7 components to build):
-
-| # | Component | Description | Key Files |
-|---|-----------|-------------|-----------|
-| 1 | **Coordinator Tools** | `spawn_agent`, `send_message`, `stop_agent` tool schemas + dispatch | `ToolSchemaService`, `ToolOrchestratorService`, `AutoApprovalEngine` |
-| 2 | **Worker Execution Engine** | Wire `AgenticLoopService.runAgenticLoop()` into `_runWorker()` with per-worker conversation context, AbortController, auto-approve, scoped tools | `CoordinatorService.js` |
-| 3 | **Coordinator System Prompt** | Adapted from Claude Code's `getCoordinatorSystemPrompt()`: 4-phase workflow, tool usage examples, synthesization rules, continue-vs-spawn matrix | `CoordinatorPrompt.js` (new), `SystemPromptAssembler.js` |
-| 4 | **Task Notification Pipeline** | Plain-text `[WORKER COMPLETED]` notification generation + injection into coordinator's active conversation as user-role messages | `AgenticLoopService.js`, `CoordinatorService.js` |
-| 5 | **Task System Activation** | Activate `owner`, `blocks`/`blockedBy` DAG enforcement, `task_claim` tool, `activeForm` UI text | `AgenticTaskService.js` |
-| 6 | **Retina UI Updates** | Live worker status in CoordinatorPanel, tool result renderers for spawn/send/stop, worker notification card renderer | `CoordinatorPanel.js`, `ToolResultRenderers.js`, `MessageList.js` |
-| 7 | **WebSocket Progress** | Replace polling with `coordinator_worker_update` push events | `coordinator.js` route |
 
 **Design decisions**:
 - **Git worktrees retained** — our differentiator over Claude Code. CC runs all workers against the same filesystem. Our worktree isolation means workers literally cannot interfere with each other
@@ -351,28 +350,26 @@ Every agentic iteration is individually logged via `RequestLogger.logChatGenerat
 4. ✅ **MCP Client** — Prism connects to external MCP servers for third-party tool access
 5. 🔲 **Slash Commands** — Parameterized prompt templates with argument substitution
 
-### Phase 3: Multi-Agent & Autonomy ✅ COMPLETE (4/4 infrastructure)
-1. ✅ **Coordinator Mode** — Infrastructure: `CoordinatorService`, `CoordinatorPanel`, git worktree endpoints, REST API. 🔲 Worker loop integration (wiring `AgenticLoopService` into `_runWorker`)
+### Phase 3: Multi-Agent & Autonomy ✅ COMPLETE
+1. ✅ **Coordinator Mode** — Full implementation: `CoordinatorService`, `CoordinatorPrompt`, worker execution engine, task notification pipeline, instance pooling, git worktree isolation, Retina UI
 2. ✅ **Mutation Queue** — `MutationQueue.js`: per-path FIFO mutex singleton for concurrent write safety
 3. ✅ **Memory Consolidation** — `MemoryConsolidationService`: scheduled 6h loop, audit trail, cost guard, real-time broadcast, UI history panel
 4. ✅ **Browser Automation** — `AgenticBrowserService`: Playwright integration with `browser_action` tool, DOM inspection, screenshot persistence
 
 ### Phase 4: Hardening & Intelligence
-1. ✅ **Token-Budget Truncation** — `ContextWindowManager`: three-strategy cascade (tool result truncation → old message compression → sliding window) wired into `AgenticLoopService` before every LLM call. Uses ~3.5 chars/token estimation, 80% utilization target, configurable per-model via `maxInputTokens`
-2. ✅ **Dedicated Agent Endpoint** — `POST /agent` with SSE streaming + JSON fallback, approval endpoint, decoupled from `/chat`
+1. ✅ **Token-Budget Truncation** — `ContextWindowManager`: three-strategy cascade wired into `AgenticLoopService` before every LLM call
+2. ✅ **Dedicated Agent Endpoint** — `POST /agent` with SSE streaming + JSON fallback, approval endpoint
 3. ✅ **Exhaustion Recovery** — Final tool-free LLM pass on iteration limit, summarizes progress for user
 4. ✅ **Local GPU Mutex** — `LocalModelQueue`: process-level lock preventing GPU collisions across chat + benchmark
-5. ✅ **Request Iteration Logging** — Per-pass `RequestLogger.logChatGeneration()` with agenticIteration number, per-pass and overall usage aggregation
-6. ✅ **Benchmarking System** — `BenchmarkService`: custom LLM accuracy benchmarking with multi-model comparison, provider-bucketed execution, multi-assertion evaluation, abort support, full UI dashboard
-7. ✅ **Visual Workflow System** — `WorkflowAssembler` + `workflows.js`: node-based visual graph engine, MinIO file handling, full editor UI in Retina
-8. ✅ **Task & State Management** — `AgenticTaskService`: MongoDB-backed persistent task list with `task_create`, `task_get`, `task_list`, `task_update`. Project-scoped, monotonic IDs, Tier 1 auto-approve. Schema pre-wired for swarm (`owner`, `blocks`, `blockedBy`)
-9. 🔲 **Coordinator Worker Loop** — Wire `AgenticLoopService.runAgenticLoop()` into `CoordinatorService._runWorker()` so workers autonomously edit files
-10. 🔲 **Slash Commands** — Parameterized prompt templates with `$1`, `$@` argument substitution
-11. 🔲 **Per-Tool Tier Overrides UI** — Retina settings panel to customize Auto-Approval tiers per tool
-12. 🔲 **Coordinator Conflict Resolution** — Interactive diff merge UI for worktree conflicts
-13. 🔲 **Boot-Time Cleanup** — Prune orphan worktrees from `/tmp/prism-worktrees/` on Prism startup
-14. 🔲 **Full Auto Confirmation Dialog** — Retina modal confirming the user wants to activate `autoApprove` mode before enabling it
-15. 🔲 **Task Swarm Extensions** — `task_claim` (atomic acquisition + agent-busy check), `task_stop`/`task_output` (worker reporting), `blocks`/`blockedBy` DAG enforcement, `owner` field activation, `activeForm` spinner text, Coordinator WebSocket broadcast of task state changes
+5. ✅ **Request Iteration Logging** — Per-pass `RequestLogger.logChatGeneration()` with agenticIteration number
+6. ✅ **Benchmarking System** — `BenchmarkService`: custom LLM accuracy benchmarking with multi-model comparison
+7. ✅ **Visual Workflow System** — `WorkflowAssembler` + `workflows.js`: node-based visual graph engine
+8. ✅ **Task & State Management** — `AgenticTaskService`: MongoDB-backed persistent task list with 4 tools
+9. 🔲 **Slash Commands** — Parameterized prompt templates with `$1`, `$@` argument substitution
+10. 🔲 **Per-Tool Tier Overrides UI** — Retina settings panel to customize Auto-Approval tiers per tool
+11. 🔲 **Coordinator Conflict Resolution** — Interactive diff merge UI for worktree conflicts
+12. 🔲 **Boot-Time Cleanup** — Prune orphan worktrees from `/tmp/prism-worktrees/` on Prism startup
+13. 🔲 **Full Auto Confirmation Dialog** — Retina modal confirming the user wants to activate `autoApprove` mode
 
 ---
 
@@ -406,13 +403,6 @@ Identified gaps between the current implementation and production-grade robustne
 1. Pass `signal` through to `executeTool()` / `executeToolStreaming()` and abort the `fetch()` calls
 2. Add a `POST /compute/shell/kill/:pid` endpoint to `tools-api` for process-tree cleanup
 3. Track spawned PIDs in `AgenticLoopService` and kill them in the `finally` block
-
-### 🔲 Coordinator WebSocket Streaming
-**Impact**: Low — The Coordinator Mode currently uses **polling** (`GET /coordinator/status/:taskId`) to track worker progress. This works but creates unnecessary request overhead and latency in the UI.
-
-**Gap**: `CoordinatorService._runWorker()` does not emit events to a WebSocket channel. `CoordinatorPanel.js` polls on a timer instead of receiving push updates.
-
-**Mitigation path**: Emit `coordinator_progress` events via the existing WebSocket broadcast infrastructure. Wire `CoordinatorService` to accept a `broadcast` callback (same pattern as `MemoryConsolidationService`).
 
 ### ⚠️ Token Estimation Accuracy
 **Impact**: Low — `ContextWindowManager` uses a fixed `~3.5 chars/token` ratio for budget enforcement. This is intentionally conservative but has known limitations:
@@ -458,7 +448,7 @@ These are documented in their respective source files but excluded from this age
 
 ---
 
-## Appendix: Removed Features (Do Not Implement)
+## Appendix A: Removed Features (Do Not Implement)
 
 The following features were present in the original design document but were removed during the code-grounded review. They are preserved here for historical context.
 
@@ -481,3 +471,29 @@ The following features were present in the original design document but were rem
 > *Original*: Use a dedicated side-query LLM layer (`classifyYoloAction`) to decide whether to auto-execute a tool.
 
 **Why removed**: Not the feature itself (permission gating is critical), but the *implementation approach*. Using an LLM side-query for every tool call is expensive, slow (~500ms+ latency per classification), and unreliable. Replaced with the **Auto-Approval Engine** — a deterministic, rule-based three-tier system that achieves the same goal with zero latency and zero cost. LLM-based classification can be revisited as a Tier 2 fallback for ambiguous custom tools if needed.
+
+---
+
+## Appendix B: Intentionally Not Implemented (By Design)
+
+Features studied from Claude Code's architecture that we explicitly chose NOT to implement, with rationale.
+
+### ❌ TeamCreateTool / Persistent Multi-Agent Swarms
+> *Claude Code*: `TeamCreateTool` creates persistent multi-agent teams with team files, shared task lists, and cleanup hooks.
+
+**Why not**: Our coordinator mode already handles the useful subset — parallel workers with isolated contexts. The "team" abstraction adds a management layer (team files, team deletion, team-scoped tasks) that creates complexity without proportional benefit for our use case. If a task needs more workers, the coordinator just spawns them.
+
+### ❌ Task Swarm Extensions (task_claim, DAG enforcement, owner fields)
+> *Original design*: Activate `owner`, `blocks`/`blockedBy` DAG enforcement, `task_claim` tool, `activeForm` UI text in `AgenticTaskService`.
+
+**Why not**: The coordinator already manages worker assignment — it decides what tasks to create and which workers to spawn. Adding atomic task claiming, dependency DAGs, and worker ownership tracking duplicates the coordinator's job at a lower abstraction level. These patterns are designed for autonomous swarms where agents self-organize; our coordinator is the central brain. The task system works well as a simple persistent scratchpad for single-agent workflows.
+
+### ❌ Worker-to-Worker Communication
+> *Claude Code*: Workers can be configured to check on each other.
+
+**Why not**: The coordinator system prompt explicitly says "Do not use one worker to check on another." Workers report to the coordinator; the coordinator decides what to do next. Worker-to-worker communication creates implicit dependencies and makes it harder to reason about the system state.
+
+### ❌ Coordinator WebSocket Streaming (for Manual Panel)
+> *Original*: Replace polling at `GET /coordinator/status/:taskId` with WebSocket push events.
+
+**Why not**: The manual panel decomposition flow is a lower-priority UX path now that chat-triggered coordinator mode is fully functional. The polling works fine for the occasional manual decomposition. If the manual panel sees more use, this can be revisited.
