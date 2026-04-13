@@ -353,7 +353,10 @@ export default class SystemPromptAssembler {
 
     // ── 3. Tool Policy (persona-specific) ────────────────────────
     if (persona?.toolPolicy) {
-      sections.push(persona.toolPolicy);
+      const policyText = typeof persona.toolPolicy === "function"
+        ? persona.toolPolicy(ctx)
+        : persona.toolPolicy;
+      if (policyText) sections.push(policyText);
     }
 
     // ── 4. Available Tools (domain-grouped) ──────────────────────
@@ -375,25 +378,9 @@ export default class SystemPromptAssembler {
     if (codingFallback || persona?.usesCodingGuidelines) {
       const guidelines = persona?.guidelines || (
         `## Coding Guidelines\n` +
-        `1. Always read relevant files before making edits to understand context\n` +
-        `2. Prefer str_replace_file over write_file for editing existing code — it's safer and preserves unchanged content\n` +
-        `3. Use multi_file_read when you need to inspect several files at once\n` +
-        `4. After making changes, verify them by reading the modified section\n` +
-        `5. Use project_summary to understand unfamiliar codebases before diving in\n` +
-        `6. Check git_status before and after edits to track your changes\n` +
-        `7. When searching, use includes filters to narrow results (e.g. [".js", ".ts"])\n` +
-        `8. Keep your explanations concise and technical\n\n` +
-        `## Task Management\n` +
-        `You have persistent task tools (task_create, task_list, task_update) that survive across conversations.\n` +
-        `Use them proactively:\n` +
-        `- At the START of a session, call task_list to check for in-progress or pending tasks from prior sessions\n` +
-        `- When starting complex multi-step work (3+ files, multi-phase refactors, migrations), create a task with task_create to track progress\n` +
-        `- ONLY mark a task as completed when you have FULLY accomplished it — if blocked or encountering errors, keep it as in_progress\n` +
-        `- Always set activeForm when creating or updating to "in_progress" — a present-continuous phrase shown as a spinner (e.g. "Running tests", "Refactoring auth module")\n` +
-        `- After completing a task, call task_list to find your next task\n` +
-        `- To delete a task that is no longer relevant or was created in error, set its status to "deleted" via task_update\n` +
-        `- Break large tasks into subtasks — use metadata to link related tasks\n` +
-        `- Do NOT create tasks for simple, single-step requests — only for work that benefits from tracking`
+        `- Always read relevant files before making edits to understand context\n` +
+        `- After making changes, verify them by reading the modified section\n` +
+        `- Keep your explanations concise and technical`
       );
       sections.push(guidelines);
     }
