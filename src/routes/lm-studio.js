@@ -1,5 +1,6 @@
 import express from "express";
 import { getProvider } from "../providers/index.js";
+import { isInstance } from "../providers/instance-registry.js";
 import logger from "../utils/logger.js";
 import { resolveArchParams, estimateMemory } from "../utils/gguf-arch.js";
 import { sleep } from "../utils/utilities.js";
@@ -7,13 +8,22 @@ import { initSseResponse } from "../utils/SseUtilities.js";
 
 const router = express.Router();
 
+/** Resolve instance ID from request — supports ?instance=lm-studio-2 */
+function resolveInstanceId(req) {
+  const id = req.query.instance || req.body?.instance || "lm-studio";
+  // Validate it's actually a registered instance
+  if (!isInstance(id)) return "lm-studio";
+  return id;
+}
+
 /**
  * GET /lm-studio/models
  * List all models available from LM Studio.
  */
-router.get("/models", async (_req, res, next) => {
+router.get("/models", async (req, res, next) => {
   try {
-    const provider = getProvider("lm-studio");
+    const instanceId = resolveInstanceId(req);
+    const provider = getProvider(instanceId);
     const data = await provider.listModels();
     res.json(data);
   } catch (error) {
@@ -36,7 +46,8 @@ router.post("/load", async (req, res, next) => {
         .json({ error: true, message: "Missing 'model' in request body" });
     }
 
-    const provider = getProvider("lm-studio");
+    const instanceId = resolveInstanceId(req);
+    const provider = getProvider(instanceId);
 
     // Build load options from request body
     const loadOptions = {};
@@ -92,7 +103,8 @@ router.post("/load-stream", async (req, res) => {
   req.on("close", () => { aborted = true; });
 
   try {
-    const provider = getProvider("lm-studio");
+    const instanceId = resolveInstanceId(req);
+    const provider = getProvider(instanceId);
     send({ type: "start", model });
 
     // Build load options
@@ -195,7 +207,8 @@ router.post("/unload", async (req, res, next) => {
       });
     }
 
-    const provider = getProvider("lm-studio");
+    const instanceId = resolveInstanceId(req);
+    const provider = getProvider(instanceId);
     const data = await provider.unloadModel(instance_id);
     res.json(data);
   } catch (error) {
@@ -217,7 +230,8 @@ router.post("/estimate", async (req, res, next) => {
     }
 
     // Fetch model metadata from LM Studio
-    const provider = getProvider("lm-studio");
+    const instanceId = resolveInstanceId(req);
+    const provider = getProvider(instanceId);
     const result = await provider.listModels();
     const allModels = result?.data || result?.models || [];
     const modelData = allModels.find((m) => m.id === model || m.path === model || m.key === model);

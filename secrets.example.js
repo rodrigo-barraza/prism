@@ -37,8 +37,18 @@ export const OLLAMA_BASE_URL = 'http://localhost:11434';
 // llama.cpp (Local LLM Server — llama-server default port 8080)
 export const LLAMA_CPP_BASE_URL = 'http://localhost:8080';
 
-// Local Model Concurrency (max simultaneous GPU inference requests)
+// Local Model Concurrency (default for instances that don't specify their own)
 export const LOCAL_MODEL_CONCURRENCY = 1;
+
+// Additional Local Provider Instances (optional)
+// Each entry creates a new provider instance at a different URL.
+// type: lm-studio | ollama | vllm | llama-cpp
+// Instances are auto-numbered: the default (above) is #1, first extra = #2, etc.
+// concurrency: max simultaneous GPU inference requests (defaults to LOCAL_MODEL_CONCURRENCY)
+export const LOCAL_PROVIDER_INSTANCES = [
+  // { type: 'lm-studio', baseUrl: 'http://192.168.86.100:1234', concurrency: 1 },
+  // { type: 'ollama', baseUrl: 'http://192.168.86.100:11434', concurrency: 2 },
+];
 
 // Mongo
 export const MONGO_URI = 'mongodb://192.168.86.2:27017/?directConnection=true&replicaSet=rs0';

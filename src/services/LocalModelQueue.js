@@ -1,59 +1,48 @@
 // ============================================================
-// LocalModelQueue — Process-level Counting Semaphore for Local GPU Models
+// LocalModelQueue — Per-Instance Counting Semaphore for Local GPU Models
 // ============================================================
 // Local inference servers (LM Studio, vLLM, Ollama, llama.cpp) can
 // serve a limited number of concurrent requests depending on your
 // GPU / VRAM headroom. This module provides a FIFO counting semaphore
-// that serializes local model requests across the entire Prism
-// process — whether they originate from concurrent benchmark runs,
-// chat requests, or any other path.
+// per instance that serializes requests — instances on different
+// machines get independent queues with their own concurrency.
 //
-// The maximum number of concurrent slots is configured via
-// LOCAL_MODEL_CONCURRENCY in secrets.js (defaults to 1).
+// Each instance's concurrency is configured in secrets.js via
+// LOCAL_MODEL_CONCURRENCY (default) or per-instance in
+// LOCAL_PROVIDER_INSTANCES.
 //
 // Usage:
-//   const release = await LocalModelQueue.acquire();
+//   const release = await LocalModelQueue.acquire("lm-studio");
 //   try { await doInference(); }
 //   finally { release(); }
 
 import logger from "../utils/logger.js";
+import { getInstance, isInstance } from "../providers/instance-registry.js";
 import { LOCAL_MODEL_CONCURRENCY } from "../../secrets.js";
 
 // Providers that hit the local GPU
 const LOCAL_PROVIDERS = new Set(["lm-studio", "vllm", "ollama", "llama-cpp"]);
 
-class LocalModelQueue {
-  constructor() {
-    /** Maximum concurrent requests allowed */
-    this._maxConcurrency = Math.max(1, parseInt(LOCAL_MODEL_CONCURRENCY, 10) || 1);
+/** @type {Map<string, InstanceQueue>} Per-instance semaphore queues */
+const queues = new Map();
+
+/** Default concurrency for instances that don't specify their own. */
+const DEFAULT_CONCURRENCY = Math.max(1, parseInt(LOCAL_MODEL_CONCURRENCY, 10) || 1);
+
+class InstanceQueue {
+  /**
+   * @param {string} instanceId
+   * @param {number} maxConcurrency
+   */
+  constructor(instanceId, maxConcurrency) {
+    this.instanceId = instanceId;
+    this.maxConcurrency = maxConcurrency;
     /** @type {Array<() => void>} FIFO queue of pending resolve callbacks */
     this._queue = [];
-    /** Number of slots currently in use */
     this._activeCount = 0;
-    /** Number of total requests processed (for logging) */
     this._totalProcessed = 0;
-
-    logger.info(
-      `[LocalModelQueue] Initialized with concurrency: ${this._maxConcurrency}`,
-    );
   }
 
-  /**
-   * Check whether a provider requires the local GPU lock.
-   * @param {string} provider
-   * @returns {boolean}
-   */
-  isLocal(provider) {
-    return LOCAL_PROVIDERS.has(provider);
-  }
-
-  /**
-   * Acquire a semaphore slot. Resolves immediately if a slot is
-   * available, otherwise enqueues and waits for its turn (FIFO order).
-   *
-   * @returns {Promise<() => void>} A release function — MUST be called
-   *   when inference is complete (use try/finally).
-   */
   acquire() {
     return new Promise((resolve) => {
       const release = () => {
@@ -61,51 +50,112 @@ class LocalModelQueue {
         this._totalProcessed++;
         const next = this._queue.shift();
         if (next) {
-          // Hand a slot to the next waiter
           this._activeCount++;
           next();
         }
       };
 
-      if (this._activeCount < this._maxConcurrency) {
+      if (this._activeCount < this.maxConcurrency) {
         this._activeCount++;
         resolve(release);
       } else {
-        // Enqueue — will be resolved when a previous holder calls release()
         this._queue.push(() => resolve(release));
         logger.info(
-          `[LocalModelQueue] Queued request (${this._queue.length} waiting, ${this._activeCount}/${this._maxConcurrency} active)`,
+          `[LocalModelQueue:${this.instanceId}] Queued request (${this._queue.length} waiting, ${this._activeCount}/${this.maxConcurrency} active)`,
         );
       }
     });
   }
 
-  /** Number of requests currently waiting in the queue. */
-  get pending() {
-    return this._queue.length;
+  get pending() { return this._queue.length; }
+  get busy() { return this._activeCount >= this.maxConcurrency; }
+  get activeCount() { return this._activeCount; }
+  get totalProcessed() { return this._totalProcessed; }
+}
+
+class LocalModelQueue {
+  constructor() {
+    logger.info(
+      `[LocalModelQueue] Initialized (default concurrency: ${DEFAULT_CONCURRENCY})`,
+    );
   }
 
-  /** Whether all slots are currently in use. */
-  get busy() {
-    return this._activeCount >= this._maxConcurrency;
+  /**
+   * Check whether a provider requires the local GPU lock.
+   * Checks both base provider types and instance IDs.
+   * @param {string} provider
+   * @returns {boolean}
+   */
+  isLocal(provider) {
+    if (LOCAL_PROVIDERS.has(provider)) return true;
+    // Check if it's a multi-instance ID (e.g. "lm-studio-2")
+    if (isInstance(provider)) return true;
+    return false;
   }
 
-  /** Number of slots currently in use. */
+  /**
+   * Get or create the semaphore queue for an instance.
+   * @param {string} instanceId
+   * @returns {InstanceQueue}
+   */
+  _getQueue(instanceId) {
+    if (queues.has(instanceId)) return queues.get(instanceId);
+
+    // Look up concurrency from instance registry
+    const instance = getInstance(instanceId);
+    const concurrency = instance?.concurrency || DEFAULT_CONCURRENCY;
+
+    const queue = new InstanceQueue(instanceId, concurrency);
+    queues.set(instanceId, queue);
+    logger.info(
+      `[LocalModelQueue] Created queue for "${instanceId}" (concurrency: ${concurrency})`,
+    );
+    return queue;
+  }
+
+  /**
+   * Acquire a semaphore slot for an instance. Resolves immediately if a
+   * slot is available, otherwise enqueues and waits (FIFO order).
+   *
+   * @param {string} [instanceId] - Instance ID. If omitted, uses a shared
+   *   default queue (backward compat for callers that don't pass an ID).
+   * @returns {Promise<() => void>} A release function — MUST be called
+   *   when inference is complete (use try/finally).
+   */
+  acquire(instanceId = "_default") {
+    return this._getQueue(instanceId).acquire();
+  }
+
+  /** Number of requests waiting for a specific instance. */
+  pending(instanceId = "_default") {
+    return queues.get(instanceId)?.pending || 0;
+  }
+
+  /** Whether all slots are in use for a specific instance. */
+  busy(instanceId = "_default") {
+    return queues.get(instanceId)?.busy || false;
+  }
+
+  /** Number of active slots for a specific instance. */
   get activeCount() {
-    return this._activeCount;
+    let total = 0;
+    for (const q of queues.values()) total += q.activeCount;
+    return total;
   }
 
-  /** Maximum concurrent slots. */
-  get maxConcurrency() {
-    return this._maxConcurrency;
+  /** Max concurrency for a specific instance (or default). */
+  maxConcurrency(instanceId = "_default") {
+    return queues.get(instanceId)?.maxConcurrency || DEFAULT_CONCURRENCY;
   }
 
-  /** Total requests processed since process start. */
+  /** Total requests processed across all instances. */
   get totalProcessed() {
-    return this._totalProcessed;
+    let total = 0;
+    for (const q of queues.values()) total += q.totalProcessed;
+    return total;
   }
 }
 
-// Singleton — one queue for the entire process
+// Singleton — one queue manager for the entire process
 const localModelQueue = new LocalModelQueue();
 export default localModelQueue;

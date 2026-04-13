@@ -44,15 +44,22 @@ import {
 
 // ── Helpers ──────────────────────────────────────────────────
 
-function getBaseUrl() {
-  return LLAMA_CPP_BASE_URL;
-}
+
 
 
 // ── Provider ─────────────────────────────────────────────────
 
-const llamaCppProvider = {
-  name: "llama-cpp",
+/**
+ * Factory: create a llama.cpp provider instance targeting a specific baseUrl.
+ * @param {string} baseUrl - The base URL for the llama-server
+ * @param {string} [instanceId="llama-cpp"] - Unique instance identifier
+ * @returns {object} Provider object with all llama.cpp methods
+ */
+export function createLlamaCppProvider(baseUrl, instanceId = "llama-cpp") {
+  const getBaseUrl = () => baseUrl;
+
+  return {
+  name: instanceId,
 
   // ── Non-Streaming Text Generation ──────────────────────────
   // POST /v1/chat/completions with stream: false
@@ -295,5 +302,7 @@ const llamaCppProvider = {
     }
   },
 };
+}
 
+const llamaCppProvider = createLlamaCppProvider(LLAMA_CPP_BASE_URL, "llama-cpp");
 export default llamaCppProvider;

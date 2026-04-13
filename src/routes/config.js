@@ -9,6 +9,7 @@ import {
   getDefaultModels,
 } from "../config.js";
 import { getProvider } from "../providers/index.js";
+import { listInstances } from "../providers/instance-registry.js";
 import { ARENA_SCORES } from "../arrays.js";
 import logger from "../utils/logger.js";
 import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
@@ -20,33 +21,35 @@ import {
   GOOGLE_API_KEY,
   ELEVENLABS_API_KEY,
   INWORLD_BASIC,
-  LM_STUDIO_BASE_URL,
-  VLLM_BASE_URL,
-  OLLAMA_BASE_URL,
-  LLAMA_CPP_BASE_URL,
   LOCAL_MODEL_CONCURRENCY,
 } from "../../secrets.js";
 
 const router = express.Router();
 
-// Map each provider to its secret — provider is "available" when secret is truthy
-const PROVIDER_SECRETS = {
+// Map cloud providers to their secrets — provider is "available" when secret is truthy
+const CLOUD_PROVIDER_SECRETS = {
   [PROVIDERS.OPENAI]: OPENAI_API_KEY,
   [PROVIDERS.ANTHROPIC]: ANTHROPIC_API_KEY,
   [PROVIDERS.GOOGLE]: GOOGLE_API_KEY,
   [PROVIDERS.ELEVENLABS]: ELEVENLABS_API_KEY,
   [PROVIDERS.INWORLD]: INWORLD_BASIC,
-  [PROVIDERS.LM_STUDIO]: LM_STUDIO_BASE_URL,
-  [PROVIDERS.VLLM]: VLLM_BASE_URL,
-  [PROVIDERS.OLLAMA]: OLLAMA_BASE_URL,
-  [PROVIDERS.LLAMA_CPP]: LLAMA_CPP_BASE_URL,
 };
 
-const AVAILABLE_PROVIDERS = new Set(
-  Object.entries(PROVIDER_SECRETS)
+// Cloud providers available based on API keys
+const AVAILABLE_CLOUD = new Set(
+  Object.entries(CLOUD_PROVIDER_SECRETS)
     .filter(([, secret]) => !!secret)
     .map(([provider]) => provider),
 );
+
+// Local provider instances from the instance registry
+const localInstances = listInstances();
+
+// Combined set: cloud providers + all local instance IDs
+const AVAILABLE_PROVIDERS = new Set([
+  ...AVAILABLE_CLOUD,
+  ...localInstances.map((inst) => inst.id),
+]);
 
 /** Keep only available provider keys in a models map. */
 function filterByAvailableProviders(modelsMap) {
@@ -195,11 +198,12 @@ function matchesAny(nameLower, patterns) {
 
 /**
  * Fetch LM Studio models and convert them to the config model format.
- * Returns an array of model option objects for the 'lm-studio' provider.
+ * @param {string} [instanceId="lm-studio"] - Provider instance ID
+ * Returns an array of model option objects for the provider instance.
  */
-async function getLmStudioModelOptions() {
+async function getLmStudioModelOptions(instanceId = "lm-studio") {
   try {
-    const provider = getProvider("lm-studio");
+    const provider = getProvider(instanceId);
     const { models } = await provider.listModels();
     if (!models || !Array.isArray(models)) return [];
 
@@ -398,11 +402,12 @@ function formatParams(totalParams) {
 /**
  * Fetch vLLM models and convert them to the config model format.
  * Enriches with name-parsed attributes and HuggingFace Hub metadata.
- * Returns an array of model option objects for the 'vllm' provider.
+ * @param {string} [instanceId="vllm"] - Provider instance ID
+ * Returns an array of model option objects for the provider instance.
  */
-async function getVllmModelOptions() {
+async function getVllmModelOptions(instanceId = "vllm") {
   try {
-    const provider = getProvider("vllm");
+    const provider = getProvider(instanceId);
     const { models } = await provider.listModels();
     if (!models || !Array.isArray(models)) return [];
 
@@ -527,11 +532,12 @@ async function getVllmModelOptions() {
 
 /**
  * Fetch Ollama models and convert them to the config model format.
- * Returns an array of model option objects for the 'ollama' provider.
+ * @param {string} [instanceId="ollama"] - Provider instance ID
+ * Returns an array of model option objects for the provider instance.
  */
-async function getOllamaModelOptions() {
+async function getOllamaModelOptions(instanceId = "ollama") {
   try {
-    const provider = getProvider("ollama");
+    const provider = getProvider(instanceId);
     const { models } = await provider.listModels();
     if (!models || !Array.isArray(models)) return [];
 
@@ -584,11 +590,12 @@ async function getOllamaModelOptions() {
 /**
  * Fetch llama.cpp models and convert them to the config model format.
  * Uses GET /v1/models (OpenAI-compatible) and GET /health (native).
- * Returns an array of model option objects for the 'llama-cpp' provider.
+ * @param {string} [instanceId="llama-cpp"] - Provider instance ID
+ * Returns an array of model option objects for the provider instance.
  */
-async function getLlamaCppModelOptions() {
+async function getLlamaCppModelOptions(instanceId = "llama-cpp") {
   try {
-    const provider = getProvider("llama-cpp");
+    const provider = getProvider(instanceId);
     const { models } = await provider.listModels();
     if (!models || !Array.isArray(models)) return [];
 
@@ -709,14 +716,29 @@ async function getLlamaCppModelOptions() {
   }
 }
 
-// Local/self-hosted providers that require network discovery.
-// Separated from the main /config so cloud providers resolve instantly.
-const LOCAL_PROVIDERS = [
-  { key: PROVIDERS.LM_STUDIO, fetch: getLmStudioModelOptions },
-  { key: PROVIDERS.VLLM, fetch: getVllmModelOptions },
-  { key: PROVIDERS.OLLAMA, fetch: getOllamaModelOptions },
-  { key: PROVIDERS.LLAMA_CPP, fetch: getLlamaCppModelOptions },
-];
+// ── Local provider model fetchers per type ─────────────────────
+// Each fetcher takes a provider instance and returns model options.
+const LOCAL_FETCHER_BY_TYPE = {
+  "lm-studio": getLmStudioModelOptions,
+  vllm: getVllmModelOptions,
+  ollama: getOllamaModelOptions,
+  "llama-cpp": getLlamaCppModelOptions,
+};
+
+// Build LOCAL_PROVIDERS from the instance registry.
+// Each instance gets its own entry with the correct fetcher + instance metadata.
+const LOCAL_PROVIDERS = localInstances.map((inst) => {
+  const baseFetcher = LOCAL_FETCHER_BY_TYPE[inst.type];
+  return {
+    key: inst.id,
+    type: inst.type,
+    instanceNumber: inst.instanceNumber,
+    concurrency: inst.concurrency,
+    fetch: baseFetcher
+      ? () => baseFetcher(inst.id)
+      : () => Promise.resolve([]),
+  };
+});
 
 /** Race a promise against a timeout. Resolves to fallback on timeout. */
 function withTimeout(promise, ms, fallback = []) {
@@ -772,10 +794,13 @@ Guidelines:
 - For questions that don't require API data, respond naturally without tool calls.
 - The current local date/time is: {{CURRENT_DATE_TIME}}`;
 
-  // Flag which local providers are configured so the client knows to poll
-  const localProviders = LOCAL_PROVIDERS
-    .filter(({ key }) => AVAILABLE_PROVIDERS.has(key))
-    .map(({ key }) => key);
+  // Flag which local provider instances are configured so the client knows to poll
+  const localProviders = LOCAL_PROVIDERS.map(({ key, type, instanceNumber, concurrency }) => ({
+    id: key,
+    type,
+    instanceNumber,
+    concurrency,
+  }));
 
   res.json({
     fcSystemPrompt,
@@ -834,17 +859,20 @@ localConfigRouter.get("/", async (_req, res) => {
   const models = {};
 
   const results = await Promise.allSettled(
-    LOCAL_PROVIDERS
-      .filter(({ key }) => AVAILABLE_PROVIDERS.has(key))
-      .map(async ({ key, fetch: fetchFn }) => {
-        const fetched = await withTimeout(fetchFn(), LOCAL_TIMEOUT_MS);
-        return { key, models: fetched };
-      }),
+    LOCAL_PROVIDERS.map(async ({ key, type, instanceNumber, fetch: fetchFn }) => {
+      const fetched = await withTimeout(fetchFn(), LOCAL_TIMEOUT_MS);
+      return { key, type, instanceNumber, models: fetched };
+    }),
   );
 
   for (const result of results) {
     if (result.status === "fulfilled" && result.value.models.length > 0) {
-      const { key, models: providerModels } = result.value;
+      const { key, type, instanceNumber, models: providerModels } = result.value;
+      // Tag each model with its instance number and provider type
+      for (const model of providerModels) {
+        model.instanceNumber = instanceNumber;
+        model.providerType = type;
+      }
       // Enrich with arena scores before sending
       const wrapped = { [key]: providerModels };
       enrichModelsWithArenaScores(wrapped);

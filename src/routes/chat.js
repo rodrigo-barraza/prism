@@ -385,11 +385,12 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
   // ── Local GPU mutex ──────────────────────────────────────
   let localRelease;
   if (localModelQueue.isLocal(providerName)) {
-    localRelease = await localModelQueue.acquire();
+    localRelease = await localModelQueue.acquire(providerName);
+    const q = localModelQueue._getQueue(providerName);
     logger.info(
-      `[chat] 🔒 Acquired local GPU slot for ${resolvedModel} ` +
-      `(${localModelQueue.activeCount}/${localModelQueue.maxConcurrency} active` +
-      (localModelQueue.pending > 0 ? `, ${localModelQueue.pending} queued)` : ")"),
+      `[chat] 🔒 Acquired local GPU slot for ${resolvedModel} (${providerName}) ` +
+      `(${q.activeCount}/${q.maxConcurrency} active` +
+      (q.pending > 0 ? `, ${q.pending} queued)` : ")"),
     );
   }
 

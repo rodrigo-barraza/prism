@@ -222,7 +222,7 @@ export default class CoordinatorService {
     let workerProvider = providerName;
     let workerModel = model || resolvedModel;
     if (localModelQueue.isLocal(providerName)) {
-      const maxLocalWorkers = localModelQueue.maxConcurrency - 1;
+      const maxLocalWorkers = localModelQueue.maxConcurrency(providerName) - 1;
       if (maxLocalWorkers >= 1) {
         // Enough GPU slots — check how many local workers are already running
         const localRunning = Array.from(activeWorkers.values()).filter(
@@ -817,13 +817,13 @@ export default class CoordinatorService {
       // Local model guard — same logic as spawnFromTool:
       // use local model when concurrency allows, fall back to cloud otherwise.
       if (localModelQueue.isLocal(resolvedProviderName)) {
-        const maxLocalWorkers = localModelQueue.maxConcurrency - 1;
+        const maxLocalWorkers = localModelQueue.maxConcurrency(resolvedProviderName) - 1;
         if (maxLocalWorkers < 1) {
           logger.info(`[Coordinator] Panel worker ${worker.id}: single-slot concurrency → falling back to ${LOCAL_WORKER_FALLBACK_MODEL}`);
           resolvedProviderName = LOCAL_WORKER_FALLBACK_PROVIDER;
           resolvedModel = LOCAL_WORKER_FALLBACK_MODEL;
         } else {
-          logger.info(`[Coordinator] Panel worker ${worker.id}: local concurrency ${localModelQueue.maxConcurrency} — using local model "${resolvedModel}"`);
+          logger.info(`[Coordinator] Panel worker ${worker.id}: local concurrency ${localModelQueue.maxConcurrency(resolvedProviderName)} — using local model "${resolvedModel}"`);
         }
       }
 

@@ -12,6 +12,9 @@ import { resolveArchParams } from "../utils/gguf-arch.js";
 import { LM_STUDIO_BASE_URL, TOOLS_API_URL } from "../../secrets.js";
 import { TYPES, getDefaultModels } from "../config.js";
 import { sleep } from "../utils/utilities.js";
+
+// Default MCP server URL for ephemeral tool integrations
+const DEFAULT_MCP_SERVER_URL = TOOLS_API_URL || "http://localhost:5590";
 import {
   convertToolsToOpenAI,
   buildPayloadParams,
@@ -22,12 +25,7 @@ import {
   MEDIA_STRATEGIES,
 } from "../utils/openai-compat.js";
 
-// MCP server URL for ephemeral tool integrations
-const MCP_SERVER_URL = TOOLS_API_URL || "http://localhost:5590";
 
-function getBaseUrl() {
-  return LM_STUDIO_BASE_URL;
-}
 
 // ── Native /api/v1/chat SSE stream parser ────────────────────
 // The native endpoint emits named SSE events: reasoning.start/delta/end,
@@ -235,8 +233,18 @@ function buildNativeInput(messages) {
   return historyPrefix ? historyPrefix + currentText : currentText;
 }
 
-const lmStudioProvider = {
-  name: "lm-studio",
+/**
+ * Factory: create an LM Studio provider instance targeting a specific baseUrl.
+ * @param {string} baseUrl - The base URL for the LM Studio server
+ * @param {string} [instanceId="lm-studio"] - Unique instance identifier
+ * @returns {object} Provider object with all LM Studio methods
+ */
+export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
+  const getBaseUrl = () => baseUrl;
+  const MCP_SERVER_URL = DEFAULT_MCP_SERVER_URL;
+
+  return {
+  name: instanceId,
 
   async generateText(
     messages,
@@ -810,5 +818,7 @@ const lmStudioProvider = {
     }
   },
 };
+}
 
+const lmStudioProvider = createLmStudioProvider(LM_STUDIO_BASE_URL, "lm-studio");
 export default lmStudioProvider;

@@ -14,14 +14,21 @@ import {
 
 // ── Helpers ──────────────────────────────────────────────────
 
-function getBaseUrl() {
-  return VLLM_BASE_URL;
-}
+
 
 // ── Provider ─────────────────────────────────────────────────
 
-const vllmProvider = {
-  name: "vllm",
+/**
+ * Factory: create a vLLM provider instance targeting a specific baseUrl.
+ * @param {string} baseUrl - The base URL for the vLLM server
+ * @param {string} [instanceId="vllm"] - Unique instance identifier
+ * @returns {object} Provider object with all vLLM methods
+ */
+export function createVllmProvider(baseUrl, instanceId = "vllm") {
+  const getBaseUrl = () => baseUrl;
+
+  return {
+  name: instanceId,
 
   async generateText(
     messages,
@@ -218,5 +225,7 @@ const vllmProvider = {
     }
   },
 };
+}
 
+const vllmProvider = createVllmProvider(VLLM_BASE_URL, "vllm");
 export default vllmProvider;

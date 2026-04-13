@@ -8,6 +8,7 @@ import vllmProvider from "./vllm.js";
 import ollamaProvider from "./ollama.js";
 import llamaCppProvider from "./llama-cpp.js";
 import ActiveGenerationTracker from "../services/ActiveGenerationTracker.js";
+import { getInstanceProvider, isInstance } from "./instance-registry.js";
 
 const providers = {
   openai: openaiProvider,
@@ -100,9 +101,19 @@ function wrapProvider(provider) {
 const wrappedCache = new Map();
 
 export function getProvider(name) {
+  // Check instance registry first (local providers + multi-instance)
+  if (isInstance(name)) {
+    if (wrappedCache.has(name)) return wrappedCache.get(name);
+    const instanceProvider = getInstanceProvider(name);
+    const wrapped = wrapProvider(instanceProvider);
+    wrappedCache.set(name, wrapped);
+    return wrapped;
+  }
+
+  // Fall through to static cloud providers
   const provider = providers[name];
   if (!provider) {
-    const available = Object.keys(providers).join(", ");
+    const available = [...Object.keys(providers), "(+ local instances)"].join(", ");
     throw new Error(`Unknown provider "${name}". Available: ${available}`);
   }
 

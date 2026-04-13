@@ -3,9 +3,7 @@ import logger from "../utils/logger.js";
 import { OLLAMA_BASE_URL } from "../../secrets.js";
 import { TYPES, getDefaultModels } from "../config.js";
 
-function getBaseUrl() {
-  return OLLAMA_BASE_URL;
-}
+
 
 /**
  * Convert messages with images to Ollama's native format.
@@ -27,8 +25,17 @@ function prepareOllamaMessages(messages) {
   });
 }
 
-const ollamaProvider = {
-  name: "ollama",
+/**
+ * Factory: create an Ollama provider instance targeting a specific baseUrl.
+ * @param {string} baseUrl - The base URL for the Ollama server
+ * @param {string} [instanceId="ollama"] - Unique instance identifier
+ * @returns {object} Provider object with all Ollama methods
+ */
+export function createOllamaProvider(baseUrl, instanceId = "ollama") {
+  const getBaseUrl = () => baseUrl;
+
+  return {
+  name: instanceId,
 
   // ── Non-Streaming Text Generation ──────────────────────
 
@@ -291,5 +298,7 @@ const ollamaProvider = {
     }
   },
 };
+}
 
+const ollamaProvider = createOllamaProvider(OLLAMA_BASE_URL, "ollama");
 export default ollamaProvider;
