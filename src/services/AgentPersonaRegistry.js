@@ -302,7 +302,7 @@ const CODING_ENABLED_TOOLS = [
 PERSONAS.set("CODING", {
   id: "CODING",
   name: "Coding Agent",
-  project: "retina-agent",
+  project: "coding",
   identity: () =>
     `You are a highly capable coding agent with access to file system, git, command execution, and web tools.`,
   guidelines: `## Coding Guidelines

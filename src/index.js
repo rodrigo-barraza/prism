@@ -267,9 +267,11 @@ setupWebSocket(wss);
   // Auto-connect enabled MCP servers
   try {
     const { default: MCPClientService } = await import("./services/MCPClientService.js");
+    const { default: AgentPersonaRegistryMCP } = await import("./services/AgentPersonaRegistry.js");
     const mcpDb = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
+    const codingProject = AgentPersonaRegistryMCP.get("CODING")?.project || "coding";
     if (mcpDb) {
-      await MCPClientService.connectAllFromDB(mcpDb, "retina-agent", "admin");
+      await MCPClientService.connectAllFromDB(mcpDb, codingProject, "admin");
     }
   } catch (err) {
     logger.warn(`MCP auto-connect failed: ${err.message}`);
