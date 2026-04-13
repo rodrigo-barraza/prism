@@ -22,8 +22,10 @@ import {
   expandVideoToFrames,
   processNonStreamingResponse,
   fetchOpenAICompat,
+  parseSSEStream,
   MEDIA_STRATEGIES,
 } from "../utils/openai-compat.js";
+import { COORDINATOR_ONLY_TOOLS } from "../services/CoordinatorPrompt.js";
 
 
 
@@ -454,7 +456,23 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
         mediaStrategy: MEDIA_STRATEGIES.IMAGES_ONLY,
       });
 
-      // ── Always use native /api/v1/chat endpoint ──────────────
+      // ── Determine tool-calling strategy ──────────────────────
+      // Coordinator tools (spawn_agent, send_message, stop_agent) are
+      // Prism-local — they can't be routed via the tools-api MCP server.
+      // When ANY coordinator tool is enabled, we use the OpenAI-compat
+      // /v1/chat/completions endpoint with a standard `tools` array so
+      // Prism's agentic loop handles all tool dispatch in-process.
+      // Otherwise, use the native /api/v1/chat endpoint with MCP.
+      const coordinatorSet = new Set(COORDINATOR_ONLY_TOOLS);
+      const hasCoordinatorTools = options.tools?.some((t) => coordinatorSet.has(t.name));
+
+      if (hasCoordinatorTools) {
+        // ── OpenAI-compat path (with coordinator tools) ────────
+        yield* this._streamOpenAICompat(prepared, model, options, baseUrl);
+        return;
+      }
+
+      // ── Native /api/v1/chat path (MCP-based tools) ──────────
       // The native API supports reasoning toggle, MCP tool calling,
       // model load events, and structured stats — all in one path.
       const nativePayload = {
@@ -498,13 +516,7 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
       // NOTE: Each MCP tool schema averages ~500 tokens. We cap the tool count
       // to prevent context overflow. The model's loaded context determines the cap.
       if (options.tools && options.tools.length > 0) {
-        // Coordinator tools (spawn_agent, send_message, stop_agent) are
-        // Prism-local — they don't exisP server.t on the tools-api MC
-        // Always filter them out before building the MCP allowed_tools list.
-        const PRISM_LOCAL_TOOLS = new Set(["spawn_agent", "send_message", "stop_agent"]);
-        let toolNames = options.tools
-          .map((t) => t.name)
-          .filter((name) => !PRISM_LOCAL_TOOLS.has(name));
+        let toolNames = options.tools.map((t) => t.name);
 
         // Cap tool count based on loaded model context
         // ~500 tokens/tool; reserve 50% of context for conversation
@@ -594,6 +606,54 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
       if (error instanceof ProviderError) throw error;
       throw new ProviderError("lm-studio", error.message, 500, error);
     }
+  },
+
+  /**
+   * OpenAI-compat streaming path — used when coordinator tools are enabled.
+   * Sends a standard /v1/chat/completions request with `tools` array.
+   * Tool calls yield as non-native events, so Prism's agentic loop
+   * executes them (including spawn_agent, send_message, stop_agent).
+   *
+   * @private
+   */
+  async *_streamOpenAICompat(prepared, model, options, baseUrl) {
+    const payload = {
+      messages: prepared,
+      model,
+      ...buildPayloadParams(options),
+      ...(options.topK > 0 && { top_k: options.topK }),
+      ...(options.minP !== undefined && { min_p: options.minP }),
+      ...(options.repeatPenalty !== undefined && options.repeatPenalty !== 1 && { repeat_penalty: options.repeatPenalty }),
+      stream: true,
+      // Request usage in the final streamed chunk
+      stream_options: { include_usage: true },
+    };
+
+    // Convert tool schemas to OpenAI format
+    const tools = convertToolsToOpenAI(options.tools);
+    if (tools) payload.tools = tools;
+
+    logger.info(
+      `[LM-Studio] OpenAI-compat streaming (coordinator tools active): model=${model}, tools=${options.tools?.length || 0}`,
+    );
+
+    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      ...(options.signal && { signal: options.signal }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new ProviderError("lm-studio", `API error: ${response.status} ${errorText}`, response.status);
+    }
+
+    const reader = response.body.getReader();
+    yield* parseSSEStream(reader, {
+      signal: options.signal,
+      thinkingEnabled: options.thinkingEnabled,
+    });
   },
 
   async captionImage(
