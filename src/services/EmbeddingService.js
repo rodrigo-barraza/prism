@@ -6,9 +6,23 @@ import RequestLogger from "./RequestLogger.js";
 import logger from "../utils/logger.js";
 import { calculateTokensPerSec } from "../utils/math.js";
 import { formatCostTag } from "../utils/utilities.js";
+import SettingsService from "./SettingsService.js";
 
 const DEFAULT_PROVIDER = "google";
 const DEFAULT_MODEL = "gemini-embedding-2-preview";
+
+/** Resolve the current embedding provider + model from settings. */
+async function getEmbeddingConfig() {
+  try {
+    const mem = await SettingsService.getSection("memory");
+    return {
+      provider: mem.embeddingProvider || DEFAULT_PROVIDER,
+      model: mem.embeddingModel || DEFAULT_MODEL,
+    };
+  } catch {
+    return { provider: DEFAULT_PROVIDER, model: DEFAULT_MODEL };
+  }
+}
 
 /**
  * EmbeddingService — single entry point for all embedding generation.
@@ -38,11 +52,13 @@ const EmbeddingService = {
     const requestId = crypto.randomUUID();
     const requestStart = performance.now();
 
-    const providerName = options.provider || DEFAULT_PROVIDER;
+    // Resolve defaults from settings when no explicit provider/model given
+    const embedConfig = await getEmbeddingConfig();
+    const providerName = options.provider || embedConfig.provider;
     const resolvedModel =
       options.model ||
       getDefaultModels(TYPES.TEXT, TYPES.EMBEDDING)?.[providerName] ||
-      DEFAULT_MODEL;
+      embedConfig.model;
 
     let result;
     let success = true;

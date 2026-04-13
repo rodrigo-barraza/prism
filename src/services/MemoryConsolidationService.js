@@ -9,11 +9,25 @@ import { cosineSimilarity, calculateTokensPerSec } from "../utils/math.js";
 import { estimateTokens } from "../utils/CostCalculator.js";
 import { TYPES, getPricing } from "../config.js";
 import { COLLECTIONS } from "../constants.js";
+import SettingsService from "./SettingsService.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const CONSOLIDATION_PROVIDER = "anthropic";
-const CONSOLIDATION_MODEL = "claude-haiku-4-5-20251001";
+const CONSOLIDATION_PROVIDER_DEFAULT = "anthropic";
+const CONSOLIDATION_MODEL_DEFAULT = "claude-haiku-4-5-20251001";
+
+/** Resolve the current consolidation provider + model from settings. */
+async function getConsolidationConfig() {
+  try {
+    const mem = await SettingsService.getSection("memory");
+    return {
+      provider: mem.consolidationProvider || CONSOLIDATION_PROVIDER_DEFAULT,
+      model: mem.consolidationModel || CONSOLIDATION_MODEL_DEFAULT,
+    };
+  } catch {
+    return { provider: CONSOLIDATION_PROVIDER_DEFAULT, model: CONSOLIDATION_MODEL_DEFAULT };
+  }
+}
 
 /** Cosine similarity above which two memories are clustered together */
 const CLUSTER_THRESHOLD = 0.75;
@@ -369,7 +383,8 @@ const MemoryConsolidationService = {
     }
 
     // Phase 3: LLM analysis
-    const provider = getProvider(CONSOLIDATION_PROVIDER);
+    const { provider: consolidationProvider, model: consolidationModel } = await getConsolidationConfig();
+    const provider = getProvider(consolidationProvider);
     const aiMessages = [
       { role: "system", content: CONSOLIDATION_PROMPT },
       { role: "user", content: input },
@@ -380,7 +395,7 @@ const MemoryConsolidationService = {
     let llmSuccess = true;
     let llmError = null;
 
-    const result = await provider.generateText(aiMessages, CONSOLIDATION_MODEL, {
+    const result = await provider.generateText(aiMessages, consolidationModel, {
       maxTokens: 2000,
       temperature: 0.1,
     }).catch((err) => {
@@ -397,7 +412,7 @@ const MemoryConsolidationService = {
       const inputText = aiMessages.map((m) => m.content).join("\n");
       const approxInputTokens = estimateTokens(inputText);
       const approxOutputTokens = result ? estimateTokens(result.text || "") : 0;
-      const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[CONSOLIDATION_MODEL];
+      const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[consolidationModel];
       let estimatedCost = null;
       if (pricing) {
         const inputCost = (approxInputTokens / 1_000_000) * (pricing.inputPerMillion || 0);
@@ -414,8 +429,8 @@ const MemoryConsolidationService = {
         clientIp: null,
         agent: agent || null,
         sessionId: sessionId || null,
-        provider: CONSOLIDATION_PROVIDER,
-        model: CONSOLIDATION_MODEL,
+        provider: consolidationProvider,
+        model: consolidationModel,
         success: llmSuccess,
         errorMessage: llmError,
         estimatedCost,

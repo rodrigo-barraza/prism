@@ -9,14 +9,28 @@ import { cosineSimilarity, calculateTokensPerSec } from "../utils/math.js";
 import { estimateTokens } from "../utils/CostCalculator.js";
 import { TYPES, getPricing } from "../config.js";
 import { COLLECTIONS } from "../constants.js";
+import SettingsService from "./SettingsService.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /** Single unified collection for all agent memories. */
 const COLLECTION = COLLECTIONS.MEMORIES;
 
-const EXTRACTION_PROVIDER = "anthropic";
-const EXTRACTION_MODEL = "claude-haiku-4-5-20251001";
+const EXTRACTION_PROVIDER_DEFAULT = "anthropic";
+const EXTRACTION_MODEL_DEFAULT = "claude-haiku-4-5-20251001";
+
+/** Resolve the current extraction provider + model from settings. */
+async function getExtractionConfig() {
+  try {
+    const mem = await SettingsService.getSection("memory");
+    return {
+      provider: mem.extractionProvider || EXTRACTION_PROVIDER_DEFAULT,
+      model: mem.extractionModel || EXTRACTION_MODEL_DEFAULT,
+    };
+  } catch {
+    return { provider: EXTRACTION_PROVIDER_DEFAULT, model: EXTRACTION_MODEL_DEFAULT };
+  }
+}
 
 /**
  * Duplicate detection threshold — two memories with cosine similarity above
@@ -93,7 +107,8 @@ function freshnessCaveat(createdAt) {
 async function extractFactsFromConversation(messages, participants, meta = {}) {
   const endpoint = meta.endpoint || null;
   const agent = meta.agent || null;
-  const provider = getProvider(EXTRACTION_PROVIDER);
+  const { provider: extractionProvider, model: extractionModel } = await getExtractionConfig();
+  const provider = getProvider(extractionProvider);
   const requestId = crypto.randomUUID();
   const requestStart = performance.now();
 
@@ -151,7 +166,7 @@ ${participantList}`;
   let errorMessage = null;
 
   try {
-    result = await provider.generateText(aiMessages, EXTRACTION_MODEL, {
+    result = await provider.generateText(aiMessages, extractionModel, {
       maxTokens: 1000,
       temperature: 0.1,
     });
@@ -164,7 +179,7 @@ ${participantList}`;
     const inputText = aiMessages.map((m) => m.content).join("\n");
     const approxInputTokens = estimateTokens(inputText);
     const approxOutputTokens = result ? estimateTokens(result.text || "") : 0;
-    const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[EXTRACTION_MODEL];
+    const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[extractionModel];
     let estimatedCost = null;
     if (pricing) {
       const inputCost = (approxInputTokens / 1_000_000) * (pricing.inputPerMillion || 0);
@@ -179,8 +194,8 @@ ${participantList}`;
       project: meta.project || null,
       username: meta.username || "system",
       clientIp: null,
-      provider: EXTRACTION_PROVIDER,
-      model: EXTRACTION_MODEL,
+      provider: extractionProvider,
+      model: extractionModel,
       sessionId: meta.sessionId || null,
       agent,
       success,

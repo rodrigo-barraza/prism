@@ -171,7 +171,7 @@ function getDb() {
 // Run a single model against a benchmark prompt
 // ============================================================
 
-async function runSingleModel(benchmark, model, project, username, { signal } = {}) {
+async function runSingleModel(benchmark, model, project, username, { signal, onEvent } = {}) {
   // Bail immediately if already aborted
   if (signal?.aborted) {
     logger.info(`[benchmark] ⏭ Skipping ${model.provider}/${model.model} — already aborted`);
@@ -233,6 +233,12 @@ async function runSingleModel(benchmark, model, project, username, { signal } = 
       },
       (event) => {
         events.push(event);
+        // Forward chunk/thinking events in real-time for live preview
+        if (event.type === "chunk" || event.type === "thinking") {
+          if (onEvent) {
+            try { onEvent(event); } catch { /* noop */ }
+          }
+        }
         // Log every event for debugging
         if (event.type === "chunk") {
           logger.info(
@@ -384,7 +390,7 @@ const BenchmarkService = {
     modelTargets,
     project,
     username,
-    { onRunStart, onModelStart, onModelComplete, signal } = {},
+    { onRunStart, onModelStart, onModelComplete, onEvent, signal } = {},
   ) {
     // Resolve target models
     let models;
@@ -462,7 +468,7 @@ const BenchmarkService = {
           activeGenerationCount++;
           let result;
           try {
-            result = await runSingleModel(benchmark, model, project, username, { signal });
+            result = await runSingleModel(benchmark, model, project, username, { signal, onEvent });
           } finally {
             activeGenerationCount = Math.max(0, activeGenerationCount - 1);
           }

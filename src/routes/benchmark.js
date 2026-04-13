@@ -427,6 +427,11 @@ router.post("/:id/run", async (req, res) => {
           // Send to original connection
           send("model_complete", result);
         },
+        onEvent: (event) => {
+          // Forward live chunk/thinking events for real-time preview
+          emitter.emit("event", event);
+          send(event.type, { content: event.content });
+        },
       },
     );
 
