@@ -16,7 +16,7 @@ import AutoApprovalEngine from "./AutoApprovalEngine.js";
 import SystemPromptAssembler from "./SystemPromptAssembler.js";
 import AgentPersonaRegistry from "./AgentPersonaRegistry.js";
 import PlanningModeService from "./PlanningModeService.js";
-import SessionSummarizer from "./SessionSummarizer.js";
+import MemoryExtractor from "./MemoryExtractor.js";
 import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
 
 /** Coordinator tools bypass the enabledTools filter (always available) */
@@ -214,8 +214,8 @@ export default class AgenticLoopService {
     const assembler = new SystemPromptAssembler();
     hooks.register("beforePrompt", assembler.createHook(), "SystemPromptAssembler");
 
-    // Session Summarization (fire-and-forget on loop exit)
-    hooks.register("afterResponse", SessionSummarizer.createHook(), "SessionSummarizer");
+    // Memory Extraction (fire-and-forget on loop exit)
+    hooks.register("afterResponse", MemoryExtractor.createHook(), "MemoryExtractor");
 
     // ── Planning Mode ─────────────────────────────────────────
     if (options.planFirst) {
@@ -1026,7 +1026,7 @@ export default class AgenticLoopService {
         try {
           const { default: CoordinatorService } = await import("./CoordinatorService.js");
           const { COLLECTIONS } = await import("../constants.js");
-          const workers = CoordinatorService.listWorkers({ sessionId: agentSessionId });
+          const workers = CoordinatorService.listWorkers({ parentAgentSessionId: agentSessionId });
           if (workers.length > 0) {
             const col = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTIONS.AGENT_SESSIONS);
             await col.updateOne(

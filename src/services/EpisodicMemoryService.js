@@ -127,7 +127,7 @@ const EpisodicMemoryService = {
       toolsUsed: [...new Set(toolsUsed)], // dedupe
       keyDecisions,
 
-      // Cross-references (populated by SessionSummarizer)
+      // Cross-references (populated by MemoryExtractor)
       extractedSemanticIds: [],
       extractedProceduralIds: [],
       relatedEpisodeIds: [],

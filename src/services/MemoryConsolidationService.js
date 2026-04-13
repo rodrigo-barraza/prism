@@ -505,7 +505,7 @@ const MemoryConsolidationService = {
 
   /**
    * Check if consolidation should run and trigger if needed.
-   * Called by SessionSummarizer after storing new memories.
+   * Called by MemoryExtractor after storing new memories.
    *
    * @param {object} params
    * @param {string} params.project - Project identifier

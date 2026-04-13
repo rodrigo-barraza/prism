@@ -1316,8 +1316,8 @@ router.get("/conversations", async (req, res, next) => {
                 model: 1,
                 tokensPerSec: 1,
                 totalTime: 1,
-                toolNames: 1,
-                toolCallNames: 1,
+                toolDisplayNames: 1,
+                toolApiNames: 1,
               },
             },
           ],
@@ -1348,7 +1348,7 @@ router.get("/conversations", async (req, res, next) => {
               },
             },
           },
-          toolNames: {
+          toolDisplayNames: {
             $setUnion: {
               $reduce: {
                 input: "$_requests",
@@ -1356,13 +1356,13 @@ router.get("/conversations", async (req, res, next) => {
                 in: {
                   $concatArrays: [
                     "$$value",
-                    { $ifNull: ["$$this.toolNames", []] },
+                    { $ifNull: ["$$this.toolDisplayNames", []] },
                   ],
                 },
               },
             },
           },
-          toolCallNames: {
+          toolApiNames: {
             $setUnion: {
               $reduce: {
                 input: "$_requests",
@@ -1370,7 +1370,7 @@ router.get("/conversations", async (req, res, next) => {
                 in: {
                   $concatArrays: [
                     "$$value",
-                    { $ifNull: ["$$this.toolCallNames", []] },
+                    { $ifNull: ["$$this.toolApiNames", []] },
                   ],
                 },
               },
@@ -2442,8 +2442,8 @@ router.get("/traces", async (req, res, next) => {
           _models: { $addToSet: "$model" },
           _providers: { $addToSet: "$provider" },
           _agents: { $addToSet: "$agent" },
-          _toolArrays: { $push: { $ifNull: ["$toolNames", []] } },
-          _toolCallArrays: { $push: { $ifNull: ["$toolCallNames", []] } },
+          _toolArrays: { $push: { $ifNull: ["$toolDisplayNames", []] } },
+          _toolCallArrays: { $push: { $ifNull: ["$toolApiNames", []] } },
           _tpsValues: { $push: "$tokensPerSec" },
           _modalities: { $push: "$modalities" },
           _requests: {
@@ -2466,8 +2466,8 @@ router.get("/traces", async (req, res, next) => {
               tokensPerSec: "$tokensPerSec",
               totalTime: "$totalTime",
               toolsUsed: "$toolsUsed",
-              toolNames: "$toolNames",
-              toolCallNames: "$toolCallNames",
+              toolDisplayNames: "$toolDisplayNames",
+              toolApiNames: "$toolApiNames",
               agent: "$agent",
               timestamp: "$timestamp",
             },
@@ -2481,7 +2481,7 @@ router.get("/traces", async (req, res, next) => {
           models: { $setDifference: ["$_models", [null]] },
           providers: { $setDifference: ["$_providers", [null]] },
           agents: { $setDifference: ["$_agents", [null]] },
-          toolNames: {
+          toolDisplayNames: {
             $setUnion: {
               $reduce: {
                 input: "$_toolArrays",
@@ -2490,7 +2490,7 @@ router.get("/traces", async (req, res, next) => {
               },
             },
           },
-          toolCallNames: {
+          toolApiNames: {
             $setUnion: {
               $reduce: {
                 input: "$_toolCallArrays",

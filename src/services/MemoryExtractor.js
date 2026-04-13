@@ -64,12 +64,12 @@ Respond ONLY with a JSON object:
 Omit any section if nothing meaningful was found. Minimally, always try to produce an episode summary.`;
 
 /**
- * SessionSummarizer — extracts and stores memories from agentic conversations.
+ * MemoryExtractor — extracts and stores memories from agentic conversations.
  *
  * Registered as an `afterResponse` hook in AgentHooks.
  * Runs in the background (fire-and-forget) after the final response.
  */
-export default class SessionSummarizer {
+export default class MemoryExtractor {
   /**
    * Extract facts from a conversation and store as project-scoped memories.
    *
@@ -84,7 +84,7 @@ export default class SessionSummarizer {
   static async summarizeAndStore({ project, username, messages, traceId, conversationId, endpoint, agent }) {
     if (!messages || messages.length < MIN_MESSAGES_FOR_SUMMARY) {
       logger.info(
-        `[SessionSummarizer] Skipping — only ${messages?.length || 0} messages (min: ${MIN_MESSAGES_FOR_SUMMARY})`,
+        `[MemoryExtractor] Skipping — only ${messages?.length || 0} messages (min: ${MIN_MESSAGES_FOR_SUMMARY})`,
       );
       return [];
     }
@@ -142,7 +142,7 @@ export default class SessionSummarizer {
         RequestLogger.log({
           requestId,
           endpoint: endpoint || "/agent",
-          operation: "session:summarize",
+          operation: "memory:extract",
           project,
           traceId: traceId || null,
           username: username || "system",
@@ -160,7 +160,7 @@ export default class SessionSummarizer {
           totalTime: parseFloat(totalSec.toFixed(3)),
           modalities: { textIn: true, textOut: true },
           requestPayload: {
-            operation: "session:summarize",
+            operation: "memory:extract",
             messageCount: messages.length,
             conversationId: conversationId || null,
             messages: aiMessages,
@@ -184,12 +184,12 @@ export default class SessionSummarizer {
       try {
         memories = JSON.parse(jsonText);
         if (!Array.isArray(memories)) {
-          logger.warn("[SessionSummarizer] Response was not an array");
+          logger.warn("[MemoryExtractor] Response was not an array");
           return [];
         }
       } catch {
         logger.warn(
-          "[SessionSummarizer] Failed to parse extraction result:",
+          "[MemoryExtractor] Failed to parse extraction result:",
           jsonText.substring(0, 200),
         );
         return [];
@@ -207,7 +207,7 @@ export default class SessionSummarizer {
       } else if (typeof memories === "object") {
         parsed = memories;
       } else {
-        logger.warn("[SessionSummarizer] Unexpected response format");
+        logger.warn("[MemoryExtractor] Unexpected response format");
         return [];
       }
 
@@ -233,9 +233,9 @@ export default class SessionSummarizer {
           });
           episodeId = ep.id;
           stored.push({ type: "episode", id: ep.id });
-          logger.info(`[SessionSummarizer] Stored episode: "${parsed.episode.summary.substring(0, 60)}"`);
+          logger.info(`[MemoryExtractor] Stored episode: "${parsed.episode.summary.substring(0, 60)}"`);
         } catch (err) {
-          logger.error(`[SessionSummarizer] Episode storage failed: ${err.message}`);
+          logger.error(`[MemoryExtractor] Episode storage failed: ${err.message}`);
         }
       }
 
@@ -272,7 +272,7 @@ export default class SessionSummarizer {
 
             stored.push({ type: "semantic", id: semResult?.id });
           } catch (err) {
-            logger.error(`[SessionSummarizer] Semantic storage failed: ${err.message}`);
+            logger.error(`[MemoryExtractor] Semantic storage failed: ${err.message}`);
           }
         }
       }
@@ -294,7 +294,7 @@ export default class SessionSummarizer {
             if (procResult) proceduralIds.push(procResult.id);
             stored.push({ type: "procedural", id: procResult?.id });
           } catch (err) {
-            logger.error(`[SessionSummarizer] Procedural storage failed: ${err.message}`);
+            logger.error(`[MemoryExtractor] Procedural storage failed: ${err.message}`);
           }
         }
       }
@@ -305,17 +305,17 @@ export default class SessionSummarizer {
           semanticIds,
           proceduralIds,
         }).catch((err) =>
-          logger.error(`[SessionSummarizer] Episode cross-ref failed: ${err.message}`),
+          logger.error(`[MemoryExtractor] Episode cross-ref failed: ${err.message}`),
         );
       }
 
       logger.info(
-        `[SessionSummarizer] Stored ${stored.length} memories from conversation ${conversationId || "unknown"} ` +
+        `[MemoryExtractor] Stored ${stored.length} memories from conversation ${conversationId || "unknown"} ` +
         `(ep:${episodeId ? 1 : 0} sem:${semanticIds.length} proc:${proceduralIds.length})`,
       );
       return stored;
     } catch (err) {
-      logger.error(`[SessionSummarizer] Failed: ${err.message}`);
+      logger.error(`[MemoryExtractor] Failed: ${err.message}`);
       return [];
     }
   }
@@ -329,7 +329,7 @@ export default class SessionSummarizer {
   static createHook() {
     return async (ctx, { _text, messages }) => {
       // Fire-and-forget — don't block the response
-      SessionSummarizer.summarizeAndStore({
+      MemoryExtractor.summarizeAndStore({
         project: ctx.project,
         username: ctx.username,
         messages: messages || ctx.messages,
@@ -363,7 +363,7 @@ export default class SessionSummarizer {
           });
         })
         .catch((err) =>
-          logger.error(`[SessionSummarizer] Background summarization failed: ${err.message}`),
+          logger.error(`[MemoryExtractor] Background summarization failed: ${err.message}`),
         );
     };
   }

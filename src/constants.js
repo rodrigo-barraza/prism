@@ -33,6 +33,8 @@ export const COLLECTIONS = {
 
 /**
  * Reusable MongoDB $group aggregation expression for summing estimated costs.
- * Use as: `totalCost: COST_SUM_EXPR` inside `$group` stages.
+ * Sums the per-request `estimatedCost` field (USD, nullable).
+ * Convention: aggregation outputs use `totalCost` as the destination field name.
+ * Usage: `totalCost: COST_SUM_EXPR` inside `$group` stages.
  */
 export const COST_SUM_EXPR = { $sum: { $ifNull: ["$estimatedCost", 0] } };
