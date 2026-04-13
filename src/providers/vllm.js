@@ -192,6 +192,49 @@ export function createVllmProvider(baseUrl, instanceId = "vllm") {
     }
   },
 
+  // ── Embedding Generation ─────────────────────────────────
+
+  /**
+   * Generate an embedding via the OpenAI-compatible /v1/embeddings endpoint.
+   * vLLM also exposes /v2/embed, but /v1/embeddings keeps the response
+   * contract identical to the OpenAI provider.
+   *
+   * @param {string} content - Text to embed
+   * @param {string} model - Embedding model name
+   * @param {object} [options] - Optional { dimensions }
+   * @returns {Promise<{ embedding: number[], dimensions: number }>}
+   */
+  async generateEmbedding(content, model, options = {}) {
+    const baseUrl = getBaseUrl();
+    logger.provider("vLLM", `generateEmbedding model=${model} baseUrl=${baseUrl}`);
+    try {
+      const payload = {
+        model,
+        input: content,
+      };
+      if (options.dimensions) payload.dimensions = options.dimensions;
+
+      const response = await fetchOpenAICompat(
+        `${baseUrl}/v1/embeddings`,
+        payload,
+      );
+      const data = await response.json();
+
+      const embedding = data.data?.[0]?.embedding;
+      if (!embedding) {
+        throw new Error("No embedding data in vLLM response");
+      }
+
+      return {
+        embedding,
+        dimensions: embedding.length,
+      };
+    } catch (error) {
+      if (error instanceof ProviderError) throw error;
+      throw new ProviderError("vllm", error.message, 500, error);
+    }
+  },
+
   // ── Model Listing ────────────────────────────────────────
 
   /**
