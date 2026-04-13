@@ -294,13 +294,13 @@ export default class AgenticLoopService {
 
     // ── Message injection queue for coordinator mode ─────────
     // When coordinator tools spawn workers, workers deliver results
-    // as <task-notification> user-role messages via this queue.
+    // as <task-notification> XML user-role messages via this queue.
     // The loop drains this queue after each tool execution batch.
     // The wake signal wakes the coordinator wait loop immediately.
     const injectedMessages = [];
     let _notifyWake = null;
     const injectMessage = (content) => {
-      injectedMessages.push({ role: "user", content });
+      injectedMessages.push({ role: "user", content, _taskNotification: true });
       if (_notifyWake) { _notifyWake(); _notifyWake = null; }
     };
     let hasSpawnedWorkers = false;
@@ -815,7 +815,7 @@ export default class AgenticLoopService {
 
           // ── Drain coordinator message injection queue ────────
           // Worker notifications arrive here as user-role messages
-          // containing <task-notification> XML.
+          // prefixed with [WORKER COMPLETED/FAILED/STOPPED].
           if (injectedMessages.length > 0) {
             const drained = injectedMessages.splice(0, injectedMessages.length);
             for (const msg of drained) {

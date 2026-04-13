@@ -141,30 +141,35 @@ async function cleanupWorktrees(repoPath) {
 }
 
 // ────────────────────────────────────────────────────────────
-// Task Notification XML
+// Task Notification (XML format, matching Claude Code's design)
 // ────────────────────────────────────────────────────────────
+// Structured XML gives the coordinator consistent, machine-parseable
+// boundaries. The <task-notification> opening tag lets both the system
+// prompt and the frontend reliably distinguish worker results from
+// real user messages.
 
 function buildTaskNotification(worker) {
   const status = worker.status === "complete" ? "completed" : worker.status;
-  const diffSection = worker.diff?.hasChanges ? `
-  <diff>
-    <additions>${worker.diff.additions || 0}</additions>
-    <deletions>${worker.diff.deletions || 0}</deletions>
-    <files>${(worker.diff.files || []).join(", ")}</files>
-  </diff>` : "";
+  const summary = status === "completed"
+    ? `Agent "${worker.description}" completed`
+    : status === "failed"
+      ? `Agent "${worker.description}" failed: ${worker.error || "Unknown error"}`
+      : `Agent "${worker.description}" was stopped`;
 
-  const usageSection = `
-  <usage>
-    <tool_uses>${worker.toolCalls?.length || 0}</tool_uses>
-    <duration_ms>${worker.durationMs || 0}</duration_ms>
-  </usage>`;
+  const resultSection = (worker.output || "").trim().slice(0, 4000);
+  const toolUseCount = worker.toolCalls?.length || 0;
+  const durationMs = worker.durationMs || 0;
 
-  return `[INTERNAL WORKER NOTIFICATION — DO NOT echo any XML tags below in your response. Summarize in natural language only.]
-<task-notification>
-  <task-id>${worker.agentId}</task-id>
-  <status>${status}</status>
-  <summary>Agent "${worker.description}" ${status}</summary>
-  <result>${(worker.output || "").slice(0, 4000)}</result>${diffSection}${usageSection}
+  let diffSection = "";
+  if (worker.diff?.hasChanges) {
+    diffSection = `\n<diff>+${worker.diff.additions || 0} -${worker.diff.deletions || 0} in ${(worker.diff.files || []).join(", ")}</diff>`;
+  }
+
+  return `<task-notification>
+<task-id>${worker.agentId}</task-id>
+<status>${status}</status>
+<summary>${summary}</summary>${resultSection ? `\n<result>${resultSection}</result>` : ""}
+<usage><tool_uses>${toolUseCount}</tool_uses><duration_ms>${durationMs}</duration_ms></usage>${diffSection}
 </task-notification>`;
 }
 
@@ -209,7 +214,7 @@ export default class CoordinatorService {
    * Spawn a worker agent from a spawn_agent tool call.
    *
    * Creates a git worktree, runs AgenticLoopService.runAgenticLoop() in it,
-   * collects the diff when complete, and injects a <task-notification> into
+   * collects the diff when complete, and injects a [WORKER COMPLETED] notification into
    * the coordinator's conversation.
    *
    * @param {object} params
@@ -612,7 +617,7 @@ export default class CoordinatorService {
       `[Coordinator] Worker ${worker.agentId} completed in ${worker.durationMs}ms (${workerToolCalls.length} tool calls)`,
     );
 
-    // Inject <task-notification> into the coordinator's active conversation
+    // Inject worker notification into the coordinator's active conversation
     const notification = buildTaskNotification(worker);
     if (coordinatorCtx.injectMessage) {
       coordinatorCtx.injectMessage(notification);

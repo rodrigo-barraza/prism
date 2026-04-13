@@ -175,13 +175,13 @@ The coordinator (lead agent) breaks complex tasks apart, spawns parallel workers
 User Request → LLM Decomposition (Claude Sonnet) → N Workers → Git Worktree Isolation → MutationQueue Safety → Unified Diff → User Approval → Git Merge
 
 **Target Architecture** (🔲 to build):
-Chat Message → Coordinator System Prompt Injection → LLM calls `spawn_agent` tool → Worker spawned with own `AgenticLoopService.runAgenticLoop()` in isolated git worktree → Worker autonomously uses full tool suite → Worker completes → `<task-notification>` XML injected as user-role message into coordinator's conversation → Coordinator synthesizes results → Optionally continues worker via `send_message` → User reviews unified diffs → Approve & Merge
+Chat Message → Coordinator System Prompt Injection → LLM calls `spawn_agent` tool → Worker spawned with own `AgenticLoopService.runAgenticLoop()` in isolated git worktree → Worker autonomously uses full tool suite → Worker completes → `[WORKER COMPLETED]` plain-text notification injected as user-role message into coordinator's conversation → Coordinator synthesizes results → Optionally continues worker via `send_message` → User reviews unified diffs → Approve & Merge
 
 **Reference Architecture (Claude Code)**:
 - **coordinatorMode.ts**: Feature-gated via `CLAUDE_CODE_COORDINATOR_MODE` env var. `getCoordinatorSystemPrompt()` returns a 300-line system prompt defining the coordinator's role, tool usage examples (`Agent`, `SendMessage`, `TaskStop`), 4-phase workflow (Research → Synthesis → Implementation → Verification), concurrency rules (read-only parallel, write-heavy serial), synthesization anti-patterns, continue-vs-spawn decision matrix
 - **src/utils/swarm/inProcessRunner.ts**: `InProcessRunnerConfig` wraps `runAgent()` with `AsyncLocalStorage`-based context isolation, `TeammateIdentity`, linked `AbortController`, plan mode approval support, idle notification to leader via file-based mailbox, task claiming from team task list
 - **src/utils/swarm/spawnInProcess.ts**: Creates `TeammateContext`, registers `InProcessTeammateTaskState` in `AppState`, returns `InProcessSpawnOutput` with `abortController` and `teammateContext`
-- **AgentTool/**: Coordinator calls `Agent(description, prompt, subagent_type)` → spawns worker. Worker results arrive as `<task-notification>` XML in user-role messages containing `task-id`, `status`, `summary`, `result`, `usage`
+- **AgentTool/**: Coordinator calls `Agent(description, prompt, subagent_type)` → spawns worker. Worker results arrive as `[WORKER COMPLETED/FAILED/STOPPED]` plain-text notifications in user-role messages containing agent ID, status, summary, result, usage
 - **TeamCreateTool/**: Higher-level team concept for persistent multi-agent swarms. Creates team file, resets task list, registers cleanup. Beyond our current scope.
 - **Key insight**: Workers **cannot see the coordinator's conversation**. Every prompt must be self-contained. Coordinator must synthesize research findings before delegating implementation — never write "based on your findings."
 
@@ -192,7 +192,7 @@ Claude Code is a CLI REPL — its main loop is always alive, waiting for user in
 | Aspect | Claude Code (CLI REPL) | Prism (HTTP Request) |
 |---|---|---|
 | **Loop lifecycle** | Always alive — REPL event loop waits for input indefinitely | Terminates — agentic loop exits when model returns text |
-| **Notification delivery** | `enqueueAgentNotification()` pushes `<task-notification>` XML into the session's `inputQueue` as a synthetic user message — the REPL naturally drains it on the next iteration | `injectMessage()` pushes to an in-memory array + fires `_notifyWake()` to wake a suspended Promise inside the loop |
+| **Notification delivery** | `enqueueAgentNotification()` pushes `<task-notification>` XML into the session's `inputQueue` as a synthetic user message — the REPL naturally drains it on the next iteration | `injectMessage()` pushes a plain-text `[WORKER COMPLETED]` notification to an in-memory array + fires `_notifyWake()` to wake a suspended Promise inside the loop |
 | **Coordinator wait** | Implicit — the REPL is always listening, so notifications are consumed as soon as they arrive | Explicit — when the coordinator outputs text after spawning workers, the loop checks `CoordinatorService.listWorkers()` and suspends via `await new Promise()` with event-driven wake + 2s safety poll + 5min hard timeout |
 | **Re-prompting** | The notification appears as the next user turn — the model responds naturally | After draining notifications into `currentMessages`, the loop `continue`s to re-prompt the model with the new user-role messages |
 | **Multi-round handling** | Each notification triggers a new REPL turn independently | The loop re-checks `listWorkers()` after each model response — if workers are still running, it waits again. Handles N rounds automatically |
@@ -206,7 +206,7 @@ Claude Code is a CLI REPL — its main loop is always alive, waiting for user in
 - TeamCreateTool (higher-level swarm concept): https://github.com/razakiau/claude-code/blob/main/src/tools/TeamCreateTool/TeamCreateTool.ts
 - Swarm utilities directory (inProcessRunner, spawnInProcess, teamHelpers, etc.): https://github.com/razakiau/claude-code/tree/main/src/utils/swarm
 
-**Key takeaway**: Our `injectMessage()` + `_notifyWake()` + coordinator wait pattern is the HTTP-equivalent of Claude Code's always-alive REPL `inputQueue`. Both deliver `<task-notification>` XML as user-role messages — the difference is purely in the transport lifecycle.
+**Key takeaway**: Our `injectMessage()` + `_notifyWake()` + coordinator wait pattern is the HTTP-equivalent of Claude Code's always-alive REPL `inputQueue`. Claude Code uses `<task-notification>` XML; we use plain-text `[WORKER COMPLETED]` notifications for better model compliance and zero echo risk — the difference is purely in the transport lifecycle.
 
 **Infrastructure** ✅ (already built):
 - `CoordinatorService.js`: `decompose()` (LLM-based task decomposition via Claude Sonnet, max 5 sub-tasks), `execute()` (parallel worktree spawning), `approveMerge()`, `abort()`, status polling, `_runWorker()` stub
@@ -225,9 +225,9 @@ Claude Code is a CLI REPL — its main loop is always alive, waiting for user in
 | 1 | **Coordinator Tools** | `spawn_agent`, `send_message`, `stop_agent` tool schemas + dispatch | `ToolSchemaService`, `ToolOrchestratorService`, `AutoApprovalEngine` |
 | 2 | **Worker Execution Engine** | Wire `AgenticLoopService.runAgenticLoop()` into `_runWorker()` with per-worker conversation context, AbortController, auto-approve, scoped tools | `CoordinatorService.js` |
 | 3 | **Coordinator System Prompt** | Adapted from Claude Code's `getCoordinatorSystemPrompt()`: 4-phase workflow, tool usage examples, synthesization rules, continue-vs-spawn matrix | `CoordinatorPrompt.js` (new), `SystemPromptAssembler.js` |
-| 4 | **Task Notification Pipeline** | `<task-notification>` XML generation + injection into coordinator's active conversation as user-role messages | `AgenticLoopService.js`, `CoordinatorService.js` |
+| 4 | **Task Notification Pipeline** | Plain-text `[WORKER COMPLETED]` notification generation + injection into coordinator's active conversation as user-role messages | `AgenticLoopService.js`, `CoordinatorService.js` |
 | 5 | **Task System Activation** | Activate `owner`, `blocks`/`blockedBy` DAG enforcement, `task_claim` tool, `activeForm` UI text | `AgenticTaskService.js` |
-| 6 | **Retina UI Updates** | Live worker status in CoordinatorPanel, tool result renderers for spawn/send/stop, `<task-notification>` card renderer | `CoordinatorPanel.js`, `ToolResultRenderers.js`, `MessageList.js` |
+| 6 | **Retina UI Updates** | Live worker status in CoordinatorPanel, tool result renderers for spawn/send/stop, worker notification card renderer | `CoordinatorPanel.js`, `ToolResultRenderers.js`, `MessageList.js` |
 | 7 | **WebSocket Progress** | Replace polling with `coordinator_worker_update` push events | `coordinator.js` route |
 
 **Design decisions**:

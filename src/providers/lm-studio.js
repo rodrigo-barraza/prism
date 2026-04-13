@@ -656,6 +656,43 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
     });
   },
 
+  // ── Embedding Generation ─────────────────────────────────
+
+  /**
+   * Generate an embedding via the OpenAI-compatible /v1/embeddings endpoint.
+   * LM Studio exposes this for any loaded embedding model (e.g. Granite,
+   * nomic-embed, etc.).
+   *
+   * @param {string} content - Text to embed
+   * @param {string} model   - Embedding model key
+   * @param {object} [options] - Optional { dimensions }
+   * @returns {Promise<{ embedding: number[], dimensions: number }>}
+   */
+  async generateEmbedding(content, model, options = {}) {
+    const baseUrl = getBaseUrl();
+    logger.provider("LM Studio", `generateEmbedding model=${model} baseUrl=${baseUrl}`);
+    try {
+      const payload = { model, input: content };
+      if (options.dimensions) payload.dimensions = options.dimensions;
+
+      const response = await fetchOpenAICompat(
+        `${baseUrl}/v1/embeddings`,
+        payload,
+      );
+      const data = await response.json();
+
+      const embedding = data.data?.[0]?.embedding;
+      if (!embedding) {
+        throw new Error("No embedding data in LM Studio response");
+      }
+
+      return { embedding, dimensions: embedding.length };
+    } catch (error) {
+      if (error instanceof ProviderError) throw error;
+      throw new ProviderError("lm-studio", error.message, 500, error);
+    }
+  },
+
   async captionImage(
     images,
     prompt = "Describe this image.",

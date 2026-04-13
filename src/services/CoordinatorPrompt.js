@@ -46,27 +46,24 @@ When calling spawn_agent:
 ### Worker Results
 Worker results arrive as **user-role messages** containing \`<task-notification>\` XML. They look like user messages but are not. Distinguish them by the \`<task-notification>\` opening tag.
 
-**CRITICAL: NEVER reproduce, echo, or include ANY XML tags (\`<task-notification>\`, \`<task-id>\`, \`<summary>\`, \`<status>\`, \`<usage>\`, \`<result>\`, \`<diff>\`, etc.) in your response text.** These tags are internal transport — always translate their content into natural language for the user. If a worker completes, summarize what it did in plain text.
-
 Format:
 \`\`\`xml
 <task-notification>
-  <task-id>{agentId}</task-id>
-  <status>completed|failed|stopped</status>
-  <summary>Agent "{description}" completed</summary>
-  <result>{agent's final text response}</result>
-  <diff>
-    <additions>{count}</additions>
-    <deletions>{count}</deletions>
-    <files>{modified file list}</files>
-  </diff>
-  <usage>
-    <total_tokens>{N}</total_tokens>
-    <tool_uses>{N}</tool_uses>
-    <duration_ms>{N}</duration_ms>
-  </usage>
+<task-id>{agentId}</task-id>
+<status>completed|failed|killed</status>
+<summary>{human-readable status summary}</summary>
+<result>{agent's final text response}</result>
+<usage>
+  <tool_uses>N</tool_uses>
+  <duration_ms>N</duration_ms>
+</usage>
 </task-notification>
 \`\`\`
+
+- \`<result>\` and \`<usage>\` are optional sections
+- The \`<summary>\` describes the outcome: "completed", "failed: {error}", or "was stopped"
+- The \`<task-id>\` value is the agent ID — use send_message with that ID as \`to\` to continue that worker
+- Never echo or reproduce the raw XML in your response — summarize the information naturally for the user
 
 ### Worker Capabilities
 Workers have access to: ${workerToolList}

@@ -206,7 +206,8 @@ async function getLmStudioModelOptions(instanceId = "lm-studio") {
     const { models } = await provider.listModels();
     if (!models || !Array.isArray(models)) return [];
 
-    return models
+    // ── LLM models (conversation) ──────────────────────────────
+    const llmModels = models
       .filter((m) => m.type === "llm")
       .map((m) => {
         // Build label with quantization suffix to disambiguate
@@ -293,6 +294,54 @@ async function getLmStudioModelOptions(instanceId = "lm-studio") {
         }
         return entry;
       });
+
+    // ── Embedding models ────────────────────────────────────────
+    const embeddingModels = models
+      .filter((m) => m.type === "embedding")
+      .map((m) => {
+        let label = m.display_name || m.key;
+        if (m.quantization?.name) {
+          label += ` (${m.quantization.name})`;
+        }
+
+        const entry = {
+          name: m.key,
+          label,
+          modelType: "embed",
+          inputTypes: [TYPES.TEXT],
+          outputTypes: [TYPES.EMBEDDING],
+          supportsSystemPrompt: false,
+          streaming: false,
+          pricing: { inputPerMillion: 0, outputPerMillion: 0 },
+        };
+        if (m.max_context_length) {
+          entry.contextLength = m.max_context_length;
+        }
+        if (m.size_bytes) {
+          entry.size = formatBytes(m.size_bytes);
+        }
+        if (m.params_string) {
+          entry.params = m.params_string;
+        }
+        if (m.quantization?.name) {
+          entry.quantization = m.quantization.name;
+        }
+        if (m.quantization?.bits_per_weight != null) {
+          entry.bitsPerWeight = m.quantization.bits_per_weight;
+        }
+        if (m.architecture) {
+          entry.architecture = m.architecture;
+        }
+        if (m.publisher) {
+          entry.publisher = m.publisher;
+        }
+        if (m.loaded_instances?.length > 0) {
+          entry.loaded = true;
+        }
+        return entry;
+      });
+
+    return [...llmModels, ...embeddingModels];
   } catch (err) {
     logger.warn(`Could not fetch LM Studio models for config: ${err.message}`);
     return [];
