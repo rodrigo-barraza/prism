@@ -181,7 +181,6 @@ async function executeToolGeneric(name, args = {}, ctx = {}) {
     if (ctx.project) body.project = ctx.project;
     if (ctx.agent) body.agent = ctx.agent;
     if (ctx.username) body.username = ctx.username;
-    console.log(`[TOOL-DEBUG] ${name} body.project=${body.project} ctx.project=${ctx.project}`);
     return fetchJsonPost(url, body, contextHeaders);
   }
 
