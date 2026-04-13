@@ -12,14 +12,13 @@ import {
   getModelByName,
 } from "../config.js";
 import { getProvider } from "../providers/index.js";
+import { isInstance } from "../providers/instance-registry.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 import { sleep } from "../utils/utilities.js";
 import { COLLECTIONS } from "../constants.js";
 
-// Providers that run on local GPU — grouped into a single sequential bucket
-const LOCAL_PROVIDERS = new Set(["lm-studio", "vllm", "ollama", "llama-cpp"]);
 
 const BENCHMARKS_COL = COLLECTIONS.BENCHMARKS;
 const RUNS_COL = COLLECTIONS.BENCHMARK_RUNS;
@@ -437,18 +436,19 @@ const BenchmarkService = {
       `[benchmark] Starting run ${runId} — "${benchmark.name}" against ${models.length} model(s)`,
     );
 
-    // ── Provider-bucketed concurrent execution ──────────────────
-    // Different providers run concurrently (parallel Promise.all).
-    // Models within the same provider run sequentially with a
-    // 100ms stagger to avoid rate-limiting.
-    // Local GPU providers share a single sequential bucket.
+    // ── Instance-aware concurrent execution ─────────────────────
+    // Cloud providers: all models under the same provider run sequentially
+    // within a bucket, but different providers run concurrently.
+    // Local providers: models are bucketed per instance (e.g. lm-studio,
+    // lm-studio-2), and each instance runs up to its concurrency limit.
+    // Two instances means two concurrent local inference streams.
 
     const INTRA_PROVIDER_DELAY_MS = 100;
 
-    // Group models by provider; collapse all local providers into one bucket
+    // Group models by provider; local providers use their instance ID as key
     const buckets = new Map();
     for (const m of models) {
-      const key = LOCAL_PROVIDERS.has(m.provider) ? "__local__" : m.provider;
+      const key = m.provider; // Instance IDs are already unique (lm-studio, lm-studio-2, etc.)
       if (!buckets.has(key)) buckets.set(key, []);
       buckets.get(key).push(m);
     }
@@ -458,8 +458,8 @@ const BenchmarkService = {
     );
 
     // Each bucket runs its models sequentially; all buckets run concurrently.
-    // NOTE: The process-level GPU mutex lives in prepareGenerationContext() (via LocalModelQueue),
-    // so concurrent benchmark runs and chat requests are globally serialized there.
+    // The process-level GPU mutex (LocalModelQueue) still serializes at the
+    // instance level, so concurrent benchmark runs and chat requests are safe.
     let aborted = false;
     const bucketPromises = [...buckets.entries()].map(
       async ([_key, bucketModels]) => {
@@ -473,7 +473,7 @@ const BenchmarkService = {
           if (i > 0) await sleep(INTRA_PROVIDER_DELAY_MS);
           const model = bucketModels[i];
           if (onModelStart) {
-            try { onModelStart({ ...model, isLocal: LOCAL_PROVIDERS.has(model.provider) }); } catch { /* noop */ }
+            try { onModelStart({ ...model, isLocal: isInstance(model.provider) }); } catch { /* noop */ }
           }
           activeGenerationCount++;
           let result;
