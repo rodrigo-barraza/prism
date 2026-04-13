@@ -14,6 +14,10 @@ const DEFAULTS = {
     embeddingProvider: "",
     embeddingModel: "",
   },
+  agents: {
+    subagentProvider: "",
+    subagentModel: "",
+  },
 };
 
 // ─── In-memory cache ──────────────────────────────────────────────────────────

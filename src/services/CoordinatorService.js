@@ -12,6 +12,7 @@ import { calculateTokensPerSec } from "../utils/math.js";
 import localModelQueue from "./LocalModelQueue.js";
 import ToolOrchestratorService from "./ToolOrchestratorService.js";
 import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
+import SettingsService from "./SettingsService.js";
 
 // ────────────────────────────────────────────────────────────
 // CoordinatorService — Multi-Agent Orchestration
@@ -71,12 +72,23 @@ const MAX_WORKER_ITERATIONS = 15;
 const DECOMPOSITION_PROVIDER = "anthropic";
 const DECOMPOSITION_MODEL = "claude-sonnet-4-20250514";
 
-/** Fallback model/provider for workers when coordinator is on a local GPU model
- *  AND concurrency is 1 (single-slot). When LOCAL_MODEL_CONCURRENCY >= 2,
- *  workers use the local model directly, capped at (concurrency - 1) slots
- *  to reserve one for the coordinator. */
-const LOCAL_WORKER_FALLBACK_PROVIDER = "anthropic";
-const LOCAL_WORKER_FALLBACK_MODEL = "claude-haiku-4-5-20251001";
+/**
+ * Resolve the user-configured subagent provider/model from settings.
+ * Returns null when no subagent model is configured — callers should
+ * keep the local provider (queuing) when this returns null.
+ * @returns {Promise<{ provider: string, model: string }|null>}
+ */
+async function getWorkerFallback() {
+  try {
+    const agents = await SettingsService.getSection("agents");
+    if (agents?.subagentProvider && agents?.subagentModel) {
+      return { provider: agents.subagentProvider, model: agents.subagentModel };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 /** Active coordinator tasks keyed by taskId (manual panel flow) */
 const activeTasks = new Map();
@@ -216,6 +228,9 @@ export default class CoordinatorService {
       return { error: `Maximum concurrent workers (${MAX_WORKERS}) reached. Wait for a worker to complete or stop one.` };
     }
 
+    // Resolve the user-configured (or hardcoded) subagent fallback
+    const workerFallback = await getWorkerFallback();
+
     // ── Local model guard with instance pooling ────────────────
     // When the coordinator is on a local provider, distribute workers
     // across ALL instances of the same type (e.g. lm-studio, lm-studio-2).
@@ -240,9 +255,13 @@ export default class CoordinatorService {
         ).length;
 
         if (localRunning >= maxWorkerSlots) {
-          workerProvider = LOCAL_WORKER_FALLBACK_PROVIDER;
-          workerModel = LOCAL_WORKER_FALLBACK_MODEL;
-          logger.info(`[Coordinator] All local slots full (${localRunning}/${maxWorkerSlots} across ${siblings.length} instances) — worker will use ${LOCAL_WORKER_FALLBACK_MODEL}`);
+          if (workerFallback) {
+            workerProvider = workerFallback.provider;
+            workerModel = workerFallback.model;
+            logger.info(`[Coordinator] All local slots full (${localRunning}/${maxWorkerSlots} across ${siblings.length} instances) — worker will use ${workerFallback.model}`);
+          } else {
+            logger.info(`[Coordinator] All local slots full (${localRunning}/${maxWorkerSlots}) — no subagent model configured, worker will queue on local provider`);
+          }
         } else {
           // Find the least-busy instance to assign this worker to
           let bestInstance = null;
@@ -265,18 +284,24 @@ export default class CoordinatorService {
             logger.info(
               `[Coordinator] Assigned worker to ${bestInstance.id} (${bestAvailable} slots free, ${siblings.length} instance${siblings.length > 1 ? "s" : ""} pooled) — model "${workerModel}"`,
             );
+          } else if (workerFallback) {
+            // All instances busy — fall back to configured cloud model
+            workerProvider = workerFallback.provider;
+            workerModel = workerFallback.model;
+            logger.info(`[Coordinator] No available local slots — worker will use ${workerFallback.model}`);
           } else {
-            // All instances busy — fall back to cloud
-            workerProvider = LOCAL_WORKER_FALLBACK_PROVIDER;
-            workerModel = LOCAL_WORKER_FALLBACK_MODEL;
-            logger.info(`[Coordinator] No available local slots — worker will use ${LOCAL_WORKER_FALLBACK_MODEL}`);
+            logger.info(`[Coordinator] No available local slots and no subagent model configured — worker will queue on local provider`);
           }
         }
       } else {
         // Total concurrency across all instances is 1 — no spare slots
-        workerProvider = LOCAL_WORKER_FALLBACK_PROVIDER;
-        workerModel = LOCAL_WORKER_FALLBACK_MODEL;
-        logger.info(`[Coordinator] Single-slot concurrency across ${siblings.length} instance(s) — workers will use ${LOCAL_WORKER_FALLBACK_MODEL} instead`);
+        if (workerFallback) {
+          workerProvider = workerFallback.provider;
+          workerModel = workerFallback.model;
+          logger.info(`[Coordinator] Single-slot concurrency across ${siblings.length} instance(s) — workers will use ${workerFallback.model} instead`);
+        } else {
+          logger.info(`[Coordinator] Single-slot concurrency and no subagent model configured — worker will queue on local provider`);
+        }
       }
     }
 
@@ -859,9 +884,14 @@ export default class CoordinatorService {
         const totalSlots = siblings.reduce((sum, inst) => sum + inst.concurrency, 0);
 
         if (totalSlots <= 1) {
-          logger.info(`[Coordinator] Panel worker ${worker.id}: single-slot concurrency → falling back to ${LOCAL_WORKER_FALLBACK_MODEL}`);
-          resolvedProviderName = LOCAL_WORKER_FALLBACK_PROVIDER;
-          resolvedModel = LOCAL_WORKER_FALLBACK_MODEL;
+          const panelFallback = await getWorkerFallback();
+          if (panelFallback) {
+            logger.info(`[Coordinator] Panel worker ${worker.id}: single-slot concurrency → falling back to ${panelFallback.model}`);
+            resolvedProviderName = panelFallback.provider;
+            resolvedModel = panelFallback.model;
+          } else {
+            logger.info(`[Coordinator] Panel worker ${worker.id}: single-slot concurrency, no subagent model configured — queuing on local provider`);
+          }
         } else {
           // Find least-busy instance
           let bestInstance = null;
