@@ -5,18 +5,13 @@ import MongoWrapper from "../wrappers/MongoWrapper.js";
 import FileService from "../services/FileService.js";
 import { assembleGraph } from "../services/WorkflowAssembler.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
+import { COLLECTIONS } from "../constants.js";
 
 const router = Router();
-const WORKFLOWS_COL = "workflows";
+const WORKFLOWS_COL = COLLECTIONS.WORKFLOWS;
 
 /** Media fields on messages that may contain base64 data URLs. */
 const MEDIA_FIELDS = ["images", "audio", "video", "pdf"];
-
-function getDb() {
-  const client = MongoWrapper.getClient(MONGO_DB_NAME);
-  if (!client) return null;
-  return client.db(MONGO_DB_NAME);
-}
 
 /**
  * Upload a single value if it's a base64 data URL, returning the minio:// ref.
@@ -297,7 +292,7 @@ function computeWorkflowMeta(nodes) {
  */
 router.get("/", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const source = req.query.source || "retina";
@@ -323,7 +318,7 @@ router.get("/", async (req, res, next) => {
  */
 router.get("/:id", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     let filter;
@@ -358,7 +353,7 @@ router.get("/:id", async (req, res, next) => {
  */
 router.post("/", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const project = req.project;
@@ -395,7 +390,7 @@ router.post("/", async (req, res, next) => {
     const convIds = req.body.conversationIds;
     if (Array.isArray(convIds) && convIds.length > 0) {
       const conversations = await db
-        .collection("conversations")
+        .collection(COLLECTIONS.CONVERSATIONS)
         .find({ id: { $in: convIds } })
         .project({ totalCost: 1 })
         .toArray();
@@ -430,7 +425,7 @@ router.post("/", async (req, res, next) => {
  */
 router.put("/:id", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     let filter;
@@ -484,7 +479,7 @@ router.put("/:id", async (req, res, next) => {
  */
 router.patch("/:id/conversations", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     let filter;
@@ -513,7 +508,7 @@ router.patch("/:id/conversations", async (req, res, next) => {
     const allConvIds = workflow?.conversationIds || [];
     if (allConvIds.length > 0) {
       const conversations = await db
-        .collection("conversations")
+        .collection(COLLECTIONS.CONVERSATIONS)
         .find({ id: { $in: allConvIds } })
         .project({ totalCost: 1 })
         .toArray();
@@ -539,7 +534,7 @@ router.patch("/:id/conversations", async (req, res, next) => {
  */
 router.delete("/:id", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     let filter;

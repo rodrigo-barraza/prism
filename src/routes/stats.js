@@ -2,15 +2,9 @@ import { Router } from "express";
 import logger from "../utils/logger.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
+import { COLLECTIONS } from "../constants.js";
 
 const router = Router();
-const REQUESTS_COL = "requests";
-
-function getDb() {
-  const client = MongoWrapper.getClient(MONGO_DB_NAME);
-  if (!client) return null;
-  return client.db(MONGO_DB_NAME);
-}
 
 /**
  * GET /stats/models
@@ -19,7 +13,7 @@ function getDb() {
  */
 router.get("/models", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const username = req.username;
@@ -47,7 +41,7 @@ router.get("/models", async (req, res, next) => {
     ];
 
     const results = await db
-      .collection(REQUESTS_COL)
+      .collection(COLLECTIONS.REQUESTS)
       .aggregate(pipeline)
       .toArray();
 

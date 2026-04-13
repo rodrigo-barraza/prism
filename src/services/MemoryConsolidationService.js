@@ -6,7 +6,7 @@ import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 import { cosineSimilarity, calculateTokensPerSec } from "../utils/math.js";
-import { estimateTokens } from "../utils/CostCalculator.js";
+import { estimateTokens, calculateTextCost } from "../utils/CostCalculator.js";
 import { TYPES, getPricing } from "../config.js";
 import { COLLECTIONS } from "../constants.js";
 import SettingsService from "./SettingsService.js";
@@ -228,17 +228,15 @@ async function applyActions(actions, agent, project, username, { traceId, endpoi
 // ─── Run Tracking ────────────────────────────────────────────────────────────
 
 async function getRunCount(project) {
-  const client = MongoWrapper.getClient(MONGO_DB_NAME);
-  if (!client) return 0;
-  const db = client.db(MONGO_DB_NAME);
+  const db = MongoWrapper.getDb(MONGO_DB_NAME);
+  if (!db) return 0;
   const doc = await db.collection(RUNS_COLLECTION).findOne({ project });
   return doc?.sessionsSinceLastRun || 0;
 }
 
 async function incrementRunCount(project) {
-  const client = MongoWrapper.getClient(MONGO_DB_NAME);
-  if (!client) return;
-  const db = client.db(MONGO_DB_NAME);
+  const db = MongoWrapper.getDb(MONGO_DB_NAME);
+  if (!db) return;
   await db.collection(RUNS_COLLECTION).updateOne(
     { project },
     { $inc: { sessionsSinceLastRun: 1 } },
@@ -247,9 +245,8 @@ async function incrementRunCount(project) {
 }
 
 async function resetRunCount(project) {
-  const client = MongoWrapper.getClient(MONGO_DB_NAME);
-  if (!client) return;
-  const db = client.db(MONGO_DB_NAME);
+  const db = MongoWrapper.getDb(MONGO_DB_NAME);
+  if (!db) return;
   await db.collection(RUNS_COLLECTION).updateOne(
     { project },
     {
@@ -268,10 +265,9 @@ async function resetRunCount(project) {
  * Record a consolidation run for audit trail.
  */
 async function recordHistory(project, trigger, memoriesBefore, actions, summary, durationMs) {
-  const client = MongoWrapper.getClient(MONGO_DB_NAME);
-  if (!client) return;
+  const db = MongoWrapper.getDb(MONGO_DB_NAME);
+  if (!db) return;
 
-  const db = client.db(MONGO_DB_NAME);
   const mergeCount = actions.filter((a) => a.type === "merge").reduce(
     (sum, a) => sum + (a.sourceIds?.length || 0), 0,
   );
@@ -301,10 +297,9 @@ async function recordHistory(project, trigger, memoriesBefore, actions, summary,
  * Returns true if more runs are allowed.
  */
 async function canRunToday(project) {
-  const client = MongoWrapper.getClient(MONGO_DB_NAME);
-  if (!client) return true;
+  const db = MongoWrapper.getDb(MONGO_DB_NAME);
+  if (!db) return true;
 
-  const db = client.db(MONGO_DB_NAME);
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
@@ -346,10 +341,9 @@ const MemoryConsolidationService = {
     }
 
     // Load all memories with embeddings
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) throw new Error("Database not available");
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
+    if (!db) throw new Error("Database not available");
 
-    const db = client.db(MONGO_DB_NAME);
     const agentId = agent || "CODING";
     const allMemories = await db
       .collection(COLLECTIONS.MEMORIES)
@@ -410,9 +404,10 @@ const MemoryConsolidationService = {
       const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[consolidationModel];
       let estimatedCost = null;
       if (pricing) {
-        const inputCost = (approxInputTokens / 1_000_000) * (pricing.inputPerMillion || 0);
-        const outputCost = (approxOutputTokens / 1_000_000) * (pricing.outputPerMillion || 0);
-        estimatedCost = parseFloat((inputCost + outputCost).toFixed(8));
+        estimatedCost = calculateTextCost(
+          { inputTokens: approxInputTokens, outputTokens: approxOutputTokens },
+          pricing,
+        );
       }
 
       RequestLogger.log({
@@ -547,10 +542,9 @@ const MemoryConsolidationService = {
    * @returns {Promise<Array>} Consolidation history entries, newest first
    */
   async getHistory(project, limit = 10) {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) return [];
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
+    if (!db) return [];
 
-    const db = client.db(MONGO_DB_NAME);
     return db
       .collection(HISTORY_COLLECTION)
       .find({ project })

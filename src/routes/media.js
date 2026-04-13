@@ -8,19 +8,13 @@ const router = express.Router();
 const CONVERSATIONS_COL = COLLECTIONS.CONVERSATIONS;
 const REQUESTS_COL = COLLECTIONS.REQUESTS;
 
-function getDb() {
-  const client = MongoWrapper.getClient(MONGO_DB_NAME);
-  if (!client) return null;
-  return client.db(MONGO_DB_NAME);
-}
-
 // ============================================================
 // GET /media — extract media from the caller's project conversations
 // AND from agent image generation requests (for skipConversation callers)
 // ============================================================
 router.get("/", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const {

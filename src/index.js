@@ -173,7 +173,7 @@ setupWebSocket(wss);
   // Critical for $lookup aggregation performance (conversations ↔ requests).
   // Without these, $lookup does full collection scans per document.
   try {
-    const db = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (db) {
       await Promise.all([
         // requests — used by $lookup from conversations and session joins
@@ -215,7 +215,7 @@ setupWebSocket(wss);
 
   // Clear any stale isGenerating flags left over from a previous crash/restart
   try {
-    const db = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (db) {
       const { modifiedCount } = await db
         .collection("conversations")
@@ -244,7 +244,7 @@ setupWebSocket(wss);
       return persona?.project;
     }).filter(Boolean);
 
-    const db = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (db && agentProjects.length > 0) {
       const agentConvs = await db.collection("conversations")
         .find({ project: { $in: agentProjects } })
@@ -268,7 +268,7 @@ setupWebSocket(wss);
   try {
     const { default: MCPClientService } = await import("./services/MCPClientService.js");
     const { default: AgentPersonaRegistryMCP } = await import("./services/AgentPersonaRegistry.js");
-    const mcpDb = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
+    const mcpDb = MongoWrapper.getDb(MONGO_DB_NAME);
     const codingProject = AgentPersonaRegistryMCP.get("CODING")?.project || "coding";
     if (mcpDb) {
       await MCPClientService.connectAllFromDB(mcpDb, codingProject, "admin");
@@ -282,7 +282,7 @@ setupWebSocket(wss);
   const CONSOLIDATION_INTERVAL_MS = 6 * 60 * 60 * 1000;
   setInterval(async () => {
     try {
-      const db = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
+      const db = MongoWrapper.getDb(MONGO_DB_NAME);
       if (!db) return;
 
       // Find all distinct projects with at least some memories

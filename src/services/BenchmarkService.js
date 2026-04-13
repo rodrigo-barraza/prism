@@ -155,15 +155,7 @@ function filterAvailableModels(models) {
   });
 }
 
-// ============================================================
-// Database helpers
-// ============================================================
 
-function getDb() {
-  const client = MongoWrapper.getClient(MONGO_DB_NAME);
-  if (!client) return null;
-  return client.db(MONGO_DB_NAME);
-}
 
 
 // ============================================================
@@ -537,7 +529,7 @@ const BenchmarkService = {
 
     // Persist run (even partial / aborted runs)
     if (results.length > 0) {
-      const db = getDb();
+      const db = MongoWrapper.getDb(MONGO_DB_NAME);
       if (db) {
         await db.collection(RUNS_COL).insertOne(run);
       }
@@ -554,7 +546,7 @@ const BenchmarkService = {
   // ── CRUD Helpers ────────────────────────────────────────────
 
   async create(data, project, username) {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) throw new Error("Database not available");
 
     const now = new Date().toISOString();
@@ -581,7 +573,7 @@ const BenchmarkService = {
   },
 
   async list(project) {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) throw new Error("Database not available");
 
     return db
@@ -592,7 +584,7 @@ const BenchmarkService = {
   },
 
   async getById(id, project) {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) throw new Error("Database not available");
 
     return db.collection(BENCHMARKS_COL).findOne({ id, project });
@@ -600,7 +592,7 @@ const BenchmarkService = {
 
 
   async remove(id, project) {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) throw new Error("Database not available");
 
     await db.collection(BENCHMARKS_COL).deleteOne({ id, project });
@@ -608,7 +600,7 @@ const BenchmarkService = {
   },
 
   async getRuns(benchmarkId, project) {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) throw new Error("Database not available");
 
     return db
@@ -619,14 +611,14 @@ const BenchmarkService = {
   },
 
   async getRunById(runId, project) {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) throw new Error("Database not available");
 
     return db.collection(RUNS_COL).findOne({ id: runId, project });
   },
 
   async getLatestRun(benchmarkId, project) {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) throw new Error("Database not available");
 
     return db

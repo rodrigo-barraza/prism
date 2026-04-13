@@ -38,3 +38,37 @@ export const COLLECTIONS = {
  * Usage: `totalCost: COST_SUM_EXPR` inside `$group` stages.
  */
 export const COST_SUM_EXPR = { $sum: { $ifNull: ["$estimatedCost", 0] } };
+
+/**
+ * Reusable MongoDB $group aggregation expression for summing total tokens.
+ * Adds inputTokens + outputTokens (both nullable).
+ * Usage: `totalTokens: TOTAL_TOKENS_EXPR` inside `$group` stages.
+ */
+export const TOTAL_TOKENS_EXPR = {
+  $sum: {
+    $add: [
+      { $ifNull: ["$inputTokens", 0] },
+      { $ifNull: ["$outputTokens", 0] },
+    ],
+  },
+};
+
+/**
+ * Reusable MongoDB $group aggregation expression for averaging tok/s.
+ * Filters out null and outlier (>10k) values before averaging.
+ * Usage: `avgTokensPerSec: AVG_TOKENS_PER_SEC_EXPR` inside `$group` stages.
+ */
+export const AVG_TOKENS_PER_SEC_EXPR = {
+  $avg: {
+    $cond: [
+      {
+        $and: [
+          { $ne: ["$tokensPerSec", null] },
+          { $lte: ["$tokensPerSec", 10000] },
+        ],
+      },
+      "$tokensPerSec",
+      null,
+    ],
+  },
+};

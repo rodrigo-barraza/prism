@@ -7,25 +7,18 @@ import BenchmarkService from "../services/BenchmarkService.js";
 import ActiveGenerationTracker from "../services/ActiveGenerationTracker.js";
 import logger from "../utils/logger.js";
 import { resolveArchParams, estimateMemory } from "../utils/gguf-arch.js";
-import { COLLECTIONS, COST_SUM_EXPR } from "../constants.js";
+import { COLLECTIONS, COST_SUM_EXPR, TOTAL_TOKENS_EXPR, AVG_TOKENS_PER_SEC_EXPR } from "../constants.js";
 import os from "os";
 
 const router = express.Router();
 const { REQUESTS: REQUESTS_COL, CONVERSATIONS: CONVERSATIONS_COL, WORKFLOWS: WORKFLOWS_COL } = COLLECTIONS;
-
-// ── Helper: get DB handle ────────────────────────────────────
-function getDb() {
-  const client = MongoWrapper.getClient(MONGO_DB_NAME);
-  if (!client) return null;
-  return client.db(MONGO_DB_NAME);
-}
 
 // ============================================================
 // GET /admin/requests — paginated, filtered request logs
 // ============================================================
 router.get("/requests", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const {
@@ -87,7 +80,7 @@ router.get("/requests", async (req, res, next) => {
 // ============================================================
 router.get("/requests/:id", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const doc = await db
@@ -107,7 +100,7 @@ router.get("/requests/:id", async (req, res, next) => {
 // ============================================================
 router.get("/requests/:id/associations", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const request = await db
@@ -191,7 +184,7 @@ router.get("/requests/:id/associations", async (req, res, next) => {
 // ============================================================
 router.get("/stats", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const { from, to, project } = req.query;
@@ -213,20 +206,7 @@ router.get("/stats", async (req, res, next) => {
           totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
           totalCost: COST_SUM_EXPR,
           avgLatency: { $avg: { $ifNull: ["$totalTime", 0] } },
-          avgTokensPerSec: {
-            $avg: {
-              $cond: [
-                {
-                  $and: [
-                    { $ne: ["$tokensPerSec", null] },
-                    { $lte: ["$tokensPerSec", 10000] },
-                  ],
-                },
-                "$tokensPerSec",
-                null,
-              ],
-            },
-          },
+          avgTokensPerSec: AVG_TOKENS_PER_SEC_EXPR,
           successCount: {
             $sum: { $cond: [{ $eq: ["$success", true] }, 1, 0] },
           },
@@ -291,7 +271,7 @@ router.get("/stats", async (req, res, next) => {
 // ============================================================
 router.get("/stats/projects", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const { from, to, project } = req.query;
@@ -311,30 +291,10 @@ router.get("/stats/projects", async (req, res, next) => {
           totalRequests: { $sum: 1 },
           totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
           totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
-          totalTokens: {
-            $sum: {
-              $add: [
-                { $ifNull: ["$inputTokens", 0] },
-                { $ifNull: ["$outputTokens", 0] },
-              ],
-            },
-          },
+          totalTokens: TOTAL_TOKENS_EXPR,
           totalCost: COST_SUM_EXPR,
           avgLatency: { $avg: { $ifNull: ["$totalTime", 0] } },
-          avgTokensPerSec: {
-            $avg: {
-              $cond: [
-                {
-                  $and: [
-                    { $ne: ["$tokensPerSec", null] },
-                    { $lte: ["$tokensPerSec", 10000] },
-                  ],
-                },
-                "$tokensPerSec",
-                null,
-              ],
-            },
-          },
+          avgTokensPerSec: AVG_TOKENS_PER_SEC_EXPR,
           lastRequest: { $max: "$timestamp" },
           _models: { $addToSet: "$model" },
           _providers: { $addToSet: "$provider" },
@@ -436,7 +396,7 @@ router.get("/stats/projects", async (req, res, next) => {
 // ============================================================
 router.get("/stats/users", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const pipeline = [
@@ -444,14 +404,7 @@ router.get("/stats/users", async (req, res, next) => {
         $group: {
           _id: "$username",
           totalRequests: { $sum: 1 },
-          totalTokens: {
-            $sum: {
-              $add: [
-                { $ifNull: ["$inputTokens", 0] },
-                { $ifNull: ["$outputTokens", 0] },
-              ],
-            },
-          },
+          totalTokens: TOTAL_TOKENS_EXPR,
           totalCost: COST_SUM_EXPR,
           avgLatency: { $avg: { $ifNull: ["$totalTime", 0] } },
           lastRequest: { $max: "$timestamp" },
@@ -486,7 +439,7 @@ router.get("/stats/users", async (req, res, next) => {
 // ============================================================
 router.get("/stats/models", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const { from, to, project } = req.query;
@@ -506,30 +459,10 @@ router.get("/stats/models", async (req, res, next) => {
           totalRequests: { $sum: 1 },
           totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
           totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
-          totalTokens: {
-            $sum: {
-              $add: [
-                { $ifNull: ["$inputTokens", 0] },
-                { $ifNull: ["$outputTokens", 0] },
-              ],
-            },
-          },
+          totalTokens: TOTAL_TOKENS_EXPR,
           totalCost: COST_SUM_EXPR,
           avgLatency: { $avg: { $ifNull: ["$totalTime", 0] } },
-          avgTokensPerSec: {
-            $avg: {
-              $cond: [
-                {
-                  $and: [
-                    { $ne: ["$tokensPerSec", null] },
-                    { $lte: ["$tokensPerSec", 10000] },
-                  ],
-                },
-                "$tokensPerSec",
-                null,
-              ],
-            },
-          },
+          avgTokensPerSec: AVG_TOKENS_PER_SEC_EXPR,
           _convIds: { $addToSet: "$conversationId" },
           toolsUsed: {
             $max: { $cond: [{ $eq: ["$toolsUsed", true] }, true, false] },
@@ -625,7 +558,7 @@ router.get("/stats/models", async (req, res, next) => {
 // ============================================================
 router.get("/stats/endpoints", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const { from, to } = req.query;
@@ -642,14 +575,7 @@ router.get("/stats/endpoints", async (req, res, next) => {
         $group: {
           _id: "$endpoint",
           totalRequests: { $sum: 1 },
-          totalTokens: {
-            $sum: {
-              $add: [
-                { $ifNull: ["$inputTokens", 0] },
-                { $ifNull: ["$outputTokens", 0] },
-              ],
-            },
-          },
+          totalTokens: TOTAL_TOKENS_EXPR,
           totalCost: COST_SUM_EXPR,
           avgLatency: { $avg: { $ifNull: ["$totalTime", 0] } },
           successRate: { $avg: { $cond: [{ $eq: ["$success", true] }, 1, 0] } },
@@ -684,7 +610,7 @@ router.get("/stats/endpoints", async (req, res, next) => {
 // ============================================================
 router.get("/stats/costs", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const { from, to } = req.query;
@@ -719,20 +645,7 @@ router.get("/stats/costs", async (req, res, next) => {
               totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
               totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
               totalRequests: { $sum: 1 },
-              avgTokensPerSec: {
-                $avg: {
-                  $cond: [
-                    {
-                      $and: [
-                        { $ne: ["$tokensPerSec", null] },
-                        { $lte: ["$tokensPerSec", 10000] },
-                      ],
-                    },
-                    "$tokensPerSec",
-                    null,
-                  ],
-                },
-              },
+              avgTokensPerSec: AVG_TOKENS_PER_SEC_EXPR,
             },
           },
         ])
@@ -750,20 +663,7 @@ router.get("/stats/costs", async (req, res, next) => {
               totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
               totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
               totalRequests: { $sum: 1 },
-              avgTokensPerSec: {
-                $avg: {
-                  $cond: [
-                    {
-                      $and: [
-                        { $ne: ["$tokensPerSec", null] },
-                        { $lte: ["$tokensPerSec", 10000] },
-                      ],
-                    },
-                    "$tokensPerSec",
-                    null,
-                  ],
-                },
-              },
+              avgTokensPerSec: AVG_TOKENS_PER_SEC_EXPR,
             },
           },
           { $sort: { totalCost: -1 } },
@@ -782,20 +682,7 @@ router.get("/stats/costs", async (req, res, next) => {
               totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
               totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
               totalRequests: { $sum: 1 },
-              avgTokensPerSec: {
-                $avg: {
-                  $cond: [
-                    {
-                      $and: [
-                        { $ne: ["$tokensPerSec", null] },
-                        { $lte: ["$tokensPerSec", 10000] },
-                      ],
-                    },
-                    "$tokensPerSec",
-                    null,
-                  ],
-                },
-              },
+              avgTokensPerSec: AVG_TOKENS_PER_SEC_EXPR,
             },
           },
           { $sort: { totalCost: -1 } },
@@ -814,20 +701,7 @@ router.get("/stats/costs", async (req, res, next) => {
               totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
               totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
               totalRequests: { $sum: 1 },
-              avgTokensPerSec: {
-                $avg: {
-                  $cond: [
-                    {
-                      $and: [
-                        { $ne: ["$tokensPerSec", null] },
-                        { $lte: ["$tokensPerSec", 10000] },
-                      ],
-                    },
-                    "$tokensPerSec",
-                    null,
-                  ],
-                },
-              },
+              avgTokensPerSec: AVG_TOKENS_PER_SEC_EXPR,
             },
           },
           { $sort: { totalCost: -1 } },
@@ -846,20 +720,7 @@ router.get("/stats/costs", async (req, res, next) => {
               totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
               totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
               totalRequests: { $sum: 1 },
-              avgTokensPerSec: {
-                $avg: {
-                  $cond: [
-                    {
-                      $and: [
-                        { $ne: ["$tokensPerSec", null] },
-                        { $lte: ["$tokensPerSec", 10000] },
-                      ],
-                    },
-                    "$tokensPerSec",
-                    null,
-                  ],
-                },
-              },
+              avgTokensPerSec: AVG_TOKENS_PER_SEC_EXPR,
             },
           },
           { $sort: { totalCost: -1 } },
@@ -878,20 +739,7 @@ router.get("/stats/costs", async (req, res, next) => {
               totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
               totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
               totalRequests: { $sum: 1 },
-              avgTokensPerSec: {
-                $avg: {
-                  $cond: [
-                    {
-                      $and: [
-                        { $ne: ["$tokensPerSec", null] },
-                        { $lte: ["$tokensPerSec", 10000] },
-                      ],
-                    },
-                    "$tokensPerSec",
-                    null,
-                  ],
-                },
-              },
+              avgTokensPerSec: AVG_TOKENS_PER_SEC_EXPR,
             },
           },
           { $sort: { totalCost: -1 } },
@@ -910,20 +758,7 @@ router.get("/stats/costs", async (req, res, next) => {
               totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
               totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
               totalRequests: { $sum: 1 },
-              avgTokensPerSec: {
-                $avg: {
-                  $cond: [
-                    {
-                      $and: [
-                        { $ne: ["$tokensPerSec", null] },
-                        { $lte: ["$tokensPerSec", 10000] },
-                      ],
-                    },
-                    "$tokensPerSec",
-                    null,
-                  ],
-                },
-              },
+              avgTokensPerSec: AVG_TOKENS_PER_SEC_EXPR,
             },
           },
           { $sort: { totalCost: -1 } },
@@ -946,20 +781,7 @@ router.get("/stats/costs", async (req, res, next) => {
               totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
               totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
               totalRequests: { $sum: 1 },
-              avgTokensPerSec: {
-                $avg: {
-                  $cond: [
-                    {
-                      $and: [
-                        { $ne: ["$tokensPerSec", null] },
-                        { $lte: ["$tokensPerSec", 10000] },
-                      ],
-                    },
-                    "$tokensPerSec",
-                    null,
-                  ],
-                },
-              },
+              avgTokensPerSec: AVG_TOKENS_PER_SEC_EXPR,
             },
           },
           { $sort: { totalCost: -1 } },
@@ -1075,7 +897,7 @@ router.get("/stats/costs", async (req, res, next) => {
 // ============================================================
 router.get("/stats/timeline", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const { hours = 24, from, to, project } = req.query;
@@ -1214,7 +1036,7 @@ router.get("/stats/timeline", async (req, res, next) => {
 // ============================================================
 router.get("/conversations", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const {
@@ -1431,7 +1253,7 @@ router.get("/conversations", async (req, res, next) => {
 // ============================================================
 router.get("/conversations/filters", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const [convProjects, reqProjects, usernames] = await Promise.all([
@@ -1458,7 +1280,7 @@ router.get("/conversations/filters", async (req, res, next) => {
 // ============================================================
 router.get("/conversations/stats", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const project = req.query.project || null;
@@ -1487,7 +1309,7 @@ router.get("/conversations/stats", async (req, res, next) => {
 // Powered by Change Streams when available; polls otherwise.
 // ============================================================
 router.get("/conversations/stream", async (req, res) => {
-  const db = getDb();
+  const db = MongoWrapper.getDb(MONGO_DB_NAME);
   if (!db) return res.status(503).json({ error: "Database not available" });
 
   res.writeHead(200, {
@@ -1652,7 +1474,7 @@ router.get("/changes/stream", async (req, res) => {
 // ============================================================
 router.get("/conversations/:id", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const doc = await db
@@ -1672,7 +1494,7 @@ router.get("/conversations/:id", async (req, res, next) => {
 // ============================================================
 router.get("/live", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const { minutes = 5 } = req.query;
@@ -1760,7 +1582,7 @@ router.get("/live", async (req, res, next) => {
 // GET /admin/health — system health
 // ============================================================
 router.get("/health", async (_req, res) => {
-  const db = getDb();
+  const db = MongoWrapper.getDb(MONGO_DB_NAME);
   const mongoStatus = db ? "connected" : "disconnected";
 
   let dbStats = null;
@@ -1932,7 +1754,7 @@ router.post("/lm-studio/estimate", async (req, res, next) => {
  */
 router.get("/workflows", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const {
@@ -2020,7 +1842,7 @@ router.get("/workflows", async (req, res, next) => {
  */
 router.get("/workflows/:id", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const { ObjectId } = await import("mongodb");
@@ -2047,7 +1869,7 @@ router.get("/workflows/:id", async (req, res, next) => {
 // ============================================================
 router.get("/media", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const {
@@ -2296,7 +2118,7 @@ router.get("/media", async (req, res, next) => {
 // ============================================================
 router.get("/text", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const {
@@ -2395,7 +2217,7 @@ router.get("/text", async (req, res, next) => {
 // ============================================================
 router.get("/traces", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const {
@@ -2568,7 +2390,7 @@ router.get("/traces", async (req, res, next) => {
 // ============================================================
 router.get("/traces/:id", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const requests = await db

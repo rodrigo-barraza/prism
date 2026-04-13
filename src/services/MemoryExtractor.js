@@ -7,7 +7,7 @@ import SemanticMemoryService from "./SemanticMemoryService.js";
 import ProceduralMemoryService from "./ProceduralMemoryService.js";
 import RequestLogger from "./RequestLogger.js";
 import logger from "../utils/logger.js";
-import { estimateTokens } from "../utils/CostCalculator.js";
+import { estimateTokens, calculateTextCost } from "../utils/CostCalculator.js";
 import { TYPES, getPricing } from "../config.js";
 import { calculateTokensPerSec } from "../utils/math.js";
 
@@ -134,9 +134,10 @@ export default class MemoryExtractor {
         const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[SUMMARIZATION_MODEL];
         let estimatedCost = null;
         if (pricing) {
-          const inputCost = (approxInputTokens / 1_000_000) * (pricing.inputPerMillion || 0);
-          const outputCost = (approxOutputTokens / 1_000_000) * (pricing.outputPerMillion || 0);
-          estimatedCost = parseFloat((inputCost + outputCost).toFixed(8));
+          estimatedCost = calculateTextCost(
+            { inputTokens: approxInputTokens, outputTokens: approxOutputTokens },
+            pricing,
+          );
         }
 
         RequestLogger.log({

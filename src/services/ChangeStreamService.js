@@ -72,7 +72,7 @@ function openStream(db, collectionName) {
       // Attempt to re-open after a delay
       streams.delete(collectionName);
       setTimeout(() => {
-        const db = MongoWrapper.getClient(MONGO_DB_NAME)?.db(MONGO_DB_NAME);
+        const db = MongoWrapper.getDb(MONGO_DB_NAME);
         if (db) {
           const reopened = openStream(db, collectionName);
           if (reopened) {
@@ -102,13 +102,11 @@ const ChangeStreamService = {
    * Call this after MongoDB is connected.
    */
   async init() {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) {
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
+    if (!db) {
       logger.warn("ChangeStreamService: No MongoDB client available");
       return;
     }
-
-    const db = client.db(MONGO_DB_NAME);
 
     // Test if Change Streams are supported by opening a brief watch
     try {

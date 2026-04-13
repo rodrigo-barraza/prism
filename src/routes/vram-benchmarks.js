@@ -8,12 +8,6 @@ import { COLLECTIONS } from "../constants.js";
 
 const COLLECTION = COLLECTIONS.VRAM_BENCHMARKS;
 
-function getDb() {
-  const client = MongoWrapper.getClient(MONGO_DB_NAME);
-  if (!client) return null;
-  return client.db(MONGO_DB_NAME);
-}
-
 /**
  * GET /vram-benchmarks
  * Returns all benchmark entries, with optional query filters.
@@ -27,7 +21,7 @@ function getDb() {
  */
 router.get("/", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const filter = { error: null };
@@ -125,7 +119,7 @@ router.get("/", async (req, res, next) => {
  */
 router.get("/machines", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const pipeline = [
@@ -184,7 +178,7 @@ router.get("/machines", async (req, res, next) => {
  */
 router.get("/settings", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const labels = await db
@@ -211,7 +205,7 @@ router.get("/settings", async (req, res, next) => {
  */
 router.get("/contexts", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const filter = { error: null };

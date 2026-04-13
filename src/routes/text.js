@@ -2,22 +2,16 @@ import express from "express";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
+import { COLLECTIONS } from "../constants.js";
 
 const router = express.Router();
-const CONVERSATIONS_COL = "conversations";
-
-function getDb() {
-  const client = MongoWrapper.getClient(MONGO_DB_NAME);
-  if (!client) return null;
-  return client.db(MONGO_DB_NAME);
-}
 
 // ============================================================
 // GET /text — extract text content from the caller's project conversations
 // ============================================================
 router.get("/", async (req, res, next) => {
   try {
-    const db = getDb();
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const {
@@ -87,7 +81,7 @@ router.get("/", async (req, res, next) => {
 
     const countPipeline = [...pipeline, { $count: "total" }];
     const [countResult] = await db
-      .collection(CONVERSATIONS_COL)
+      .collection(COLLECTIONS.CONVERSATIONS)
       .aggregate(countPipeline)
       .toArray();
     const total = countResult?.total || 0;
@@ -95,7 +89,7 @@ router.get("/", async (req, res, next) => {
     pipeline.push({ $skip: skip }, { $limit: lim });
 
     const items = await db
-      .collection(CONVERSATIONS_COL)
+      .collection(COLLECTIONS.CONVERSATIONS)
       .aggregate(pipeline)
       .toArray();
 
