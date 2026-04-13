@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import logger from "../utils/logger.js";
 import mutationQueue from "./MutationQueue.js";
 import { getProvider } from "../providers/index.js";
+import { getInstancesByType, getInstanceType } from "../providers/instance-registry.js";
 import RequestLogger from "./RequestLogger.js";
 import { estimateTokens } from "../utils/CostCalculator.js";
 import { TYPES, getPricing } from "../config.js";
@@ -215,31 +216,67 @@ export default class CoordinatorService {
       return { error: `Maximum concurrent workers (${MAX_WORKERS}) reached. Wait for a worker to complete or stop one.` };
     }
 
-    // ── Local model guard ──────────────────────────────────────
-    // If LOCAL_MODEL_CONCURRENCY >= 2, workers can share the local
-    // GPU — cap at (concurrency - 1) to reserve a slot for the
-    // coordinator. When concurrency is 1, fall back to a cloud model.
+    // ── Local model guard with instance pooling ────────────────
+    // When the coordinator is on a local provider, distribute workers
+    // across ALL instances of the same type (e.g. lm-studio, lm-studio-2).
+    // Reserve 1 slot on the coordinator's own instance, then fill workers
+    // round-robin on the least-busy instances. If all local slots are full,
+    // fall back to a cloud model.
     let workerProvider = providerName;
     let workerModel = model || resolvedModel;
     if (localModelQueue.isLocal(providerName)) {
-      const maxLocalWorkers = localModelQueue.maxConcurrency(providerName) - 1;
-      if (maxLocalWorkers >= 1) {
-        // Enough GPU slots — check how many local workers are already running
+      const providerType = getInstanceType(providerName) || providerName;
+      const siblings = getInstancesByType(providerType);
+
+      // Calculate total slots across all instances, reserving 1 for the coordinator
+      const totalSlots = siblings.reduce((sum, inst) => sum + inst.concurrency, 0);
+      const maxWorkerSlots = totalSlots - 1; // Reserve 1 for coordinator
+
+      if (maxWorkerSlots >= 1) {
+        // Count running local workers across ALL instances of this type
+        const siblingIds = new Set(siblings.map((s) => s.id));
         const localRunning = Array.from(activeWorkers.values()).filter(
-          (w) => w.status === "running" && localModelQueue.isLocal(w.providerName),
+          (w) => w.status === "running" && siblingIds.has(w.providerName),
         ).length;
-        if (localRunning >= maxLocalWorkers) {
+
+        if (localRunning >= maxWorkerSlots) {
           workerProvider = LOCAL_WORKER_FALLBACK_PROVIDER;
           workerModel = LOCAL_WORKER_FALLBACK_MODEL;
-          logger.info(`[Coordinator] Local slots full (${localRunning}/${maxLocalWorkers}) — worker will use ${LOCAL_WORKER_FALLBACK_MODEL}`);
+          logger.info(`[Coordinator] All local slots full (${localRunning}/${maxWorkerSlots} across ${siblings.length} instances) — worker will use ${LOCAL_WORKER_FALLBACK_MODEL}`);
         } else {
-          logger.info(`[Coordinator] Local slot available (${localRunning}/${maxLocalWorkers}) — worker will use local model "${workerModel}"`);
+          // Find the least-busy instance to assign this worker to
+          let bestInstance = null;
+          let bestAvailable = -1;
+          for (const inst of siblings) {
+            const active = localModelQueue._getQueue(inst.id).activeCount;
+            const available = inst.concurrency - active;
+            // Skip the coordinator's own instance if it has only 1 slot
+            if (inst.id === providerName && inst.concurrency <= 1) continue;
+            // Reserve 1 slot on coordinator's instance
+            const reservedAvailable = inst.id === providerName ? available - 1 : available;
+            if (reservedAvailable > bestAvailable) {
+              bestAvailable = reservedAvailable;
+              bestInstance = inst;
+            }
+          }
+
+          if (bestInstance && bestAvailable > 0) {
+            workerProvider = bestInstance.id;
+            logger.info(
+              `[Coordinator] Assigned worker to ${bestInstance.id} (${bestAvailable} slots free, ${siblings.length} instance${siblings.length > 1 ? "s" : ""} pooled) — model "${workerModel}"`,
+            );
+          } else {
+            // All instances busy — fall back to cloud
+            workerProvider = LOCAL_WORKER_FALLBACK_PROVIDER;
+            workerModel = LOCAL_WORKER_FALLBACK_MODEL;
+            logger.info(`[Coordinator] No available local slots — worker will use ${LOCAL_WORKER_FALLBACK_MODEL}`);
+          }
         }
       } else {
-        // Concurrency 1 — no spare slots, always fall back to cloud
+        // Total concurrency across all instances is 1 — no spare slots
         workerProvider = LOCAL_WORKER_FALLBACK_PROVIDER;
         workerModel = LOCAL_WORKER_FALLBACK_MODEL;
-        logger.info(`[Coordinator] Single-slot concurrency — workers will use ${LOCAL_WORKER_FALLBACK_MODEL} instead`);
+        logger.info(`[Coordinator] Single-slot concurrency across ${siblings.length} instance(s) — workers will use ${LOCAL_WORKER_FALLBACK_MODEL} instead`);
       }
     }
 
@@ -814,16 +851,33 @@ export default class CoordinatorService {
       let resolvedProviderName = providerName || DECOMPOSITION_PROVIDER;
       let resolvedModel = model || DECOMPOSITION_MODEL;
 
-      // Local model guard — same logic as spawnFromTool:
-      // use local model when concurrency allows, fall back to cloud otherwise.
+      // Local model guard with instance pooling — same logic as spawnFromTool:
+      // distribute workers across all instances of the same type.
       if (localModelQueue.isLocal(resolvedProviderName)) {
-        const maxLocalWorkers = localModelQueue.maxConcurrency(resolvedProviderName) - 1;
-        if (maxLocalWorkers < 1) {
+        const providerType = getInstanceType(resolvedProviderName) || resolvedProviderName;
+        const siblings = getInstancesByType(providerType);
+        const totalSlots = siblings.reduce((sum, inst) => sum + inst.concurrency, 0);
+
+        if (totalSlots <= 1) {
           logger.info(`[Coordinator] Panel worker ${worker.id}: single-slot concurrency → falling back to ${LOCAL_WORKER_FALLBACK_MODEL}`);
           resolvedProviderName = LOCAL_WORKER_FALLBACK_PROVIDER;
           resolvedModel = LOCAL_WORKER_FALLBACK_MODEL;
         } else {
-          logger.info(`[Coordinator] Panel worker ${worker.id}: local concurrency ${localModelQueue.maxConcurrency(resolvedProviderName)} — using local model "${resolvedModel}"`);
+          // Find least-busy instance
+          let bestInstance = null;
+          let bestAvailable = -1;
+          for (const inst of siblings) {
+            const active = localModelQueue._getQueue(inst.id).activeCount;
+            const available = inst.concurrency - active;
+            if (available > bestAvailable) {
+              bestAvailable = available;
+              bestInstance = inst;
+            }
+          }
+          if (bestInstance) {
+            resolvedProviderName = bestInstance.id;
+            logger.info(`[Coordinator] Panel worker ${worker.id}: assigned to ${bestInstance.id} (${siblings.length} instance${siblings.length > 1 ? "s" : ""} pooled, ${totalSlots} total slots) — model "${resolvedModel}"`);
+          }
         }
       }
 

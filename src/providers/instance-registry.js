@@ -149,3 +149,22 @@ export function listInstanceIds() {
 export function listInstanceTypes() {
   return [...new Set([...registry.values()].map((e) => e.type))];
 }
+
+/**
+ * Get all instances of a given provider type.
+ * @param {string} type - Provider type (e.g. "lm-studio")
+ * @returns {InstanceEntry[]}
+ */
+export function getInstancesByType(type) {
+  return [...registry.values()].filter((e) => e.type === type);
+}
+
+/**
+ * Resolve the provider type from an instance ID.
+ * e.g. "lm-studio-2" → "lm-studio", "ollama" → "ollama"
+ * @param {string} id - Instance ID
+ * @returns {string|null}
+ */
+export function getInstanceType(id) {
+  return registry.get(id)?.type || null;
+}
