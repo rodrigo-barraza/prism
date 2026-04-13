@@ -170,7 +170,7 @@ router.get("/", async (req, res, next) => {
         // Agent-generated images are always origin=ai
         const reqMatch = {
           project: req.project,
-          operation: "agent:image",
+          operation: { $in: ["agent:image", "agent:iteration"] },
           success: true,
           "responsePayload.images": { $exists: true, $ne: [] },
         };

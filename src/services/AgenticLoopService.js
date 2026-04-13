@@ -340,6 +340,7 @@ export default class AgenticLoopService {
         let passStreamedThinking = "";
         let passThinkingSignature = "";
         const passPendingToolCalls = [];
+        const passStreamedImages = [];
         const passStart = performance.now();
         let passFirstTokenTime = null;
         let passGenerationEnd = null;
@@ -520,7 +521,9 @@ export default class AgenticLoopService {
                   } catch (err) {
                       logger.error(`MinIO upload failed: ${err.message}`);
                   }
-                  streamedImages.push(minioRef || `data:${chunk.mimeType || "image/png"};base64,${chunk.data}`);
+                  const imgRef = minioRef || `data:${chunk.mimeType || "image/png"};base64,${chunk.data}`;
+                  streamedImages.push(imgRef);
+                  passStreamedImages.push(imgRef);
               }
               emit({ type: "image", ...(minioRef ? {} : { data: chunk.data }), mimeType: chunk.mimeType, minioRef });
               continue;
@@ -578,40 +581,46 @@ export default class AgenticLoopService {
 
         if (signal?.aborted) break;
 
-        // Log the intermediate request
+        // ── Deferred iteration log ──────────────────────────────
+        // Compute timing/cost eagerly, but defer the actual DB write
+        // until after tool execution so tool-generated images (e.g.
+        // generate_image, browser screenshots) are captured in
+        // responsePayload.images.
         const passGenerationSec = passFirstTokenTime && passGenerationEnd ? (passGenerationEnd - passFirstTokenTime) / 1000 : null;
-        const passTotalSec = (performance.now() - passStart) / 1000;
-        const passTokensPerSec = calculateTokensPerSec(passUsage.outputTokens, passGenerationSec);
         const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[resolvedModel];
-        const passEstimatedCost = calculateTextCost(passUsage, pricing);
-
-        RequestLogger.logChatGeneration({
-          requestId: `${ctx.requestId}-${iterations}`,
-          endpoint: "/agent",
-          operation: "agent:iteration",
-          project,
-          username,
-          clientIp: ctx.clientIp,
-          agent: agent || null,
-          provider: providerName,
-          model: resolvedModel,
-          agentSessionId,
-          traceId: traceId || null,
-          success: true,
-          usage: passUsage,
-          estimatedCost: passEstimatedCost,
-          tokensPerSec: passTokensPerSec,
-          timeToGenerationSec: passFirstTokenTime ? (passFirstTokenTime - passStart) / 1000 : null,
-          generationSec: passGenerationSec,
-          totalSec: passTotalSec,
-          options: passOptions,
-          messages: currentMessages,
-          text: passStreamedText,
-          thinking: passStreamedThinking,
-          toolCalls: passPendingToolCalls,
-          outputCharacters: passOutputCharacters,
-          agenticIteration: iterations,
-        }).catch(err => logger.error(`[AgenticLoopService] Failed to log intermediate request: ${err.message}`));
+        const logIteration = () => {
+          const passTotalSec = (performance.now() - passStart) / 1000;
+          const passTokensPerSec = calculateTokensPerSec(passUsage.outputTokens, passGenerationSec);
+          const passEstimatedCost = calculateTextCost(passUsage, pricing);
+          RequestLogger.logChatGeneration({
+            requestId: `${ctx.requestId}-${iterations}`,
+            endpoint: "/agent",
+            operation: "agent:iteration",
+            project,
+            username,
+            clientIp: ctx.clientIp,
+            agent: agent || null,
+            provider: providerName,
+            model: resolvedModel,
+            agentSessionId,
+            traceId: traceId || null,
+            success: true,
+            usage: passUsage,
+            estimatedCost: passEstimatedCost,
+            tokensPerSec: passTokensPerSec,
+            timeToGenerationSec: passFirstTokenTime ? (passFirstTokenTime - passStart) / 1000 : null,
+            generationSec: passGenerationSec,
+            totalSec: passTotalSec,
+            options: passOptions,
+            messages: currentMessages,
+            text: passStreamedText,
+            thinking: passStreamedThinking,
+            images: passStreamedImages,
+            toolCalls: passPendingToolCalls,
+            outputCharacters: passOutputCharacters,
+            agenticIteration: iterations,
+          }).catch(err => logger.error(`[AgenticLoopService] Failed to log intermediate request: ${err.message}`));
+        };
 
         // If the LLM returned tool calls, we execute them and loop
         if (passPendingToolCalls.length > 0) {
@@ -652,6 +661,7 @@ export default class AgenticLoopService {
             if (!approvalResult?.approved) {
               // User rejected — skip these tool calls and break
               emit({ type: "status", message: `Tool execution rejected: ${needsApproval.map((t) => t.name).join(", ")}` });
+              logIteration();
               break;
             }
 
@@ -727,13 +737,16 @@ export default class AgenticLoopService {
               // into the session's images[] array and appear in /admin/media
               if (res?.result?.screenshotRef) {
                 streamedImages.push(res.result.screenshotRef);
+                passStreamedImages.push(res.result.screenshotRef);
               }
 
               // Handle generate_image results — emit image event
               // and track in streamedImages, then strip heavy data from context
               if (res?.result?.image?.data) {
                 const img = res.result.image;
-                streamedImages.push(img.minioRef || `data:${img.mimeType};base64,${img.data}`);
+                const toolImgRef = img.minioRef || `data:${img.mimeType};base64,${img.data}`;
+                streamedImages.push(toolImgRef);
+                passStreamedImages.push(toolImgRef);
                 emit({
                   type: "image",
                   data: img.data,
@@ -781,6 +794,10 @@ export default class AgenticLoopService {
           if (memoryToolsUsed) {
             emit({ type: "status", message: "memories_updated" });
           }
+
+          // Log iteration AFTER tool execution so tool-generated images
+          // are captured in responsePayload.images
+          logIteration();
 
           // Append to context for next pass
           const assistantMsg = {
@@ -895,6 +912,7 @@ export default class AgenticLoopService {
               logger.warn("[AgenticLoop] All workers completed but no notifications received");
             }
           }
+          logIteration();
           break;
         }
       }

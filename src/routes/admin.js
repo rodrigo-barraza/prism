@@ -1890,8 +1890,8 @@ router.get("/media", async (req, res, next) => {
     const [convProjects, convUsernames, reqProjects, reqUsernames] = await Promise.all([
       db.collection(CONVERSATIONS_COL).distinct("project"),
       db.collection(CONVERSATIONS_COL).distinct("username"),
-      db.collection(REQUESTS_COL).distinct("project", { operation: "agent:image", success: true }),
-      db.collection(REQUESTS_COL).distinct("username", { operation: "agent:image", success: true }),
+      db.collection(REQUESTS_COL).distinct("project", { operation: { $in: ["agent:image", "agent:iteration"] }, success: true, "responsePayload.images": { $exists: true, $ne: [] } }),
+      db.collection(REQUESTS_COL).distinct("username", { operation: { $in: ["agent:image", "agent:iteration"] }, success: true, "responsePayload.images": { $exists: true, $ne: [] } }),
     ]);
     const allProjects = [...new Set([...convProjects, ...reqProjects])].filter(Boolean).sort();
     const allUsernames = [...new Set([...convUsernames, ...reqUsernames])].filter(Boolean).sort();
@@ -2024,7 +2024,7 @@ router.get("/media", async (req, res, next) => {
     if (!type || type === "image") {
       if (origin !== "user") {
         const reqMatch = {
-          operation: "agent:image",
+          operation: { $in: ["agent:image", "agent:iteration"] },
           success: true,
           "responsePayload.images": { $exists: true, $ne: [] },
         };
