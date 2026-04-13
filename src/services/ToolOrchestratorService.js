@@ -378,19 +378,36 @@ export default class ToolOrchestratorService {
     // Inject reference images from conversation context into generate_image args.
     // The tools-api endpoint needs these as explicit args since it doesn't have
     // access to Prism's conversation messages.
+    // IMPORTANT: Only extract from the LAST user message to avoid collecting
+    // stale images from conversation history, and prefer HTTP URLs to avoid
+    // payload size issues (base64 images can be several MB).
     if (name === "generate_image" && ctx.messages) {
       const referenceImages = [];
-      for (const msg of ctx.messages) {
-        if (msg.images && Array.isArray(msg.images)) {
+      // Find the last user message with images
+      for (let i = ctx.messages.length - 1; i >= 0; i--) {
+        const msg = ctx.messages[i];
+        if (msg.role === "user" && msg.images && Array.isArray(msg.images) && msg.images.length > 0) {
+          logger.info(`[ToolOrchestrator] generate_image: found ${msg.images.length} image(s) on last user message`);
           for (const img of msg.images) {
-            if (typeof img === "string" && img.startsWith("data:")) {
+            if (typeof img === "string" && (img.startsWith("http://") || img.startsWith("https://"))) {
               referenceImages.push(img);
+              logger.info(`[ToolOrchestrator] generate_image: accepted HTTP image ref (${img.substring(0, 80)}...)`);
+            } else if (typeof img === "string" && img.startsWith("data:")) {
+              // Skip large base64 data URLs — they would exceed tools-api's body-parser limit.
+              // The generate_image endpoint fetches HTTP URLs directly, which is more efficient.
+              logger.info(`[ToolOrchestrator] generate_image: skipping base64 data URL (too large for HTTP transport)`);
+            } else {
+              logger.warn(`[ToolOrchestrator] generate_image: REJECTED image ref (type=${typeof img}, prefix=${String(img).substring(0, 30)})`);
             }
           }
+          break; // Only check the last user message
         }
       }
       if (referenceImages.length > 0) {
         args = { ...args, referenceImages };
+        logger.info(`[ToolOrchestrator] generate_image: injecting ${referenceImages.length} reference image(s) into tool args`);
+      } else {
+        logger.info(`[ToolOrchestrator] generate_image: no reference images found in conversation`);
       }
     }
 

@@ -123,7 +123,7 @@ export function convertToolsToGoogle(tools) {
   ];
 }
 
-function convertMessages(messages) {
+async function convertMessages(messages) {
   const result = [];
 
   for (let i = 0; i < messages.length; i++) {
@@ -159,18 +159,33 @@ function convertMessages(messages) {
     // Only include media for user messages — model-generated media
     // require a thought_signature when sent back, so we skip them.
     if (item.role !== "assistant") {
-      // All media fields are arrays of data URLs
+      // All media fields are arrays of data URLs or HTTP URLs
       for (const field of ["images", "audio", "video", "pdf"]) {
         const arr = item[field];
         if (arr && Array.isArray(arr)) {
-          for (const dataUrl of arr) {
-            const match = dataUrl.match(
+          for (const mediaRef of arr) {
+            const match = mediaRef.match(
               /^data:([\w-]+\/[\w.+-]+);base64,(.+)$/,
             );
             if (match) {
               parts.push({
                 inlineData: { mimeType: match[1], data: match[2] },
               });
+            } else if (mediaRef.startsWith("http://") || mediaRef.startsWith("https://")) {
+              // HTTP URLs — fetch and convert to inline base64
+              try {
+                const response = await fetch(mediaRef);
+                if (response.ok) {
+                  const arrayBuffer = await response.arrayBuffer();
+                  const base64Data = Buffer.from(arrayBuffer).toString("base64");
+                  const mimeType = response.headers.get("content-type") || "image/jpeg";
+                  parts.push({
+                    inlineData: { mimeType, data: base64Data },
+                  });
+                }
+              } catch (fetchErr) {
+                logger.warn(`[Google] Failed to fetch media URL for inline data: ${fetchErr.message}`);
+              }
             }
           }
         }
@@ -211,7 +226,7 @@ const googleProvider = {
   ) {
     logger.provider("Google", `generateText model=${model}`);
     try {
-      const contents = convertMessages(messages);
+      const contents = await convertMessages(messages);
       const config = {};
       if (options.temperature !== undefined) {
         config.temperature = options.temperature;
@@ -344,7 +359,7 @@ const googleProvider = {
   ) {
     logger.provider("Google", `generateTextStream model=${model}`);
     try {
-      const contents = convertMessages(messages);
+      const contents = await convertMessages(messages);
       const config = {};
       if (options.temperature !== undefined) {
         config.temperature = options.temperature;
