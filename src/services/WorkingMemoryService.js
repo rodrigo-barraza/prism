@@ -48,25 +48,25 @@ const WorkingMemoryService = {
    * @param {object} params
    * @param {string} params.agent
    * @param {string} params.project
-   * @param {string} params.sessionId
+   * @param {string} params.traceId
    * @param {string} params.queryText - User's message (drives retrieval)
    * @param {string} [params.username]
    * @returns {Promise<object>} The assembled working memory state
    */
-  async load({ agent, project, sessionId, queryText, username }) {
+  async load({ agent, project, traceId, queryText, username }) {
     if (!agent) throw new Error("WorkingMemoryService.load requires an agent");
-    if (!sessionId) throw new Error("WorkingMemoryService.load requires a sessionId");
+    if (!traceId) throw new Error("WorkingMemoryService.load requires a traceId");
 
     const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
 
     // Check for existing session workspace
-    let workspace = await collection.findOne({ agent, sessionId });
+    let workspace = await collection.findOne({ agent, traceId });
 
     if (!workspace) {
       workspace = {
         id: crypto.randomUUID(),
         agent,
-        sessionId,
+        traceId,
         project: project || null,
         username: username || null,
         slots: [],
@@ -186,7 +186,7 @@ const WorkingMemoryService = {
     // Update workspace
     const now = new Date().toISOString();
     await collection.updateOne(
-      { agent, sessionId },
+      { agent, traceId },
       {
         $set: {
           slots: finalSlots,
@@ -217,14 +217,14 @@ const WorkingMemoryService = {
   /**
    * Add a note to the scratchpad (intermediate reasoning).
    *
-   * @param {string} sessionId
+   * @param {string} traceId
    * @param {string} agent
    * @param {string} note
    */
-  async addScratchpadNote(sessionId, agent, note) {
+  async addScratchpadNote(traceId, agent, note) {
     const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
     await collection.updateOne(
-      { agent, sessionId },
+      { agent, traceId },
       {
         $push: { scratchpad: { content: note, addedAt: new Date().toISOString() } },
         $set: { updatedAt: new Date().toISOString() },
@@ -313,7 +313,7 @@ const WorkingMemoryService = {
     if (!db) return;
     const collection = db.collection(COLLECTION);
     await Promise.all([
-      collection.createIndex({ agent: 1, sessionId: 1 }, { unique: true }),
+      collection.createIndex({ agent: 1, traceId: 1 }, { unique: true }),
       collection.createIndex({ expiresAt: 1 }),
       collection.createIndex({ id: 1 }, { unique: true }),
     ]);

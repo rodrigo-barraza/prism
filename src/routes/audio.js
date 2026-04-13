@@ -46,7 +46,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
     options: extraOptions,
     conversationId: incomingConversationId,
     conversationMeta: incomingConversationMeta,
-    sessionId: incomingSessionId,
+    traceId: incomingTraceId,
     skipConversation,
     project = "unknown",
     username = "unknown",
@@ -62,15 +62,15 @@ export async function handleVoice(params, emitBinary, emitJSON) {
     conversationMeta = conversationMeta || { title: titleSnippet };
   }
 
-  // ── Session: passthrough ────────────────────────────────────
-  // SessionId is generated client-side and passed on every request.
-  const sessionId = incomingSessionId || null;
+  // ── Trace: passthrough ────────────────────────────────────
+  // TraceId is generated client-side and passed on every request.
+  const traceId = incomingTraceId || null;
 
-  // Inject sessionId into conversationMeta for storage
-  if (sessionId && conversationMeta) {
-    conversationMeta.sessionId = sessionId;
-  } else if (sessionId) {
-    conversationMeta = { sessionId };
+  // Inject traceId into conversationMeta for storage
+  if (traceId && conversationMeta) {
+    conversationMeta.traceId = traceId;
+  } else if (traceId) {
+    conversationMeta = { traceId };
   }
 
   try {
@@ -150,7 +150,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
       provider: providerName,
       model: model || null,
       conversationId: conversationId || null,
-      sessionId: sessionId || null,
+      traceId: traceId || null,
       success: true,
       inputCharacters: text.length,
       totalTime: parseFloat(totalSec.toFixed(3)),
@@ -244,7 +244,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
       clientIp,
       provider: providerName,
       model: model || null,
-      sessionId: sessionId || null,
+      traceId: traceId || null,
       success: false,
       errorMessage: error.message,
       totalTime: totalSec,
@@ -321,7 +321,7 @@ router.post("/", async (req, res, next) => {
     prompt: transcriptionPrompt,
     conversationId: incomingConversationId,
     conversationMeta: incomingConversationMeta,
-    sessionId: incomingSessionId,
+    traceId: incomingTraceId,
     skipConversation,
   } = req.body;
 
@@ -333,15 +333,15 @@ router.post("/", async (req, res, next) => {
     conversationMeta = conversationMeta || { title: "Audio Transcription" };
   }
 
-  // ── Session: passthrough ────────────────────────────────────
-  // SessionId is generated client-side and passed on every request.
-  const sessionId = incomingSessionId || null;
+  // ── Trace: passthrough ────────────────────────────────────
+  // TraceId is generated client-side and passed on every request.
+  const traceId = incomingTraceId || null;
 
-  // Inject sessionId into conversationMeta for storage
-  if (sessionId && conversationMeta) {
-    conversationMeta.sessionId = sessionId;
-  } else if (sessionId) {
-    conversationMeta = { sessionId };
+  // Inject traceId into conversationMeta for storage
+  if (traceId && conversationMeta) {
+    conversationMeta.traceId = traceId;
+  } else if (traceId) {
+    conversationMeta = { traceId };
   }
 
   try {
@@ -428,7 +428,7 @@ router.post("/", async (req, res, next) => {
       provider: providerName,
       model: model || null,
       conversationId,
-      sessionId: sessionId || null,
+      traceId: traceId || null,
       success: true,
       inputTokens: result.usage?.inputTokens || 0,
       outputTokens: result.usage?.outputTokens || 0,
@@ -507,7 +507,7 @@ router.post("/", async (req, res, next) => {
       usage: result.usage || {},
       estimatedCost,
       totalTime: parseFloat(totalSec.toFixed(3)),
-      ...(sessionId && { sessionId }),
+      ...(traceId && { traceId }),
     });
   } catch (error) {
     // Clear isGenerating flag on error
@@ -531,7 +531,7 @@ router.post("/", async (req, res, next) => {
       provider: providerName,
       model: model || null,
       conversationId,
-      sessionId: sessionId || null,
+      traceId: traceId || null,
       success: false,
       errorMessage: error.message,
       totalTime: totalSec,

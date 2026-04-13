@@ -87,7 +87,7 @@ export function buildJsonResponseFromEvents(events, reqBody) {
       model: doneEvent.model || reqBody.model,
       usage: doneEvent.usage || null,
       estimatedCost: doneEvent.estimatedCost ?? null,
-      ...(doneEvent.sessionId && { sessionId: doneEvent.sessionId }),
+      ...(doneEvent.traceId && { traceId: doneEvent.traceId }),
       ...(doneEvent.conversationId && { conversationId: doneEvent.conversationId }),
     },
   };

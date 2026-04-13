@@ -181,7 +181,7 @@ function buildConsolidationInput(clusters, allMemories) {
 
 // ─── Action Execution ────────────────────────────────────────────────────────
 
-async function applyActions(actions, agent, project, username, { sessionId, endpoint } = {}) {
+async function applyActions(actions, agent, project, username, { traceId, endpoint } = {}) {
   const results = { merged: 0, deleted: 0, errors: 0 };
 
   for (const action of actions) {
@@ -201,7 +201,7 @@ async function applyActions(actions, agent, project, username, { sessionId, endp
           title: action.merged.title,
           content: action.merged.content,
           conversationId: null,
-          sessionId: sessionId || null,
+          traceId: traceId || null,
           endpoint: endpoint || null,
         });
 
@@ -336,7 +336,7 @@ const MemoryConsolidationService = {
    * @param {function} [params.broadcast] - Optional callback for real-time WebSocket notifications
    * @returns {Promise<object>} Consolidation results
    */
-  async consolidate({ agent = "CODING", project, username, trigger = "manual", broadcast, endpoint, sessionId }) {
+  async consolidate({ agent = "CODING", project, username, trigger = "manual", broadcast, endpoint, traceId }) {
     const startTime = performance.now();
     logger.info(`[MemoryConsolidation] Starting consolidation for project "${project}" (trigger: ${trigger})`);
 
@@ -423,7 +423,7 @@ const MemoryConsolidationService = {
         username: username || "system",
         clientIp: null,
         agent: agent || null,
-        sessionId: sessionId || null,
+        traceId: traceId || null,
         provider: consolidationProvider,
         model: consolidationModel,
         success: llmSuccess,
@@ -468,7 +468,7 @@ const MemoryConsolidationService = {
     }
 
     // Phase 4: Apply changes
-    const results = await applyActions(actions, agentId, project, username, { sessionId, endpoint });
+    const results = await applyActions(actions, agentId, project, username, { traceId, endpoint });
     await resetRunCount(project);
 
     const summary = parsed.summary || `Merged ${results.merged}, deleted ${results.deleted}`;
@@ -512,7 +512,7 @@ const MemoryConsolidationService = {
    * @param {string} [params.username] - Username for attribution
    * @param {function} [params.broadcast] - Optional broadcast callback for WebSocket notifications
    */
-  async checkAndRun({ project, username, broadcast, endpoint, agent, sessionId }) {
+  async checkAndRun({ project, username, broadcast, endpoint, agent, traceId }) {
     try {
       await incrementRunCount(project);
       const count = await getRunCount(project);
@@ -529,7 +529,7 @@ const MemoryConsolidationService = {
           trigger: "session_threshold",
           broadcast,
           endpoint: endpoint || "/agent",
-          sessionId: sessionId || null,
+          traceId: traceId || null,
         }).catch((err) =>
           logger.error(`[MemoryConsolidation] Background consolidation failed: ${err.message}`),
         );

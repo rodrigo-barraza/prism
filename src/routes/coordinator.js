@@ -123,22 +123,22 @@ router.post("/abort/:taskId", async (req, res, next) => {
 /**
  * GET /coordinator/workers
  * List all active workers spawned via chat tools.
- * Optional query: ?sessionId=xxx to filter by parent coordinator session.
+ * Optional query: ?agentSessionId=xxx to filter by parent coordinator session.
  */
 router.get("/workers", async (req, res) => {
-  const { sessionId } = req.query;
-  let workers = CoordinatorService.listWorkers({ parentAgentSessionId: sessionId });
+  const { agentSessionId } = req.query;
+  let workers = CoordinatorService.listWorkers({ parentAgentSessionId: agentSessionId });
 
   // Fall back to persisted workers from the agent_session document
   // when in-memory is empty (page refresh, server restart)
-  if (workers.length === 0 && sessionId) {
+  if (workers.length === 0 && agentSessionId) {
     try {
       const { default: MongoWrapper } = await import("../wrappers/MongoWrapper.js");
       const { MONGO_DB_NAME } = await import("../../secrets.js");
       const { COLLECTIONS } = await import("../constants.js");
       const col = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTIONS.AGENT_SESSIONS);
       const session = await col.findOne(
-        { id: sessionId },
+        { id: agentSessionId },
         { projection: { workers: 1 } },
       );
       if (session?.workers?.length > 0) {

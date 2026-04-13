@@ -62,7 +62,7 @@ const EpisodicMemoryService = {
    * @param {object} params
    * @param {string} params.agent - Agent identifier
    * @param {string} params.project - Project identifier
-   * @param {string} params.sessionId
+   * @param {string} params.traceId
    * @param {string} [params.conversationId]
    * @param {string} params.username
    * @param {string} params.summary - Brief episode summary
@@ -79,7 +79,7 @@ const EpisodicMemoryService = {
   async store({
     agent,
     project,
-    sessionId,
+    traceId,
     conversationId,
     username,
     summary,
@@ -102,7 +102,7 @@ const EpisodicMemoryService = {
     const embedding = await generateEmbedding(embedText, {
       project,
       agent,
-      sessionId,
+      traceId,
     });
 
     const now = new Date().toISOString();
@@ -110,7 +110,7 @@ const EpisodicMemoryService = {
       id: crypto.randomUUID(),
       agent,
       project: project || null,
-      sessionId: sessionId || null,
+      traceId: traceId || null,
       conversationId: conversationId || null,
       username: username || null,
 
@@ -302,7 +302,7 @@ const EpisodicMemoryService = {
     const collection = db.collection(COLLECTION);
     await Promise.all([
       collection.createIndex({ agent: 1, project: 1, createdAt: -1 }),
-      collection.createIndex({ agent: 1, sessionId: 1 }),
+      collection.createIndex({ agent: 1, traceId: 1 }),
       collection.createIndex({ id: 1 }, { unique: true }),
     ]);
     logger.info("[EpisodicMemory] Indexes ensured.");

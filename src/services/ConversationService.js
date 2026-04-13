@@ -234,7 +234,7 @@ const ConversationService = {
     conversationMeta = null,
     { collection = DEFAULT_COLLECTION } = {},
   ) {
-    const sessionId = conversationMeta?.sessionId || null;
+    const traceId = conversationMeta?.traceId || null;
     const col = MongoWrapper.getCollection(MONGO_DB_NAME, collection);
 
     // Auto-create conversation if it doesn't exist
@@ -268,7 +268,7 @@ const ConversationService = {
         totalCost: 0,
         isGenerating: true,
         ...(conversationMeta?.synthetic && { synthetic: true }),
-        ...(sessionId && { sessionId }),
+        ...(traceId && { traceId }),
         ...(parentId && { parentAgentSessionId: parentId }),
 
         createdAt: now,
@@ -288,9 +288,9 @@ const ConversationService = {
     // Build $set — always update timestamp
     const setFields = { updatedAt: now };
 
-    // Set sessionId if provided and not already on the doc
-    if (sessionId) {
-      setFields.sessionId = sessionId;
+    // Set traceId if provided and not already on the doc
+    if (traceId) {
+      setFields.traceId = traceId;
     }
 
     // Apply conversationMeta if provided (title, settings, systemPrompt, parentAgentSessionId)

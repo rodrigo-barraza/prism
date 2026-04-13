@@ -226,7 +226,7 @@ export default class CoordinatorService {
    * @returns {Promise<object>} Spawn result with agentId
    */
   static async spawnFromTool({ description, prompt, files, model, coordinatorCtx }) {
-    const { project, username, agent, providerName, resolvedModel, sessionId, agentSessionId: parentAgentSessionId } = coordinatorCtx;
+    const { project, username, agent, providerName, resolvedModel, traceId, agentSessionId: parentAgentSessionId } = coordinatorCtx;
 
     // Check concurrency limit
     const runningCount = Array.from(activeWorkers.values()).filter((w) => w.status === "running").length;
@@ -360,7 +360,7 @@ export default class CoordinatorService {
       agent,
       providerName: workerProvider,
       resolvedModel: workerModel,
-      sessionId,
+      traceId,
     };
 
     activeWorkers.set(agentId, workerState);
@@ -496,7 +496,7 @@ export default class CoordinatorService {
       durationMs: w.status === "running" ? Date.now() - w.startedAt : w.durationMs,
       totalCost: w.totalCost || null,
       usage: w.usage || null,
-      sessionId: w.sessionId,
+      traceId: w.traceId,
       providerName: w.providerName,
       resolvedModel: w.resolvedModel,
       files: w.files,
@@ -576,7 +576,7 @@ export default class CoordinatorService {
         },
         agentSessionId: worker.workerAgentSessionId,
         parentAgentSessionId: worker.parentAgentSessionId,
-        sessionId: worker.sessionId,
+        traceId: worker.traceId,
         project: worker.project,
         username: worker.username,
         agent: worker.agent,

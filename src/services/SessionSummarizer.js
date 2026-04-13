@@ -77,11 +77,11 @@ export default class SessionSummarizer {
    * @param {string} params.project - Project identifier
    * @param {string} params.username - Username
    * @param {Array} params.messages - Full conversation messages
-   * @param {string} [params.sessionId] - Session ID for attribution
+   * @param {string} [params.traceId] - Session ID for attribution
    * @param {string} [params.conversationId] - Conversation ID for tracking
    * @returns {Promise<Array>} Stored memory documents
    */
-  static async summarizeAndStore({ project, username, messages, sessionId, conversationId, endpoint, agent }) {
+  static async summarizeAndStore({ project, username, messages, traceId, conversationId, endpoint, agent }) {
     if (!messages || messages.length < MIN_MESSAGES_FOR_SUMMARY) {
       logger.info(
         `[SessionSummarizer] Skipping — only ${messages?.length || 0} messages (min: ${MIN_MESSAGES_FOR_SUMMARY})`,
@@ -144,7 +144,7 @@ export default class SessionSummarizer {
           endpoint: endpoint || "/agent",
           operation: "session:summarize",
           project,
-          sessionId: sessionId || null,
+          traceId: traceId || null,
           username: username || "system",
           clientIp: null,
           agent: agent || null,
@@ -221,7 +221,7 @@ export default class SessionSummarizer {
           const ep = await EpisodicMemoryService.store({
             agent: agentId,
             project,
-            sessionId,
+            traceId,
             conversationId,
             username,
             summary: parsed.episode.summary,
@@ -266,7 +266,7 @@ export default class SessionSummarizer {
               title: mem.title,
               content: mem.content,
               conversationId,
-              sessionId,
+              traceId,
               endpoint: endpoint || "/agent",
             });
 
@@ -333,7 +333,7 @@ export default class SessionSummarizer {
         project: ctx.project,
         username: ctx.username,
         messages: messages || ctx.messages,
-        sessionId: ctx.sessionId,
+        traceId: ctx.traceId,
         conversationId: ctx.conversationId,
         endpoint: ctx.endpoint || "/agent",
         agent: ctx.agent || null,
@@ -359,7 +359,7 @@ export default class SessionSummarizer {
             broadcast,
             endpoint: ctx.endpoint || "/agent",
             agent: ctx.agent || null,
-            sessionId: ctx.sessionId || null,
+            traceId: ctx.traceId || null,
           });
         })
         .catch((err) =>

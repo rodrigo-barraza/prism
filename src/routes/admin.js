@@ -103,7 +103,7 @@ router.get("/requests/:id", async (req, res, next) => {
 });
 
 // ============================================================
-// GET /admin/requests/:id/associations — conversations, workflows & sessions
+// GET /admin/requests/:id/associations — conversations, workflows & traces
 // ============================================================
 router.get("/requests/:id/associations", async (req, res, next) => {
   try {
@@ -117,7 +117,7 @@ router.get("/requests/:id/associations", async (req, res, next) => {
 
     let conversations = [];
     let workflows = [];
-    let sessions = [];
+    let traces = [];
 
     if (request.conversationId) {
       // Find conversations matching this conversationId
@@ -125,7 +125,7 @@ router.get("/requests/:id/associations", async (req, res, next) => {
         .collection(CONVERSATIONS_COL)
         .find({ id: request.conversationId })
         .project({
-          id: 1, title: 1, project: 1, sessionId: 1,
+          id: 1, title: 1, project: 1, traceId: 1,
           model: 1, totalCost: 1, modalities: 1, providers: 1,
           updatedAt: 1, createdAt: 1, username: 1,
         })
@@ -147,19 +147,19 @@ router.get("/requests/:id/associations", async (req, res, next) => {
         source: w.source || "retina",
       }));
 
-      // Derive sessions from requests — sessions are no longer a collection
-      const sessionIds = new Set();
+      // Derive traces from requests — traces are no longer a collection
+      const traceIds = new Set();
       for (const c of conversations) {
-        if (c.sessionId) sessionIds.add(c.sessionId);
+        if (c.traceId) traceIds.add(c.traceId);
       }
-      if (sessionIds.size > 0) {
-        // Count requests per sessionId to build session summary
-        const sessionAgg = await db
+      if (traceIds.size > 0) {
+        // Count requests per traceId to build trace summary
+        const traceAgg = await db
           .collection(REQUESTS_COL)
           .aggregate([
-            { $match: { sessionId: { $in: [...sessionIds] } } },
+            { $match: { traceId: { $in: [...traceIds] } } },
             { $group: {
-              _id: "$sessionId",
+              _id: "$traceId",
               requestCount: { $sum: 1 },
               project: { $first: "$project" },
               username: { $first: "$username" },
@@ -168,7 +168,7 @@ router.get("/requests/:id/associations", async (req, res, next) => {
             }},
           ])
           .toArray();
-        sessions = sessionAgg.map((s) => ({
+        traces = traceAgg.map((s) => ({
           id: s._id,
           project: s.project,
           username: s.username,
@@ -179,7 +179,7 @@ router.get("/requests/:id/associations", async (req, res, next) => {
       }
     }
 
-    res.json({ conversations, workflows, sessions });
+    res.json({ conversations, workflows, traces });
   } catch (error) {
     logger.error(`Admin /requests/:id/associations error: ${error.message}`);
     next(error);
@@ -237,7 +237,7 @@ router.get("/stats", async (req, res, next) => {
       },
     ];
 
-    // Count total sessions and conversations (respecting date + project filters)
+    // Count total traces and conversations (respecting date + project filters)
     const convMatch = {};
     if (project) convMatch.project = project;
     if (from || to) {
@@ -246,26 +246,26 @@ router.get("/stats", async (req, res, next) => {
       if (to) convMatch.createdAt.$lte = to;
     }
 
-    // Sessions: count distinct sessionIds from requests that match filters
-    const sessionMatch = { sessionId: { $ne: null } };
-    if (project) sessionMatch.project = project;
+    // Traces: count distinct traceIds from requests that match filters
+    const traceMatch = { traceId: { $ne: null } };
+    if (project) traceMatch.project = project;
     if (from || to) {
-      sessionMatch.timestamp = {};
-      if (from) sessionMatch.timestamp.$gte = from;
-      if (to) sessionMatch.timestamp.$lte = to;
+      traceMatch.timestamp = {};
+      if (from) traceMatch.timestamp.$gte = from;
+      if (to) traceMatch.timestamp.$lte = to;
     }
-    const sessionCountPipeline = [
-      { $match: sessionMatch },
-      { $group: { _id: "$sessionId" } },
+    const traceCountPipeline = [
+      { $match: traceMatch },
+      { $group: { _id: "$traceId" } },
       { $count: "total" },
     ];
 
-    const [result, sessionResult, conversationCount] = await Promise.all([
+    const [result, traceResult, conversationCount] = await Promise.all([
       db.collection(REQUESTS_COL).aggregate(pipeline).toArray().then((r) => r[0]),
-      db.collection(REQUESTS_COL).aggregate(sessionCountPipeline).toArray(),
+      db.collection(REQUESTS_COL).aggregate(traceCountPipeline).toArray(),
       db.collection(CONVERSATIONS_COL).countDocuments(convMatch),
     ]);
-    const sessionCount = sessionResult[0]?.total || 0;
+    const traceCount = traceResult[0]?.total || 0;
 
     res.json({
       totalRequests: 0,
@@ -277,7 +277,7 @@ router.get("/stats", async (req, res, next) => {
       successCount: 0,
       errorCount: 0,
       ...result,
-      sessionCount,
+      traceCount,
       conversationCount,
     });
   } catch (error) {
@@ -373,19 +373,18 @@ router.get("/stats/projects", async (req, res, next) => {
       { $group: { _id: "$project", conversationCount: { $sum: 1 } } },
     ];
 
-    // Count sessions per project
-    // Count sessions per project — derived from requests
-    const sessionPipeline = [
-      { $match: { sessionId: { $ne: null } } },
-      { $group: { _id: { project: "$project", sessionId: "$sessionId" } } },
-      { $group: { _id: "$_id.project", sessionCount: { $sum: 1 } } },
+    // Count traces per project — derived from requests
+    const tracePipeline = [
+      { $match: { traceId: { $ne: null } } },
+      { $group: { _id: { project: "$project", traceId: "$traceId" } } },
+      { $group: { _id: "$_id.project", traceCount: { $sum: 1 } } },
     ];
 
-    const [results, workflowCounts, convCounts, sessionCounts] = await Promise.all([
+    const [results, workflowCounts, convCounts, traceCounts] = await Promise.all([
       db.collection(REQUESTS_COL).aggregate(pipeline).toArray(),
       db.collection(WORKFLOWS_COL).aggregate(workflowPipeline).toArray(),
       db.collection(CONVERSATIONS_COL).aggregate(convPipeline).toArray(),
-      db.collection(REQUESTS_COL).aggregate(sessionPipeline).toArray(),
+      db.collection(REQUESTS_COL).aggregate(tracePipeline).toArray(),
     ]);
 
     // Build a project → workflowCount map
@@ -400,10 +399,10 @@ router.get("/stats/projects", async (req, res, next) => {
       convMap[cc._id || "unknown"] = cc.conversationCount;
     }
 
-    // Build a project → sessionCount map
-    const sessMap = {};
-    for (const sc of sessionCounts) {
-      sessMap[sc._id || "unknown"] = sc.sessionCount;
+    // Build a project → traceCount map
+    const traceMap = {};
+    for (const tc of traceCounts) {
+      traceMap[tc._id || "unknown"] = tc.traceCount;
     }
 
     res.json(
@@ -423,7 +422,7 @@ router.get("/stats/projects", async (req, res, next) => {
         providers: (r._providers || []).filter(Boolean),
         workflowCount: wfMap[r._id || "unknown"] || 0,
         conversationCount: convMap[r._id || "unknown"] || 0,
-        sessionCount: sessMap[r._id || "unknown"] || 0,
+        traceCount: traceMap[r._id || "unknown"] || 0,
       })),
     );
   } catch (error) {
@@ -575,16 +574,16 @@ router.get("/stats/models", async (req, res, next) => {
       }
     }
 
-    // Map conversationId → sessionId for session counting
-    const sessByConv = {};
+    // Map conversationId → traceId for trace counting
+    const traceByConv = {};
     if (allConvIds.size > 0) {
       const convDocs = await db
         .collection(CONVERSATIONS_COL)
-        .find({ id: { $in: [...allConvIds] }, sessionId: { $exists: true, $ne: null } })
-        .project({ id: 1, sessionId: 1 })
+        .find({ id: { $in: [...allConvIds] }, traceId: { $exists: true, $ne: null } })
+        .project({ id: 1, traceId: 1 })
         .toArray();
       for (const c of convDocs) {
-        sessByConv[c.id] = c.sessionId;
+        traceByConv[c.id] = c.traceId;
       }
     }
 
@@ -593,10 +592,10 @@ router.get("/stats/models", async (req, res, next) => {
         const convIds = (r._convIds || []).filter(Boolean);
         const conversationCount = convIds.length;
         let workflowCount = 0;
-        const sessionSet = new Set();
+        const traceSet = new Set();
         for (const cid of convIds) {
           workflowCount += wfByConv[cid] || 0;
-          if (sessByConv[cid]) sessionSet.add(sessByConv[cid]);
+          if (traceByConv[cid]) traceSet.add(traceByConv[cid]);
         }
         return {
           model: r._id.model,
@@ -611,7 +610,7 @@ router.get("/stats/models", async (req, res, next) => {
           toolsUsed: r.toolsUsed || false,
           conversationCount,
           workflowCount,
-          sessionCount: sessionSet.size,
+          traceCount: traceSet.size,
         };
       }),
     );
@@ -1226,7 +1225,7 @@ router.get("/conversations", async (req, res, next) => {
       search,
       provider,
       model,
-      session,
+      trace,
       from,
       to,
       sort = "updatedAt",
@@ -1234,7 +1233,7 @@ router.get("/conversations", async (req, res, next) => {
     } = req.query;
 
     const filter = {};
-    if (session) filter.sessionId = session;
+    if (trace) filter.traceId = trace;
     if (project) filter.project = project;
     if (username) filter.username = username;
     if (search) {
@@ -2392,9 +2391,9 @@ router.get("/text", async (req, res, next) => {
   }
 });
 // ============================================================
-// GET /admin/sessions — paginated session list (derived from requests)
+// GET /admin/traces — paginated trace list (derived from requests)
 // ============================================================
-router.get("/sessions", async (req, res, next) => {
+router.get("/traces", async (req, res, next) => {
   try {
     const db = getDb();
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -2410,8 +2409,8 @@ router.get("/sessions", async (req, res, next) => {
       order = "desc",
     } = req.query;
 
-    // Base filter: only requests with a sessionId
-    const match = { sessionId: { $ne: null } };
+    // Base filter: only requests with a traceId
+    const match = { traceId: { $ne: null } };
     if (project) match.project = project;
     if (username) match.username = username;
     if (from || to) {
@@ -2426,10 +2425,10 @@ router.get("/sessions", async (req, res, next) => {
 
     const pipeline = [
       { $match: match },
-      // Group all requests by sessionId
+      // Group all requests by traceId
       {
         $group: {
-          _id: "$sessionId",
+          _id: "$traceId",
           project: { $first: "$project" },
           username: { $first: "$username" },
           createdAt: { $min: "$timestamp" },
@@ -2451,7 +2450,7 @@ router.get("/sessions", async (req, res, next) => {
             $push: {
               requestId: "$requestId",
               conversationId: "$conversationId",
-              sessionId: "$sessionId",
+              traceId: "$traceId",
               inputTokens: "$inputTokens",
               outputTokens: "$outputTokens",
               model: "$model",
@@ -2545,7 +2544,7 @@ router.get("/sessions", async (req, res, next) => {
       { $sort: { [sort]: sortDir } },
     ];
 
-    // Count total matching sessions
+    // Count total matching traces
     const countPipeline = [...pipeline, { $count: "total" }];
 
     // Add pagination to the data pipeline
@@ -2559,30 +2558,30 @@ router.get("/sessions", async (req, res, next) => {
 
     res.json({ data: docs, total, page: parseInt(page, 10), limit: lim });
   } catch (error) {
-    logger.error(`Admin /sessions error: ${error.message}`);
+    logger.error(`Admin /traces error: ${error.message}`);
     next(error);
   }
 });
 
 // ============================================================
-// GET /admin/sessions/:id — single session derived from requests
+// GET /admin/traces/:id — single trace derived from requests
 // ============================================================
-router.get("/sessions/:id", async (req, res, next) => {
+router.get("/traces/:id", async (req, res, next) => {
   try {
     const db = getDb();
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const requests = await db
       .collection(REQUESTS_COL)
-      .find({ sessionId: req.params.id })
+      .find({ traceId: req.params.id })
       .toArray();
 
     if (requests.length === 0) {
-      return res.status(404).json({ error: "Session not found" });
+      return res.status(404).json({ error: "Trace not found" });
     }
 
-    // Derive session metadata from requests
-    const session = {
+    // Derive trace metadata from requests
+    const trace = {
       id: req.params.id,
       project: requests[0].project,
       username: requests[0].username,
@@ -2595,9 +2594,9 @@ router.get("/sessions/:id", async (req, res, next) => {
       requests,
     };
 
-    res.json(session);
+    res.json(trace);
   } catch (error) {
-    logger.error(`Admin /sessions/:id error: ${error.message}`);
+    logger.error(`Admin /traces/:id error: ${error.message}`);
     next(error);
   }
 });

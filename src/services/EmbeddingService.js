@@ -121,7 +121,7 @@ const EmbeddingService = {
         agent: options.agent || null,
         provider: providerName,
         model: resolvedModel,
-        sessionId: options.sessionId || null,
+        traceId: options.traceId || null,
         success,
         errorMessage,
         estimatedCost,

@@ -11,7 +11,7 @@ const router = express.Router();
  */
 router.post("/extract", async (req, res, next) => {
   try {
-    const { guildId, channelId, messages, participants, sourceMessageId, sessionId } =
+    const { guildId, channelId, messages, participants, sourceMessageId, traceId } =
       req.body;
 
     if (!guildId || !messages || !participants) {
@@ -26,7 +26,7 @@ router.post("/extract", async (req, res, next) => {
       messages,
       participants,
       sourceMessageId,
-      sessionId: sessionId || null,
+      traceId: traceId || null,
       project: req.project,
       endpoint: "/memory/extract",
     });
@@ -45,7 +45,7 @@ router.post("/extract", async (req, res, next) => {
  */
 router.post("/search", async (req, res, next) => {
   try {
-    const { guildId, userIds, queryText, limit, sessionId } = req.body;
+    const { guildId, userIds, queryText, limit, traceId } = req.body;
 
     if (!guildId || !queryText) {
       return res.status(400).json({
@@ -59,7 +59,7 @@ router.post("/search", async (req, res, next) => {
       userIds,
       queryText,
       limit: limit || 10,
-      sessionId: sessionId || null,
+      traceId: traceId || null,
       project: req.project,
       endpoint: "/memory/search",
     });

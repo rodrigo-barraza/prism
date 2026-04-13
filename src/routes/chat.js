@@ -242,7 +242,7 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
     conversationId: incomingConversationId,
     agentSessionId: incomingAgentSessionId,
     conversationMeta: incomingConversationMeta,
-    sessionId: incomingSessionId,
+    traceId: incomingTraceId,
     project = "unknown",
     username = "unknown",
     clientIp = null,
@@ -413,7 +413,7 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
     incomingConversationId,
     incomingAgentSessionId,
     incomingConversationMeta,
-    incomingSessionId,
+    incomingTraceId,
     skipConversation,
     project,
     username,
@@ -450,7 +450,7 @@ export async function handleConversation(params, emit, { signal } = {}) {
 
   const {
     providerName, resolvedModel, requestedModel, options,
-    incomingConversationId, incomingConversationMeta, incomingSessionId,
+    incomingConversationId, incomingConversationMeta, incomingTraceId,
     skipConversation, project, username, clientIp,
     requestStart, requestId, localRelease,
   } = ctx;
@@ -466,15 +466,15 @@ export async function handleConversation(params, emit, { signal } = {}) {
     conversationMeta = conversationMeta || { title: titleSnippet };
   }
 
-  const sessionId = incomingSessionId || null;
-  if (sessionId && conversationMeta) {
-    conversationMeta.sessionId = sessionId;
-  } else if (sessionId) {
-    conversationMeta = { sessionId };
+  const traceId = incomingTraceId || null;
+  if (traceId && conversationMeta) {
+    conversationMeta.traceId = traceId;
+  } else if (traceId) {
+    conversationMeta = { traceId };
   }
 
   // Merge conversation identity into ctx for sub-handlers
-  const fullCtx = { ...ctx, conversationId, conversationMeta, sessionId };
+  const fullCtx = { ...ctx, conversationId, conversationMeta, traceId };
 
   try {
     try {
@@ -550,7 +550,7 @@ export async function handleConversation(params, emit, { signal } = {}) {
       provider: providerName,
       model: resolvedModel || requestedModel || "unknown",
       conversationId: conversationId || null,
-      sessionId: sessionId || null,
+      traceId: traceId || null,
       success: false,
       errorMessage: error.message,
       totalSec,
@@ -582,7 +582,7 @@ export async function handleAgent(params, emit, { signal } = {}) {
 
   const {
     providerName, resolvedModel, requestedModel, options,
-    incomingConversationId, incomingAgentSessionId, incomingConversationMeta, incomingSessionId,
+    incomingConversationId, incomingAgentSessionId, incomingConversationMeta, incomingTraceId,
     project, username, clientIp, agent,
     requestStart, requestId, localRelease,
   } = ctx;
@@ -590,7 +590,7 @@ export async function handleAgent(params, emit, { signal } = {}) {
   // ── Agent session identity ─────────────────────────────────
   // The client sends agentSessionId directly; falls back to conversationId for backward compat
   const agentSessionId = incomingAgentSessionId || incomingConversationId || crypto.randomUUID();
-  const sessionId = incomingSessionId || null;
+  const traceId = incomingTraceId || null;
   const conversationMeta = incomingConversationMeta || null;
 
   try {
@@ -615,7 +615,7 @@ export async function handleAgent(params, emit, { signal } = {}) {
         agentSessionId,
         userMessage: ctx.userMessage,
         conversationMeta,
-        sessionId,
+        traceId,
         project,
         username,
         clientIp,
@@ -644,7 +644,7 @@ export async function handleAgent(params, emit, { signal } = {}) {
       provider: providerName,
       model: resolvedModel || requestedModel || "unknown",
       agentSessionId,
-      sessionId: sessionId || null,
+      traceId: traceId || null,
       success: false,
       errorMessage: error.message,
       totalSec,
@@ -685,7 +685,7 @@ async function handleImageAPIModel(ctx) {
     conversationId,
     userMessage,
     conversationMeta,
-    sessionId,
+    traceId,
     project,
     username,
     clientIp,
@@ -769,7 +769,7 @@ async function handleImageAPIModel(ctx) {
     provider: providerName,
     model: resolvedModel,
     conversationId: conversationId || null,
-    sessionId: sessionId || null,
+    traceId: traceId || null,
     success: true,
     inputTokens: estimatedInputTokens,
     outputTokens: outputImgTokens,
@@ -794,7 +794,7 @@ async function handleImageAPIModel(ctx) {
     usage: result.usage || null,
     estimatedCost,
     totalTime: totalSec,
-    ...(sessionId && { sessionId }),
+    ...(traceId && { traceId }),
     ...(conversationId && { conversationId }),
   });
 
@@ -880,7 +880,7 @@ export async function finalizeTextGeneration(
     parentAgentSessionId,
     userMessage,
     conversationMeta,
-    sessionId,
+    traceId,
     project,
     username,
     clientIp,
@@ -1016,7 +1016,7 @@ export async function finalizeTextGeneration(
       provider: providerName,
       model: resolvedModel,
       conversationId: conversationId || null,
-      sessionId: sessionId || null,
+      traceId: traceId || null,
       success: true,
       usage,
       estimatedCost,
@@ -1053,12 +1053,12 @@ export async function finalizeTextGeneration(
       generationTime:
         generationSec !== null ? parseFloat(generationSec.toFixed(3)) : null,
       totalTime: parseFloat(totalSec.toFixed(3)),
-      ...(sessionId && { sessionId }),
+      ...(traceId && { traceId }),
       ...(conversationId && { conversationId }),
     });
   }
 
-  // ── Link conversation to session ──────────────────────────────
+  // ── Link conversation to trace ──────────────────────────────
 
 
   // ── Conversation persistence ──────────────────────────────────

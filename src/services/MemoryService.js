@@ -191,7 +191,7 @@ ${participantList}`;
       clientIp: null,
       provider: extractionProvider,
       model: extractionModel,
-      sessionId: meta.sessionId || null,
+      traceId: meta.traceId || null,
       agent,
       success,
       errorMessage,
@@ -275,7 +275,7 @@ const MemoryService = {
    * @param {string} [params.conversationId] - Source conversation
    * @returns {Promise<object|null>} Stored memory document, or null if duplicate
    */
-  async store({ agent, project, username, type, title, content, embedding, metadata = {}, conversationId, sessionId, endpoint }) {
+  async store({ agent, project, username, type, title, content, embedding, metadata = {}, conversationId, traceId, endpoint }) {
     if (!agent) throw new Error("MemoryService.store requires an agent identifier");
     if (!content) throw new Error("MemoryService.store requires content");
 
@@ -290,7 +290,7 @@ const MemoryService = {
     // Generate embedding if not provided
     if (!embedding) {
       const embedOpts = { project };
-      if (sessionId) embedOpts.sessionId = sessionId;
+      if (traceId) embedOpts.traceId = traceId;
       if (endpoint) embedOpts.endpoint = endpoint;
       if (agent) embedOpts.agent = agent;
       embedding = await generateEmbedding(embedText, embedOpts);
@@ -362,12 +362,12 @@ const MemoryService = {
     messages,
     participants,
     sourceMessageId,
-    sessionId,
+    traceId,
     project,
     endpoint,
   }) {
     // Extract facts from the conversation via AI
-    const facts = await extractFactsFromConversation(messages, participants, { project, sessionId, endpoint, agent: "LUPOS" });
+    const facts = await extractFactsFromConversation(messages, participants, { project, traceId, endpoint, agent: "LUPOS" });
     if (facts.length === 0) {
       logger.info(
         "[MemoryService] No personal facts extracted from conversation.",
@@ -383,7 +383,7 @@ const MemoryService = {
 
     for (const fact of facts) {
       try {
-        const embedding = await generateEmbedding(fact.fact, { project, sessionId, endpoint, agent: "LUPOS" });
+        const embedding = await generateEmbedding(fact.fact, { project, traceId, endpoint, agent: "LUPOS" });
 
         const memory = await this.store({
           agent: "LUPOS",
@@ -434,14 +434,14 @@ const MemoryService = {
    * @param {number} [params.limit=10]
    * @returns {Promise<Array>} Relevant memories sorted by relevance
    */
-  async search({ agent, project, guildId, userIds, queryText, limit = 10, sessionId, endpoint }) {
+  async search({ agent, project, guildId, userIds, queryText, limit = 10, traceId, endpoint }) {
     if (!agent) throw new Error("MemoryService.search requires an agent identifier");
 
     const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
 
     // Generate embedding for the search query
     const embeddingOpts = {};
-    if (sessionId) embeddingOpts.sessionId = sessionId;
+    if (traceId) embeddingOpts.traceId = traceId;
     if (project) embeddingOpts.project = project;
     if (endpoint) embeddingOpts.endpoint = endpoint;
     if (agent) embeddingOpts.agent = agent;

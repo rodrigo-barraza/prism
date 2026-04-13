@@ -462,7 +462,7 @@ export default class ToolOrchestratorService {
       providerName: ctx._providerName,
       resolvedModel: ctx._resolvedModel,
       agentSessionId: ctx.agentSessionId,
-      sessionId: ctx.sessionId,
+      traceId: ctx.traceId,
       injectMessage: ctx._injectMessage || null,
     };
 
