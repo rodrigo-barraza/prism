@@ -89,6 +89,7 @@ const SemanticMemoryService = {
     content,
     sourceEpisodeId,
     username,
+    agentSessionId,
     metadata = {},
   }) {
     if (!agent) throw new Error("SemanticMemoryService.store requires an agent");
@@ -100,7 +101,7 @@ const SemanticMemoryService = {
 
     const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
     const embedText = title ? `${title}: ${content}` : content;
-    const embedding = await generateEmbedding(embedText, { project, agent });
+    const embedding = await generateEmbedding(embedText, { project, agent, agentSessionId });
 
     // Duplicate detection — check same agent/project
     const dedupFilter = { agent };
@@ -231,11 +232,11 @@ const SemanticMemoryService = {
    * @param {string} [params.scope] - Filter by scope
    * @returns {Promise<Array>}
    */
-  async search({ agent, project, queryText, limit = 10, types, scope }) {
+  async search({ agent, project, queryText, limit = 10, types, scope, agentSessionId }) {
     if (!agent) throw new Error("SemanticMemoryService.search requires an agent");
 
     const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
-    const queryEmbedding = await generateEmbedding(queryText, { project, agent });
+    const queryEmbedding = await generateEmbedding(queryText, { project, agent, agentSessionId });
 
     const filter = { agent };
     if (project) filter.project = project;

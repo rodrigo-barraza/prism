@@ -80,6 +80,7 @@ const EpisodicMemoryService = {
     agent,
     project,
     traceId,
+    agentSessionId,
     conversationId,
     username,
     summary,
@@ -103,6 +104,7 @@ const EpisodicMemoryService = {
       project,
       agent,
       traceId,
+      agentSessionId,
     });
 
     const now = new Date().toISOString();
@@ -164,12 +166,12 @@ const EpisodicMemoryService = {
    * @param {string} [params.username]
    * @returns {Promise<Array>} Relevant episodes sorted by composite score
    */
-  async search({ agent, project, queryText, limit = DEFAULT_LIMIT, username }) {
+  async search({ agent, project, queryText, limit = DEFAULT_LIMIT, username, agentSessionId }) {
     if (!agent) throw new Error("EpisodicMemoryService.search requires an agent");
 
     const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
 
-    const queryEmbedding = await generateEmbedding(queryText, { project, agent });
+    const queryEmbedding = await generateEmbedding(queryText, { project, agent, agentSessionId });
 
     const filter = { agent };
     if (project) filter.project = project;

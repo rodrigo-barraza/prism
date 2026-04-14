@@ -122,7 +122,7 @@ const ProspectiveMemoryService = {
    * @param {string} [params.queryText] - User's first message (for cue matching)
    * @returns {Promise<Array>} Triggered memories
    */
-  async checkTriggers({ agent, project, queryText }) {
+  async checkTriggers({ agent, project, queryText, agentSessionId }) {
     const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
     const now = new Date().toISOString();
     const triggered = [];
@@ -176,7 +176,7 @@ const ProspectiveMemoryService = {
         .toArray();
 
       if (cueCandidates.length > 0) {
-        const queryEmbedding = await generateEmbedding(queryText, { project, agent });
+        const queryEmbedding = await generateEmbedding(queryText, { project, agent, agentSessionId });
 
         for (const mem of cueCandidates) {
           if (!mem.embedding) continue;

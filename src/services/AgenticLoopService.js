@@ -231,6 +231,7 @@ export default class AgenticLoopService {
         username,
         agent,
         traceId,
+        agentSessionId,
         agentContext: options.agentContext,
         enabledTools: resolvedEnabledTools,
       });
@@ -321,6 +322,7 @@ export default class AgenticLoopService {
             username,
             agent,
             traceId,
+            agentSessionId,
             agentContext: options.agentContext,
             enabledTools: resolvedEnabledTools,
           };

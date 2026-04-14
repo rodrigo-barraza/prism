@@ -59,6 +59,7 @@ const ProceduralMemoryService = {
     toolSequence = [],
     tags = [],
     sourceEpisodeId,
+    agentSessionId,
   }) {
     if (!agent) throw new Error("ProceduralMemoryService.store requires an agent");
     if (!trigger) throw new Error("ProceduralMemoryService.store requires a trigger");
@@ -70,7 +71,7 @@ const ProceduralMemoryService = {
 
     // Embed the trigger + procedure for retrieval
     const embedText = `${trigger}\n${procedure.join("\n")}`;
-    const embedding = await generateEmbedding(embedText, { project, agent });
+    const embedding = await generateEmbedding(embedText, { project, agent, agentSessionId });
 
     // Check for existing similar procedure — reinforce instead of duplicate
     const dedupFilter = { agent };
@@ -158,11 +159,11 @@ const ProceduralMemoryService = {
    * @param {number} [params.limit=5]
    * @returns {Promise<Array>}
    */
-  async search({ agent, project, queryText, limit = 5 }) {
+  async search({ agent, project, queryText, limit = 5, agentSessionId }) {
     if (!agent) throw new Error("ProceduralMemoryService.search requires an agent");
 
     const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
-    const queryEmbedding = await generateEmbedding(queryText, { project, agent });
+    const queryEmbedding = await generateEmbedding(queryText, { project, agent, agentSessionId });
 
     const filter = { agent };
     if (project) {

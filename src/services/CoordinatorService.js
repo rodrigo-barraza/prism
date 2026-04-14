@@ -637,7 +637,7 @@ export default class CoordinatorService {
    * @param {string} [params.repoPath] - Repository root path
    * @returns {Promise<object>} Decomposed plan with sub-tasks
    */
-  static async decompose({ task, files, repoPath, endpoint }) {
+  static async decompose({ task, files, repoPath, endpoint, agentSessionId }) {
     const provider = getProvider(DECOMPOSITION_PROVIDER);
 
     const userMessage = `Task: ${task}\n\nTarget files:\n${files.map((f) => `- ${f}`).join("\n")}`;
@@ -687,6 +687,7 @@ export default class CoordinatorService {
         model: DECOMPOSITION_MODEL,
         success: llmSuccess,
         errorMessage: llmError,
+        agentSessionId: agentSessionId || null,
         estimatedCost,
         inputTokens: approxInputTokens,
         outputTokens: approxOutputTokens,

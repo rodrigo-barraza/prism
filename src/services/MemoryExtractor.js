@@ -81,7 +81,7 @@ export default class MemoryExtractor {
    * @param {string} [params.conversationId] - Conversation ID for tracking
    * @returns {Promise<Array>} Stored memory documents
    */
-  static async summarizeAndStore({ project, username, messages, traceId, conversationId, endpoint, agent }) {
+  static async summarizeAndStore({ project, username, messages, traceId, agentSessionId, conversationId, endpoint, agent }) {
     if (!messages || messages.length < MIN_MESSAGES_FOR_SUMMARY) {
       logger.info(
         `[MemoryExtractor] Skipping — only ${messages?.length || 0} messages (min: ${MIN_MESSAGES_FOR_SUMMARY})`,
@@ -146,6 +146,7 @@ export default class MemoryExtractor {
           operation: "memory:extract",
           project,
           traceId: traceId || null,
+          agentSessionId: agentSessionId || null,
           username: username || "system",
           clientIp: null,
           agent: agent || null,
@@ -223,6 +224,7 @@ export default class MemoryExtractor {
             agent: agentId,
             project,
             traceId,
+            agentSessionId,
             conversationId,
             username,
             summary: parsed.episode.summary,
@@ -255,6 +257,7 @@ export default class MemoryExtractor {
               content: mem.content,
               sourceEpisodeId: episodeId,
               username,
+              agentSessionId,
             });
             if (semResult) semanticIds.push(semResult.id);
 
@@ -268,6 +271,7 @@ export default class MemoryExtractor {
               content: mem.content,
               conversationId,
               traceId,
+              agentSessionId,
               endpoint: endpoint || "/agent",
             });
 
@@ -291,6 +295,7 @@ export default class MemoryExtractor {
               procedure: proc.procedure,
               toolSequence: proc.toolSequence || [],
               sourceEpisodeId: episodeId,
+              agentSessionId,
             });
             if (procResult) proceduralIds.push(procResult.id);
             stored.push({ type: "procedural", id: procResult?.id });
@@ -335,6 +340,7 @@ export default class MemoryExtractor {
         username: ctx.username,
         messages: messages || ctx.messages,
         traceId: ctx.traceId,
+        agentSessionId: ctx.agentSessionId,
         conversationId: ctx.conversationId,
         endpoint: ctx.endpoint || "/agent",
         agent: ctx.agent || null,
@@ -361,6 +367,7 @@ export default class MemoryExtractor {
             endpoint: ctx.endpoint || "/agent",
             agent: ctx.agent || null,
             traceId: ctx.traceId || null,
+            agentSessionId: ctx.agentSessionId || null,
           });
         })
         .catch((err) =>

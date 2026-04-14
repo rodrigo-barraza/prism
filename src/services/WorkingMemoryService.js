@@ -53,7 +53,7 @@ const WorkingMemoryService = {
    * @param {string} [params.username]
    * @returns {Promise<object>} The assembled working memory state
    */
-  async load({ agent, project, traceId, queryText, username }) {
+  async load({ agent, project, traceId, agentSessionId, queryText, username }) {
     if (!agent) throw new Error("WorkingMemoryService.load requires an agent");
     if (!traceId) throw new Error("WorkingMemoryService.load requires a traceId");
 
@@ -89,6 +89,7 @@ const WorkingMemoryService = {
           project,
           queryText,
           limit: FETCH_LIMITS.semantic,
+          agentSessionId,
         }).catch((err) => {
           logger.warn(`[WorkingMemory] Semantic search failed: ${err.message}`);
           return [];
@@ -99,6 +100,7 @@ const WorkingMemoryService = {
           project,
           queryText,
           limit: FETCH_LIMITS.episodic,
+          agentSessionId,
         }).catch((err) => {
           logger.warn(`[WorkingMemory] Episodic search failed: ${err.message}`);
           return [];
@@ -109,6 +111,7 @@ const WorkingMemoryService = {
           project,
           queryText,
           limit: FETCH_LIMITS.procedural,
+          agentSessionId,
         }).catch((err) => {
           logger.warn(`[WorkingMemory] Procedural search failed: ${err.message}`);
           return [];
@@ -118,6 +121,7 @@ const WorkingMemoryService = {
           agent,
           project,
           queryText,
+          agentSessionId,
         }).catch((err) => {
           logger.warn(`[WorkingMemory] Prospective check failed: ${err.message}`);
           return [];

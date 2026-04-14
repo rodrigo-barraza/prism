@@ -2423,5 +2423,87 @@ router.get("/traces/:id", async (req, res, next) => {
   }
 });
 
+// ============================================================
+// GET /admin/sessions/:id/stats — aggregate stats for an agent session
+// Sums cost, tokens, models, providers across ALL requests with this agentSessionId
+// ============================================================
+router.get("/sessions/:id/stats", async (req, res, next) => {
+  try {
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
+    if (!db) return res.status(503).json({ error: "Database not available" });
+
+    const requests = await db
+      .collection(REQUESTS_COL)
+      .find({ agentSessionId: req.params.id })
+      .project({
+        estimatedCost: 1,
+        inputTokens: 1,
+        outputTokens: 1,
+        provider: 1,
+        model: 1,
+        operation: 1,
+        timestamp: 1,
+        modalities: 1,
+        toolApiNames: 1,
+        success: 1,
+      })
+      .toArray();
+
+    if (requests.length === 0) {
+      return res.status(404).json({ error: "No requests found for this session" });
+    }
+
+    // Aggregate
+    const providers = new Set();
+    const models = new Set();
+    const operations = new Set();
+    let totalCost = 0;
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+    const mergedModalities = {};
+    const toolCounts = {};
+
+    for (const r of requests) {
+      totalCost += r.estimatedCost || 0;
+      totalInputTokens += r.inputTokens || 0;
+      totalOutputTokens += r.outputTokens || 0;
+      if (r.provider) providers.add(r.provider);
+      if (r.model) models.add(r.model);
+      if (r.operation) operations.add(r.operation);
+      // Merge modalities
+      if (r.modalities) {
+        for (const [k, v] of Object.entries(r.modalities)) {
+          if (v) mergedModalities[k] = true;
+        }
+      }
+      // Count tool usage
+      if (r.toolApiNames?.length > 0) {
+        for (const name of r.toolApiNames) {
+          toolCounts[name] = (toolCounts[name] || 0) + 1;
+        }
+      }
+    }
+
+    res.json({
+      agentSessionId: req.params.id,
+      requestCount: requests.length,
+      totalCost,
+      totalInputTokens,
+      totalOutputTokens,
+      totalTokens: totalInputTokens + totalOutputTokens,
+      providers: [...providers],
+      models: [...models],
+      operations: [...operations],
+      modalities: mergedModalities,
+      toolCounts,
+      createdAt: requests.reduce((min, r) => (!min || r.timestamp < min ? r.timestamp : min), null),
+      updatedAt: requests.reduce((max, r) => (!max || r.timestamp > max ? r.timestamp : max), null),
+    });
+  } catch (error) {
+    logger.error(`Admin /sessions/:id/stats error: ${error.message}`);
+    next(error);
+  }
+});
+
 export default router;
 

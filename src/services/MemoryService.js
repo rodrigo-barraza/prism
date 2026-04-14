@@ -193,6 +193,7 @@ ${participantList}`;
       provider: extractionProvider,
       model: extractionModel,
       traceId: meta.traceId || null,
+      agentSessionId: meta.agentSessionId || null,
       agent,
       success,
       errorMessage,
@@ -276,7 +277,7 @@ const MemoryService = {
    * @param {string} [params.conversationId] - Source conversation
    * @returns {Promise<object|null>} Stored memory document, or null if duplicate
    */
-  async store({ agent, project, username, type, title, content, embedding, metadata = {}, conversationId, traceId, endpoint }) {
+  async store({ agent, project, username, type, title, content, embedding, metadata = {}, conversationId, traceId, agentSessionId, endpoint }) {
     if (!agent) throw new Error("MemoryService.store requires an agent identifier");
     if (!content) throw new Error("MemoryService.store requires content");
 
@@ -292,6 +293,7 @@ const MemoryService = {
     if (!embedding) {
       const embedOpts = { project };
       if (traceId) embedOpts.traceId = traceId;
+      if (agentSessionId) embedOpts.agentSessionId = agentSessionId;
       if (endpoint) embedOpts.endpoint = endpoint;
       if (agent) embedOpts.agent = agent;
       embedding = await generateEmbedding(embedText, embedOpts);
@@ -435,7 +437,7 @@ const MemoryService = {
    * @param {number} [params.limit=10]
    * @returns {Promise<Array>} Relevant memories sorted by relevance
    */
-  async search({ agent, project, guildId, userIds, queryText, limit = 10, traceId, endpoint }) {
+  async search({ agent, project, guildId, userIds, queryText, limit = 10, traceId, agentSessionId, endpoint }) {
     if (!agent) throw new Error("MemoryService.search requires an agent identifier");
 
     const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
@@ -443,6 +445,7 @@ const MemoryService = {
     // Generate embedding for the search query
     const embeddingOpts = {};
     if (traceId) embeddingOpts.traceId = traceId;
+    if (agentSessionId) embeddingOpts.agentSessionId = agentSessionId;
     if (project) embeddingOpts.project = project;
     if (endpoint) embeddingOpts.endpoint = endpoint;
     if (agent) embeddingOpts.agent = agent;

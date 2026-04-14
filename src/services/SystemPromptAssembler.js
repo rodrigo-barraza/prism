@@ -176,7 +176,7 @@ export default class SystemPromptAssembler {
    * @param {string} [username] - Username
    * @returns {Promise<string>} Formatted memory sections for the system prompt
    */
-  async fetchMemories(agent, project, queryText, { traceId, endpoint, username } = {}) {
+  async fetchMemories(agent, project, queryText, { traceId, agentSessionId, endpoint, username } = {}) {
     // If we have a traceId, use the full working memory pipeline
     if (traceId) {
       try {
@@ -184,6 +184,7 @@ export default class SystemPromptAssembler {
           agent,
           project,
           traceId,
+          agentSessionId,
           queryText,
           username,
         });
@@ -207,6 +208,7 @@ export default class SystemPromptAssembler {
         queryText,
         limit: 5,
         traceId: traceId || null,
+        agentSessionId: agentSessionId || null,
         endpoint: endpoint || "/agent",
       });
 
@@ -226,7 +228,7 @@ export default class SystemPromptAssembler {
    * @param {string} queryText - The user's latest message (used for relevance matching)
    * @returns {Promise<Array<{ name: string, content: string, score: number }>>}
    */
-  async fetchSkills(project, username, queryText, { traceId, endpoint, agent } = {}) {
+  async fetchSkills(project, username, queryText, { traceId, agentSessionId, endpoint, agent } = {}) {
     try {
       const client = MongoWrapper.getClient(MONGO_DB_NAME);
       if (!client) return [];
@@ -252,7 +254,7 @@ export default class SystemPromptAssembler {
       // Generate query embedding
       let queryEmbedding;
       try {
-        queryEmbedding = await EmbeddingService.embed(queryText, { source: "skill-relevance", project, endpoint: endpoint || "/agent", traceId: traceId || null, agent: agent || null });
+        queryEmbedding = await EmbeddingService.embed(queryText, { source: "skill-relevance", project, endpoint: endpoint || "/agent", traceId: traceId || null, agentSessionId: agentSessionId || null, agent: agent || null });
       } catch (err) {
         logger.warn(`[SystemPromptAssembler] Query embedding failed: ${err.message} — returning all skills`);
         return skills.map((s) => ({ name: s.name, content: s.content, description: s.description, score: 1 }));
@@ -424,7 +426,7 @@ export default class SystemPromptAssembler {
       .find((m) => m.role === "user");
     const queryText = lastUserMsg?.content || "";
 
-    const skills = await this.fetchSkills(ctx.project, ctx.username, queryText, { traceId: ctx.traceId, endpoint: "/agent", agent: agentId });
+    const skills = await this.fetchSkills(ctx.project, ctx.username, queryText, { traceId: ctx.traceId, agentSessionId: ctx.agentSessionId, endpoint: "/agent", agent: agentId });
     const skillNames = [];
     if (skills.length > 0) {
       const skillBlocks = skills.map((s) => {
@@ -440,6 +442,7 @@ export default class SystemPromptAssembler {
     if (memoryQuery) {
       const memories = await this.fetchMemories(agentId, ctx.project, memoryQuery, {
         traceId: ctx.traceId,
+        agentSessionId: ctx.agentSessionId,
         endpoint: "/agent",
         username: ctx.username,
       });
