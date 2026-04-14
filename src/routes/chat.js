@@ -866,7 +866,6 @@ export async function finalizeTextGeneration(
     thinkingFragments,
   },
   overrideMessagesToAppend = null,
-  skipRequestLog = false
 ) {
   const {
     providerName,
@@ -1003,12 +1002,14 @@ export async function finalizeTextGeneration(
   }
 
   // ── Request logging with sanitized payloads ────────────────────
-  // Placed after audio build so audioRef is available for modality detection
-  if (!skipRequestLog) {
+  // Placed after audio build so audioRef is available for modality detection.
+  // Agentic requests are logged granularly per-iteration by AgenticLoopService,
+  // so we only log here for non-agentic paths (chat, live).
+  if (!options.agenticLoopEnabled) {
     RequestLogger.logChatGeneration({
       requestId,
-      endpoint: options.agenticLoopEnabled ? "/agent" : modelDef?.liveAPI ? "/live" : "/chat",
-      operation: options.agenticLoopEnabled ? "agent" : modelDef?.liveAPI ? "live" : "chat",
+      endpoint: modelDef?.liveAPI ? "/live" : "/chat",
+      operation: modelDef?.liveAPI ? "live" : "chat",
       project,
       username,
       clientIp,

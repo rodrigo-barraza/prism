@@ -1035,7 +1035,7 @@ export default class AgenticLoopService {
           contentSegments: cleanSegments,
           textFragments: cleanTextFragments,
           thinkingFragments: cleanThinkingFragments,
-      }, newTurnMessages, true); // <--- pass true to skip the overall request logging so we don't duplicate
+      }, newTurnMessages);
 
       // ── Persist worker snapshots to the parent session ──────────
       // Workers live in-memory during execution but must be persisted
