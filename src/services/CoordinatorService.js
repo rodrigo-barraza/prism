@@ -311,7 +311,7 @@ export default class CoordinatorService {
       }
     }
 
-    const agentId = `agent-${(++agentCounter).toString(36)}`;
+    const agentId = `agent-${(++agentCounter).toString(36)}-${crypto.randomUUID().slice(0, 4)}`;
     const branchName = `coordinator/${agentId}`;
     const workspaceRoot = getDefaultWorkspaceRoot();
 
@@ -369,11 +369,27 @@ export default class CoordinatorService {
 
     // Run the worker loop asynchronously — don't await
     CoordinatorService._runWorkerLoop(workerState, prompt, coordinatorCtx)
-      .catch((err) => {
+      .catch(async (err) => {
         logger.error(`[Coordinator] Worker ${agentId} loop error: ${err.message}`);
         workerState.status = "failed";
         workerState.error = err.message;
         workerState.durationMs = Date.now() - workerState.startedAt;
+
+        // Clean up worktree on failure to prevent orphaned branches
+        if (workerState.isolated && workerState.worktreePath) {
+          await removeWorktree(workerState.repoPath, workerState.worktreePath).catch((e) =>
+            logger.warn(`[Coordinator] Worktree cleanup failed for ${agentId}: ${e.message}`),
+          );
+        }
+
+        // Notify the coordinator that the worker failed — same as completion flow
+        const notification = buildTaskNotification(workerState);
+        if (coordinatorCtx.injectMessage) {
+          coordinatorCtx.injectMessage(notification);
+        }
+        if (coordinatorCtx.emit) {
+          coordinatorCtx.emit({ type: "status", message: "workers_updated" });
+        }
       });
 
     return {
