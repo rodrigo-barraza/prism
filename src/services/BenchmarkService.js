@@ -231,8 +231,8 @@ async function runSingleModel(benchmark, model, project, username, { signal, onE
       },
       (event) => {
         events.push(event);
-        // Forward chunk/thinking events in real-time for live preview
-        if (event.type === "chunk" || event.type === "thinking") {
+        // Forward chunk/thinking/tool events in real-time for live preview
+        if (event.type === "chunk" || event.type === "thinking" || event.type === "toolCall" || event.type === "tool_execution" || event.type === "tool_output") {
           if (onEvent) {
             try { onEvent(event); } catch { /* noop */ }
           }
@@ -312,16 +312,17 @@ async function runSingleModel(benchmark, model, project, username, { signal, onE
       .map((e) => e.content)
       .join("");
 
-    // Extract tool calls (emitted as type: "toolCall")
-    const toolCallEvents = events.filter((e) => e.type === "toolCall" && e.status === "done");
-    const toolCalls = toolCallEvents.length > 0
-      ? toolCallEvents.map((tc) => ({
-        id: tc.id,
-        name: tc.name,
-        args: tc.args,
-        result: tc.result,
-      }))
-      : null;
+    // Extract tool calls from both event paths:
+    // - "toolCall" with status "done" — native MCP path (e.g. LM Studio)
+    // - "tool_execution" with status "done" — standard agentic path (cloud providers)
+    const nativeToolCalls = events
+      .filter((e) => e.type === "toolCall" && e.status === "done")
+      .map((tc) => ({ id: tc.id, name: tc.name, args: tc.args, result: tc.result, status: "done" }));
+    const agenticToolCalls = events
+      .filter((e) => e.type === "tool_execution" && (e.status === "done" || e.status === "error"))
+      .map((e) => ({ id: e.tool?.id, name: e.tool?.name, args: e.tool?.args, result: e.tool?.result, status: e.status }));
+    const toolCalls = [...nativeToolCalls, ...agenticToolCalls];
+    const toolCallsResult = toolCalls.length > 0 ? toolCalls : null;
 
     return {
       provider: model.provider,
@@ -330,7 +331,7 @@ async function runSingleModel(benchmark, model, project, username, { signal, onE
       ...configFlags,
       response: text || null,
       thinking: thinkingText || null,
-      toolCalls,
+      toolCalls: toolCallsResult,
       passed,
       matchMode,
       latency: parseFloat(latency.toFixed(3)),
@@ -468,9 +469,16 @@ const BenchmarkService = {
             try { onModelStart({ ...model, isLocal: isInstance(model.provider) }); } catch { /* noop */ }
           }
           activeGenerationCount++;
+
+          // Wrap onEvent to tag each event with the source model (enables
+          // correct attribution when multiple provider buckets stream concurrently).
+          const modelOnEvent = onEvent
+            ? (event) => onEvent({ ...event, _sourceModel: { provider: model.provider, model: model.model } })
+            : undefined;
+
           let result;
           try {
-            result = await runSingleModel(benchmark, model, project, username, { signal, onEvent });
+            result = await runSingleModel(benchmark, model, project, username, { signal, onEvent: modelOnEvent });
           } finally {
             activeGenerationCount = Math.max(0, activeGenerationCount - 1);
           }

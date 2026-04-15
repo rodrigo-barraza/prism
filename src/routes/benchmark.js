@@ -444,9 +444,17 @@ router.post("/:id/run", async (req, res) => {
           send("model_complete", result);
         },
         onEvent: (event) => {
-          // Forward live chunk/thinking events for real-time preview
+          // Forward live events for real-time preview
           emitter.emit("event", event);
-          send(event.type, { content: event.content });
+          // Include _sourceModel for concurrent model attribution
+          const sourceTag = event._sourceModel ? { _sourceModel: event._sourceModel } : {};
+          // Tool events carry structured data beyond just content
+          if (event.type === "toolCall" || event.type === "tool_execution" || event.type === "tool_output") {
+            const { type, _sourceModel, ...rest } = event;
+            send(type, { ...rest, ...sourceTag });
+          } else {
+            send(event.type, { content: event.content, ...sourceTag });
+          }
         },
       },
     );
