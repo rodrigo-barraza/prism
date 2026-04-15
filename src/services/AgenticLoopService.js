@@ -47,6 +47,7 @@ export default class AgenticLoopService {
       messages,
       options,
       agentSessionId,
+      parentAgentSessionId,
       traceId,
       project,
       username,
@@ -605,6 +606,7 @@ export default class AgenticLoopService {
             provider: providerName,
             model: resolvedModel,
             agentSessionId,
+            parentAgentSessionId: parentAgentSessionId || null,
             traceId: traceId || null,
             success: true,
             usage: passUsage,
@@ -719,6 +721,7 @@ export default class AgenticLoopService {
                  _providerName: providerName,
                  _resolvedModel: resolvedModel,
                  _injectMessage: injectMessage,
+                 _emit: emit,
                });
                await hooks.run("afterToolCall", tc, result, ctx);
                return { name: tc.name, id: tc.id, result };

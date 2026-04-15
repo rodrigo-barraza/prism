@@ -2432,9 +2432,17 @@ router.get("/sessions/:id/stats", async (req, res, next) => {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
+    const sessionId = req.params.id;
+    // Include requests from child worker sessions (linked via parentAgentSessionId)
+    // so aggregated stats reflect ALL activity spawned by this coordinator session
     const requests = await db
       .collection(REQUESTS_COL)
-      .find({ agentSessionId: req.params.id })
+      .find({
+        $or: [
+          { agentSessionId: sessionId },
+          { parentAgentSessionId: sessionId },
+        ],
+      })
       .project({
         estimatedCost: 1,
         inputTokens: 1,
@@ -2446,6 +2454,7 @@ router.get("/sessions/:id/stats", async (req, res, next) => {
         modalities: 1,
         toolApiNames: 1,
         success: 1,
+        parentAgentSessionId: 1,
       })
       .toArray();
 
@@ -2484,9 +2493,12 @@ router.get("/sessions/:id/stats", async (req, res, next) => {
       }
     }
 
+    const workerRequestCount = requests.filter((r) => r.parentAgentSessionId === sessionId).length;
+
     res.json({
-      agentSessionId: req.params.id,
+      agentSessionId: sessionId,
       requestCount: requests.length,
+      workerRequestCount,
       totalCost,
       totalInputTokens,
       totalOutputTokens,

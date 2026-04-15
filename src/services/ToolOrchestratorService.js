@@ -465,6 +465,8 @@ export default class ToolOrchestratorService {
       agentSessionId: ctx.agentSessionId,
       traceId: ctx.traceId,
       injectMessage: ctx._injectMessage || null,
+      // Pass the parent's emit so workers can forward live events
+      emit: ctx._emit || null,
     };
 
     switch (name) {

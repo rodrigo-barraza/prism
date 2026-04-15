@@ -534,14 +534,54 @@ export default class CoordinatorService {
       },
     ];
 
-    // Capture worker output
+    // Capture worker output AND forward tool events to the parent coordinator's
+    // SSE stream. This lets the frontend display live worker tool activity
+    // without polling — events arrive as `worker_tool_execution`, `worker_tool_output`,
+    // and `worker_status` with the worker's agentId for disambiguation.
+    const parentEmit = coordinatorCtx.emit;
     let workerOutput = "";
     const workerToolCalls = [];
     const workerEmit = (event) => {
       if (event.type === "chunk") {
         workerOutput += event.content || "";
-      } else if (event.type === "tool_execution" && event.status === "calling") {
-        workerToolCalls.push({ name: event.tool?.name, args: event.tool?.args });
+      } else if (event.type === "tool_execution") {
+        if (event.status === "calling") {
+          workerToolCalls.push({ name: event.tool?.name, args: event.tool?.args });
+        }
+        // Forward to parent SSE stream — namespaced so the frontend can
+        // distinguish worker tool calls from the coordinator's own
+        if (parentEmit) {
+          parentEmit({
+            type: "worker_tool_execution",
+            workerId: worker.agentId,
+            workerDescription: worker.description,
+            tool: event.tool,
+            status: event.status,
+          });
+        }
+      } else if (event.type === "tool_output") {
+        // Forward streaming tool output (shell, python, etc.)
+        if (parentEmit) {
+          parentEmit({
+            type: "worker_tool_output",
+            workerId: worker.agentId,
+            toolCallId: event.toolCallId,
+            name: event.name,
+            event: event.event,
+            data: event.data,
+          });
+        }
+      } else if (event.type === "status") {
+        // Forward iteration progress and notable status updates
+        if (parentEmit && (event.message === "iteration_progress" || event.message === "workers_updated")) {
+          parentEmit({
+            type: "worker_status",
+            workerId: worker.agentId,
+            message: event.message,
+            iteration: event.iteration,
+            maxIterations: event.maxIterations,
+          });
+        }
       } else if (event.type === "done") {
         // Capture cost and usage from finalizeTextGeneration
         worker.totalCost = event.estimatedCost || null;
