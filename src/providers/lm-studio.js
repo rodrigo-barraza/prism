@@ -457,17 +457,21 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
       });
 
       // ── Determine tool-calling strategy ──────────────────────
-      // Coordinator tools (spawn_agent, send_message, stop_agent) are
-      // Prism-local — they can't be routed via the tools-api MCP server.
-      // When ANY coordinator tool is enabled, we use the OpenAI-compat
-      // /v1/chat/completions endpoint with a standard `tools` array so
-      // Prism's agentic loop handles all tool dispatch in-process.
-      // Otherwise, use the native /api/v1/chat endpoint with MCP.
+      // When called from Prism's agentic loop (options.agent is set),
+      // ALWAYS use the OpenAI-compat /v1/chat/completions endpoint.
+      // Prism's loop handles multi-turn tool re-prompting with full
+      // tool schemas on every turn — critical for smaller models that
+      // lose structured FC format across turns. Native MCP delegates
+      // the loop to LM Studio, which conflicts with Prism's approval
+      // gating, error budgets, and context window management.
+      //
+      // Coordinator tools (spawn_agent, etc.) are Prism-local and
+      // also require this path since they can't route via MCP.
       const coordinatorSet = new Set(COORDINATOR_ONLY_TOOLS);
       const hasCoordinatorTools = options.tools?.some((t) => coordinatorSet.has(t.name));
 
-      if (hasCoordinatorTools) {
-        // ── OpenAI-compat path (with coordinator tools) ────────
+      if (options.agent || hasCoordinatorTools) {
+        // ── OpenAI-compat path (agentic + coordinator) ─────────
         yield* this._streamOpenAICompat(prepared, model, options, baseUrl);
         return;
       }
