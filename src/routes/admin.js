@@ -2433,16 +2433,25 @@ router.get("/sessions/:id/stats", async (req, res, next) => {
     if (!db) return res.status(503).json({ error: "Database not available" });
 
     const sessionId = req.params.id;
-    // Include requests from child worker sessions (linked via parentAgentSessionId)
-    // so aggregated stats reflect ALL activity spawned by this coordinator session
+    // Recursively discover all descendant session IDs (multi-level workers)
+    const allSessionIds = new Set([sessionId]);
+    let frontier = [sessionId];
+    for (let depth = 0; depth < 10 && frontier.length > 0; depth++) {
+      const childIds = await db
+        .collection(REQUESTS_COL)
+        .distinct("agentSessionId", {
+          parentAgentSessionId: { $in: frontier },
+          agentSessionId: { $nin: [...allSessionIds] },
+        });
+      if (childIds.length === 0) break;
+      const newIds = childIds.filter(Boolean);
+      for (const id of newIds) allSessionIds.add(id);
+      frontier = newIds;
+    }
+
     const requests = await db
       .collection(REQUESTS_COL)
-      .find({
-        $or: [
-          { agentSessionId: sessionId },
-          { parentAgentSessionId: sessionId },
-        ],
-      })
+      .find({ agentSessionId: { $in: [...allSessionIds] } })
       .project({
         estimatedCost: 1,
         inputTokens: 1,
@@ -2454,6 +2463,7 @@ router.get("/sessions/:id/stats", async (req, res, next) => {
         modalities: 1,
         toolApiNames: 1,
         success: 1,
+        agentSessionId: 1,
         parentAgentSessionId: 1,
       })
       .toArray();
@@ -2493,7 +2503,7 @@ router.get("/sessions/:id/stats", async (req, res, next) => {
       }
     }
 
-    const workerRequestCount = requests.filter((r) => r.parentAgentSessionId === sessionId).length;
+    const workerRequestCount = requests.filter((r) => r.agentSessionId !== sessionId).length;
 
     const createdAt = requests.reduce((min, r) => (!min || r.timestamp < min ? r.timestamp : min), null);
     const updatedAt = requests.reduce((max, r) => (!max || r.timestamp > max ? r.timestamp : max), null);
@@ -2522,6 +2532,154 @@ router.get("/sessions/:id/stats", async (req, res, next) => {
     });
   } catch (error) {
     logger.error(`Admin /sessions/:id/stats error: ${error.message}`);
+    next(error);
+  }
+});
+
+// ============================================================
+// GET /admin/sessions/:id/requests — all requests for a session (recursive)
+// Returns requests from the root session AND all descendant worker sessions.
+// ============================================================
+router.get("/sessions/:id/requests", async (req, res, next) => {
+  try {
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
+    if (!db) return res.status(503).json({ error: "Database not available" });
+
+    const rootSessionId = req.params.id;
+
+    // Recursively discover all descendant session IDs by walking the
+    // parentAgentSessionId chain. Each level's workers have their own
+    // agentSessionId but reference the parent via parentAgentSessionId.
+    const allSessionIds = new Set([rootSessionId]);
+    let frontier = [rootSessionId];
+
+    // Safety limit to prevent infinite loops (max 10 levels deep)
+    for (let depth = 0; depth < 10 && frontier.length > 0; depth++) {
+      // Find all requests whose parentAgentSessionId is in the current frontier
+      const childRequests = await db
+        .collection(REQUESTS_COL)
+        .distinct("agentSessionId", {
+          parentAgentSessionId: { $in: frontier },
+          agentSessionId: { $nin: [...allSessionIds] },
+        });
+
+      if (childRequests.length === 0) break;
+
+      const newIds = childRequests.filter(Boolean);
+      for (const id of newIds) allSessionIds.add(id);
+      frontier = newIds;
+    }
+
+    // Fetch all requests across all discovered session IDs
+    const requests = await db
+      .collection(REQUESTS_COL)
+      .find({ agentSessionId: { $in: [...allSessionIds] } })
+      .project({
+        requestId: 1,
+        timestamp: 1,
+        provider: 1,
+        model: 1,
+        operation: 1,
+        endpoint: 1,
+        success: 1,
+        errorMessage: 1,
+        inputTokens: 1,
+        outputTokens: 1,
+        estimatedCost: 1,
+        tokensPerSec: 1,
+        totalTime: 1,
+        toolsUsed: 1,
+        toolDisplayNames: 1,
+        toolApiNames: 1,
+        modalities: 1,
+        agentSessionId: 1,
+        parentAgentSessionId: 1,
+        traceId: 1,
+        agent: 1,
+      })
+      .sort({ timestamp: 1 })
+      .toArray();
+
+    res.json({
+      rootSessionId,
+      sessionIds: [...allSessionIds],
+      total: requests.length,
+      requests,
+    });
+  } catch (error) {
+    logger.error(`Admin /sessions/:id/requests error: ${error.message}`);
+    next(error);
+  }
+});
+
+// ============================================================
+// GET /admin/agent-sessions — list all agent sessions (cross-user)
+// ============================================================
+router.get("/agent-sessions", async (req, res, next) => {
+  try {
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
+    if (!db) return res.status(503).json({ error: "Database not available" });
+
+    const {
+      page = 1,
+      limit = 50,
+      project,
+      from,
+      to,
+      sort = "updatedAt",
+      order = "desc",
+    } = req.query;
+
+    const filter = {};
+    if (project) filter.project = project;
+    if (from || to) {
+      filter.updatedAt = {};
+      if (from) filter.updatedAt.$gte = from;
+      if (to) filter.updatedAt.$lte = to;
+    }
+
+    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
+    const lim = parseInt(limit, 10);
+    const sortDir = order === "asc" ? 1 : -1;
+
+    const [docs, total] = await Promise.all([
+      db
+        .collection(COLLECTIONS.AGENT_SESSIONS)
+        .find(filter, {
+          // Exclude full message history for the list view — too heavy
+          projection: { messages: 0 },
+        })
+        .sort({ [sort]: sortDir })
+        .skip(skip)
+        .limit(lim)
+        .toArray(),
+      db.collection(COLLECTIONS.AGENT_SESSIONS).countDocuments(filter),
+    ]);
+
+    res.json({ data: docs, total, page: parseInt(page, 10), limit: lim });
+  } catch (error) {
+    logger.error(`Admin /agent-sessions error: ${error.message}`);
+    next(error);
+  }
+});
+
+// ============================================================
+// GET /admin/agent-sessions/:id — single agent session (with messages)
+// ============================================================
+router.get("/agent-sessions/:id", async (req, res, next) => {
+  try {
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
+    if (!db) return res.status(503).json({ error: "Database not available" });
+
+    const doc = await db
+      .collection(COLLECTIONS.AGENT_SESSIONS)
+      .findOne({ id: req.params.id });
+
+    if (!doc) return res.status(404).json({ error: "Agent session not found" });
+
+    res.json(doc);
+  } catch (error) {
+    logger.error(`Admin /agent-sessions/:id error: ${error.message}`);
     next(error);
   }
 });
