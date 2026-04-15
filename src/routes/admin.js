@@ -2495,6 +2495,14 @@ router.get("/sessions/:id/stats", async (req, res, next) => {
 
     const workerRequestCount = requests.filter((r) => r.parentAgentSessionId === sessionId).length;
 
+    const createdAt = requests.reduce((min, r) => (!min || r.timestamp < min ? r.timestamp : min), null);
+    const updatedAt = requests.reduce((max, r) => (!max || r.timestamp > max ? r.timestamp : max), null);
+
+    // Wall-clock elapsed time: from first request to last request (includes workers)
+    const totalElapsedTime = createdAt && updatedAt
+      ? Math.max(0, (new Date(updatedAt).getTime() - new Date(createdAt).getTime()) / 1000)
+      : 0;
+
     res.json({
       agentSessionId: sessionId,
       requestCount: requests.length,
@@ -2508,8 +2516,9 @@ router.get("/sessions/:id/stats", async (req, res, next) => {
       operations: [...operations],
       modalities: mergedModalities,
       toolCounts,
-      createdAt: requests.reduce((min, r) => (!min || r.timestamp < min ? r.timestamp : min), null),
-      updatedAt: requests.reduce((max, r) => (!max || r.timestamp > max ? r.timestamp : max), null),
+      totalElapsedTime,
+      createdAt,
+      updatedAt,
     });
   } catch (error) {
     logger.error(`Admin /sessions/:id/stats error: ${error.message}`);
