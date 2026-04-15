@@ -17,9 +17,10 @@
 
 import logger from "../utils/logger.js";
 import { getInstance, isInstance } from "../providers/instance-registry.js";
+import { LOCAL_PROVIDER_TYPES } from "./LocalProviderGateway.js";
 
-// Providers that hit the local GPU
-const LOCAL_PROVIDERS = new Set(["lm-studio", "vllm", "ollama", "llama-cpp"]);
+// Providers that hit the local GPU — sourced from LocalProviderGateway
+const LOCAL_PROVIDERS = LOCAL_PROVIDER_TYPES;
 
 /** @type {Map<string, InstanceQueue>} Per-instance semaphore queues */
 const queues = new Map();

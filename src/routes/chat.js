@@ -24,6 +24,7 @@ import { formatCostTag } from "../utils/utilities.js";
 
 import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
 import localModelQueue from "../services/LocalModelQueue.js";
+import LocalProviderGateway from "../services/LocalProviderGateway.js";
 
 import {
   markGenerating,
@@ -344,9 +345,7 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
   // thinkingEnabled ON only when the client didn't send a value (undefined).
   // When the client explicitly sends false (thinking toggle off), respect it
   // — models can use tools without thinking.
-  if ((providerName === "lm-studio" || providerName === "llama-cpp") && thinkingEnabled === undefined) {
-    options.thinkingEnabled = true;
-  }
+  LocalProviderGateway.applyLocalDefaults(providerName, options, { thinkingEnabled });
 
   // ── Validation ──────────────────────────────────────────────
   if (!providerName) {
@@ -496,10 +495,10 @@ export async function handleConversation(params, emit, { signal } = {}) {
         ctx.modelDef?.streaming !== false;
 
       if (useStreaming) {
-        // LM Studio native MCP — only on /chat path
-        const useLmStudioNativeMcp = providerName === "lm-studio" && !options.agenticLoopEnabled;
+        // Native MCP tool execution — provider handles tool calling internally
+        const useNativeMcp = LocalProviderGateway.isNativeMCP(providerName) && !options.agenticLoopEnabled;
 
-        if (useLmStudioNativeMcp && options.functionCallingEnabled) {
+        if (useNativeMcp && options.functionCallingEnabled) {
           const builtInTools = ToolOrchestratorService.getToolSchemas();
           let tools = builtInTools;
           if (options.enabledTools && Array.isArray(options.enabledTools)) {
@@ -510,13 +509,13 @@ export async function handleConversation(params, emit, { signal } = {}) {
           if (ctx.modelDef?.contextLength) {
             options.contextLength = ctx.modelDef.contextLength;
           }
-          logger.info(`[chat] LM-Studio MCP: ${tools.length} tools enabled, enabledTools=${(options.enabledTools || []).length}, builtIn=${builtInTools.length}, contextLength=${options.contextLength || 'unset'}`);
-        } else if (useLmStudioNativeMcp) {
-          logger.warn(`[chat] LM-Studio MCP SKIPPED: functionCallingEnabled=${options.functionCallingEnabled}, useLmStudioNativeMcp=${useLmStudioNativeMcp}`);
+          logger.info(`[chat] Native MCP (${providerName}): ${tools.length} tools enabled, enabledTools=${(options.enabledTools || []).length}, builtIn=${builtInTools.length}, contextLength=${options.contextLength || 'unset'}`);
+        } else if (useNativeMcp) {
+          logger.warn(`[chat] Native MCP SKIPPED (${providerName}): functionCallingEnabled=${options.functionCallingEnabled}, useNativeMcp=${useNativeMcp}`);
         }
 
         // Non-LM-Studio FC on /chat path
-        if (!useLmStudioNativeMcp && !options.agenticLoopEnabled && options.functionCallingEnabled) {
+        if (!useNativeMcp && !options.agenticLoopEnabled && options.functionCallingEnabled) {
           const builtInTools = ToolOrchestratorService.getToolSchemas();
           let tools = builtInTools;
           if (options.enabledTools && Array.isArray(options.enabledTools)) {

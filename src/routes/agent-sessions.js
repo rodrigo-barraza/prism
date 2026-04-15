@@ -41,7 +41,7 @@ router.get("/", async (req, res, next) => {
 
 /**
  * GET /agent-sessions/:id
- * Get a specific agent session.
+ * Get a specific agent session, including aggregated stats from request logs.
  */
 router.get("/:id", async (req, res, next) => {
   try {
@@ -52,8 +52,8 @@ router.get("/:id", async (req, res, next) => {
 
     const project = req.project;
     const username = req.username;
-    const session = await client
-      .db(MONGO_DB_NAME)
+    const db = client.db(MONGO_DB_NAME);
+    const session = await db
       .collection(COLLECTION)
       .findOne({ id: req.params.id, project, username });
 
@@ -61,7 +61,99 @@ router.get("/:id", async (req, res, next) => {
       return res.status(404).json({ error: "Agent session not found" });
     }
 
-    res.json(session);
+    // ── Aggregate stats from request logs (single source of truth) ──
+    // Recursively discover all descendant session IDs (multi-level workers)
+    const sessionId = req.params.id;
+    const allSessionIds = new Set([sessionId]);
+    let frontier = [sessionId];
+    for (let depth = 0; depth < 10 && frontier.length > 0; depth++) {
+      const childIds = await db
+        .collection(COLLECTIONS.REQUESTS)
+        .distinct("agentSessionId", {
+          parentAgentSessionId: { $in: frontier },
+          agentSessionId: { $nin: [...allSessionIds] },
+        });
+      if (childIds.length === 0) break;
+      const newIds = childIds.filter(Boolean);
+      for (const id of newIds) allSessionIds.add(id);
+      frontier = newIds;
+    }
+
+    const requests = await db
+      .collection(COLLECTIONS.REQUESTS)
+      .find({ agentSessionId: { $in: [...allSessionIds] } })
+      .project({
+        estimatedCost: 1,
+        inputTokens: 1,
+        outputTokens: 1,
+        provider: 1,
+        model: 1,
+        operation: 1,
+        timestamp: 1,
+        modalities: 1,
+        toolApiNames: 1,
+        success: 1,
+        agentSessionId: 1,
+        parentAgentSessionId: 1,
+      })
+      .toArray();
+
+    let stats = null;
+    if (requests.length > 0) {
+      const providers = new Set();
+      const models = new Set();
+      const operations = new Set();
+      let totalCost = 0;
+      let totalInputTokens = 0;
+      let totalOutputTokens = 0;
+      const mergedModalities = {};
+      const toolCounts = {};
+
+      for (const r of requests) {
+        totalCost += r.estimatedCost || 0;
+        totalInputTokens += r.inputTokens || 0;
+        totalOutputTokens += r.outputTokens || 0;
+        if (r.provider) providers.add(r.provider);
+        if (r.model) models.add(r.model);
+        if (r.operation) operations.add(r.operation);
+        if (r.modalities) {
+          for (const [k, v] of Object.entries(r.modalities)) {
+            if (v) mergedModalities[k] = true;
+          }
+        }
+        if (r.toolApiNames?.length > 0) {
+          for (const name of r.toolApiNames) {
+            toolCounts[name] = (toolCounts[name] || 0) + 1;
+          }
+        }
+      }
+
+      const workerRequestCount = requests.filter((r) => r.agentSessionId !== sessionId).length;
+      const statsCreatedAt = requests.reduce((min, r) => (!min || r.timestamp < min ? r.timestamp : min), null);
+      const statsUpdatedAt = requests.reduce((max, r) => (!max || r.timestamp > max ? r.timestamp : max), null);
+      const totalElapsedTime = statsCreatedAt && statsUpdatedAt
+        ? Math.max(0, (new Date(statsUpdatedAt).getTime() - new Date(statsCreatedAt).getTime()) / 1000)
+        : 0;
+
+      stats = {
+        requestCount: requests.length,
+        workerRequestCount,
+        totalCost,
+        totalInputTokens,
+        totalOutputTokens,
+        totalTokens: totalInputTokens + totalOutputTokens,
+        providers: [...providers],
+        models: [...models],
+        operations: [...operations],
+        modalities: mergedModalities,
+        toolCounts,
+        totalElapsedTime,
+        createdAt: statsCreatedAt,
+        updatedAt: statsUpdatedAt,
+      };
+    }
+
+    res.json({ ...session, stats });
   } catch (error) {
     logger.error(`Error fetching agent session: ${error.message}`);
     next(error);

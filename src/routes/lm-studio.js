@@ -2,7 +2,7 @@ import express from "express";
 import { getProvider } from "../providers/index.js";
 import { isInstance } from "../providers/instance-registry.js";
 import logger from "../utils/logger.js";
-import { resolveArchParams, estimateMemory } from "../utils/gguf-arch.js";
+import LocalProviderGateway from "../services/LocalProviderGateway.js";
 import { sleep } from "../utils/utilities.js";
 import { initSseResponse } from "../utils/SseUtilities.js";
 
@@ -229,7 +229,9 @@ router.post("/estimate", async (req, res, next) => {
       return res.status(400).json({ error: true, message: "Missing 'model' in request body" });
     }
 
-    // Fetch model metadata from LM Studio
+    // Delegate to gateway — it handles the full fetch → estimate pipeline.
+    // Fall back to direct gguf-arch if we need raw model data (e.g. for
+    // custom gpuLayers values from the slider).
     const instanceId = resolveInstanceId(req);
     const provider = getProvider(instanceId);
     const result = await provider.listModels();
@@ -240,31 +242,18 @@ router.post("/estimate", async (req, res, next) => {
       return res.status(404).json({ error: true, message: `Model '${model}' not found` });
     }
 
-    const sizeBytes = modelData.size_bytes || 0;
-    const bpw = modelData.quantization?.bits_per_weight || 4;
-    const archParams = resolveArchParams(
-      modelData.architecture,
-      modelData.params_string,
-      sizeBytes,
-      bpw,
-    );
-    const totalLayers = archParams.layers;
-
-    const memory = estimateMemory({
-      sizeBytes,
-      archParams,
-      gpuLayers: gpuLayers ?? totalLayers,
+    const estimate = LocalProviderGateway.estimateVRAM(modelData, {
       contextLength: contextLength ?? 4096,
-      offloadKvCache: offloadKvCache ?? true,
+      gpuLayers,
       flashAttention: flashAttention ?? true,
-      vision: modelData.capabilities?.vision || false,
+      offloadKvCache: offloadKvCache ?? true,
     });
 
-    res.json({
-      ...memory,
-      archParams,
-      totalLayers,
-    });
+    if (!estimate) {
+      return res.status(400).json({ error: true, message: "Could not estimate VRAM for this model" });
+    }
+
+    res.json(estimate);
   } catch (error) {
     logger.error(`POST /lm-studio/estimate error: ${error.message}`);
     next(error);

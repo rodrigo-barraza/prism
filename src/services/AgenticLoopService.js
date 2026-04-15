@@ -18,6 +18,7 @@ import AgentPersonaRegistry from "./AgentPersonaRegistry.js";
 import PlanningModeService from "./PlanningModeService.js";
 import MemoryExtractor from "./MemoryExtractor.js";
 import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
+import LocalProviderGateway from "./LocalProviderGateway.js";
 
 /** Coordinator tools bypass the enabledTools filter (always available) */
 const COORDINATOR_TOOL_NAMES = new Set(COORDINATOR_ONLY_TOOLS);
@@ -159,7 +160,7 @@ export default class AgenticLoopService {
     // own internal loop handles multi-step tool calling via native MCP events.
     // vLLM uses standard OpenAI-compatible function calling and needs Prism's
     // agentic re-prompting loop (just like cloud providers), so it is NOT included here.
-    const isNativeMCPProvider = providerName === "lm-studio" || providerName === "ollama";
+    const isNativeMCPProvider = LocalProviderGateway.isNativeMCP(providerName);
     let hasCalledTools = false;
 
     // Resolve max iterations from client or fall back to the module constant.
