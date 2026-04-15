@@ -5,7 +5,7 @@ import { estimateTokens } from "../utils/CostCalculator.js";
 import RequestLogger from "./RequestLogger.js";
 import logger from "../utils/logger.js";
 import { calculateTokensPerSec } from "../utils/math.js";
-import { formatCostTag } from "../utils/utilities.js";
+import { formatCostTag, roundMs } from "../utils/utilities.js";
 import SettingsService from "./SettingsService.js";
 
 /** Resolve the current embedding provider + model from settings. */
@@ -131,7 +131,7 @@ const EmbeddingService = {
         outputTokens: result?.dimensions || 0,
         tokensPerSec: calculateTokensPerSec(approxInputTokens, totalSec),
         inputCharacters,
-        totalTime: parseFloat(totalSec.toFixed(3)),
+        totalTime: roundMs(totalSec),
         modalities: (() => {
           const mod = { embeddingOut: true };
           if (typeof content === "string") {

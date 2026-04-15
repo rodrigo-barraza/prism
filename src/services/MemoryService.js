@@ -8,6 +8,7 @@ import logger from "../utils/logger.js";
 import { cosineSimilarity, calculateTokensPerSec } from "../utils/math.js";
 import { estimateTokens, calculateTextCost } from "../utils/CostCalculator.js";
 import { TYPES, getPricing } from "../config.js";
+import { roundMs } from "../utils/utilities.js";
 import { COLLECTIONS } from "../constants.js";
 import SettingsService from "./SettingsService.js";
 
@@ -202,7 +203,7 @@ ${participantList}`;
       outputTokens: approxOutputTokens,
       tokensPerSec: calculateTokensPerSec(approxOutputTokens, totalSec),
       inputCharacters: inputText.length,
-      totalTime: parseFloat(totalSec.toFixed(3)),
+      totalTime: roundMs(totalSec),
       modalities: { textIn: true, textOut: true },
       requestPayload: {
         operation: "memory:extract",

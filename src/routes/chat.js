@@ -20,7 +20,7 @@ import FileService from "../services/FileService.js";
 import { createStreamState, dispatchChunk } from "../utils/StreamChunkDispatcher.js";
 import { calculateTokensPerSec } from "../utils/math.js";
 import { compressImageForSizeLimit } from "../utils/media.js";
-import { formatCostTag } from "../utils/utilities.js";
+import { formatCostTag, roundMs } from "../utils/utilities.js";
 
 import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
 import localModelQueue from "../services/LocalModelQueue.js";
@@ -775,7 +775,7 @@ async function handleImageAPIModel(ctx) {
     inputCharacters: prompt.length,
     outputCharacters: result.text ? result.text.length : 0,
     estimatedCost,
-    totalTime: parseFloat(totalSec.toFixed(3)),
+    totalTime: roundMs(totalSec),
   });
 
   // Emit events
@@ -823,7 +823,7 @@ async function handleImageAPIModel(ctx) {
       model: resolvedModel,
       provider: providerName,
       timestamp: new Date().toISOString(),
-      totalTime: parseFloat(totalSec.toFixed(3)),
+      totalTime: roundMs(totalSec),
       estimatedCost,
     });
 
@@ -1048,11 +1048,11 @@ export async function finalizeTextGeneration(
       ...(audioRef ? { audioRef } : {}),
       timeToGeneration:
         timeToGenerationSec !== null
-          ? parseFloat(timeToGenerationSec.toFixed(3))
+          ? roundMs(timeToGenerationSec)
           : null,
       generationTime:
-        generationSec !== null ? parseFloat(generationSec.toFixed(3)) : null,
-      totalTime: parseFloat(totalSec.toFixed(3)),
+        generationSec !== null ? roundMs(generationSec) : null,
+      totalTime: roundMs(totalSec),
       ...(traceId && { traceId }),
       ...(conversationId && { conversationId }),
     });
@@ -1085,7 +1085,7 @@ export async function finalizeTextGeneration(
         provider: providerName,
         timestamp: new Date().toISOString(),
         usage: usage || null,
-        totalTime: parseFloat(totalSec.toFixed(3)),
+        totalTime: roundMs(totalSec),
         tokensPerSec,
         estimatedCost,
         // Display segment metadata — preserves interleaving order for Retina
@@ -1125,7 +1125,7 @@ export async function finalizeTextGeneration(
         provider: providerName,
         timestamp: new Date().toISOString(),
         usage: usage || null,
-        totalTime: parseFloat(totalSec.toFixed(3)),
+        totalTime: roundMs(totalSec),
         tokensPerSec,
         estimatedCost,
         // Generation settings — source of truth per request

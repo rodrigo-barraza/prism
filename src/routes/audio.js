@@ -8,7 +8,7 @@ import ConversationService from "../services/ConversationService.js";
 import FileService from "../services/FileService.js";
 import logger from "../utils/logger.js";
 import RequestLogger from "../services/RequestLogger.js";
-import { formatCostTag } from "../utils/utilities.js";
+import { formatCostTag, roundMs } from "../utils/utilities.js";
 
 const router = express.Router();
 
@@ -153,7 +153,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
       traceId: traceId || null,
       success: true,
       inputCharacters: text.length,
-      totalTime: parseFloat(totalSec.toFixed(3)),
+      totalTime: roundMs(totalSec),
     });
 
     emitJSON({ type: "done" });
@@ -191,7 +191,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
         provider: providerName,
         voice: voice || undefined,
         timestamp: new Date().toISOString(),
-        totalTime: parseFloat(totalSec.toFixed(3)),
+        totalTime: roundMs(totalSec),
       });
 
       const meta = conversationMeta
@@ -433,7 +433,7 @@ router.post("/", async (req, res, next) => {
       inputTokens: result.usage?.inputTokens || 0,
       outputTokens: result.usage?.outputTokens || 0,
       estimatedCost,
-      totalTime: parseFloat(totalSec.toFixed(3)),
+      totalTime: roundMs(totalSec),
     });
 
     // ── Conversation persistence ────────────────────────────────
@@ -465,7 +465,7 @@ router.post("/", async (req, res, next) => {
           model: model || undefined,
           provider: providerName,
           timestamp: new Date().toISOString(),
-          totalTime: parseFloat(totalSec.toFixed(3)),
+          totalTime: roundMs(totalSec),
           estimatedCost,
           usage: result.usage || undefined,
         },
@@ -506,7 +506,7 @@ router.post("/", async (req, res, next) => {
       text: result.text,
       usage: result.usage || {},
       estimatedCost,
-      totalTime: parseFloat(totalSec.toFixed(3)),
+      totalTime: roundMs(totalSec),
       ...(traceId && { traceId }),
     });
   } catch (error) {

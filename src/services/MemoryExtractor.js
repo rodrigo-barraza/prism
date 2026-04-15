@@ -10,6 +10,7 @@ import logger from "../utils/logger.js";
 import { estimateTokens, calculateTextCost } from "../utils/CostCalculator.js";
 import { TYPES, getPricing } from "../config.js";
 import { calculateTokensPerSec } from "../utils/math.js";
+import { roundMs } from "../utils/utilities.js";
 
 const SUMMARIZATION_PROVIDER = "anthropic";
 const SUMMARIZATION_MODEL = "claude-haiku-4-5-20251001";
@@ -159,7 +160,7 @@ export default class MemoryExtractor {
           outputTokens: approxOutputTokens,
           tokensPerSec: calculateTokensPerSec(approxOutputTokens, totalSec),
           inputCharacters: inputText.length,
-          totalTime: parseFloat(totalSec.toFixed(3)),
+          totalTime: roundMs(totalSec),
           modalities: { textIn: true, textOut: true },
           requestPayload: {
             operation: "memory:extract",

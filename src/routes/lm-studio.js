@@ -43,7 +43,7 @@ router.post("/load", async (req, res, next) => {
     if (!model) {
       return res
         .status(400)
-        .json({ error: true, message: "Missing 'model' in request body" });
+        .json({ error: "Missing 'model' in request body" });
     }
 
     const instanceId = resolveInstanceId(req);
@@ -86,7 +86,7 @@ router.post("/load-stream", async (req, res) => {
   if (!model) {
     return res
       .status(400)
-      .json({ error: true, message: "Missing 'model' in request body" });
+      .json({ error: "Missing 'model' in request body" });
   }
 
   // Set up SSE — use setHeader pattern (not writeHead) to match /chat endpoint
@@ -202,8 +202,7 @@ router.post("/unload", async (req, res, next) => {
     const { instance_id } = req.body;
     if (!instance_id) {
       return res.status(400).json({
-        error: true,
-        message: "Missing 'instance_id' in request body",
+        error: "Missing 'instance_id' in request body",
       });
     }
 
@@ -226,7 +225,7 @@ router.post("/estimate", async (req, res, next) => {
   try {
     const { model, contextLength, gpuLayers, flashAttention, offloadKvCache } = req.body;
     if (!model) {
-      return res.status(400).json({ error: true, message: "Missing 'model' in request body" });
+      return res.status(400).json({ error: "Missing 'model' in request body" });
     }
 
     // Delegate to gateway — it handles the full fetch → estimate pipeline.
@@ -239,7 +238,7 @@ router.post("/estimate", async (req, res, next) => {
     const modelData = allModels.find((m) => m.id === model || m.path === model || m.key === model);
 
     if (!modelData) {
-      return res.status(404).json({ error: true, message: `Model '${model}' not found` });
+      return res.status(404).json({ error: `Model '${model}' not found` });
     }
 
     const estimate = LocalProviderGateway.estimateVRAM(modelData, {
@@ -250,7 +249,7 @@ router.post("/estimate", async (req, res, next) => {
     });
 
     if (!estimate) {
-      return res.status(400).json({ error: true, message: "Could not estimate VRAM for this model" });
+      return res.status(400).json({ error: "Could not estimate VRAM for this model" });
     }
 
     res.json(estimate);

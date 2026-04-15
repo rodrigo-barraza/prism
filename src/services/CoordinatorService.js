@@ -9,6 +9,7 @@ import RequestLogger from "./RequestLogger.js";
 import { estimateTokens, calculateTextCost } from "../utils/CostCalculator.js";
 import { TYPES, getPricing } from "../config.js";
 import { calculateTokensPerSec } from "../utils/math.js";
+import { roundMs } from "../utils/utilities.js";
 import localModelQueue from "./LocalModelQueue.js";
 import ToolOrchestratorService from "./ToolOrchestratorService.js";
 import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
@@ -749,7 +750,7 @@ export default class CoordinatorService {
         outputTokens: approxOutputTokens,
         tokensPerSec: calculateTokensPerSec(approxOutputTokens, llmTotalSec),
         inputCharacters: inputText.length,
-        totalTime: parseFloat(llmTotalSec.toFixed(3)),
+        totalTime: roundMs(llmTotalSec),
         modalities: { textIn: true, textOut: true },
         requestPayload: {
           operation: "coordinator:decompose",

@@ -1645,7 +1645,7 @@ router.post("/lm-studio/load", async (req, res, next) => {
     if (!model) {
       return res
         .status(400)
-        .json({ error: true, message: "Missing 'model' in request body" });
+        .json({ error: "Missing 'model' in request body" });
     }
 
     const provider = getProvider("lm-studio");
@@ -1679,8 +1679,7 @@ router.post("/lm-studio/unload", async (req, res, next) => {
     const { instance_id } = req.body;
     if (!instance_id) {
       return res.status(400).json({
-        error: true,
-        message: "Missing 'instance_id' in request body",
+        error: "Missing 'instance_id' in request body",
       });
     }
 
@@ -1702,7 +1701,7 @@ router.post("/lm-studio/estimate", async (req, res, next) => {
   try {
     const { model, contextLength, gpuLayers, flashAttention, offloadKvCache } = req.body;
     if (!model) {
-      return res.status(400).json({ error: true, message: "Missing 'model' in request body" });
+      return res.status(400).json({ error: "Missing 'model' in request body" });
     }
 
     const provider = getProvider("lm-studio");
@@ -1711,7 +1710,7 @@ router.post("/lm-studio/estimate", async (req, res, next) => {
     const modelData = allModels.find((m) => m.id === model || m.path === model || m.key === model);
 
     if (!modelData) {
-      return res.status(404).json({ error: true, message: `Model '${model}' not found` });
+      return res.status(404).json({ error: `Model '${model}' not found` });
     }
 
     const sizeBytes = modelData.size_bytes || 0;

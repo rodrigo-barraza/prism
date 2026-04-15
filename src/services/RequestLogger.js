@@ -3,6 +3,7 @@ import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 import { getTotalInputTokens } from "../utils/CostCalculator.js";
 import { computeModalities } from "./ConversationService.js";
+import { roundMs } from "../utils/utilities.js";
 import { COLLECTIONS } from "../constants.js";
 
 const COLLECTION = COLLECTIONS.REQUESTS;
@@ -242,9 +243,9 @@ const RequestLogger = {
         0,
       ),
       outputCharacters,
-      timeToGeneration: timeToGenerationSec !== null ? parseFloat(timeToGenerationSec.toFixed(3)) : null,
-      generationTime: generationSec !== null ? parseFloat(generationSec.toFixed(3)) : null,
-      totalTime: totalSec !== null ? parseFloat(totalSec.toFixed(3)) : null,
+      timeToGeneration: timeToGenerationSec !== null ? roundMs(timeToGenerationSec) : null,
+      generationTime: generationSec !== null ? roundMs(generationSec) : null,
+      totalTime: totalSec !== null ? roundMs(totalSec) : null,
       requestPayload: {
         messages: messages.map(sanitizeMsg),
         ...(options?.tools ? { tools: options.tools.map((t) => t.name || t.function?.name) } : {}),

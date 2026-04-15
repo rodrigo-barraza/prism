@@ -21,3 +21,14 @@ export function sleep(ms) {
 export function formatCostTag(estimatedCost) {
   return estimatedCost !== null ? `, cost: $${estimatedCost.toFixed(6)}` : "";
 }
+
+/**
+ * Round a floating-point seconds value to millisecond precision (3 decimals).
+ * Standard precision for all timing metrics stored in the database.
+ *
+ * @param {number} sec
+ * @returns {number}
+ */
+export function roundMs(sec) {
+  return parseFloat(sec.toFixed(3));
+}

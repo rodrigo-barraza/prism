@@ -8,6 +8,7 @@ import logger from "../utils/logger.js";
 import { cosineSimilarity, calculateTokensPerSec } from "../utils/math.js";
 import { estimateTokens, calculateTextCost } from "../utils/CostCalculator.js";
 import { TYPES, getPricing } from "../config.js";
+import { roundMs } from "../utils/utilities.js";
 import { COLLECTIONS } from "../constants.js";
 import SettingsService from "./SettingsService.js";
 
@@ -429,7 +430,7 @@ const MemoryConsolidationService = {
         outputTokens: approxOutputTokens,
         tokensPerSec: calculateTokensPerSec(approxOutputTokens, llmTotalSec),
         inputCharacters: inputText.length,
-        totalTime: parseFloat(llmTotalSec.toFixed(3)),
+        totalTime: roundMs(llmTotalSec),
         modalities: { textIn: true, textOut: true },
         requestPayload: {
           operation: "memory:consolidate",

@@ -16,7 +16,7 @@ import { isInstance } from "../providers/instance-registry.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
-import { sleep } from "../utils/utilities.js";
+import { sleep, roundMs } from "../utils/utilities.js";
 import { COLLECTIONS } from "../constants.js";
 
 
@@ -282,7 +282,7 @@ async function runSingleModel(benchmark, model, project, username, { signal, onE
         thinking: null,
         passed: false,
         matchMode: benchmark.matchMode || MATCH_MODES.CONTAINS,
-        latency: parseFloat(latency.toFixed(3)),
+        latency: roundMs(latency),
         usage: null,
         estimatedCost: null,
         error: errorEvent.message,
@@ -334,7 +334,7 @@ async function runSingleModel(benchmark, model, project, username, { signal, onE
       toolCalls: toolCallsResult,
       passed,
       matchMode,
-      latency: parseFloat(latency.toFixed(3)),
+      latency: roundMs(latency),
       usage: doneEvent.usage || null,
       estimatedCost: doneEvent.estimatedCost ?? null,
       error: null,
@@ -354,7 +354,7 @@ async function runSingleModel(benchmark, model, project, username, { signal, onE
       thinking: null,
       passed: false,
       matchMode: benchmark.matchMode || MATCH_MODES.CONTAINS,
-      latency: parseFloat(latency.toFixed(3)),
+      latency: roundMs(latency),
       usage: null,
       estimatedCost: null,
       error: err.message,
