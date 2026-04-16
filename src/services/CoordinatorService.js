@@ -142,14 +142,13 @@ async function cleanupWorktrees(repoPath) {
 }
 
 // ────────────────────────────────────────────────────────────
-// Task Notification (XML format, matching Claude Code's design)
+// Worker Result Builder
 // ────────────────────────────────────────────────────────────
-// Structured XML gives the coordinator consistent, machine-parseable
-// boundaries. The <task-notification> opening tag lets both the system
-// prompt and the frontend reliably distinguish worker results from
-// real user messages.
+// Returns a structured result object that becomes the spawn_agent
+// tool call's response. The coordinator LLM receives it directly
+// as the tool result — no separate user-role notification needed.
 
-function buildTaskNotification(worker) {
+function buildWorkerResult(worker) {
   const status = worker.status === "complete" ? "completed" : worker.status;
   const summary = status === "completed"
     ? `Agent "${worker.description}" completed`
@@ -157,21 +156,27 @@ function buildTaskNotification(worker) {
       ? `Agent "${worker.description}" failed: ${worker.error || "Unknown error"}`
       : `Agent "${worker.description}" was stopped`;
 
-  const resultSection = (worker.output || "").trim().slice(0, 4000);
-  const toolUseCount = worker.toolCalls?.length || 0;
-  const durationMs = worker.durationMs || 0;
+  const result = {
+    agent_id: worker.agentId,
+    description: worker.description,
+    status,
+    summary,
+    result: (worker.output || "").trim().slice(0, 4000) || null,
+    toolUses: worker.toolCalls?.length || 0,
+    durationMs: worker.durationMs || 0,
+  };
 
-  let diffSection = "";
   if (worker.diff?.hasChanges) {
-    diffSection = `\n<diff>+${worker.diff.additions || 0} -${worker.diff.deletions || 0} in ${(worker.diff.files || []).join(", ")}</diff>`;
+    result.diff = {
+      additions: worker.diff.additions || 0,
+      deletions: worker.diff.deletions || 0,
+      files: worker.diff.files || [],
+    };
   }
 
-  return `<task-notification>
-<task-id>${worker.agentId}</task-id>
-<status>${status}</status>
-<summary>${summary}</summary>${resultSection ? `\n<result>${resultSection}</result>` : ""}
-<usage><tool_uses>${toolUseCount}</tool_uses><duration_ms>${durationMs}</duration_ms></usage>${diffSection}
-</task-notification>`;
+  if (worker.error) result.error = worker.error;
+
+  return result;
 }
 
 // ────────────────────────────────────────────────────────────
@@ -407,38 +412,33 @@ export default class CoordinatorService {
 
     logger.info(`[Coordinator] Spawned worker ${agentId}: "${description}" in ${worktreePath}${workerState.isolated ? " (isolated worktree)" : " (shared workspace)"}`);
 
-    // Run the worker loop asynchronously — don't await
-    CoordinatorService._runWorkerLoop(workerState, prompt, coordinatorCtx)
-      .catch(async (err) => {
-        logger.error(`[Coordinator] Worker ${agentId} loop error: ${err.message}`);
-        workerState.status = "failed";
-        workerState.error = err.message;
-        workerState.durationMs = Date.now() - workerState.startedAt;
+    // Run the worker loop — blocks until the worker completes.
+    // When multiple spawn_agent calls appear in the same model response,
+    // the agentic loop's Promise.all executes them concurrently.
+    try {
+      await CoordinatorService._runWorkerLoop(workerState, prompt, coordinatorCtx);
+    } catch (err) {
+      logger.error(`[Coordinator] Worker ${agentId} loop error: ${err.message}`);
+      workerState.status = "failed";
+      workerState.error = err.message;
+      workerState.durationMs = Date.now() - workerState.startedAt;
 
-        // Clean up worktree on failure to prevent orphaned branches
-        if (workerState.isolated && workerState.worktreePath) {
-          await removeWorktree(workerState.repoPath, workerState.worktreePath).catch((e) =>
-            logger.warn(`[Coordinator] Worktree cleanup failed for ${agentId}: ${e.message}`),
-          );
-        }
+      // Clean up worktree on failure to prevent orphaned branches
+      if (workerState.isolated && workerState.worktreePath) {
+        await removeWorktree(workerState.repoPath, workerState.worktreePath).catch((e) =>
+          logger.warn(`[Coordinator] Worktree cleanup failed for ${agentId}: ${e.message}`),
+        );
+      }
+    }
 
-        // Notify the coordinator that the worker failed — same as completion flow
-        const notification = buildTaskNotification(workerState);
-        if (coordinatorCtx.injectMessage) {
-          coordinatorCtx.injectMessage(notification);
-        }
-        if (coordinatorCtx.emit) {
-          coordinatorCtx.emit({ type: "status", message: "workers_updated" });
-        }
-      });
+    // Notify UI that worker state changed
+    if (coordinatorCtx.emit) {
+      coordinatorCtx.emit({ type: "status", message: "workers_updated" });
+    }
 
-    return {
-      agent_id: agentId,
-      description,
-      branch: workerState.branchName || null,
-      worktree: worktreePath,
-      status: "running",
-    };
+    const workerResult = buildWorkerResult(workerState);
+    logger.info(`[Coordinator] Worker ${agentId} result: status=${workerResult.status} toolUses=${workerResult.toolUses} durationMs=${workerResult.durationMs}`);
+    return workerResult;
   }
 
   /**
@@ -717,12 +717,12 @@ export default class CoordinatorService {
     } catch (err) {
       if (err.name === "AbortError" || worker.abortController.signal.aborted) {
         worker.status = "stopped";
-        worker.durationMs = Date.now() - worker.startedAt;
-        return;
+      } else {
+        throw err;
       }
-      throw err;
     }
 
+    // Always populate — including on abort/error paths
     worker.output = workerOutput.slice(0, 4000);
     worker.toolCalls = workerToolCalls;
     worker.messages = workerMessages;
@@ -746,12 +746,6 @@ export default class CoordinatorService {
     logger.info(
       `[Coordinator] Worker ${worker.agentId} completed in ${worker.durationMs}ms (${workerToolCalls.length} tool calls)`,
     );
-
-    // Inject worker notification into the coordinator's active conversation
-    const notification = buildTaskNotification(worker);
-    if (coordinatorCtx.injectMessage) {
-      coordinatorCtx.injectMessage(notification);
-    }
   }
 
   // ══════════════════════════════════════════════════════════

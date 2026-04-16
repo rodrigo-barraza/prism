@@ -290,19 +290,6 @@ export default class AgenticLoopService {
     // Track consecutive errors per tool name for retry budgeting
     const toolErrorCounts = new Map();
 
-    // ── Message injection queue for coordinator mode ─────────
-    // When coordinator tools spawn workers, workers deliver results
-    // as <task-notification> XML user-role messages via this queue.
-    // The loop drains this queue after each tool execution batch.
-    // The wake signal wakes the coordinator wait loop immediately.
-    const injectedMessages = [];
-    let _notifyWake = null;
-    const injectMessage = (content) => {
-      injectedMessages.push({ role: "user", content, _taskNotification: true });
-      if (_notifyWake) { _notifyWake(); _notifyWake = null; }
-    };
-    let hasSpawnedWorkers = false;
-
     try {
       while (iterations < resolvedMaxIterations) {
         iterations++;
@@ -621,7 +608,6 @@ export default class AgenticLoopService {
         // If the LLM returned tool calls, we execute them and loop
         if (passPendingToolCalls.length > 0) {
 
-          if (passPendingToolCalls.some((tc) => tc.name === "spawn_agent")) hasSpawnedWorkers = true;
 
           // ── beforeToolCall hook: auto-approval gating ──────
           const { autoApproved: _autoApproved, needsApproval } = approvalEngine.checkBatch(passPendingToolCalls);
@@ -712,7 +698,6 @@ export default class AgenticLoopService {
                  // Coordinator context — used by spawn_agent/send_message/stop_agent
                  _providerName: providerName,
                  _resolvedModel: resolvedModel,
-                 _injectMessage: injectMessage,
                  _emit: emit,
                });
                await hooks.run("afterToolCall", tc, result, ctx);
@@ -828,87 +813,13 @@ export default class AgenticLoopService {
           // Clean up empty assistant text content nodes
           currentMessages = currentMessages.filter((m) => !(m.role === "assistant" && !m.content?.trim() && (!m.toolCalls || m.toolCalls.length === 0)));
 
-          // ── Drain coordinator message injection queue ────────
-          // Worker notifications arrive here as user-role messages
-          // prefixed with [WORKER COMPLETED/FAILED/STOPPED].
-          if (injectedMessages.length > 0) {
-            const drained = injectedMessages.splice(0, injectedMessages.length);
-            for (const msg of drained) {
-              currentMessages.push(msg);
-              emit({ type: "status", message: "worker_notification", agentNotification: msg.content });
-            }
-          }
 
           // Run the next iteration
           continue;
         }
 
         // If text was returned without new tools, we're done
-        // — unless the coordinator has running workers. In that case,
-        // save the response, wait for worker notifications, then
-        // re-prompt the model so it can synthesize the results.
         if (passStreamedText) {
-          if (hasSpawnedWorkers) {
-            const { default: CoordinatorService } = await import("./CoordinatorService.js");
-            const runningWorkers = CoordinatorService.listWorkers().filter((w) => w.status === "running");
-
-            if (runningWorkers.length > 0) {
-              // Save coordinator text as an assistant message
-              currentMessages.push({
-                role: "assistant",
-                content: passStreamedText,
-                ...(passStreamedThinking && { thinking: passStreamedThinking }),
-                ...(passThinkingSignature && { thinkingSignature: passThinkingSignature }),
-              });
-
-              emit({ type: "status", message: "coordinator_waiting", activeWorkers: runningWorkers.length });
-              logger.info(`[AgenticLoop] Coordinator waiting for ${runningWorkers.length} running workers`);
-
-              // Wait for ALL workers to finish — not just the first.
-              // Waking on the first notification causes a race: subsequent
-              // notifications arrive mid-stream during the re-prompt and
-              // never get delivered as proper user messages. By holding
-              // until every worker reaches a terminal state, all
-              // notifications are batched and drained in one go.
-              await new Promise((resolve) => {
-                if (signal?.aborted) { resolve(); return; }
-                let settled = false;
-                const done = () => { if (settled) return; settled = true; clearInterval(safetyPoll); _notifyWake = null; resolve(); };
-
-                // Wake callback — re-check worker states when any notification arrives
-                const checkAllDone = () => {
-                  const still = CoordinatorService.listWorkers().filter((w) => w.status === "running");
-                  if (still.length === 0) done();
-                };
-
-                _notifyWake = checkAllDone;
-
-                // Safety poll every 2s in case notification was lost
-                const safetyPoll = setInterval(() => {
-                  if (signal?.aborted) { done(); return; }
-                  checkAllDone();
-                }, 2000);
-                // Hard timeout — 5 minutes
-                setTimeout(done, 300_000);
-              });
-
-              if (signal?.aborted) break;
-
-              // Drain all pending notifications — all workers are done at this point
-              if (injectedMessages.length > 0) {
-                const drained = injectedMessages.splice(0, injectedMessages.length);
-                for (const msg of drained) {
-                  currentMessages.push(msg);
-                  emit({ type: "status", message: "worker_notification", agentNotification: msg.content });
-                }
-                logger.info(`[AgenticLoop] Coordinator received ${drained.length} worker notifications, re-prompting`);
-                continue; // Re-prompt model with notifications
-              }
-
-              // All workers done but no notifications (edge case — worker failed silently)
-              logger.warn("[AgenticLoop] All workers completed but no notifications received");
-            }
-          }
           logIteration();
           break;
         }
@@ -1037,7 +948,7 @@ export default class AgenticLoopService {
       // ── Persist worker snapshots to the parent session ──────────
       // Workers live in-memory during execution but must be persisted
       // so they survive page refreshes and server restarts.
-      if (hasSpawnedWorkers && agentSessionId) {
+      if (streamedToolCalls.some((tc) => tc.name === "spawn_agent") && agentSessionId) {
         try {
           const { default: CoordinatorService } = await import("./CoordinatorService.js");
           const { COLLECTIONS } = await import("../constants.js");
