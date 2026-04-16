@@ -326,10 +326,20 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
 
         // If minContextLength is requested (e.g. agentic mode) and model is loaded
         // with insufficient context, force a reload with the required minimum.
+        // BUT: skip reload if the model is already at its maximum context — reloading
+        // would just load the same max again, creating an infinite unload/reload loop
+        // (e.g. minContextLength=150k but model max is 32k → loads at 32k → 32k<150k → reload → 32k → …).
+        const modelMaxCtx = modelEntry?.max_context_length || 0;
+        const alreadyAtMax = modelMaxCtx > 0 && options._loadedContextLength >= modelMaxCtx;
         const needsReload = isLoaded &&
           options.minContextLength &&
           options._loadedContextLength &&
-          options._loadedContextLength < options.minContextLength;
+          options._loadedContextLength < options.minContextLength &&
+          !alreadyAtMax;
+
+        if (alreadyAtMax && options.minContextLength && options._loadedContextLength < options.minContextLength) {
+          logger.info(`[LM-Studio] Model ${model} already at max context (${options._loadedContextLength}/${modelMaxCtx}) — skipping reload (requested ${options.minContextLength})`);
+        }
 
         if (needsReload) {
           const target = Math.min(options.minContextLength, modelEntry.max_context_length || options.minContextLength);
