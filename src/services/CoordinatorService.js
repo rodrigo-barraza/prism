@@ -531,6 +531,41 @@ export default class CoordinatorService {
   }
 
   /**
+   * Abort all running workers spawned under a given parent agent session.
+   * Called when the coordinator's SSE connection is severed (user presses stop)
+   * or explicitly via the REST endpoint.
+   *
+   * @param {string} parentAgentSessionId - The coordinator session ID
+   * @returns {{ stopped: string[], alreadyStopped: string[] }}
+   */
+  static abortWorkersBySession(parentAgentSessionId) {
+    const stopped = [];
+    const alreadyStopped = [];
+
+    for (const [agentId, worker] of activeWorkers) {
+      if (worker.parentAgentSessionId !== parentAgentSessionId) continue;
+
+      if (worker.status === "running") {
+        if (worker.abortController) {
+          worker.abortController.abort();
+        }
+        worker.status = "stopped";
+        worker.durationMs = Date.now() - worker.startedAt;
+        stopped.push(agentId);
+        logger.info(`[Coordinator] Aborted worker ${agentId} (parent session stopped)`);
+      } else {
+        alreadyStopped.push(agentId);
+      }
+    }
+
+    if (stopped.length > 0) {
+      logger.info(`[Coordinator] Bulk-aborted ${stopped.length} worker(s) for session ${parentAgentSessionId}`);
+    }
+
+    return { stopped, alreadyStopped };
+  }
+
+  /**
    * Get the status of a specific worker.
    * @param {string} agentId
    * @returns {object|null}

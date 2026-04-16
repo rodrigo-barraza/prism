@@ -631,6 +631,17 @@ export async function handleAgent(params, emit, { signal } = {}) {
         localRelease();
         logger.info(`[agent] 🔓 Released local GPU lock for ${resolvedModel}`);
       }
+
+      // When the SSE connection is severed (user pressed stop), abort any
+      // spawned workers that are still running under this coordinator session.
+      if (signal?.aborted) {
+        try {
+          const { default: CoordinatorService } = await import("../services/CoordinatorService.js");
+          CoordinatorService.abortWorkersBySession(agentSessionId);
+        } catch (cleanupErr) {
+          logger.warn(`[agent] Worker cleanup failed: ${cleanupErr.message}`);
+        }
+      }
     }
   } catch (error) {
     markGenerating(agentSessionId, project, username, false, getCollectionOpts(project));

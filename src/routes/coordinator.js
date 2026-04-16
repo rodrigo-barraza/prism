@@ -153,6 +153,23 @@ router.get("/workers", async (req, res) => {
 });
 
 /**
+ * POST /coordinator/workers/stop
+ * Abort all running workers for a given parent agent session.
+ * Called by the frontend when the user presses stop.
+ *
+ * Body: { agentSessionId: string }
+ */
+router.post("/workers/stop", (req, res) => {
+  const { agentSessionId } = req.body;
+  if (!agentSessionId) {
+    return res.status(400).json({ error: "'agentSessionId' is required" });
+  }
+
+  const result = CoordinatorService.abortWorkersBySession(agentSessionId);
+  res.json(result);
+});
+
+/**
  * GET /coordinator/workers/:agentId
  * Get the status of a specific chat-spawned worker.
  */
