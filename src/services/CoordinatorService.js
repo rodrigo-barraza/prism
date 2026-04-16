@@ -248,7 +248,46 @@ export default class CoordinatorService {
     let workerModel = model || resolvedModel;
     if (localModelQueue.isLocal(providerName)) {
       const providerType = getInstanceType(providerName) || providerName;
-      const siblings = getInstancesByType(providerType);
+      let siblings = getInstancesByType(providerType);
+
+      // ── Model availability filter ─────────────────────────────
+      // When multiple instances exist, verify the worker model is
+      // downloaded on each before routing there. Prevents 404 errors
+      // from instances that don't have the model on disk.
+      if (siblings.length > 1) {
+        try {
+          const checks = await Promise.allSettled(
+            siblings.map(async (inst) => {
+              const provider = getProvider(inst.id);
+              if (!provider?.listModels) return false;
+              const result = await Promise.race([
+                provider.listModels(),
+                new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000)),
+              ]);
+              const models = result?.models || result?.data || [];
+              return models.some((m) => (m.key || m.id) === workerModel);
+            }),
+          );
+          const available = siblings.filter((_, i) =>
+            checks[i].status === "fulfilled" && checks[i].value === true,
+          );
+          if (available.length > 0) {
+            if (available.length < siblings.length) {
+              logger.info(
+                `[Coordinator] Model "${workerModel}" available on ${available.length}/${siblings.length} instances: ${available.map((s) => s.id).join(", ")}`,
+              );
+            }
+            siblings = available;
+          } else {
+            logger.warn(
+              `[Coordinator] Model "${workerModel}" not available on any ${providerType} instance`,
+            );
+            siblings = [];
+          }
+        } catch (err) {
+          logger.warn(`[Coordinator] Model availability check failed: ${err.message}`);
+        }
+      }
 
       // Calculate total slots across all instances, reserving 1 for the coordinator
       const totalSlots = siblings.reduce((sum, inst) => sum + inst.concurrency, 0);
