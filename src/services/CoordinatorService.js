@@ -597,13 +597,37 @@ export default class CoordinatorService {
     const parentEmit = coordinatorCtx.emit;
     let workerOutput = "";
     const workerToolCalls = [];
+    let lastWorkerPhase = null;
     const workerEmit = (event) => {
       if (event.type === "chunk") {
         workerOutput += event.content || "";
+        // Notify the frontend that the worker is actively generating text
+        if (parentEmit && lastWorkerPhase !== "generating") {
+          lastWorkerPhase = "generating";
+          parentEmit({
+            type: "worker_status",
+            workerId: worker.agentId,
+            message: "phase",
+            phase: "generating",
+          });
+        }
+      } else if (event.type === "thinking") {
+        // Notify the frontend that the worker is in the thinking phase
+        if (parentEmit && lastWorkerPhase !== "thinking") {
+          lastWorkerPhase = "thinking";
+          parentEmit({
+            type: "worker_status",
+            workerId: worker.agentId,
+            message: "phase",
+            phase: "thinking",
+          });
+        }
       } else if (event.type === "tool_execution") {
         if (event.status === "calling") {
           workerToolCalls.push({ name: event.tool?.name, args: event.tool?.args });
         }
+        // Reset phase so post-tool generation fires a fresh "generating" event
+        lastWorkerPhase = null;
         // Forward to parent SSE stream — namespaced so the frontend can
         // distinguish worker tool calls from the coordinator's own
         if (parentEmit) {
