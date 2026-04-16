@@ -662,6 +662,16 @@ export default class CoordinatorService {
             maxIterations: event.maxIterations,
           });
         }
+        // Forward LM Studio lifecycle phases (loading, processing, generating)
+        if (parentEmit && event.phase) {
+          lastWorkerPhase = event.phase;
+          parentEmit({
+            type: "worker_status",
+            workerId: worker.agentId,
+            message: "phase",
+            phase: event.phase,
+          });
+        }
       } else if (event.type === "done") {
         // Capture cost and usage from finalizeTextGeneration
         worker.totalCost = event.estimatedCost || null;
