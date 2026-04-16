@@ -63,8 +63,12 @@ async function* parseNativeSSEStream(reader, options = {}) {
           const json = JSON.parse(trimmed.slice(6));
           const type = json.type;
 
+          // ── Chat lifecycle events ──
+          if (type === "chat.start") {
+            yield { type: "status", message: "Starting…", phase: "starting" };
+          }
           // ── Reasoning events ──
-          if (type === "reasoning.delta" && json.content) {
+          else if (type === "reasoning.delta" && json.content) {
             yield { type: "thinking", content: json.content };
           }
           // ── Message content events ──
@@ -73,16 +77,25 @@ async function* parseNativeSSEStream(reader, options = {}) {
           }
           // ── Model loading events ──
           else if (type === "model_load.start") {
-            yield { type: "status", message: "Loading model… 0%" };
+            yield { type: "status", message: "Loading model… 0%", phase: "loading" };
           } else if (type === "model_load.progress") {
             const pct = json.progress != null ? Math.round(json.progress * 100) : 0;
-            yield { type: "status", message: `Loading model… ${pct}%` };
+            yield { type: "status", message: `Loading model… ${pct}%`, phase: "loading" };
           } else if (type === "model_load.end") {
-            yield { type: "status", message: "Loading model… 100%" };
+            yield { type: "status", message: "Loading model… 100%", phase: "loading" };
           }
           // ── Prompt processing events ──
           else if (type === "prompt_processing.start") {
-            yield { type: "status", message: "Processing prompt…" };
+            yield { type: "status", message: "Processing prompt…", phase: "processing" };
+          } else if (type === "prompt_processing.progress") {
+            const pct = json.progress != null ? Math.round(json.progress * 100) : 0;
+            yield { type: "status", message: `Processing prompt… ${pct}%`, phase: "processing" };
+          } else if (type === "prompt_processing.end") {
+            yield { type: "status", message: "Processing prompt… done", phase: "processing" };
+          }
+          // ── Generation start ──
+          else if (type === "message.start") {
+            yield { type: "status", message: "Generating…", phase: "generating" };
           }
           // ── Tool call events (MCP) ──
           else if (type === "tool_call.start") {
@@ -152,6 +165,10 @@ async function* parseNativeSSEStream(reader, options = {}) {
               usage = {
                 inputTokens: stats.input_tokens || 0,
                 outputTokens: stats.total_output_tokens || 0,
+                // Enrich with LM Studio-specific perf metrics
+                tokensPerSec: stats.tokens_per_second || undefined,
+                timeToFirstToken: stats.time_to_first_token_seconds || undefined,
+                reasoningOutputTokens: stats.reasoning_output_tokens || undefined,
               };
             }
           }
@@ -651,6 +668,8 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
       `[LM-Studio] OpenAI-compat streaming (coordinator tools active): model=${model}, tools=${options.tools?.length || 0}`,
     );
 
+    yield { type: "status", message: "Starting…", phase: "starting" };
+
     const response = await fetch(`${baseUrl}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -663,11 +682,20 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
       throw new ProviderError("lm-studio", `API error: ${response.status} ${errorText}`, response.status);
     }
 
+    yield { type: "status", message: "Processing prompt…", phase: "processing" };
+
     const reader = response.body.getReader();
-    yield* parseSSEStream(reader, {
+    let emittedGenerating = false;
+    for await (const chunk of parseSSEStream(reader, {
       signal: options.signal,
       thinkingEnabled: options.thinkingEnabled,
-    });
+    })) {
+      if (!emittedGenerating) {
+        emittedGenerating = true;
+        yield { type: "status", message: "Generating…", phase: "generating" };
+      }
+      yield chunk;
+    }
   },
 
   // ── Embedding Generation ─────────────────────────────────

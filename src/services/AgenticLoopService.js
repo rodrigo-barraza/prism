@@ -545,7 +545,8 @@ export default class AgenticLoopService {
               continue;
           }
           if (chunk && typeof chunk === "object" && chunk.type === "status") {
-              emit({ type: "status", message: chunk.message });
+              const { type: _t, ...statusRest } = chunk;
+              emit({ type: "status", ...statusRest });
               continue;
           }
 
