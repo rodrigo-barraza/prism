@@ -98,8 +98,9 @@ router.get("/:id", async (req, res, next) => {
       })
       .toArray();
 
-    let stats = null;
-    if (requests.length > 0) {
+    // ── Shared aggregation helper ───────────────────────────────
+    const aggregateRequests = (reqs) => {
+      if (reqs.length === 0) return null;
       const providers = new Set();
       const models = new Set();
       const operations = new Set();
@@ -109,7 +110,7 @@ router.get("/:id", async (req, res, next) => {
       const mergedModalities = {};
       const toolCounts = {};
 
-      for (const r of requests) {
+      for (const r of reqs) {
         totalCost += r.estimatedCost || 0;
         totalInputTokens += r.inputTokens || 0;
         totalOutputTokens += r.outputTokens || 0;
@@ -128,16 +129,14 @@ router.get("/:id", async (req, res, next) => {
         }
       }
 
-      const workerRequestCount = requests.filter((r) => r.agentSessionId !== sessionId).length;
-      const statsCreatedAt = requests.reduce((min, r) => (!min || r.timestamp < min ? r.timestamp : min), null);
-      const statsUpdatedAt = requests.reduce((max, r) => (!max || r.timestamp > max ? r.timestamp : max), null);
-      const totalElapsedTime = statsCreatedAt && statsUpdatedAt
-        ? Math.max(0, (new Date(statsUpdatedAt).getTime() - new Date(statsCreatedAt).getTime()) / 1000)
+      const earliest = reqs.reduce((min, r) => (!min || r.timestamp < min ? r.timestamp : min), null);
+      const latest = reqs.reduce((max, r) => (!max || r.timestamp > max ? r.timestamp : max), null);
+      const totalElapsedTime = earliest && latest
+        ? Math.max(0, (new Date(latest).getTime() - new Date(earliest).getTime()) / 1000)
         : 0;
 
-      stats = {
-        requestCount: requests.length,
-        workerRequestCount,
+      return {
+        requestCount: reqs.length,
         totalCost,
         totalInputTokens,
         totalOutputTokens,
@@ -148,8 +147,23 @@ router.get("/:id", async (req, res, next) => {
         modalities: mergedModalities,
         toolCounts,
         totalElapsedTime,
-        createdAt: statsCreatedAt,
-        updatedAt: statsUpdatedAt,
+        createdAt: earliest,
+        updatedAt: latest,
+      };
+    };
+
+    // ── Split requests into orchestrator vs worker buckets ────
+    const orchestratorRequests = requests.filter((r) => r.agentSessionId === sessionId);
+    const workerRequests = requests.filter((r) => r.agentSessionId !== sessionId);
+
+    let stats = null;
+    if (requests.length > 0) {
+      const allStats = aggregateRequests(requests);
+      allStats.workerRequestCount = workerRequests.length;
+      stats = {
+        ...allStats,
+        orchestrator: aggregateRequests(orchestratorRequests),
+        workers: aggregateRequests(workerRequests),
       };
     }
 

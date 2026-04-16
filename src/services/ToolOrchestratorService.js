@@ -467,6 +467,9 @@ export default class ToolOrchestratorService {
 
       // Pass the parent's emit so workers can forward live events
       emit: ctx._emit || null,
+
+      // User-configured max iterations for worker agents
+      maxWorkerIterations: ctx._maxWorkerIterations,
     };
 
     switch (name) {

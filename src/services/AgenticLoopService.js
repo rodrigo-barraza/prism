@@ -699,6 +699,7 @@ export default class AgenticLoopService {
                  _providerName: providerName,
                  _resolvedModel: resolvedModel,
                  _emit: emit,
+                  _maxWorkerIterations: options.maxWorkerIterations,
                });
                await hooks.run("afterToolCall", tc, result, ctx);
                return { name: tc.name, id: tc.id, result };

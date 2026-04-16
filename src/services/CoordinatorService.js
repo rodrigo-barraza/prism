@@ -163,6 +163,7 @@ function buildWorkerResult(worker) {
     summary,
     result: (worker.output || "").trim().slice(0, 4000) || null,
     toolUses: worker.toolCalls?.length || 0,
+    iterations: worker.iterations || 0,
     durationMs: worker.durationMs || 0,
   };
 
@@ -232,7 +233,14 @@ export default class CoordinatorService {
    * @returns {Promise<object>} Spawn result with agentId
    */
   static async spawnFromTool({ description, prompt, files, model, coordinatorCtx }) {
-    const { project, username, agent, providerName, resolvedModel, traceId, agentSessionId: parentAgentSessionId } = coordinatorCtx;
+    const { project, username, agent, providerName, resolvedModel, traceId, agentSessionId: parentAgentSessionId, maxWorkerIterations: clientMaxWorkerIter } = coordinatorCtx;
+
+    // Resolve max worker iterations: 0 = unlimited (Infinity), positive = clamped 1-100, default = constant
+    const resolvedMaxWorkerIterations = clientMaxWorkerIter === 0
+      ? Infinity
+      : clientMaxWorkerIter
+        ? Math.min(100, Math.max(1, clientMaxWorkerIter))
+        : MAX_WORKER_ITERATIONS;
 
     // Check concurrency limit
     const runningCount = Array.from(activeWorkers.values()).filter((w) => w.status === "running").length;
@@ -406,12 +414,23 @@ export default class CoordinatorService {
       providerName: workerProvider,
       resolvedModel: workerModel,
       traceId,
+      maxIterations: resolvedMaxWorkerIterations,
     };
 
     activeWorkers.set(agentId, workerState);
 
     logger.info(`[Coordinator] Spawned worker ${agentId}: "${description}" in ${worktreePath}${workerState.isolated ? " (isolated worktree)" : " (shared workspace)"}`);
 
+    // Emit early so the frontend can show live status immediately
+    // (before the blocking loop starts and before a result is available)
+    if (coordinatorCtx.emit) {
+      coordinatorCtx.emit({
+        type: "worker_status",
+        workerId: agentId,
+        message: "spawned",
+        description,
+      });
+    }
     // Run the worker loop — blocks until the worker completes.
     // When multiple spawn_agent calls appear in the same model response,
     // the agentic loop's Promise.all executes them concurrently.
@@ -654,6 +673,7 @@ export default class CoordinatorService {
       } else if (event.type === "status") {
         // Forward iteration progress and notable status updates
         if (parentEmit && (event.message === "iteration_progress" || event.message === "workers_updated")) {
+          if (event.iteration) worker.iterations = event.iteration;
           parentEmit({
             type: "worker_status",
             workerId: worker.agentId,
@@ -701,7 +721,7 @@ export default class CoordinatorService {
           autoApprove: true,
           agenticLoopEnabled: true,
           enabledTools: workerEnabledTools,
-          maxIterations: MAX_WORKER_ITERATIONS,
+          maxIterations: worker.maxIterations,
           maxTokens: 8192,
         },
         agentSessionId: worker.workerAgentSessionId,
