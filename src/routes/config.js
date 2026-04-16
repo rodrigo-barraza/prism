@@ -155,12 +155,16 @@ function enrichModelsWithArenaScores(modelsMap) {
 // ── Local provider instance metadata ────────────────────────────
 // Built from the instance registry. Model fetching is now delegated
 // to LocalProviderGateway.discoverModels() in GET /config-local.
-const LOCAL_PROVIDERS = localInstances.map((inst) => ({
-  key: inst.id,
-  type: inst.type,
-  instanceNumber: inst.instanceNumber,
-  concurrency: inst.concurrency,
-}));
+const LOCAL_PROVIDERS = localInstances.map((inst) => {
+  const entry = {
+    key: inst.id,
+    type: inst.type,
+    instanceNumber: inst.instanceNumber,
+    concurrency: inst.concurrency,
+  };
+  if (inst.nickname) entry.nickname = inst.nickname;
+  return entry;
+});
 
 
 /**
@@ -210,12 +214,11 @@ Guidelines:
 - The current local date/time is: {{CURRENT_DATE_TIME}}`;
 
   // Flag which local provider instances are configured so the client knows to poll
-  const localProviders = LOCAL_PROVIDERS.map(({ key, type, instanceNumber, concurrency }) => ({
-    id: key,
-    type,
-    instanceNumber,
-    concurrency,
-  }));
+  const localProviders = LOCAL_PROVIDERS.map(({ key, type, instanceNumber, concurrency, nickname }) => {
+    const entry = { id: key, type, instanceNumber, concurrency };
+    if (nickname) entry.nickname = nickname;
+    return entry;
+  });
 
   res.json({
     fcSystemPrompt,

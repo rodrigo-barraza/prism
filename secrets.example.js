@@ -26,13 +26,14 @@ export const ELEVENLABS_API_KEY = '';
 export const INWORLD_BASIC = '';
 
 // Local Providers
-// Each entry is an instance: { url, concurrency }
+// Each entry is an instance: { url, concurrency, nickname? }
 // Multiple entries = multiple instances (auto-numbered #1, #2, ...)
+// nickname (optional) = display label shown in UI, e.g. "Desktop" → "LM Studio (Desktop)"
 // Empty array = provider not configured
 
 // LM Studio
 export const PROVIDER_LM_STUDIO = [
-  { url: 'http://localhost:1234', concurrency: 1 },
+  { url: 'http://localhost:1234', concurrency: 1, nickname: '' },
 ];
 
 // vLLM

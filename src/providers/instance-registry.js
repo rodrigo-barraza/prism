@@ -2,11 +2,15 @@
 // Instance Registry — Multi-Instance Local Provider Support
 // ============================================================
 // Creates and registers provider instances from PROVIDER_* arrays
-// in secrets.js. Each array entry is an instance: { url, concurrency }.
+// in secrets.js. Each array entry is an instance:
+//   { url, concurrency, nickname? }
 //
 // Instances are auto-numbered per type:
 //   PROVIDER_LM_STUDIO[0] → "lm-studio" (#1)
 //   PROVIDER_LM_STUDIO[1] → "lm-studio-2" (#2)
+//
+// nickname (optional) → display label in the UI:
+//   "Desktop" → "LM Studio (Desktop)"
 //
 // Usage:
 //   getInstanceProvider("lm-studio")   → first LM Studio instance
@@ -53,6 +57,7 @@ const PROVIDER_ARRAYS = {
  * @property {string} baseUrl       - Server URL
  * @property {number} concurrency   - Max concurrent requests for this instance
  * @property {number} instanceNumber - 1-based instance number within its type
+ * @property {string} [nickname]    - Optional display label (e.g. "Desktop")
  * @property {object} provider      - The instantiated provider object
  */
 
@@ -62,14 +67,14 @@ const registry = new Map();
 /**
  * Register all instances for a provider type from its array.
  * @param {string} type - Provider type key
- * @param {Array<{url: string, concurrency?: number}>} instances
+ * @param {Array<{url: string, concurrency?: number, nickname?: string}>} instances
  */
 function registerType(type, instances) {
   const factory = FACTORIES[type];
   if (!factory) return;
 
   for (let i = 0; i < instances.length; i++) {
-    const { url, concurrency = 1 } = instances[i];
+    const { url, concurrency = 1, nickname } = instances[i];
     if (!url) continue;
 
     const instanceNumber = i + 1;
@@ -77,17 +82,21 @@ function registerType(type, instances) {
     const maxConcurrency = Math.max(1, parseInt(concurrency, 10) || 1);
     const provider = factory(url, id);
 
-    registry.set(id, {
+    const entry = {
       id,
       type,
       baseUrl: url,
       concurrency: maxConcurrency,
       instanceNumber,
       provider,
-    });
+    };
+    if (nickname) entry.nickname = nickname;
 
+    registry.set(id, entry);
+
+    const label = nickname ? `${id} (${nickname})` : id;
     logger.info(
-      `[InstanceRegistry] ${id} → ${url} (concurrency: ${maxConcurrency})`,
+      `[InstanceRegistry] ${label} → ${url} (concurrency: ${maxConcurrency})`,
     );
   }
 }
