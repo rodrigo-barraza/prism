@@ -282,6 +282,7 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
     autoApprove,
     planFirst,
     maxIterations,
+    maxWorkerIterations,
     agentContext,
     // customSystemPrompt is deprecated — the assembler always runs and
     // loads the correct persona via AgentPersonaRegistry. Kept here to
@@ -329,6 +330,7 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
     ...(autoApprove && { autoApprove }),
     ...(planFirst && { planFirst }),
     ...(maxIterations !== undefined && { maxIterations }),
+    ...(maxWorkerIterations !== undefined && { maxWorkerIterations }),
     ...(agentContext && { agentContext }),
     ...(extraParams.systemPrompt && { systemPrompt: extraParams.systemPrompt }),
   };
