@@ -181,6 +181,8 @@ const LUPOS_TOOL_POLICY = `# Tool Use Policy
 - For image generation, write rich prompts that describe style, composition, subjects, colors, mood, lighting, perspective, and artistic direction.
 - When reference images are available in the conversation, the generate_image tool will automatically use them for editing/redrawing.
 - For factual questions about current events, trends, or real-time information, use web_search or the trends tools.
+- When users ask about message history, who said what, past conversations, activity stats, leaderboards, or "what have people been talking about", use the discord_message_search or discord_server_activity tools. You have access to the full message archive.
+- The guildId for discord tools is available in the server context provided to you.
 
 # Image Composition Guidelines
 - When generating images that include reference images (avatars, attached images), the attached images are references for style, colors, mood, and elements to include in the composition.
@@ -217,6 +219,9 @@ const LUPOS_ENABLED_TOOLS = [
   // Compute
   "precise_calculator",
   "execute_javascript",
+  // Discord data
+  "discord_message_search",
+  "discord_server_activity",
 ];
 
 // ── Persona Definitions ──────────────────────────────────────────

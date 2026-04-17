@@ -351,6 +351,14 @@ export default class SystemPromptAssembler {
       if (ac.clockCrewContext) {
         sections.push(ac.clockCrewContext);
       }
+
+      // Discord IDs — explicitly inject so discord tools get the correct IDs
+      // (the LLM cannot infer these from guild/channel names alone)
+      if (ac.guildId) {
+        let idsBlock = `# Discord IDs\n- Guild ID: ${ac.guildId}`;
+        if (ac.channelId) idsBlock += `\n- Channel ID: ${ac.channelId}`;
+        sections.push(idsBlock);
+      }
     }
 
     // ── 3. Tool Policy (persona-specific) ────────────────────────

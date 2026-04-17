@@ -734,12 +734,29 @@ export default class CoordinatorService {
       }
     };
 
-    // Build enabled tools list — exclude coordinator-only tools
-    const allSchemas = ToolOrchestratorService.getToolSchemas();
-    const coordinatorSet = new Set(COORDINATOR_ONLY_TOOLS);
-    const workerEnabledTools = allSchemas
-      .map((t) => t.name)
-      .filter((name) => !coordinatorSet.has(name));
+    // Build enabled tools list for the worker.
+    // If the parent agent has a persona with scoped tools (e.g. Lupos),
+    // let AgenticLoopService resolve enabledTools from the persona — don't
+    // override with all tools. For coding agents (no persona), build the
+    // full list minus coordinator-only tools.
+    let workerEnabledTools;
+    if (worker.agent) {
+      const { default: AgentPersonaRegistry } = await import("./AgentPersonaRegistry.js");
+      const persona = AgentPersonaRegistry.get(worker.agent);
+      if (persona?.enabledTools) {
+        // Inherit the parent's persona-scoped tools
+        workerEnabledTools = persona.enabledTools;
+      }
+    }
+
+    if (!workerEnabledTools) {
+      // Default: all tools minus coordinator-only (for coding agents)
+      const allSchemas = ToolOrchestratorService.getToolSchemas();
+      const coordinatorSet = new Set(COORDINATOR_ONLY_TOOLS);
+      workerEnabledTools = allSchemas
+        .map((t) => t.name)
+        .filter((name) => !coordinatorSet.has(name));
+    }
 
     const workerProvider = getProvider(worker.providerName);
     const { getModelByName } = await import("../config.js");
