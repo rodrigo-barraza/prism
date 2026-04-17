@@ -50,7 +50,7 @@ router.post("/", async (req, res, next) => {
 router.get("/", async (req, res, next) => {
   try {
     const project = req.project;
-    const agent = req.query.agent || "CODING";
+    const agent = req.query.agent || null;
     const limit = parseInt(req.query.limit) || 100;
     const skip = parseInt(req.query.skip) || 0;
 

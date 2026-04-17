@@ -520,11 +520,10 @@ const MemoryService = {
    * @returns {Promise<{ memories: Array, total: number }>}
    */
   async list({ agent, project, guildId, userId, limit = 50, skip = 0 }) {
-    if (!agent) throw new Error("MemoryService.list requires an agent identifier");
-
     const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
 
-    const filter = { agent };
+    const filter = {};
+    if (agent) filter.agent = agent;
     if (project) filter.project = project;
     if (guildId) filter.guildId = guildId;
     if (userId) filter.aboutUserId = userId;
