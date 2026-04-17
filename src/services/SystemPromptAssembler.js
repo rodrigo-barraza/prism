@@ -8,6 +8,7 @@ import { TOOLS_API_URL, MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 import { cosineSimilarity } from "../utils/math.js";
 import { getCoordinatorPromptAddendum, COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
+import { createAbortController } from "../utils/AbortController.js";
 
 const SKILL_RELEVANCE_THRESHOLD = 0.3;
 
@@ -55,7 +56,7 @@ export default class SystemPromptAssembler {
     }
 
     try {
-      const controller = new AbortController();
+      const controller = createAbortController();
       const timeout = setTimeout(() => controller.abort(), 5000);
 
       const url = `${TOOLS_API_URL}/filesystem/list?path=${encodeURIComponent(this.workspaceRoot)}&depth=2`;
@@ -350,6 +351,17 @@ export default class SystemPromptAssembler {
       }
       if (ac.clockCrewContext) {
         sections.push(ac.clockCrewContext);
+      }
+
+      // Stickers kiosk context — stage flow, emotion state, visual context
+      if (ac.stickersContext) {
+        sections.push(ac.stickersContext);
+      }
+      if (ac.emotionContext) {
+        sections.push(ac.emotionContext);
+      }
+      if (ac.visualContext) {
+        sections.push(ac.visualContext);
       }
 
       // Discord IDs — explicitly inject so discord tools get the correct IDs

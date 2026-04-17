@@ -59,12 +59,12 @@ describe("Config route — pattern constant detection", () => {
     }
   });
 
-  it("models with Function Calling have it in their tools array", async () => {
+  it("models with Tool Calling have it in their tools array", async () => {
     const res = await request(app).get("/config").expect(200);
 
     const allModels = Object.values(res.body.textToText.models).flat();
     const fcModels = allModels.filter(
-      (m) => m.tools && m.tools.includes("Function Calling"),
+      (m) => m.tools && m.tools.includes("Tool Calling"),
     );
 
     // Should have FC models from cloud providers (GPT, Claude, Gemini)

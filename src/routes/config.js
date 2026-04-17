@@ -194,7 +194,7 @@ router.get("/", async (_req, res) => {
     if (AVAILABLE_PROVIDERS.has(val)) availableProviderMap[key] = val;
   }
 
-  // Build the dynamic Function Calling system prompt
+  // Build the dynamic Tool Calling system prompt
   const schemas = ToolOrchestratorService.getToolSchemas() || [];
   const toolNames = schemas.map(s => s.name || s.function?.name).filter(Boolean).map(name => {
     return name.replace(/^get_/, "").replace(/_/g, " ");

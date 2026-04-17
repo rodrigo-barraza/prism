@@ -79,7 +79,7 @@ const MODELS = {
     reasoningSummary: true,
     responsesAPI: true,
     webSearch: true,
-    tools: ["Thinking", "Web Search", "Function Calling", "File Search"],
+    tools: ["Thinking", "Web Search", "Tool Calling", "File Search"],
   },
   GPT_5_MINI: {
     name: "gpt-5-mini",
@@ -102,7 +102,7 @@ const MODELS = {
     streaming: true,
     thinking: true,
     webSearch: true,
-    tools: ["Thinking", "Web Search", "Function Calling", "File Search"],
+    tools: ["Thinking", "Web Search", "Tool Calling", "File Search"],
   },
   GPT_5_NANO: {
     name: "gpt-5-nano",
@@ -125,7 +125,7 @@ const MODELS = {
     streaming: true,
     thinking: false,
     webSearch: true,
-    tools: ["Web Search", "Function Calling", "File Search"],
+    tools: ["Web Search", "Tool Calling", "File Search"],
   },
   // ----- Legacy OpenAI Models (unlisted, kept for cost tracking) -----
   GPT_41_MINI: {
@@ -220,7 +220,7 @@ const MODELS = {
     streaming: true,
     thinking: true,
     webSearch: true,
-    tools: ["Thinking", "Web Search", "Function Calling", "File Search"],
+    tools: ["Thinking", "Web Search", "Tool Calling", "File Search"],
   },
   GPT_53_CODEX: {
     name: "gpt-5.3-codex",
@@ -244,7 +244,7 @@ const MODELS = {
     streaming: true,
     thinking: true,
     webSearch: true,
-    tools: ["Thinking", "Web Search", "Function Calling", "File Search"],
+    tools: ["Thinking", "Web Search", "Tool Calling", "File Search"],
   },
   GPT_54: {
     name: "gpt-5.4",
@@ -277,7 +277,7 @@ const MODELS = {
     tools: [
       "Thinking",
       "Web Search",
-      "Function Calling",
+      "Tool Calling",
       "File Search",
       "Computer Use",
     ],
@@ -310,7 +310,7 @@ const MODELS = {
     tools: [
       "Thinking",
       "Web Search",
-      "Function Calling",
+      "Tool Calling",
       "File Search",
       "Computer Use",
     ],
@@ -342,7 +342,7 @@ const MODELS = {
     tools: [
       "Thinking",
       "Web Search",
-      "Function Calling",
+      "Tool Calling",
       "File Search",
       "Computer Use",
     ],
@@ -369,7 +369,7 @@ const MODELS = {
     thinking: false,
     responsesAPI: true,
     webSearch: true,
-    tools: ["Web Search", "Function Calling", "File Search"],
+    tools: ["Web Search", "Tool Calling", "File Search"],
   },
   // ----- Anthropic — Text Generation -----
   HAIKU_45: {
@@ -399,7 +399,7 @@ const MODELS = {
     assistantImages: false,
     webSearch: true,
     codeExecution: true,
-    tools: ["Thinking", "Web Search", "Function Calling", "Code Execution"],
+    tools: ["Thinking", "Web Search", "Tool Calling", "Code Execution"],
   },
   SONNET_45: {
     name: "claude-sonnet-4-5-20250929",
@@ -433,7 +433,7 @@ const MODELS = {
     tools: [
       "Thinking",
       "Web Search",
-      "Function Calling",
+      "Tool Calling",
       "Computer Use",
       "Code Execution",
     ],
@@ -469,7 +469,7 @@ const MODELS = {
     tools: [
       "Thinking",
       "Web Search",
-      "Function Calling",
+      "Tool Calling",
       "Computer Use",
       "Code Execution",
     ],
@@ -505,7 +505,7 @@ const MODELS = {
     tools: [
       "Thinking",
       "Web Search",
-      "Function Calling",
+      "Tool Calling",
       "Computer Use",
       "Code Execution",
     ],
@@ -541,7 +541,7 @@ const MODELS = {
     tools: [
       "Thinking",
       "Web Search",
-      "Function Calling",
+      "Tool Calling",
       "Computer Use",
       "Code Execution",
     ],
@@ -587,7 +587,7 @@ const MODELS = {
     tools: [
       "Thinking",
       "Google Search",
-      "Function Calling",
+      "Tool Calling",
       "Code Execution",
       "URL Context",
     ],
@@ -630,7 +630,7 @@ const MODELS = {
     tools: [
       "Thinking",
       "Google Search",
-      "Function Calling",
+      "Tool Calling",
       "Code Execution",
       "URL Context",
     ],
@@ -667,7 +667,7 @@ const MODELS = {
     tools: [
       "Thinking",
       "Google Search",
-      "Function Calling",
+      "Tool Calling",
       "Code Execution",
       "URL Context",
     ],
@@ -700,7 +700,7 @@ const MODELS = {
     thinkingLevels: ["minimal", "low", "medium", "high"],
     liveAPI: true,
     webSearch: "Google Search",
-    tools: ["Thinking", "Google Search", "Function Calling"],
+    tools: ["Thinking", "Google Search", "Tool Calling"],
   },
 
 

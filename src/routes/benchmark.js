@@ -2,6 +2,8 @@ import express from "express";
 import { EventEmitter } from "node:events";
 import BenchmarkService from "../services/BenchmarkService.js";
 import logger from "../utils/logger.js";
+import { createAbortController } from "../utils/AbortController.js";
+import { registerCleanup } from "../utils/CleanupRegistry.js";
 
 const router = express.Router();
 
@@ -13,6 +15,16 @@ const activeRuns = new Map();
 // to receive events from an already-running benchmark.
 const runEmitters = new Map();   // benchmarkId → EventEmitter
 const runStates = new Map();     // benchmarkId → { completedResults, activeModel, startedAt }
+
+// Shutdown cleanup — abort any running benchmarks
+registerCleanup(async () => {
+  if (activeRuns.size === 0) return;
+  logger.info(`[Benchmark] Shutdown: aborting ${activeRuns.size} active run(s)`);
+  for (const [id, controller] of activeRuns) {
+    controller.abort();
+    activeRuns.delete(id);
+  }
+});
 
 // ============================================================
 // GET /benchmark — List all benchmark tests for the caller's project
@@ -355,7 +367,7 @@ router.post("/:id/run", async (req, res) => {
     });
 
     // Abort controller — wired to client disconnect AND explicit abort endpoint
-    const abortController = new AbortController();
+    const abortController = createAbortController();
     let clientClosed = false;
 
     const registryKey = req.params.id;

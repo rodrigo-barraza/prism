@@ -28,6 +28,10 @@ import SemanticMemoryService from "./services/SemanticMemoryService.js";
 import ProceduralMemoryService from "./services/ProceduralMemoryService.js";
 import ProspectiveMemoryService from "./services/ProspectiveMemoryService.js";
 import WorkingMemoryService from "./services/WorkingMemoryService.js";
+import { installShutdownHandlers } from "./utils/CleanupRegistry.js";
+
+// Install process-level shutdown handlers (SIGTERM, SIGINT → runCleanupFunctions)
+installShutdownHandlers();
 
 // Routes
 import chatRouter from "./routes/chat.js";

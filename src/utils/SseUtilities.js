@@ -1,5 +1,6 @@
 import { handleConversation } from "../routes/chat.js";
 import { ProviderError } from "./errors.js";
+import { createAbortController } from "./AbortController.js";
 
 // ============================================================
 // SSE streaming utilities — shared by /chat and /agent routes
@@ -105,7 +106,7 @@ export function buildJsonResponseFromEvents(events, reqBody) {
 export async function handleSseRequest(req, res, params, handler = handleConversation) {
   initSseResponse(res);
 
-  const controller = new AbortController();
+  const controller = createAbortController();
   res.on("close", () => {
     if (!res.writableFinished) controller.abort();
   });

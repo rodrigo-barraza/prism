@@ -14,6 +14,8 @@ import localModelQueue from "./LocalModelQueue.js";
 import ToolOrchestratorService from "./ToolOrchestratorService.js";
 import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
 import SettingsService from "./SettingsService.js";
+import { createAbortController } from "../utils/AbortController.js";
+import { registerCleanup } from "../utils/CleanupRegistry.js";
 
 // ────────────────────────────────────────────────────────────
 // CoordinatorService — Multi-Agent Orchestration
@@ -108,6 +110,33 @@ const instanceReservations = new Map();
 
 /** Counter for generating sequential agent IDs */
 let agentCounter = 0;
+
+// Register shutdown cleanup — abort all running workers and remove worktrees
+registerCleanup(async () => {
+  const running = [...activeWorkers.values()].filter((w) => w.status === "running");
+  if (running.length === 0) return;
+
+  logger.info(`[Coordinator] Shutdown: aborting ${running.length} running worker(s)…`);
+  for (const worker of running) {
+    worker.abortController?.abort();
+    worker.status = "stopped";
+    worker.durationMs = Date.now() - worker.startedAt;
+  }
+
+  // Clean up worktrees in parallel
+  const cleanups = running
+    .filter((w) => w.isolated && w.worktreePath)
+    .map((w) =>
+      removeWorktree(w.repoPath, w.worktreePath)
+        .then(() => { w.worktreePath = null; })
+        .catch((e) => logger.warn(`[Coordinator] Shutdown worktree cleanup failed for ${w.agentId}: ${e.message}`)),
+    );
+
+  if (cleanups.length > 0) {
+    await Promise.allSettled(cleanups);
+    logger.info(`[Coordinator] Shutdown: cleaned up ${cleanups.length} worktree(s)`);
+  }
+});
 
 // ────────────────────────────────────────────────────────────
 // Tools-API Helpers
@@ -435,7 +464,7 @@ export default class CoordinatorService {
       durationMs: 0,
       totalCost: null,
       usage: null,
-      abortController: new AbortController(),
+      abortController: createAbortController(),
       messages: [],
       files: files || [],
       // Carry coordinator context for continuation
@@ -1236,7 +1265,7 @@ export default class CoordinatorService {
       const { getModelByName } = await import("../config.js");
       const workerModelDef = getModelByName(resolvedModel);
 
-      const abortController = new AbortController();
+      const abortController = createAbortController();
       worker.abortController = abortController;
 
       await AgenticLoopService.runAgenticLoop({

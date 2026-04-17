@@ -163,7 +163,7 @@ function detectCapabilities(modelKey, providerMeta = {}) {
   // Build tools list
   const tools = [];
   if (supportsThinking) tools.push("Thinking");
-  if (supportsFunctionCalling) tools.push("Function Calling");
+  if (supportsFunctionCalling) tools.push("Tool Calling");
 
   // Build input types
   const inputTypes = [TYPES.TEXT];
@@ -719,7 +719,7 @@ class LocalProviderGateway {
    */
   _matchesFilter(model, filter) {
     if (filter.thinking && !model.thinking) return false;
-    if (filter.functionCalling && !model.tools?.includes("Function Calling")) return false;
+    if (filter.functionCalling && !model.tools?.includes("Tool Calling")) return false;
     if (filter.vision && !model.vision) return false;
     if (filter.video && !model.inputTypes?.includes(TYPES.VIDEO)) return false;
     if (filter.audio && !model.inputTypes?.includes(TYPES.AUDIO)) return false;
@@ -771,7 +771,7 @@ class LocalProviderGateway {
         if (model.modelType === "embed") embeddingModels++;
         else conversationModels++;
         if (model.thinking) capabilityDistribution.thinking++;
-        if (model.tools?.includes("Function Calling")) capabilityDistribution.functionCalling++;
+        if (model.tools?.includes("Tool Calling")) capabilityDistribution.functionCalling++;
         if (model.vision) capabilityDistribution.vision++;
         if (model.inputTypes?.includes(TYPES.VIDEO)) capabilityDistribution.video++;
         if (model.inputTypes?.includes(TYPES.AUDIO)) capabilityDistribution.audio++;

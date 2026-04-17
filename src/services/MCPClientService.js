@@ -2,6 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import logger from "../utils/logger.js";
+import { registerCleanup } from "../utils/CleanupRegistry.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -19,6 +20,22 @@ const MCP_PREFIX = "mcp" + MCP_DELIMITER;
  * @type {Map<string, object>}
  */
 const connections = new Map();
+
+// Register shutdown cleanup — disconnect all MCP servers
+registerCleanup(async () => {
+  if (connections.size === 0) return;
+  logger.info(`[MCP] Shutdown: disconnecting ${connections.size} server(s)…`);
+  const names = [...connections.keys()];
+  await Promise.allSettled(names.map(async (n) => {
+    const conn = connections.get(n);
+    if (!conn) return;
+    try { await conn.client.close(); } catch { /* best-effort */ }
+    if (conn.transport?.close) {
+      try { await conn.transport.close(); } catch { /* best-effort */ }
+    }
+    connections.delete(n);
+  }));
+});
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

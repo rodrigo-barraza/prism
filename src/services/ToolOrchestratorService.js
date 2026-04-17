@@ -2,6 +2,7 @@ import { TOOLS_API_URL } from "../../secrets.js";
 import MCPClientService from "./MCPClientService.js";
 import logger from "../utils/logger.js";
 import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
+import { createAbortController } from "../utils/AbortController.js";
 
 // ────────────────────────────────────────────────────────────
 // Schema Cache — fetched from tools-api at startup
@@ -31,7 +32,7 @@ let initialized = false;
  */
 async function fetchSchemas() {
   try {
-    const controller = new AbortController();
+    const controller = createAbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
 
     const res = await fetch(`${TOOLS_API_URL}/admin/tool-schemas`, {
@@ -181,11 +182,11 @@ async function executeToolGeneric(name, args = {}, ctx = {}) {
     if (ctx.project) body.project = ctx.project;
     if (ctx.agent) body.agent = ctx.agent;
     if (ctx.username) body.username = ctx.username;
-    return fetchJsonPost(url, body, contextHeaders);
+    return fetchJsonPost(url, body, contextHeaders, ctx.signal);
   }
 
   const url = buildUrlFromEndpoint(schema.endpoint, resolvedArgs);
-  return fetchJson(url, contextHeaders);
+  return fetchJson(url, contextHeaders, ctx.signal);
 }
 
 /**
@@ -206,10 +207,11 @@ function buildContextHeaders(ctx = {}) {
   return headers;
 }
 
-async function fetchJson(url, extraHeaders = {}) {
+async function fetchJson(url, extraHeaders = {}, signal) {
   try {
     const res = await fetch(url, {
       headers: { ...extraHeaders },
+      ...(signal && { signal }),
     });
     if (!res.ok) {
       try {
@@ -221,16 +223,20 @@ async function fetchJson(url, extraHeaders = {}) {
     }
     return await res.json();
   } catch (err) {
+    if (err.name === "AbortError") {
+      return { error: "Tool execution aborted" };
+    }
     return { error: `Failed to reach API: ${err.message}` };
   }
 }
 
-async function fetchJsonPost(url, body, extraHeaders = {}) {
+async function fetchJsonPost(url, body, extraHeaders = {}, signal) {
   try {
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...extraHeaders },
       body: JSON.stringify(body),
+      ...(signal && { signal }),
     });
     if (!res.ok) {
       // Forward the actual error body from tools-api for debugging
@@ -243,6 +249,9 @@ async function fetchJsonPost(url, body, extraHeaders = {}) {
     }
     return await res.json();
   } catch (err) {
+    if (err.name === "AbortError") {
+      return { error: "Tool execution aborted" };
+    }
     return { error: `Failed to reach API: ${err.message}` };
   }
 }
@@ -568,8 +577,23 @@ export default class ToolOrchestratorService {
     const contextHeaders = buildContextHeaders(ctx);
 
     try {
-      const controller = new AbortController();
+      // Combine session abort signal with a 65s timeout.
+      // If the user cancels the session, the fetch aborts immediately.
+      // If 65s elapses, the fetch aborts via timeout.
+      const controller = createAbortController();
       const timeout = setTimeout(() => controller.abort(), 65_000); // generous timeout
+
+      // If session signal exists, abort the local controller when session aborts
+      if (ctx.signal && !ctx.signal.aborted) {
+        const onSessionAbort = () => controller.abort();
+        ctx.signal.addEventListener("abort", onSessionAbort, { once: true });
+        // Clean up listener when controller aborts from timeout (not session)
+        controller.signal.addEventListener("abort", () => {
+          ctx.signal.removeEventListener("abort", onSessionAbort);
+        }, { once: true });
+      } else if (ctx.signal?.aborted) {
+        controller.abort();
+      }
 
       const res = await fetch(url, {
         method: "POST",
