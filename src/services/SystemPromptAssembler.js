@@ -371,6 +371,11 @@ export default class SystemPromptAssembler {
         if (ac.channelId) idsBlock += `\n- Channel ID: ${ac.channelId}`;
         sections.push(idsBlock);
       }
+
+      // Lights context — current light states, night lock, automation mode
+      if (ac.lightsContext) {
+        sections.push(ac.lightsContext);
+      }
     }
 
     // ── 3. Tool Policy (persona-specific) ────────────────────────

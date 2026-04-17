@@ -291,6 +291,25 @@ localConfigRouter.get("/", async (_req, res) => {
 export { localConfigRouter };
 
 /**
+ * GET /config/agents
+ * Returns the list of registered agent personas with metadata for the frontend picker.
+ */
+router.get("/agents", (_req, res) => {
+  const agents = AgentPersonaRegistry.list().map((a) => {
+    const persona = AgentPersonaRegistry.get(a.id);
+    return {
+      id: a.id,
+      name: a.name,
+      project: persona?.project,
+      toolCount: persona?.enabledTools?.length || 0,
+      usesDirectoryTree: persona?.usesDirectoryTree || false,
+      usesCodingGuidelines: persona?.usesCodingGuidelines || false,
+    };
+  });
+  res.json(agents);
+});
+
+/**
  * GET /config/tools
  * Returns tool schemas. Optionally filter by agent persona via ?agent=CODING.
  */
