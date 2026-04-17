@@ -15,6 +15,7 @@ const COLLECTION = COLLECTIONS.AGENT_SESSIONS;
 /**
  * GET /agent-sessions
  * List all agent sessions for the given project.
+ * Enriches each session with toolCounts from request logs (single aggregation).
  */
 router.get("/", async (req, res, next) => {
   try {
@@ -25,12 +26,42 @@ router.get("/", async (req, res, next) => {
 
     const project = req.project;
     const username = req.username;
-    const sessions = await client
-      .db(MONGO_DB_NAME)
-      .collection(COLLECTION)
-      .find({ project, username })
-      .sort({ updatedAt: -1 })
-      .toArray();
+    const db = client.db(MONGO_DB_NAME);
+
+    // Fetch sessions and aggregate tool counts from requests in parallel
+    const [sessions, toolCountDocs] = await Promise.all([
+      db.collection(COLLECTION)
+        .find({ project, username })
+        .sort({ updatedAt: -1 })
+        .toArray(),
+      db.collection(COLLECTIONS.REQUESTS)
+        .aggregate([
+          { $match: { project, username, toolApiNames: { $exists: true, $ne: [] } } },
+          { $unwind: "$toolApiNames" },
+          { $group: {
+            _id: { sessionId: "$agentSessionId", tool: "$toolApiNames" },
+            count: { $sum: 1 },
+          }},
+          { $group: {
+            _id: "$_id.sessionId",
+            tools: { $push: { name: "$_id.tool", count: "$count" } },
+          }},
+        ])
+        .toArray(),
+    ]);
+
+    // Build sessionId → toolCounts map
+    const toolCountsMap = new Map();
+    for (const doc of toolCountDocs) {
+      const counts = {};
+      for (const t of doc.tools) counts[t.name] = t.count;
+      toolCountsMap.set(doc._id, counts);
+    }
+
+    // Merge toolCounts into each session
+    for (const session of sessions) {
+      session.toolCounts = toolCountsMap.get(session.id) || null;
+    }
 
     res.json(sessions);
   } catch (error) {
