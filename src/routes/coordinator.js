@@ -159,13 +159,13 @@ router.get("/workers", async (req, res) => {
  *
  * Body: { agentSessionId: string }
  */
-router.post("/workers/stop", (req, res) => {
+router.post("/workers/stop", async (req, res) => {
   const { agentSessionId } = req.body;
   if (!agentSessionId) {
     return res.status(400).json({ error: "'agentSessionId' is required" });
   }
 
-  const result = CoordinatorService.abortWorkersBySession(agentSessionId);
+  const result = await CoordinatorService.abortWorkersBySession(agentSessionId);
   res.json(result);
 });
 

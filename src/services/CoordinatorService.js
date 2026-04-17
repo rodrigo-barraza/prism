@@ -94,8 +94,17 @@ async function getWorkerFallback() {
 /** Active coordinator tasks keyed by taskId (manual panel flow) */
 const activeTasks = new Map();
 
-/** Active workers spawned via chat tools, keyed by agentId */
+/** Active agents spawned via chat tools, keyed by agentId */
 const activeWorkers = new Map();
+
+/**
+ * Synchronous per-instance reservation counter.
+ * Prevents race conditions when multiple spawn_agent calls fire concurrently
+ * via Promise.all — each spawn increments the counter immediately at selection
+ * time, so the next spawn sees the correct active count.
+ * Keyed by instance id (provider name).
+ */
+const instanceReservations = new Map();
 
 /** Counter for generating sequential agent IDs */
 let agentCounter = 0;
@@ -325,65 +334,64 @@ export default class CoordinatorService {
         }
       }
 
-      // Calculate total slots across all instances, reserving 1 for the coordinator
-      const totalSlots = siblings.reduce((sum, inst) => sum + inst.concurrency, 0);
-      const maxWorkerSlots = totalSlots - 1; // Reserve 1 for coordinator
-
-      if (maxWorkerSlots >= 1) {
-        // Count running local workers across ALL instances of this type
-        const siblingIds = new Set(siblings.map((s) => s.id));
-        const localRunning = Array.from(activeWorkers.values()).filter(
-          (w) => w.status === "running" && siblingIds.has(w.providerName),
+      // ── Instance selection: respect concurrency per instance ──
+      // concurrency is the max parallel inference requests an instance handles.
+      // The orchestrator's inference is IDLE while workers run (it finished
+      // generating spawn_agent tool calls), but we reserve 1 slot on its
+      // instance for the continuation turn after workers complete.
+      //
+      // instanceReservations prevents race conditions when multiple spawn_agent
+      // calls fire concurrently — the counter is incremented synchronously.
+      const getActiveOn = (id) => {
+        const reserved = instanceReservations.get(id) || 0;
+        const running = [...activeWorkers.values()].filter(
+          (w) => w.providerName === id && w.status === "running",
         ).length;
+        return reserved + running;
+      };
 
-        if (localRunning >= maxWorkerSlots) {
-          if (workerFallback) {
-            workerProvider = workerFallback.provider;
-            workerModel = workerFallback.model;
-            logger.info(`[Coordinator] All local slots full (${localRunning}/${maxWorkerSlots} across ${siblings.length} instances) — worker will use ${workerFallback.model}`);
-          } else {
-            logger.info(`[Coordinator] All local slots full (${localRunning}/${maxWorkerSlots}) — no subagent model configured, worker will queue on local provider`);
-          }
-        } else {
-          // Find the least-busy instance to assign this worker to
-          let bestInstance = null;
-          let bestAvailable = -1;
-          for (const inst of siblings) {
-            const active = localModelQueue._getQueue(inst.id).activeCount;
-            const available = inst.concurrency - active;
-            // Skip the coordinator's own instance if it has only 1 slot
-            if (inst.id === providerName && inst.concurrency <= 1) continue;
-            // Reserve 1 slot on coordinator's instance
-            const reservedAvailable = inst.id === providerName ? available - 1 : available;
-            if (reservedAvailable > bestAvailable) {
-              bestAvailable = reservedAvailable;
-              bestInstance = inst;
-            }
-          }
+      let bestInstance = null;
+      let bestAvailable = -1;
 
-          if (bestInstance && bestAvailable > 0) {
-            workerProvider = bestInstance.id;
-            logger.info(
-              `[Coordinator] Assigned worker to ${bestInstance.id} (${bestAvailable} slots free, ${siblings.length} instance${siblings.length > 1 ? "s" : ""} pooled) — model "${workerModel}"`,
-            );
-          } else if (workerFallback) {
-            // All instances busy — fall back to configured cloud model
-            workerProvider = workerFallback.provider;
-            workerModel = workerFallback.model;
-            logger.info(`[Coordinator] No available local slots — worker will use ${workerFallback.model}`);
-          } else {
-            logger.info(`[Coordinator] No available local slots and no subagent model configured — worker will queue on local provider`);
+      // Phase 1: coordinator's own instance (no reservation needed —
+      // orchestrator inference is IDLE while workers run, it finished
+      // generating spawn_agent calls and only resumes after all tools complete)
+      const coordInst = siblings.find((s) => s.id === providerName);
+      if (coordInst) {
+        const coordActive = getActiveOn(coordInst.id);
+        const coordAvailable = coordInst.concurrency - coordActive;
+        if (coordAvailable > 0) {
+          bestInstance = coordInst;
+          bestAvailable = coordAvailable;
+        }
+      }
+
+      // Phase 2: secondary instances (full concurrency, no orchestrator reservation)
+      if (!bestInstance) {
+        for (const inst of siblings) {
+          if (inst.id === providerName) continue;
+          const active = getActiveOn(inst.id);
+          const available = inst.concurrency - active;
+          if (available > bestAvailable) {
+            bestAvailable = available;
+            bestInstance = inst;
           }
         }
+      }
+
+      if (bestInstance && bestAvailable > 0) {
+        workerProvider = bestInstance.id;
+        // Increment reservation synchronously so the next concurrent spawn sees it
+        instanceReservations.set(bestInstance.id, (instanceReservations.get(bestInstance.id) || 0) + 1);
+        logger.info(
+          `[Coordinator] Assigned agent to ${bestInstance.id} (${bestAvailable} slots free, ${siblings.length} instance${siblings.length > 1 ? "s" : ""} pooled) — model "${workerModel}"`,
+        );
+      } else if (workerFallback) {
+        workerProvider = workerFallback.provider;
+        workerModel = workerFallback.model;
+        logger.info(`[Coordinator] All instances at capacity — agent will use ${workerFallback.model}`);
       } else {
-        // Total concurrency across all instances is 1 — no spare slots
-        if (workerFallback) {
-          workerProvider = workerFallback.provider;
-          workerModel = workerFallback.model;
-          logger.info(`[Coordinator] Single-slot concurrency across ${siblings.length} instance(s) — workers will use ${workerFallback.model} instead`);
-        } else {
-          logger.info(`[Coordinator] Single-slot concurrency and no subagent model configured — worker will queue on local provider`);
-        }
+        logger.info(`[Coordinator] All instances at capacity and no subagent model configured — agent will queue on local provider`);
       }
     }
 
@@ -471,6 +479,16 @@ export default class CoordinatorService {
         await removeWorktree(workerState.repoPath, workerState.worktreePath).catch((e) =>
           logger.warn(`[Coordinator] Worktree cleanup failed for ${agentId}: ${e.message}`),
         );
+      }
+
+      // Notify frontend immediately so the StatusBar stops showing "Generating..."
+      if (coordinatorCtx.emit) {
+        coordinatorCtx.emit({
+          type: "worker_status",
+          workerId: agentId,
+          message: "failed",
+          error: err.message,
+        });
       }
     }
 
@@ -562,9 +580,10 @@ export default class CoordinatorService {
    * @param {string} parentAgentSessionId - The coordinator session ID
    * @returns {{ stopped: string[], alreadyStopped: string[] }}
    */
-  static abortWorkersBySession(parentAgentSessionId) {
+  static async abortWorkersBySession(parentAgentSessionId) {
     const stopped = [];
     const alreadyStopped = [];
+    const cleanupPromises = [];
 
     for (const [agentId, worker] of activeWorkers) {
       if (worker.parentAgentSessionId !== parentAgentSessionId) continue;
@@ -577,9 +596,24 @@ export default class CoordinatorService {
         worker.durationMs = Date.now() - worker.startedAt;
         stopped.push(agentId);
         logger.info(`[Coordinator] Aborted worker ${agentId} (parent session stopped)`);
+
+        // Queue worktree cleanup so orphaned worktrees don't accumulate
+        if (worker.isolated && worker.worktreePath) {
+          cleanupPromises.push(
+            removeWorktree(worker.repoPath, worker.worktreePath)
+              .then(() => { worker.worktreePath = null; })
+              .catch((e) => logger.warn(`[Coordinator] Worktree cleanup failed for ${agentId}: ${e.message}`)),
+          );
+        }
       } else {
         alreadyStopped.push(agentId);
       }
+    }
+
+    // Clean up worktrees in parallel — non-blocking, best-effort
+    if (cleanupPromises.length > 0) {
+      await Promise.allSettled(cleanupPromises);
+      logger.info(`[Coordinator] Cleaned up ${cleanupPromises.length} worktree(s) for session ${parentAgentSessionId}`);
     }
 
     if (stopped.length > 0) {
@@ -840,16 +874,67 @@ export default class CoordinatorService {
     worker.diff = diffResult.error ? null : diffResult;
     worker.status = "complete";
 
+    // Remove worktree now that the diff has been collected — prevents orphaned
+    // worktrees from accumulating on disk across sessions.
+    if (worker.isolated && worker.worktreePath) {
+      await removeWorktree(worker.repoPath, worker.worktreePath).catch((e) =>
+        logger.warn(`[Coordinator] Post-completion worktree cleanup failed for ${worker.agentId}: ${e.message}`),
+      );
+    }
+
+    // Notify frontend immediately so the per-worker StatusBar updates
+    // from "Generating..." to a completed state. Each worker finishes
+    // independently — can't wait for the parent's `workers_updated` event.
+    if (parentEmit) {
+      parentEmit({
+        type: "worker_status",
+        workerId: worker.agentId,
+        message: "complete",
+        durationMs: worker.durationMs,
+        toolCount: workerToolCalls.length,
+      });
+    }
+
+    // Release the per-instance reservation (synchronous counter)
+    const currentRes = instanceReservations.get(worker.providerName) || 0;
+    if (currentRes > 0) instanceReservations.set(worker.providerName, currentRes - 1);
+
     logger.info(
-      `[Coordinator] Worker ${worker.agentId} completed in ${worker.durationMs}ms (${workerToolCalls.length} tool calls)`,
+      `[Coordinator] Agent ${worker.agentId} completed in ${worker.durationMs}ms (${workerToolCalls.length} tool calls)`,
     );
 
-    // Cache eviction hint — signal that this worker's inference slot is free.
-    // For local providers (LM Studio), this means the GPU concurrency slot
-    // can be reused. The model stays loaded in VRAM for the next request.
-    logger.info(
-      `[Coordinator] Cache eviction: worker ${worker.agentId} slot released (provider=${worker.providerName}, model=${worker.resolvedModel})`,
-    );
+    // ── VRAM eviction for secondary instances ──────────────────
+    // When a worker finishes on a secondary LM Studio instance (not the
+    // coordinator's own), check if any other workers are still active on
+    // that instance. If none, unload the model to free GPU VRAM.
+    // This prevents idle secondary GPUs from holding 14+ GB of model weights.
+    // The primary instance is NEVER unloaded (orchestrator needs it).
+    const workerInstanceId = worker.providerName;
+    const coordinatorInstanceId = coordinatorCtx.providerName;
+    if (workerInstanceId !== coordinatorInstanceId) {
+      const othersOnSameInstance = [...activeWorkers.values()].filter(
+        (w) => w.providerName === workerInstanceId && w.agentId !== worker.agentId && w.status === "running",
+      );
+      if (othersOnSameInstance.length === 0) {
+        try {
+          const workerProviderObj = getProvider(workerInstanceId);
+          if (workerProviderObj?.unloadModelByKey) {
+            logger.info(
+              `[Coordinator] VRAM eviction: unloading "${worker.resolvedModel}" from secondary instance ${workerInstanceId} (no active workers remain)`,
+            );
+            await workerProviderObj.unloadModelByKey(worker.resolvedModel).catch((e) =>
+              logger.warn(`[Coordinator] VRAM eviction failed on ${workerInstanceId}: ${e.message}`),
+            );
+          }
+        } catch (e) {
+          logger.warn(`[Coordinator] VRAM eviction error: ${e.message}`);
+        }
+      } else {
+        logger.info(
+          `[Coordinator] VRAM eviction deferred: ${othersOnSameInstance.length} worker(s) still active on ${workerInstanceId}`,
+        );
+      }
+    }
   }
 
   // ══════════════════════════════════════════════════════════

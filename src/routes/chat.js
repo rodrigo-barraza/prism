@@ -637,7 +637,7 @@ export async function handleAgent(params, emit, { signal } = {}) {
       if (signal?.aborted) {
         try {
           const { default: CoordinatorService } = await import("../services/CoordinatorService.js");
-          CoordinatorService.abortWorkersBySession(agentSessionId);
+          await CoordinatorService.abortWorkersBySession(agentSessionId);
         } catch (cleanupErr) {
           logger.warn(`[agent] Worker cleanup failed: ${cleanupErr.message}`);
         }
