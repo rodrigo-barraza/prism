@@ -470,6 +470,9 @@ export default class ToolOrchestratorService {
 
       // User-configured max iterations for worker agents
       maxWorkerIterations: ctx._maxWorkerIterations,
+
+      // Inherit context window size so workers load with the same context
+      minContextLength: ctx._minContextLength,
     };
 
     switch (name) {

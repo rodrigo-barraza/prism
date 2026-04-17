@@ -233,7 +233,7 @@ export default class CoordinatorService {
    * @returns {Promise<object>} Spawn result with agentId
    */
   static async spawnFromTool({ description, prompt, files, model, coordinatorCtx }) {
-    const { project, username, agent, providerName, resolvedModel, traceId, agentSessionId: parentAgentSessionId, maxWorkerIterations: clientMaxWorkerIter } = coordinatorCtx;
+    const { project, username, agent, providerName, resolvedModel, traceId, agentSessionId: parentAgentSessionId, maxWorkerIterations: clientMaxWorkerIter, minContextLength } = coordinatorCtx;
 
     // Resolve max worker iterations: 0 = unlimited (Infinity), positive = clamped 1-100, default = constant
     const resolvedMaxWorkerIterations = clientMaxWorkerIter === 0
@@ -415,6 +415,7 @@ export default class CoordinatorService {
       resolvedModel: workerModel,
       traceId,
       maxIterations: resolvedMaxWorkerIterations,
+      minContextLength: minContextLength || null,
     };
 
     activeWorkers.set(agentId, workerState);
@@ -775,6 +776,7 @@ export default class CoordinatorService {
           enabledTools: workerEnabledTools,
           maxIterations: worker.maxIterations,
           maxTokens: 8192,
+          ...(worker.minContextLength && { minContextLength: worker.minContextLength }),
         },
         agentSessionId: worker.workerAgentSessionId,
         parentAgentSessionId: worker.parentAgentSessionId,
