@@ -148,6 +148,25 @@ async function cleanupWorktrees(repoPath) {
 // tool call's response. The coordinator LLM receives it directly
 // as the tool result — no separate user-role notification needed.
 
+/**
+ * Extract the text content from the last assistant message in a conversation.
+ * Mirrors Claude Code's finalizeAgentTool pattern — only the final report is
+ * returned to the orchestrator, keeping the parent context clean.
+ *
+ * If the last assistant message has no text (e.g. it was a pure tool_use),
+ * walks backward to find the most recent assistant message with text.
+ */
+function getLastAssistantText(messages) {
+  if (!messages?.length) return "";
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role !== "assistant") continue;
+    const text = (typeof m.content === "string" ? m.content : "").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
 function buildWorkerResult(worker) {
   const status = worker.status === "complete" ? "completed" : worker.status;
   const summary = status === "completed"
@@ -156,12 +175,16 @@ function buildWorkerResult(worker) {
       ? `Agent "${worker.description}" failed: ${worker.error || "Unknown error"}`
       : `Agent "${worker.description}" was stopped`;
 
+  // Return the full last assistant message text (no truncation).
+  // Like Claude Code, we trust the model to produce a concise final report.
+  const lastText = getLastAssistantText(worker.messages);
+
   const result = {
     agent_id: worker.agentId,
     description: worker.description,
     status,
     summary,
-    result: (worker.output || "").trim().slice(0, 4000) || null,
+    result: lastText || (worker.output || "").trim() || null,
     toolUses: worker.toolCalls?.length || 0,
     iterations: worker.iterations || 0,
     durationMs: worker.durationMs || 0,
@@ -797,7 +820,7 @@ export default class CoordinatorService {
     }
 
     // Always populate — including on abort/error paths
-    worker.output = workerOutput.slice(0, 4000);
+    worker.output = getLastAssistantText(workerMessages) || workerOutput;
     worker.toolCalls = workerToolCalls;
     worker.messages = workerMessages;
     worker.durationMs = Date.now() - worker.startedAt;
@@ -819,6 +842,13 @@ export default class CoordinatorService {
 
     logger.info(
       `[Coordinator] Worker ${worker.agentId} completed in ${worker.durationMs}ms (${workerToolCalls.length} tool calls)`,
+    );
+
+    // Cache eviction hint — signal that this worker's inference slot is free.
+    // For local providers (LM Studio), this means the GPU concurrency slot
+    // can be reused. The model stays loaded in VRAM for the next request.
+    logger.info(
+      `[Coordinator] Cache eviction: worker ${worker.agentId} slot released (provider=${worker.providerName}, model=${worker.resolvedModel})`,
     );
   }
 
@@ -1157,7 +1187,7 @@ export default class CoordinatorService {
 
       worker.status = "complete";
       worker.toolCalls = workerToolCalls;
-      worker.output = workerOutput.slice(0, 2000);
+      worker.output = workerOutput;
       onProgress?.({ status: "complete" });
 
       logger.info(`[Coordinator] Panel worker ${worker.id} completed (${workerToolCalls.length} tool calls)`);
