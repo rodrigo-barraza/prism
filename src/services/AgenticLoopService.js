@@ -968,7 +968,9 @@ export default class AgenticLoopService {
         }
       }
 
-      // ── afterResponse hook: session summarization ───────────
+      // ── afterResponse hook: memory extraction ─────────────────
+      // Passes toolCalls so MemoryExtractor can implement mutual exclusion:
+      // if the main agent used upsert_memory this turn, extraction is skipped.
       hooks.run("afterResponse", ctx, {
         text: finalStreamedText,
         thinking: streamedThinking,

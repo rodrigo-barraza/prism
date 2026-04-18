@@ -85,6 +85,21 @@ const MinioWrapper = {
   async stat(key) {
     return client.statObject(bucketName, key);
   },
+
+  /**
+   * List all objects in the bucket with an optional prefix.
+   * @param {string} [prefix=""] - Object key prefix to filter by
+   * @returns {Promise<Array<{ name: string, size: number, lastModified: Date }>>}
+   */
+  async listObjects(prefix = "") {
+    return new Promise((resolve, reject) => {
+      const items = [];
+      const stream = client.listObjectsV2(bucketName, prefix, true);
+      stream.on("data", (obj) => items.push({ name: obj.name, size: obj.size, lastModified: obj.lastModified }));
+      stream.on("end", () => resolve(items));
+      stream.on("error", reject);
+    });
+  },
 };
 
 export default MinioWrapper;

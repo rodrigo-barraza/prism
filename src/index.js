@@ -23,11 +23,7 @@ import MongoWrapper from "./wrappers/MongoWrapper.js";
 import MinioWrapper from "./wrappers/MinioWrapper.js";
 import ChangeStreamService from "./services/ChangeStreamService.js";
 import MemoryConsolidationService from "./services/MemoryConsolidationService.js";
-import EpisodicMemoryService from "./services/EpisodicMemoryService.js";
-import SemanticMemoryService from "./services/SemanticMemoryService.js";
-import ProceduralMemoryService from "./services/ProceduralMemoryService.js";
-import ProspectiveMemoryService from "./services/ProspectiveMemoryService.js";
-import WorkingMemoryService from "./services/WorkingMemoryService.js";
+import BackgroundHousekeepingService from "./services/BackgroundHousekeepingService.js";
 import { installShutdownHandlers } from "./utils/CleanupRegistry.js";
 
 // Install process-level shutdown handlers (SIGTERM, SIGINT → runCleanupFunctions)
@@ -163,15 +159,6 @@ setupWebSocket(wss);
 (async () => {
   await MongoWrapper.createClient(MONGO_DB_NAME, MONGO_URI);
   await MemoryService.ensureIndexes();
-
-  // ── Ensure memory system indexes ──────────────────────────────
-  await Promise.all([
-    EpisodicMemoryService.ensureIndexes(),
-    SemanticMemoryService.ensureIndexes(),
-    ProceduralMemoryService.ensureIndexes(),
-    ProspectiveMemoryService.ensureIndexes(),
-    WorkingMemoryService.ensureIndexes(),
-  ]).catch((err) => logger.error(`Failed to ensure memory system indexes: ${err.message}`));
 
   // ── Ensure collection indexes ──────────────────────────────────
   // Critical for $lookup aggregation performance (conversations ↔ requests).
@@ -311,15 +298,19 @@ setupWebSocket(wss);
   }, CONSOLIDATION_INTERVAL_MS);
   logger.info(`[AutoDream] Scheduled consolidation every ${CONSOLIDATION_INTERVAL_MS / 3_600_000}h`);
 
-  // ── Working Memory Cleanup ──────────────────────────────────
-  // Clean up expired working memory sessions every hour
-  const WM_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+  // ── Background Housekeeping ────────────────────────────────
+  // Boot-time run: clean up orphans from previous crashes
+  BackgroundHousekeepingService.run({ trigger: "boot" }).catch((err) =>
+    logger.error(`[Housekeeping] Boot-time run failed: ${err.message}`),
+  );
+
+  // Scheduled run: every 6h (piggybacking on the consolidation interval)
   setInterval(() => {
-    WorkingMemoryService.cleanupExpired().catch((err) =>
-      logger.error(`[WorkingMemory] Cleanup failed: ${err.message}`),
+    BackgroundHousekeepingService.run({ trigger: "scheduled" }).catch((err) =>
+      logger.error(`[Housekeeping] Scheduled run failed: ${err.message}`),
     );
-  }, WM_CLEANUP_INTERVAL_MS);
-  logger.info(`[WorkingMemory] Scheduled cleanup every ${WM_CLEANUP_INTERVAL_MS / 3_600_000}h`);
+  }, CONSOLIDATION_INTERVAL_MS);
+  logger.info(`[Housekeeping] Scheduled cleanup every ${CONSOLIDATION_INTERVAL_MS / 3_600_000}h`);
 
   // Initialize MinIO if all secrets are configured
   if (

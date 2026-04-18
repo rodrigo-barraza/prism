@@ -192,6 +192,9 @@ const RequestLogger = {
   }) {
     const inputTokens = usage ? getTotalInputTokens(usage) : 0;
     const outputTokens = usage ? (usage.outputTokens || 0) : 0;
+    const cacheReadInputTokens = usage?.cacheReadInputTokens || 0;
+    const cacheCreationInputTokens = usage?.cacheCreationInputTokens || 0;
+    const reasoningOutputTokens = usage?.reasoningOutputTokens || 0;
 
     // Build synthetic message array for computeModalities (same function used by conversations)
     const syntheticMessages = [
@@ -228,6 +231,9 @@ const RequestLogger = {
       errorMessage,
       inputTokens,
       outputTokens,
+      ...(cacheReadInputTokens > 0 && { cacheReadInputTokens }),
+      ...(cacheCreationInputTokens > 0 && { cacheCreationInputTokens }),
+      ...(reasoningOutputTokens > 0 && { reasoningOutputTokens }),
       estimatedCost,
       tokensPerSec,
       temperature: options?.temperature ?? null,

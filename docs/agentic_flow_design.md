@@ -29,7 +29,7 @@ The Retina Agent executes a robust 11-step loop for every user interaction, buil
 9. ✅ **Context Window Enforcement**: Before each LLM call, `ContextWindowManager.enforce()` applies a three-strategy truncation cascade to prevent context overflow: (1) aggressive tool result truncation → (2) old assistant message compression → (3) sliding window turn dropping. Uses ~3.5 chars/token estimation, 80% utilization target, configurable per-model via `maxInputTokens`. Emits `context_truncated` status events to the UI.
 10. ✅ **Exhaustion Recovery**: If the loop exits by hitting `MAX_TOOL_ITERATIONS`, a final tool-free LLM pass is triggered to summarize progress so the user understands where they stand. Emits `iteration_limit_reached` status.
 11. ✅ **Response Rendering**: Flushes final text to the transport via `emit({ type: "chunk", content })`.
-12. ✅ **Post-Sampling Hooks**: Background processes for memory extraction via `SessionSummarizer`, registered as an `afterResponse` hook. Uses Claude Haiku to extract 4-type memories (user, feedback, project, reference) and stores via `AgentMemoryService`. Also triggers `MemoryConsolidationService.checkAndRun()` for session-threshold consolidation.
+12. ✅ **Post-Sampling Hooks**: Background memory extraction via `MemoryExtractor`, registered as an `afterResponse` hook in `AgentHooks`. Uses a configurable extraction model (Settings → Memory Models) to extract memories using CC-style 4-type taxonomy: `user` (role, goals, preferences), `feedback` (corrections, confirmations, lessons), `project` (non-derivable context, decisions, deadlines), `reference` (external system pointers). Includes explicit "What NOT to save" negative constraints (code patterns, git history, debugging solutions). Implements **mutual exclusion** — skips extraction when the main agent used `upsert_memory` during the current turn. All memories stored in the single unified `memories` collection via `MemoryService.store()` with embedding-based cosine duplicate detection (>0.92 threshold). Triggers `MemoryConsolidationService.checkAndRun()` for session-threshold consolidation.
 13. ✅ **Await Input**: The WebSocket connection stays open for the next message. REST SSE connections end cleanly.
 
 ---
@@ -252,22 +252,77 @@ Claude Code is a CLI REPL — its main loop is always alive, waiting for user in
 - **Coordinator is a mode, not a persona** — the coordinator system prompt is injected as an addendum to the existing `CODING` persona when coordinator tools are available, not a separate identity
 - **File paths optional for chat-triggered flow** — the coordinator LLM discovers files via its existing tools (`project_summary`, `grep_search`). Manual panel still requires explicit file paths
 
-### ✅ Persistent Memory (Two-Phase)
+### ✅ Multi-System Cognitive Memory Architecture
 
-**Phase A — Session Summarization** ✅:
-`SessionSummarizer` runs as a fire-and-forget `afterResponse` hook, extracting memories via `claude-haiku-4-5` into a 4-type taxonomy (user, feedback, project, reference). Stored in `agent_memories` collection via `AgentMemoryService` with embedding-based duplicate detection (cosine similarity > 0.92 = skip). Memories include staleness caveats and age metadata for prompt injection.
+Prism implements a **5-store memory system** inspired by Tulving's memory taxonomy and Baddeley's working memory model. Each store serves a distinct cognitive function, with `WorkingMemoryService` acting as the central executive that orchestrates retrieval across all long-term stores.
 
-**Phase B — Memory Consolidation** ✅:
-Autonomous background process that clusters, merges, and prunes accumulated memories using Union-Find clustering on embeddings. Implementation:
+#### Memory Stores
 
-- `MemoryConsolidationService.js`: Clusters memories by cosine similarity, sends clusters to Claude Haiku for merge/delete/keep analysis, applies actions, records audit trail in `memory_consolidation_history` collection
+| Store | Service | Collection | Analog | Purpose |
+| ----- | ------- | ---------- | ------ | ------- |
+| **Episodic** | `EpisodicMemoryService` | `memory_episodic` | "What happened" | Session narratives with temporal context, outcomes, participants, and cross-references to extracted memories |
+| **Semantic** | `SemanticMemoryService` | `memory_semantic` | "What I know" | Stable, decontextualized knowledge — facts, preferences, rules, references. Includes confidence scoring (Ebbinghaus-inspired decay), reinforcement counting, and contradiction tracking |
+| **Procedural** | `ProceduralMemoryService` | `memory_procedural` | "How to do it" | Learned tool sequences and problem-solving patterns. Stores trigger → step sequence → tool chain, with success/failure rate tracking |
+| **Prospective** | `ProspectiveMemoryService` | `memory_prospective` | "Remember to remember" | Future intentions with time-based and cue-based triggers. Checked on every session start; auto-expires after configurable TTL (default 7 days) |
+| **Working** | `WorkingMemoryService` | `memory_working` | Baddeley's central executive | Session-scoped, capacity-limited (18 slots). Orchestrates parallel retrieval from all 4 long-term stores, ranks by composite score, and formats for prompt injection |
+
+#### Memory Extraction Pipeline
+
+`MemoryExtractor` (replaces the former `SessionSummarizer`) runs as a fire-and-forget `afterResponse` hook. Uses Claude Haiku to extract three categories from each conversation:
+
+1. **Episode** → `EpisodicMemoryService.store()` — narrative, outcome (resolved/partial/abandoned/deferred), satisfaction, key decisions, tags
+2. **Semantic memories** → `SemanticMemoryService.store()` — with duplicate detection (cosine > 0.92 → reinforce instead of create). Also dual-writes to legacy `MemoryService` for backward compatibility
+3. **Procedural memories** → `ProceduralMemoryService.store()` — trigger, step-by-step procedure, tool sequence
+
+Cross-references: episode IDs linked to extracted semantic/procedural IDs via `EpisodicMemoryService.linkExtracted()`.
+
+#### Prompt Injection Flow
+
+```
+User message → SystemPromptAssembler.fetchMemories()
+            → WorkingMemoryService.load({ queryText })
+            → Promise.all([
+                SemanticMemoryService.search()   → context slots
+                EpisodicMemoryService.search()   → experience slots
+                ProceduralMemoryService.search() → procedure slots
+                ProspectiveMemoryService.checkTriggers() → reminder slots (always priority)
+              ])
+            → Capacity management: top 18 slots by composite score
+            → Formatted as ## sections: Pending Reminders, Known Facts, Relevant Past Sessions, Learned Procedures
+            → Injected into system prompt as ## Agent Memory
+```
+
+Fallback: If `WorkingMemoryService` fails, `SystemPromptAssembler` falls back to legacy `MemoryService.search()` flat retrieval.
+
+#### Confidence & Scoring
+
+**Semantic memories** use an Ebbinghaus-inspired confidence model:
+- Base confidence starts at 0.5, increases by 0.1 per reinforcement (capped at 1.0)
+- Contradiction penalty: -0.15 per contradiction
+- Time decay: `e^(-t/S)` where S = 10 + reinforcementCount × 5 (more reinforcement = slower decay)
+- Search composite: 70% similarity + 20% confidence + 10% reinforcement bonus
+
+**Procedural memories** weight by success rate:
+- Search composite: 70% similarity + 30% success rate
+- Success/failure tracked per procedure, used to surface reliable patterns
+
+**Episodic memories** use logarithmic recency:
+- Search composite: 80% similarity + 20% recency boost (1/log₂(ageDays + 1))
+
+#### Memory Consolidation ✅
+
+Autonomous background process that clusters, merges, and prunes accumulated **legacy** memories using Union-Find clustering on embeddings:
+
+- `MemoryConsolidationService.js`: Clusters by cosine similarity, sends clusters to Claude Haiku for merge/delete/keep analysis, applies actions, records audit trail in `memory_consolidation_history` collection
 - **Scheduled loop**: `setInterval` in `index.js` runs every 6 hours, processes all projects with 10+ memories (trigger: `scheduled`)
 - **Cost guard**: `DAILY_MAX_CONSOLIDATIONS = 3` per project per day to prevent API credit burn
 - **Audit trail**: Every run recorded with trigger type, memory counts (before/after), actions applied, duration, summary
-- **Real-time feedback**: `broadcast` callback wired through `SessionSummarizer` → `ctx.emit` pushes `memory_consolidation_complete` events to Retina via WebSocket
+- **Real-time feedback**: `broadcast` callback wired through `MemoryExtractor` → `ctx.emit` pushes `memory_consolidation_complete` events to Retina via WebSocket
 - **API**: `GET /agent-memories/consolidation-history?project=X&limit=5`
 - **UI**: `MemoriesPanel.js` has collapsible Consolidation History section with trigger badges (Manual / Scheduled / Session), timeline entries, and auto-refresh on consolidation events via `consolidationEvent` prop
-- **Triggers**: Manual (POST endpoint), scheduled (6h interval), session-threshold (after N sessions via SessionSummarizer)
+- **Triggers**: Manual (POST endpoint), scheduled (6h interval), session-threshold (after N sessions via MemoryExtractor)
+
+**Files**: `MemoryExtractor.js`, `EpisodicMemoryService.js`, `SemanticMemoryService.js`, `ProceduralMemoryService.js`, `ProspectiveMemoryService.js`, `WorkingMemoryService.js`, `MemoryService.js` (legacy), `MemoryConsolidationService.js`, `SystemPromptAssembler.js`
 
 ### ✅ Context Window Management
 
@@ -348,7 +403,7 @@ Prism streams raw chunks (`emit({ type: "chunk", content })`) without transforma
 
 ### ✅ Memory as a First-Class Citizen
 
-`AgentMemoryService` is a fully generalized project-scoped memory system (stripped of Discord-specific fields). Uses embedding-based storage with cosine similarity search, 4-type taxonomy (user, feedback, project, reference), duplicate detection, and staleness caveats. Integrated into `SystemPromptAssembler.fetchMemories()` — relevant memories are injected into the system prompt on every agentic loop iteration.
+Prism implements a 5-store cognitive memory architecture (episodic, semantic, procedural, prospective, working) inspired by Tulving's memory taxonomy and Baddeley's working memory model. `WorkingMemoryService` acts as the central executive — orchestrating parallel retrieval from all 4 long-term stores into capacity-limited (18-slot) workspaces. Integrated into `SystemPromptAssembler.fetchMemories()` via `WorkingMemoryService.load()`, with fallback to legacy `MemoryService.search()`. See Section 4 "Multi-System Cognitive Memory Architecture" for full details.
 
 ### ✅ Client-Server Tool Decoupling
 
@@ -368,15 +423,16 @@ Every agentic iteration is individually logged via `RequestLogger.logChatGenerat
 2. ✅ **Dynamic System Prompt Assembly** — `SystemPromptAssembler`: agent identity + coding guidelines + tool schemas (domain-grouped) + project structure + skills (embedding-filtered) + environment + memory
 3. ✅ **Auto-Approval Engine** — `AutoApprovalEngine`: three-tier system with `beforeToolCall` hook + `ApprovalCardComponent` UI + "Approve All" escalation
 4. ✅ **UltraPlan Mode** — `PlanningModeService` + `PlanCardComponent`: plan → approve → execute workflow
-5. ✅ **Session Summarization** — `SessionSummarizer` + `AgentMemoryService`: Claude Haiku extraction → 4-type memory taxonomy → MongoDB
+5. ✅ **Memory Extraction** — `MemoryExtractor` (replaces `SessionSummarizer`): Claude Haiku extraction → 3-category multi-store pipeline (episodic + semantic + procedural) → MongoDB
 
-### Phase 2: Memory & Extensibility ✅ COMPLETE (4/5)
+### Phase 2: Memory & Extensibility ✅ COMPLETE (5/6)
 
-1. ✅ **Generalized MemoryService** — `AgentMemoryService`: project-scoped, embedding-based, 4-type taxonomy, duplicate detection, wired into `SystemPromptAssembler`
-2. ✅ **Skills System** — DB-backed per-project skills with embedding-based relevance filtering, CRUD via `/skills` API, SkillsPanel UI, injected into system prompt
-3. ✅ **Tool Rendering Registry** — `ToolResultRenderers.js`: registry-based rendering with specialized components per tool domain
-4. ✅ **MCP Client** — Prism connects to external MCP servers for third-party tool access
-5. 🔲 **Slash Commands** — Parameterized prompt templates with argument substitution
+1. ✅ **Generalized MemoryService** — `AgentMemoryService` (legacy): project-scoped, embedding-based, 4-type taxonomy, duplicate detection
+2. ✅ **Multi-System Cognitive Memory** — 5-store architecture: `EpisodicMemoryService`, `SemanticMemoryService`, `ProceduralMemoryService`, `ProspectiveMemoryService`, `WorkingMemoryService` (central executive). `MemoryExtractor` replaces `SessionSummarizer` with multi-store extraction pipeline. `SystemPromptAssembler` wired to `WorkingMemoryService.load()` with legacy fallback
+3. ✅ **Skills System** — DB-backed per-project skills with embedding-based relevance filtering, CRUD via `/skills` API, SkillsPanel UI, injected into system prompt
+4. ✅ **Tool Rendering Registry** — `ToolResultRenderers.js`: registry-based rendering with specialized components per tool domain
+5. ✅ **MCP Client** — Prism connects to external MCP servers for third-party tool access
+6. 🔲 **Slash Commands** — Parameterized prompt templates with argument substitution
 
 ### Phase 3: Multi-Agent & Autonomy ✅ COMPLETE
 
@@ -407,8 +463,8 @@ Tasks identified via deep comparison with Claude Code's `src/utils/` infrastruct
 
 1. ✅ **AbortController Tree** — `createAbortController()` + `createChildAbortController(parent)` in `utils/AbortController.js`. WeakRef-based GC-safe propagation with module-scope bound handlers. Threaded through `ToolOrchestratorService` (tool fetch calls abort on session cancel), `SseUtilities` (SSE session controllers), `CoordinatorService` (worker controllers), `SystemPromptAssembler`, and `benchmark.js`. AbortError handling in `fetchJson`/`fetchJsonPost`.
 2. ✅ **Cleanup Registry** — `utils/CleanupRegistry.js`: global `Set<fn>` singleton with `registerCleanup()` / `runCleanupFunctions()`. `installShutdownHandlers()` wired in `index.js` — handles SIGTERM/SIGINT with 5s hard timeout. Registered services: `CoordinatorService` (abort workers + remove worktrees), `MCPClientService` (disconnect all servers + kill stdio transports), `benchmark.js` (abort active runs).
-3. 🔲 **Background Housekeeping** — `BackgroundHousekeeping` service: boot-time worktree pruning (`/tmp/prism-worktrees/` > 24h), periodic stale session/request-log cleanup (6h interval), MinIO orphan purge. Reference: CC's `cleanup.ts` + `backgroundHousekeeping.ts`
-4. 🔲 **Process Kill Endpoint** — `POST /compute/shell/kill/:pid` in `tools-api` for process-tree cleanup. Track spawned PIDs in `AgenticLoopService`, kill in `finally` block
+3. ✅ **Background Housekeeping** — `BackgroundHousekeepingService`: boot-time worktree pruning (`/tmp/prism-worktrees/` > 24h), periodic stale session/request-log cleanup (6h interval), MinIO orphan purge, stale `isGenerating` flag cleanup. Wired in `index.js` as boot-time fire-and-forget + 6h `setInterval`.
+4. ✅ **Process Kill Endpoint** — `POST /agentic/command/kill` in `tools-api`: process-tree kill via `killProcessTree()` in `AgenticCommandService.js`. SIGTERM with 3s grace period, SIGKILL escalation. PID 1 and self-kill protection.
 5. 🔲 **Session Resume Sanitization** — `filterUnresolvedToolUses()` pass on MongoDB session reload to prevent API errors from orphaned tool_use blocks. Reference: CC's `conversationRecovery.ts`
 6. 🔲 **Interrupted Turn Detection** — Detect `interrupted_prompt` vs `interrupted_turn` states on session resume. Auto-inject "Continue from where you left off" for interrupted turns. QoL improvement
 
@@ -426,7 +482,7 @@ Deep comparative analysis against [razakiau/claude-code](https://github.com/raza
 | **UI**        | React Ink (terminal TUI via `src/screens/`)                                                                               | React web UI (Retina, Next.js)                                  |
 | **Transport** | CLI REPL with background UDS daemon                                                                                       | HTTP REST + WebSocket + SSE                                     |
 | **State**     | File-based (JSONL transcripts, `~/.claude/`)                                                                              | MongoDB collections + MinIO                                     |
-| **Memory**    | `src/memdir/` — file-based `memdir.ts` with `findRelevantMemories.ts`, `memoryAge.ts`, `memoryScan.ts`, `teamMemPaths.ts` | `AgentMemoryService` — MongoDB + embeddings with consolidation  |
+| **Memory**    | `src/memdir/` — file-based with `MEMORY.md` index, Sonnet side-query relevance selection, forked-agent extraction (prompt cache sharing), `autoDream` consolidation, 4-type taxonomy (`user`/`feedback`/`project`/`reference`), team memory scoping | 5-store cognitive architecture — MongoDB + embeddings, Ebbinghaus decay, `WorkingMemoryService` central executive, `MemoryExtractor` + `MemoryConsolidationService` |
 | **Skills**    | `src/skills/` — `bundledSkills.ts` + `loadSkillsDir.ts` + `mcpSkillBuilders.ts`                                           | DB-backed per-project skills with embedding relevance filtering |
 | **Plugins**   | `src/plugins/` — `bundled/` directory + `builtinPlugins.ts` registry                                                      | No plugin architecture (tools via `tools-api` schemas)          |
 | **Tasks**     | `src/tasks/` — 5 polymorphic task runners                                                                                 | Single `AgenticLoopService` for all execution paths             |
@@ -449,9 +505,7 @@ runCleanupFunctions() → Promise.all(cleanupFunctions)
 
 Any service can register a cleanup function; all run during graceful shutdown.
 
-**Prism gap**: Our `AbortController` usage is flat — one controller per session, `signal.aborted` checks in the loop. No parent-child propagation, no WeakRef-based cleanup, no global cleanup registry. In-flight `ToolOrchestratorService` fetch calls are not aborted when the user cancels.
-
-**Recommendation**: Implement a `createChildAbortController()` utility modeled on CC's pattern. Pass child signals to `executeTool()` / `executeToolStreaming()` so fetch calls abort cleanly. Add a `CleanupRegistry` singleton that runs registered teardown functions (worktree removal, shell PID kills) in Prism's `SIGTERM`/`SIGINT` handler and in `AgenticLoopService.finally`.
+**Prism**: ✅ **Resolved** — `utils/AbortController.js` implements the same WeakRef-based parent-child tree with module-scope bound handlers. `utils/CleanupRegistry.js` provides the global shutdown registry with `installShutdownHandlers()` wired in `index.js`. Signal threading through `ToolOrchestratorService.fetchJson()`/`fetchJsonPost()`, `SseUtilities`, `CoordinatorService` (worker controllers), `SystemPromptAssembler`, and `benchmark.js`. AbortError handling returns clean `{ error: "Tool execution aborted" }` messages. See Phase 5.1 and 5.2 in the roadmap and Section 8 "Abort Propagation" for full implementation details.
 
 ### 7.3 Cleanup & Housekeeping
 
@@ -469,9 +523,7 @@ Any service can register a cleanup function; all run during graceful shutdown.
 
 **Claude Code** (`src/utils/backgroundHousekeeping.ts`): Scheduled background tasks that run during idle periods.
 
-**Prism gap**: No boot-time or scheduled cleanup. Orphaned worktrees in `/tmp/prism-worktrees/` accumulate indefinitely. No periodic purge of old session data or tool results.
-
-**Recommendation**: Implement a `BackgroundHousekeeping` service that runs on Prism startup and periodically (6h interval like memory consolidation). Priority: worktree pruning (already identified as 🔲), stale MongoDB session cleanup, MinIO orphan purge.
+**Prism**: ✅ **Resolved** — `BackgroundHousekeepingService.js`: boot-time + 6h scheduled cleanup. Targets: orphaned worktrees (>24h), stale `isGenerating` flags (>2h), old request logs (>90 days), MinIO orphans (conversation-ID-scoped objects with no matching MongoDB document). Wired in `index.js` as fire-and-forget boot run + `setInterval`. Process kill via `POST /agentic/command/kill` in tools-api.
 
 ### 7.4 Conversation Recovery & Session Resume
 
@@ -522,31 +574,184 @@ Plus `stopTask.ts` (graceful shutdown), `pillLabel.ts` (UI label generation), `t
 
 **Recommendation**: Lower priority. Our MCP client + custom tools + tools-api schema pattern provides the tool extensibility we need. A plugin system would only matter if we wanted to distribute Prism as a framework (not our current goal).
 
-### 7.7 Memory Architecture Comparison
+### 7.7 Persistent Memory Architecture — Deep Comparison
 
-**Claude Code** (`src/memdir/`):
+**Reference URLs** (Claude Code source, studied for this analysis):
 
-- `memdir.ts` — core memory directory manager
-- `findRelevantMemories.ts` — relevance-based memory retrieval
-- `memoryAge.ts` — time-decay weighting for memory freshness
-- `memoryScan.ts` — directory scanning for memory files
-- `memoryTypes.ts` — type definitions
-- `teamMemPaths.ts` / `teamMemPrompts.ts` — team-scoped memory paths and prompts
+- Memory directory core: https://github.com/razakiau/claude-code/blob/main/src/memdir/memdir.ts
+- Memory type taxonomy: https://github.com/razakiau/claude-code/blob/main/src/memdir/memoryTypes.ts
+- Memory extraction (forked agent): https://github.com/razakiau/claude-code/blob/main/src/services/extractMemories/extractMemories.ts
+- Extraction prompts: https://github.com/razakiau/claude-code/blob/main/src/services/extractMemories/prompts.ts
+- Relevance matching (Sonnet side-query): https://github.com/razakiau/claude-code/blob/main/src/memdir/findRelevantMemories.ts
+- Memory scanning: https://github.com/razakiau/claude-code/blob/main/src/memdir/memoryScan.ts
+- Memory age/decay: https://github.com/razakiau/claude-code/blob/main/src/memdir/memoryAge.ts
+- Background consolidation: https://github.com/razakiau/claude-code/tree/main/src/services/autoDream
+- Team memory paths: https://github.com/razakiau/claude-code/blob/main/src/memdir/teamMemPaths.ts
 
-**Storage**: File-based — memories stored as files in `~/.claude/memdir/`. Relevance matching via content scanning (not embeddings).
+#### 7.7.1 Claude Code: File-Based `memdir` Architecture
 
-**Prism** (`AgentMemoryService` + `MemoryConsolidationService`):
+CC uses a **flat file-based memory system** stored at `~/.claude/projects/<path>/memory/`. The architecture has three layers:
 
-- MongoDB-backed with embedding vectors (cosine similarity search)
-- 4-type taxonomy: user, feedback, project, reference
-- Duplicate detection via embedding similarity > 0.92
-- Automated consolidation: Union-Find clustering → Claude Haiku merge/delete/keep analysis
-- Staleness caveats injected into prompts
-- Consolidation audit trail with UI history panel
+| Layer | System | Purpose |
+| ----- | ------ | ------- |
+| **Storage** | `memdir/` — Markdown files with YAML frontmatter | One `.md` file per memory, plus `MEMORY.md` index |
+| **Extraction** | `extractMemories.ts` — forked agent | Runs a cloned agent after each turn to write memories |
+| **Consolidation** | `autoDream/` — "dreaming" agent | Background consolidation during idle time |
 
-**Comparison**: Prism's memory system is **significantly more sophisticated** than Claude Code's file-based `memdir`. We have embedding-based search (vs. file scanning), automated consolidation (vs. manual), and a richer type taxonomy. Claude Code's team memory paths are irrelevant to our architecture (we don't have team concepts).
+**Memory Type Taxonomy** (4 types, flat — defined in `memoryTypes.ts`):
 
-**Our advantage**: ✅ No changes needed. Our memory architecture exceeds Claude Code's.
+| CC Type | What it stores | Prism Equivalent Store |
+| ------- | -------------- | --------------------- |
+| `user` | User's role, goals, expertise, preferences | `SemanticMemoryService` (category: `preference`, `reference`) |
+| `feedback` | Corrections + confirmations ("don't mock DB", "yes, bundled PR was right") | `ProceduralMemoryService` (learned approaches) + `SemanticMemoryService` (category: `rule`) |
+| `project` | Non-derivable project context (deadlines, incidents, decisions) | `SemanticMemoryService` (category: `fact`) + `EpisodicMemoryService` (event context) |
+| `reference` | Pointers to external systems (Linear projects, Grafana boards) | `SemanticMemoryService` (category: `reference`) |
+
+**Explicit exclusions** from memory (defined in `WHAT_NOT_TO_SAVE_SECTION`):
+- Code patterns, architecture, file paths (derivable via grep/git)
+- Git history (use `git log` / `git blame`)
+- Debugging solutions (fix is in the code)
+- Anything already in `CLAUDE.md` files
+- Ephemeral task details
+- These exclusions apply **even when the user explicitly asks** — CC prompts the user for what was *surprising* or *non-obvious* instead
+
+**Storage Format** — Each memory is a markdown file with frontmatter:
+
+```markdown
+---
+name: user_role
+description: User is a senior data scientist focused on observability
+type: user
+---
+User is a data scientist investigating logging infrastructure.
+```
+
+The `MEMORY.md` index is a flat list of links — **not a memory itself**, but a manually-maintained index:
+```markdown
+- [User Role](user_role.md) — senior data scientist, observability focus
+- [Testing Policy](feedback_testing.md) — no mocking databases
+```
+Capped at `MAX_ENTRYPOINT_LINES = 200` / `MAX_ENTRYPOINT_BYTES = 25,000`. Truncation warning injected if exceeded. `MEMORY.md` is always loaded into the system prompt (every turn), topic files are loaded selectively.
+
+#### 7.7.2 CC Memory Extraction: Forked Agent Pattern
+
+CC's `extractMemories.ts` implements the most architecturally interesting pattern — a **forked agent** that shares the parent's prompt cache:
+
+1. **Forked agent** — `runForkedAgent()` creates a full clone of the current conversation that shares the parent's prompt cache key. This means the input tokens for extraction are **nearly free** (cache read tokens only)
+2. **Sandboxed permissions** — the forked agent can only: read files, grep, glob, read-only bash, and write/edit files **within the memory directory**. Created via `createAutoMemCanUseTool(memoryDir)` which returns a `canUseTool` function
+3. **Cursor-based** — tracks `lastMemoryMessageUuid` so each run only processes messages added since the last extraction
+4. **Mutual exclusion** — if the main agent already wrote to the memory directory this turn (`hasMemoryWritesSince()`), the forked extraction is skipped entirely and the cursor is advanced past that range
+5. **Coalescing** — if a second turn arrives while extraction is running, the context is stashed in `pendingContext` and a single trailing extraction runs after the current one finishes
+6. **Hard-capped** at `maxTurns: 5` to prevent verification rabbit-holes
+7. **Turn throttling** — configurable via feature flag `tengu_bramble_lintel` (default 1), allows running extraction every N eligible turns
+8. **Drain hook** — `drainPendingExtraction()` called before graceful shutdown to await in-flight extractions with a soft timeout (default 60s)
+
+**Key implementation detail**: The forked agent is a **full agentic loop** — it can read files, grep for existing memories, and decide whether to create new ones or update existing ones. It's not a simple prompt-and-parse extraction. The agent receives the full conversation context via prompt cache sharing, plus a pre-scanned manifest of existing memory files (via `scanMemoryFiles()` + `formatMemoryManifest()`), so it doesn't waste turns on `ls`.
+
+#### 7.7.3 CC Memory Retrieval: Sonnet Side-Query
+
+CC's `findRelevantMemories.ts` uses a **Sonnet side-query** (not just grep) for relevance matching:
+
+1. `scanMemoryFiles()` walks the memory directory and reads YAML frontmatter (name, description, type) from each `.md` file
+2. Formats all memory headers into a manifest string
+3. Sends a `sideQuery()` to Sonnet with system prompt: *"You are selecting memories that will be useful to Claude Code as it processes a user's query"*
+4. Sonnet returns up to 5 filenames as a JSON schema response
+5. Recently-used tools are passed to the selector to **avoid re-surfacing API docs** for tools already in active use (keyword overlap false positive prevention)
+6. `alreadySurfaced` set filters paths already shown in prior turns so the 5-slot budget is spent on fresh candidates
+7. Selected files are read in full and injected into the conversation context
+
+**Important**: CC does NOT use embeddings. Its retrieval is: (1) `MEMORY.md` always in system prompt (200-line index), (2) Sonnet-based relevance selection for topic files (up to 5 per turn), (3) Manual `grep` available via the model's own tool use. The Sonnet call costs tokens but leverages the model's semantic understanding — a middle ground between pure keyword search and embedding vectors.
+
+#### 7.7.4 CC Memory Consolidation: AutoDream
+
+CC's `autoDream/` directory implements background consolidation during idle time:
+
+| File | Purpose |
+| ---- | ------- |
+| `autoDream.ts` | Main consolidation service — runs during idle periods |
+| `config.ts` | Configuration (consolidation thresholds, intervals) |
+| `consolidationLock.ts` | File-based lock preventing concurrent consolidation |
+| `consolidationPrompt.ts` | Prompt template for the consolidation agent |
+
+The autoDream service runs a consolidation agent that merges, deduplicates, and prunes memory files. Uses file-based locking to prevent concurrent consolidation across multiple CC instances.
+
+**KAIROS mode**: For long-lived "assistant" sessions, CC switches to an append-only daily log format (`logs/YYYY/MM/YYYY-MM-DD.md`) instead of maintaining `MEMORY.md` directly. A separate nightly process distills logs into topic files. The prompt is date-pattern-based (not hardcoded date) to preserve prompt cache across midnight rollovers.
+
+#### 7.7.5 CC Memory Prompt Integration
+
+CC's `memdir.ts` builds the memory behavioral instructions (`buildMemoryLines()`) which include:
+
+- **`## Types of memory`** — XML-structured type taxonomy with `<name>`, `<description>`, `<when_to_save>`, `<how_to_use>`, `<body_structure>`, `<examples>` per type
+- **`## What NOT to save`** — explicit exclusions (code patterns, git history, debugging solutions)
+- **`## How to save memories`** — two-step process: (1) write topic file with frontmatter, (2) add index entry to `MEMORY.md`
+- **`## When to access memories`** — recall triggers with "ignore" semantics (if user says to ignore memory, proceed as if `MEMORY.md` were empty)
+- **`## Before recommending from memory`** — **recall verification**: if a memory names a file path, check it exists; if it names a function, grep for it. *"'The memory says X exists' is not the same as 'X exists now.'"*
+- **`## Searching past context`** — instructions for grep-based search across memory files and session transcript logs (JSONL)
+- **Combined mode** — when team memory is enabled, adds `<scope>` tags (private/team) to each type's XML block and dual-directory guidance
+
+**Team memory** (`teamMemPaths.ts` / `teamMemPrompts.ts`): When enabled via feature flag `TEAMMEM`, CC adds a shared team directory alongside the private memory directory. Types get `<scope>` annotations (e.g., `feedback` defaults to private but can be team if the guidance is a project-wide convention). Team memories are synced across all CC users on the same project.
+
+#### 7.7.6 Dimension-by-Dimension Comparison
+
+| Dimension | Claude Code | Prism |
+| --------- | ---------- | ----- |
+| **Storage backend** | Markdown files on filesystem (`~/.claude/projects/<path>/memory/`) | MongoDB collections (`memory_episodic`, `memory_semantic`, `memory_procedural`, `memory_prospective`, `memory_working`) |
+| **Type system** | 4 flat types (`user`, `feedback`, `project`, `reference`) with XML taxonomy | 5 cognitive stores modeled on Tulving's episodic/semantic distinction + Baddeley's working memory |
+| **Retrieval** | **Sonnet side-query** on frontmatter manifest (up to 5 files per turn) + `MEMORY.md` always in prompt | **Cosine similarity** on embedding vectors + temporal/decay scoring across all stores |
+| **Extraction trigger** | `afterResponse` hook via `handleStopHooks` → `runForkedAgent()` | `afterResponse` hook via `MemoryExtractor` → separate Claude Haiku LLM call |
+| **Extraction efficiency** | **Forked agent shares parent prompt cache** — input tokens are cache reads (nearly free) | Separate LLM call rebuilds context from scratch (full input token cost) |
+| **Extraction output** | File writes to memory directory (the forked agent uses tools to create/edit files) | Structured JSON extraction → MongoDB inserts via service methods |
+| **Mutual exclusion** | ✅ Tracks `hasMemoryWritesSince()` — if main agent wrote to memory dir, forked extraction skips | ❌ No deduplication — `MemoryExtractor` always runs regardless of main agent's memory activity |
+| **Coalescing** | ✅ `pendingContext` stash + trailing run after in-progress extraction completes | ❌ Each turn triggers independently — no stash/trailing pattern |
+| **Turn throttling** | Configurable N-turn interval via feature flag (default: every turn) | Runs every turn (no throttle gate) |
+| **Consolidation** | `autoDream/` — idle-time consolidation agent with file-based locking | `MemoryConsolidationService` — 6h scheduled Union-Find clustering with audit trail |
+| **Capacity management** | 200-line / 25KB cap on `MEMORY.md` + 5-file selection per turn | 18-slot working memory with relevance-based eviction across all stores |
+| **Prompt integration** | `MEMORY.md` always injected in system prompt + selected topic files in context | `WorkingMemoryService.load()` selects top-k memories per turn, formatted as `## Agent Memory` sections |
+| **Decay model** | Implicit — old files get stale, `memoryAge.ts` provides freshness weighting | Ebbinghaus forgetting curve: `e^(-t/S)` where `S = 10 + reinforcementCount × 5` |
+| **Confidence scoring** | None — all memories are equally trusted | Per-memory confidence: base 0.5, +0.1 per reinforcement, -0.15 per contradiction |
+| **Duplicate detection** | Forked agent manually checks existing files before creating new ones | Automated cosine similarity threshold (> 0.92 → reinforce instead of create) |
+| **Multi-user** | Team memory (`TEAMMEM` feature flag) with private/team scoping | Per-agent, per-project scoping (no team memory concept) |
+| **Recall verification** | ✅ "Before recommending from memory" section forces model to verify file paths and grep for functions | ❌ No recall-side verification — memories are trusted as-is |
+| **Cross-session** | File persistence — always available across sessions | MongoDB persistence — cross-session by default |
+| **Procedural memory** | Partially covered by `feedback` type (learned approaches) | Dedicated `ProceduralMemoryService` with trigger → step sequence → tool chain, success/failure rate tracking |
+| **Prospective memory** | ❌ None | `ProspectiveMemoryService` — future intentions with time-based and cue-based triggers, auto-expiration TTL |
+| **Episodic memory** | ❌ None (session transcripts exist as JSONL files but are not structured as episodic memories) | `EpisodicMemoryService` — session narratives with outcome tracking, cross-references to extracted semantic/procedural IDs |
+
+#### 7.7.7 What CC Does Better
+
+1. **Forked agent prompt cache sharing** — CC's extraction runs a full agent clone that reuses the parent's prompt cache key, so input tokens for extraction are nearly free (cache reads only). Our `MemoryExtractor` makes a separate Haiku call that rebuilds context from scratch. This is CC's single biggest memory architecture advantage — it makes extraction cost-efficient enough to run every turn
+2. **Mutual exclusion** — CC tracks whether the main agent already wrote memories this turn (`hasMemoryWritesSince()`) and skips the forked extraction. We don't have this deduplication, risking redundant extraction work
+3. **"What NOT to save" negative constraints** — CC's exclusion list is eval-validated (memory-prompt-iteration evals). They explicitly prevent saving code patterns, git history, and debugging solutions — even when the user asks. Our `MemoryExtractor` prompt doesn't have this level of negative constraint
+4. **Recall verification** — CC's "Before recommending from memory" section forces the model to `grep` or `stat` before acting on a recalled memory. *"'The memory says X exists' is not the same as 'X exists now.'"* We don't have this drift-detection pattern
+5. **Coalescing** — CC stashes extraction requests that arrive during an in-progress run and runs a single trailing pass. Our `afterResponse` hook runs once per turn with no coalescing
+6. **Sonnet-based relevance selection** — CC uses a Sonnet side-query with the full memory manifest to select which topic files to load (up to 5). This leverages the model's semantic understanding at retrieval time, whereas our embedding-based cosine similarity is cheaper but less contextually aware
+
+#### 7.7.8 Where Prism Is Stronger
+
+1. **Embedding-based retrieval** — CC uses a Sonnet side-query (smart but costs tokens per turn). We use cosine similarity on pre-computed embedding vectors, which is instant and scales to thousands of memories without per-query LLM cost
+2. **Ebbinghaus decay** — Our `SemanticMemoryService` implements a forgetting curve with `strength` that decays over time, naturally prioritizing frequently-accessed memories. CC has `memoryAge.ts` for freshness but no spaced-repetition decay model
+3. **Procedural memory** — We track tool-chain success rates as first-class `ProceduralMemoryService` records. CC partially covers this via `feedback` type memories, but doesn't track trigger → steps → tools with success/failure metrics
+4. **Prospective memory** — We support trigger-based "remind me when X" intentions with time/cue-based firing and auto-expiration. CC has no equivalent
+5. **Episodic memory** — We maintain structured session narratives (outcome, satisfaction, key decisions, tags) with cross-references to extracted memories. CC stores raw JSONL transcripts but doesn't structure them as episodic records
+6. **Working memory orchestration** — Our `WorkingMemoryService` acts as a central executive (Baddeley's model) that selects the most relevant memories from all stores per turn with explicit 18-slot capacity management. CC dumps `MEMORY.md` into the prompt (always) and selects up to 5 topic files (via Sonnet)
+7. **Automated duplicate detection** — Our cosine similarity threshold (> 0.92 → reinforce) prevents memory bloat automatically. CC relies on the forked agent manually checking existing files
+8. **Consolidation audit trail** — Our `MemoryConsolidationService` records every run with trigger type, memory counts (before/after), actions applied, duration, and summary. CC's `autoDream` runs silently with file-based locking
+
+#### 7.7.9 Adopted from CC (Implemented)
+
+The following CC patterns were adopted into Prism's memory architecture:
+
+1. ✅ **CC-style 4-type taxonomy** — Replaced the 5-store cognitive model (episodic, semantic, procedural, prospective, working) with CC's flat `user | feedback | project | reference` taxonomy in a single `memories` collection. All memories stored via `MemoryService.store()` with embedding-based dedup
+2. ✅ **Negative constraint list** — Added explicit "What NOT to save" constraints to `MemoryExtractor`'s extraction prompt: excludes code patterns, git history, debugging solutions, ephemeral task details, and anything derivable from the codebase
+3. ✅ **Mutual exclusion** — `MemoryExtractor.createHook()` checks `toolCalls` in the `afterResponse` payload; skips extraction when `upsert_memory` was called during the turn
+4. ✅ **Configurable extraction model** — Uses `SettingsService.getSection("memory")` for provider/model instead of hardcoded Haiku
+5. 🔲 **Recall verification prompt** — Planned: add a "Before recommending from memory" system prompt section to verify recalled file paths before acting on them
+
+**Why prompt cache sharing was NOT adopted:** CC's forked agent reuses the parent's Anthropic API cache key because it runs in-process as a CLI tool with direct SDK access. Prism is an HTTP server calling providers through a unified abstraction — we have no access to the cache key machinery. The extraction call uses a separate, cheap LLM call instead.
+
+**Files (CC)**: `src/memdir/memdir.ts`, `memoryTypes.ts`, `findRelevantMemories.ts`, `memoryScan.ts`, `memoryAge.ts`, `paths.ts`, `teamMemPaths.ts`, `teamMemPrompts.ts`, `src/services/extractMemories/extractMemories.ts`, `prompts.ts`, `src/services/autoDream/autoDream.ts`, `config.ts`, `consolidationLock.ts`, `consolidationPrompt.ts`
+
+**Files (Prism)**: `MemoryExtractor.js` (CC-style extraction with 4-type taxonomy + mutual exclusion), `MemoryService.js` (unified single-store with embedding dedup), `MemoryConsolidationService.js` (Union-Find clustering + LLM merge), `SystemPromptAssembler.js` (embedding search retrieval into system prompt)
 
 ### 7.8 Skills System Comparison
 
@@ -574,10 +779,10 @@ Claude Code's `src/utils/` is massive (~100+ files). Notable subdirectories and 
 
 | Utility                             | What it does                            | Prism equivalent                     | Gap?                  |
 | ----------------------------------- | --------------------------------------- | ------------------------------------ | --------------------- |
-| `abortController.ts`                | WeakRef parent-child abort tree         | Flat AbortController                 | **Yes — see 7.2**     |
-| `cleanup.ts` + `cleanupRegistry.ts` | Global shutdown + periodic cleanup      | Missing                              | **Yes — see 7.3**     |
+| `abortController.ts`                | WeakRef parent-child abort tree         | `utils/AbortController.js`           | ✅ Equivalent         |
+| `cleanup.ts` + `cleanupRegistry.ts` | Global shutdown + periodic cleanup      | `utils/CleanupRegistry.js`           | ✅ Equivalent         |
 | `conversationRecovery.ts`           | Session resume with interrupt detection | MongoDB persistence                  | **Partial — see 7.4** |
-| `backgroundHousekeeping.ts`         | Idle-time maintenance tasks             | Missing                              | **Yes — see 7.3**     |
+| `backgroundHousekeeping.ts`         | Idle-time maintenance tasks             | `BackgroundHousekeepingService`       | ✅ Equivalent         |
 | `sandbox/`                          | Sandboxed execution environments        | None (Tier 3 approval only)          | Accepted risk         |
 | `permissions/`                      | Permission system directory             | `AutoApprovalEngine`                 | ✅ Equivalent         |
 | `hooks/`                            | Hook utilities                          | `AgentHooks` EventEmitter            | ✅ Equivalent         |
@@ -585,7 +790,7 @@ Claude Code's `src/utils/` is massive (~100+ files). Notable subdirectories and 
 | `git/`                              | Git operations                          | `AgenticGitService` in tools-api     | ✅ Equivalent         |
 | `shell/` + `bash/` + `powershell/`  | Shell abstraction per OS                | `AgenticCommandService` in tools-api | ✅ Equivalent         |
 | `mcp/`                              | MCP client utilities                    | `MCPClientService`                   | ✅ Equivalent         |
-| `memory/`                           | Memory helpers                          | `AgentMemoryService`                 | ✅ Superior           |
+| `memory/`                           | Memory helpers                          | CC-style single `memories` store     | ✅ Equivalent (see 7.7)  |
 | `model/`                            | Model configuration/selection           | `config.js` model definitions        | ✅ Equivalent         |
 | `settings/`                         | User settings management                | Retina settings + Prism config       | ✅ Equivalent         |
 | `computerUse/`                      | Computer use (screen interaction)       | `AgenticBrowserService`              | ✅ Equivalent         |
@@ -634,22 +839,23 @@ Identified gaps between the current implementation and production-grade robustne
 - `installShutdownHandlers()` in `index.js` — SIGTERM/SIGINT with 5s hard timeout
 
 **Remaining** (lower priority):
-- `POST /compute/shell/kill/:pid` endpoint in `tools-api` for shell process tree cleanup
-- PID tracking in `AgenticLoopService.finally` for spawned shell processes
+- PID tracking in `AgenticLoopService.finally` for spawned shell processes (optional — processes are already terminated on session cancel via `AbortController` signal)
 
-### 🔲 Background Housekeeping & Boot-Time Cleanup
+### ✅ Background Housekeeping & Boot-Time Cleanup
 
 **Impact**: Medium — Identified as critical gap after studying Claude Code's `cleanup.ts` which runs 8+ cleanup passes including `cleanupStaleAgentWorktrees()`.
 
-**Current state**: No boot-time or periodic cleanup. Orphaned git worktrees in `/tmp/prism-worktrees/` accumulate from improper shutdowns or unhandled worker crashes. No periodic purge of stale MongoDB session data, old request logs, or MinIO orphans.
+**Implemented**: `BackgroundHousekeepingService.js` — runs at boot (fire-and-forget) and on a 6h `setInterval` in `index.js`.
 
-**Claude Code reference**: `src/utils/cleanup.ts` (8 cleanup passes), `src/utils/backgroundHousekeeping.ts` (idle-time tasks).
+Cleanup targets:
+1. **Worktree pruning**: `/tmp/prism-worktrees/` directories older than 24h removed recursively
+2. **Stale session cleanup**: `isGenerating` flags older than 2h cleared in `conversations` and `agent_sessions`
+3. **Request log pruning**: Request logs older than 90 days deleted from `requests` collection
+4. **MinIO orphan purge**: Objects whose conversation/session ID prefix no longer exists in MongoDB are removed
 
-**Implementation path**:
+**Process Kill Endpoint**: `POST /agentic/command/kill` — `killProcessTree(pid)` in `AgenticCommandService.js`. Attempts SIGTERM on the process group (-pgid), waits 3s grace period, escalates to SIGKILL. Safety: refuses PID 1 and self-kill.
 
-1. Boot-time: Prune `/tmp/prism-worktrees/` directories older than 24h on Prism startup
-2. Scheduled: 6h interval cleanup of stale request logs, orphaned MinIO objects, expired session data
-3. ~~Shutdown: `CleanupRegistry` runs all registered teardown functions~~ ✅ Done — implemented in Phase 5.2
+**Files**: `prism/src/services/BackgroundHousekeepingService.js`, `tools-api/services/AgenticCommandService.js`, `tools-api/routes/AgenticRoutes.js`
 
 ### ⚠️ Token Estimation Accuracy
 
@@ -780,9 +986,11 @@ Features studied from Claude Code's architecture that we explicitly chose NOT to
 
 ### ❌ File-Based Memory (`memdir/`)
 
-> _Claude Code_ (`src/memdir/`): File-based memory system using `~/.claude/memdir/` with `memoryScan.ts` (directory walking), `memoryAge.ts` (time-decay), and `teamMemPaths.ts`/`teamMemPrompts.ts` (team-scoped memory).
+> _Claude Code_ (`src/memdir/`): File-based memory system using `~/.claude/projects/<path>/memory/` with markdown files + YAML frontmatter, `MEMORY.md` as always-loaded index, Sonnet side-query relevance selection (up to 5 topic files per turn), forked-agent extraction (prompt cache sharing for near-free input tokens), `autoDream` idle-time consolidation, 4-type taxonomy (`user`, `feedback`, `project`, `reference`), and team memory scoping.
 
-**Why not**: Our MongoDB + embedding-based `AgentMemoryService` with automated `MemoryConsolidationService` is strictly more capable: semantic search via cosine similarity (vs file scanning), automated clustering and merging (vs manual file management), 4-type taxonomy, duplicate detection, and consolidation audit trails. File-based memory is simpler to debug but scales poorly and lacks semantic awareness.
+**Why not**: Our 5-store cognitive memory architecture is categorically more capable — see **Section 7.7** for the full deep comparison. Key advantages: embedding-based retrieval (instant, scales to thousands of memories vs Sonnet call per turn), Ebbinghaus confidence decay with reinforcement/contradiction tracking, 5 specialized cognitive stores vs 1 flat taxonomy, procedural memory with tool-chain success rates, prospective memory (future intentions) with no CC equivalent, and consolidation audit trails. CC's forked-agent prompt cache sharing is genuinely clever (makes extraction nearly free on input tokens), but our MongoDB-backed approach trades that for structured queries, automated duplicate detection (cosine > 0.92 → reinforce), and working memory orchestration (Baddeley's central executive, 18-slot capacity). The file-based approach is simpler to debug but scales poorly, lacks semantic search, and has no formal decay or confidence model.
+
+**Worth adopting from CC**: Recall verification prompting ("Before recommending from memory" — verify file paths and function names before acting), negative constraint list for extraction ("What NOT to save" — exclude derivable information), and mutual exclusion (skip extraction when main agent already wrote memories this turn). See Section 7.7.9 for the full adoption list.
 
 ### ❌ JSONL Transcript Chains with UUID Linking
 

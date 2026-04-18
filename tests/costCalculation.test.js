@@ -3,8 +3,11 @@ import {
     calculateAudioCost,
     calculateImageCost,
     calculateLiveCost,
+    getTotalInputTokens,
 } from "../src/utils/CostCalculator.js";
+import { normalizeUsage } from "../src/utils/openai-compat.js";
 import { TYPES, getPricing, getModelByName } from "../src/config.js";
+
 
 // ═══════════════════════════════════════════════════════════════
 // calculateTextCost — Unit Tests
@@ -524,7 +527,7 @@ describe("Pricing sanity checks against official published rates", () => {
     // ── Google Gemini — STT ──────────────────────────────────────
 
     it("Gemini 3 Flash STT: $1.00 audioIn / $3.00 out", () => {
-        const m = getModelByName("gemini-3-flash-preview");
+        const _m = getModelByName("gemini-3-flash-preview");
         // STT uses same model name; these come from the audio variant config
         const sttPricing = getPricing(TYPES.AUDIO, TYPES.TEXT);
         const p = sttPricing["gemini-3-flash-preview"];
@@ -633,4 +636,153 @@ describe("Pricing sanity checks against official published rates", () => {
         const m = getModelByName("text-embedding-3-large");
         expect(m.pricing.inputPerMillion).toBe(0.13);
     });
+
+// ═══════════════════════════════════════════════════════════════
+// normalizeUsage — Unit Tests
+// ═══════════════════════════════════════════════════════════════
+// Verifies extraction of prompt_tokens_details.cached_tokens and
+// completion_tokens_details.reasoning_tokens from OpenAI-compat
+// usage responses (LM Studio, OpenAI, vLLM, etc.)
+
+describe("normalizeUsage", () => {
+    it("extracts basic prompt_tokens and completion_tokens", () => {
+        const usage = normalizeUsage({ prompt_tokens: 100, completion_tokens: 50 });
+        expect(usage.inputTokens).toBe(100);
+        expect(usage.outputTokens).toBe(50);
+    });
+
+    it("returns zeros when rawUsage is null", () => {
+        const usage = normalizeUsage(null);
+        expect(usage.inputTokens).toBe(0);
+        expect(usage.outputTokens).toBe(0);
+    });
+
+    it("returns zeros when rawUsage is undefined", () => {
+        const usage = normalizeUsage(undefined);
+        expect(usage.inputTokens).toBe(0);
+        expect(usage.outputTokens).toBe(0);
+    });
+
+    // ── Cached tokens (KV cache hits) ───────────────────────────
+
+    it("extracts cached_tokens from prompt_tokens_details", () => {
+        const usage = normalizeUsage({
+            prompt_tokens: 1000,
+            completion_tokens: 200,
+            prompt_tokens_details: { cached_tokens: 800 },
+        });
+        expect(usage.cacheReadInputTokens).toBe(800);
+        // inputTokens should be adjusted to non-cached portion
+        expect(usage.inputTokens).toBe(200);
+        expect(usage.outputTokens).toBe(200);
+    });
+
+    it("does not set cacheReadInputTokens when cached_tokens is 0", () => {
+        const usage = normalizeUsage({
+            prompt_tokens: 500,
+            completion_tokens: 100,
+            prompt_tokens_details: { cached_tokens: 0 },
+        });
+        expect(usage.cacheReadInputTokens).toBeUndefined();
+        expect(usage.inputTokens).toBe(500);
+    });
+
+    it("does not set cacheReadInputTokens when prompt_tokens_details is absent", () => {
+        const usage = normalizeUsage({
+            prompt_tokens: 500,
+            completion_tokens: 100,
+        });
+        expect(usage.cacheReadInputTokens).toBeUndefined();
+        expect(usage.inputTokens).toBe(500);
+    });
+
+    it("clamps inputTokens to 0 when cached_tokens >= prompt_tokens", () => {
+        const usage = normalizeUsage({
+            prompt_tokens: 100,
+            completion_tokens: 50,
+            prompt_tokens_details: { cached_tokens: 100 },
+        });
+        expect(usage.cacheReadInputTokens).toBe(100);
+        expect(usage.inputTokens).toBe(0);
+    });
+
+    // ── Reasoning tokens ────────────────────────────────────────
+
+    it("extracts reasoning_tokens from completion_tokens_details", () => {
+        const usage = normalizeUsage({
+            prompt_tokens: 12,
+            completion_tokens: 10,
+            completion_tokens_details: { reasoning_tokens: 9 },
+        });
+        expect(usage.reasoningOutputTokens).toBe(9);
+        expect(usage.outputTokens).toBe(10);
+    });
+
+    it("does not set reasoningOutputTokens when reasoning_tokens is 0", () => {
+        const usage = normalizeUsage({
+            prompt_tokens: 100,
+            completion_tokens: 50,
+            completion_tokens_details: { reasoning_tokens: 0 },
+        });
+        expect(usage.reasoningOutputTokens).toBeUndefined();
+    });
+
+    // ── Combined cache + reasoning ──────────────────────────────
+
+    it("extracts both cached_tokens and reasoning_tokens when present", () => {
+        const usage = normalizeUsage({
+            prompt_tokens: 1000,
+            completion_tokens: 500,
+            prompt_tokens_details: { cached_tokens: 800 },
+            completion_tokens_details: { reasoning_tokens: 350 },
+        });
+        expect(usage.inputTokens).toBe(200);
+        expect(usage.cacheReadInputTokens).toBe(800);
+        expect(usage.outputTokens).toBe(500);
+        expect(usage.reasoningOutputTokens).toBe(350);
+    });
+
+    // ── Integration with getTotalInputTokens ────────────────────
+
+    it("getTotalInputTokens aggregates inputTokens + cacheReadInputTokens", () => {
+        const usage = normalizeUsage({
+            prompt_tokens: 1000,
+            completion_tokens: 200,
+            prompt_tokens_details: { cached_tokens: 800 },
+        });
+        // Total should equal original prompt_tokens
+        const total = getTotalInputTokens(usage);
+        expect(total).toBe(1000);
+    });
+
+    it("getTotalInputTokens works without cache fields", () => {
+        const usage = normalizeUsage({
+            prompt_tokens: 500,
+            completion_tokens: 100,
+        });
+        expect(getTotalInputTokens(usage)).toBe(500);
+    });
+
+    // ── Integration with calculateTextCost ───────────────────────
+
+    it("cached tokens feed into calculateTextCost cachedInputPerMillion", () => {
+        const usage = normalizeUsage({
+            prompt_tokens: 1000,
+            completion_tokens: 200,
+            prompt_tokens_details: { cached_tokens: 800 },
+        });
+        // Use pricing that has cachedInputPerMillion
+        const pricing = {
+            inputPerMillion: 1.0,
+            outputPerMillion: 5.0,
+            cachedInputPerMillion: 0.1,
+        };
+        const cost = calculateTextCost(usage, pricing);
+        // new input: (200/1M)*1.0 = 0.0002
+        // cache read: (800/1M)*0.1 = 0.00008
+        // output: (200/1M)*5.0 = 0.001
+        // total = 0.00128
+        expect(cost).toBeCloseTo(0.00128, 8);
+    });
+});
 });

@@ -2455,6 +2455,9 @@ router.get("/sessions/:id/stats", async (req, res, next) => {
         estimatedCost: 1,
         inputTokens: 1,
         outputTokens: 1,
+        cacheReadInputTokens: 1,
+        cacheCreationInputTokens: 1,
+        reasoningOutputTokens: 1,
         provider: 1,
         model: 1,
         operation: 1,
@@ -2478,6 +2481,9 @@ router.get("/sessions/:id/stats", async (req, res, next) => {
     let totalCost = 0;
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
+    let totalCacheReadInputTokens = 0;
+    let totalCacheCreationInputTokens = 0;
+    let totalReasoningOutputTokens = 0;
     const mergedModalities = {};
     const toolCounts = {};
 
@@ -2485,6 +2491,9 @@ router.get("/sessions/:id/stats", async (req, res, next) => {
       totalCost += r.estimatedCost || 0;
       totalInputTokens += r.inputTokens || 0;
       totalOutputTokens += r.outputTokens || 0;
+      totalCacheReadInputTokens += r.cacheReadInputTokens || 0;
+      totalCacheCreationInputTokens += r.cacheCreationInputTokens || 0;
+      totalReasoningOutputTokens += r.reasoningOutputTokens || 0;
       if (r.provider) providers.add(r.provider);
       if (r.model) models.add(r.model);
       if (r.operation) operations.add(r.operation);
@@ -2520,6 +2529,9 @@ router.get("/sessions/:id/stats", async (req, res, next) => {
       totalInputTokens,
       totalOutputTokens,
       totalTokens: totalInputTokens + totalOutputTokens,
+      totalCacheReadInputTokens,
+      totalCacheCreationInputTokens,
+      totalReasoningOutputTokens,
       providers: [...providers],
       models: [...models],
       operations: [...operations],
@@ -2584,6 +2596,9 @@ router.get("/sessions/:id/requests", async (req, res, next) => {
         errorMessage: 1,
         inputTokens: 1,
         outputTokens: 1,
+        cacheReadInputTokens: 1,
+        cacheCreationInputTokens: 1,
+        reasoningOutputTokens: 1,
         estimatedCost: 1,
         tokensPerSec: 1,
         totalTime: 1,

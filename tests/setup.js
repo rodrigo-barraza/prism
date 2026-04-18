@@ -18,6 +18,7 @@ vi.mock('../secrets.js', () => ({
     PROVIDER_OLLAMA: [],
     PROVIDER_LLAMA_CPP: [],
     OPENAI_COMPATIBLE_BASE_URL: 'http://localhost:9999',
+    TOOLS_API_URL: 'http://localhost:5590',
     MONGO_URI: 'mongodb://192.168.86.2:27017/?directConnection=true&replicaSet=rs0',
     MONGO_DB_NAME: 'prism-test',
 }));
@@ -34,6 +35,7 @@ vi.mock('../src/wrappers/MongoWrapper.js', () => ({
 vi.mock('../src/services/RequestLogger.js', () => ({
     default: {
         log: vi.fn(),
+        logChatGeneration: vi.fn(),
     },
 }));
 

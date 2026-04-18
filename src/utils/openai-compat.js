@@ -87,14 +87,38 @@ export function extractToolCallsFromMessage(msg) {
 
 /**
  * Build a normalized usage object from OpenAI-compatible usage data.
+ * Extracts extended token details when available:
+ *   - prompt_tokens_details.cached_tokens  → cacheReadInputTokens
+ *   - completion_tokens_details.reasoning_tokens → reasoningOutputTokens
+ *
+ * The cache field uses the same key as Anthropic (cacheReadInputTokens) so
+ * CostCalculator, RequestLogger, and console logging handle it uniformly.
+ *
  * @param {object} [rawUsage] - The usage object from the API response
- * @returns {{ inputTokens: number, outputTokens: number }}
+ * @returns {{ inputTokens: number, outputTokens: number, cacheReadInputTokens?: number, reasoningOutputTokens?: number }}
  */
 export function normalizeUsage(rawUsage) {
-  return {
+  const usage = {
     inputTokens: rawUsage?.prompt_tokens ?? 0,
     outputTokens: rawUsage?.completion_tokens ?? 0,
   };
+
+  // KV cache hits — reported by LM Studio and OpenAI
+  const cachedTokens = rawUsage?.prompt_tokens_details?.cached_tokens;
+  if (cachedTokens > 0) {
+    usage.cacheReadInputTokens = cachedTokens;
+    // Adjust inputTokens to reflect only the non-cached portion,
+    // mirroring Anthropic's convention where inputTokens excludes cache hits
+    usage.inputTokens = Math.max(0, usage.inputTokens - cachedTokens);
+  }
+
+  // Reasoning token breakdown
+  const reasoningTokens = rawUsage?.completion_tokens_details?.reasoning_tokens;
+  if (reasoningTokens > 0) {
+    usage.reasoningOutputTokens = reasoningTokens;
+  }
+
+  return usage;
 }
 
 /**

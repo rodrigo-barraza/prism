@@ -2,77 +2,118 @@ import crypto from "crypto";
 import { getProvider } from "../providers/index.js";
 import MemoryService from "./MemoryService.js";
 import MemoryConsolidationService from "./MemoryConsolidationService.js";
-import EpisodicMemoryService from "./EpisodicMemoryService.js";
-import SemanticMemoryService from "./SemanticMemoryService.js";
-import ProceduralMemoryService from "./ProceduralMemoryService.js";
 import RequestLogger from "./RequestLogger.js";
+import SettingsService from "./SettingsService.js";
 import logger from "../utils/logger.js";
 import { estimateTokens, calculateTextCost } from "../utils/CostCalculator.js";
 import { TYPES, getPricing } from "../config.js";
 import { calculateTokensPerSec } from "../utils/math.js";
 import { roundMs } from "../utils/utilities.js";
 
-const SUMMARIZATION_PROVIDER = "anthropic";
-const SUMMARIZATION_MODEL = "claude-haiku-4-5-20251001";
-const MIN_MESSAGES_FOR_SUMMARY = 4;
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const MIN_MESSAGES_FOR_EXTRACTION = 4;
 
 /**
- * Extraction prompt — inspired by Claude Code's memdir type taxonomy.
- *
- * Constrains memories to 4 types capturing context NOT derivable from the
- * current project state. Code patterns, architecture, git history, and file
- * structure are derivable (via grep/git/file reads) and should NOT be saved.
+ * Valid memory types — Claude Code's memdir taxonomy.
+ * All memories stored in a single `memories` collection, differentiated by type.
  */
-const EXTRACTION_PROMPT = `You are a memory extraction agent for a multi-system memory architecture. Analyze this conversation and extract three categories of memories.
+const VALID_TYPES = ["user", "feedback", "project", "reference"];
 
-## Category 1: Semantic Memories (Facts & Knowledge)
-Stable facts, preferences, rules, and references that will be useful in future sessions.
+/**
+ * Extraction prompt — CC-style 4-type taxonomy with explicit negative constraints.
+ *
+ * Types:
+ *   user      — user's role, goals, expertise, preferences
+ *   feedback  — corrections + confirmations ("don't mock DB", "yes, bundled PR was right")
+ *   project   — non-derivable project context (deadlines, incidents, decisions)
+ *   reference — pointers to external systems (Linear projects, Grafana boards, API endpoints)
+ *
+ * Negative constraints prevent saving information that is derivable from the
+ * codebase itself (via grep, git, file reads). This is Claude Code's most
+ * impactful memory quality insight — eval-validated.
+ */
+const EXTRACTION_PROMPT = `You are a memory extraction agent. Analyze this coding session and extract durable memories that will be useful in future sessions.
 
-Types: "preference", "fact", "rule", "reference"
+## Memory Types
 
+### user
+The user's role, goals, expertise, communication preferences, and working style.
+When to save: the user reveals something about themselves that isn't obvious from the code.
 Examples:
-- {"category": "semantic", "type": "preference", "title": "CSS animation standards", "content": "User requires GPU-accelerated CSS animations using transform/opacity"}
-- {"category": "semantic", "type": "rule", "title": "No database mocks in tests", "content": "Don't mock databases in tests — mock/prod divergence masked a broken migration"}
+- "User is a senior data scientist focused on observability infrastructure"
+- "User prefers GPU-accelerated CSS animations using transform/opacity only"
+- "User went to art university, has high CSS design standards"
 
-## Category 2: Procedural Memories (Learned Patterns)
-Successful approaches, tool sequences, or problem-solving strategies that worked.
-
+### feedback
+Corrections, confirmations, and learned lessons from this session.
+When to save: the user corrects an approach, confirms a good pattern, or a non-obvious debugging lesson emerges.
 Examples:
-- {"category": "procedural", "trigger": "WebSocket disconnection during streaming", "procedure": ["Check AbortController signal chain", "Verify stream.return() on abort", "Check orphaned event listeners"], "toolSequence": ["grep_search", "read_file", "str_replace_file"]}
+- "Don't mock databases in tests — mock/prod divergence masked a broken migration"
+- "Bundled PR approach was confirmed as the right strategy for this repo"
+- "When debugging WebSocket drops, always check AbortController signal chain first"
 
-## Category 3: Episode Summary
-A narrative summary of what happened in this session as a whole.
+### project
+Non-derivable project context — things you can't figure out by reading the code.
+When to save: deadlines, incidents, architectural decisions, team agreements, deployment constraints.
+Examples:
+- "Merge freeze begins 2026-03-05 for mobile release"
+- "The staging cluster uses a different Redis config than prod — don't assume parity"
+- "Team decided to keep MemoryService as the single source of truth for all agent memories"
 
-Example:
-- {"category": "episode", "summary": "Debugged WebSocket reconnection issue in AgenticLoopService", "narrative": "User reported streaming drops. Found AbortController wasn't passed through stream chain. Fixed by threading signal through all async generators.", "outcome": "resolved", "satisfaction": "positive", "keyDecisions": ["Choose AbortController over setTimeout for cleanup"], "tags": ["websocket", "debugging"]}
+### reference
+Pointers to external systems, dashboards, APIs, or documentation.
+When to save: the user mentions a specific external resource that would be useful to recall later.
+Examples:
+- "Project Linear board: https://linear.app/team/project-xyz"
+- "Grafana dashboard for API latency: https://grafana.internal/d/abc123"
+- "The lights API runs on port 5558 at /api/lights"
 
 ## What NOT to Save
-- Code patterns derivable by reading the code
-- Git history, file changes, or project structure
-- Ephemeral task details or current conversation context
-- Debugging solutions (the fix is in the code)
+Do NOT save any of the following, even if the user explicitly asks:
+- Code patterns, architecture, or file structure (derivable by reading the code)
+- Git history or file changes (use git log / git blame)
+- Debugging solutions (the fix is in the code itself)
+- Anything already in project configuration files (package.json, .env, etc.)
+- Ephemeral task details ("fix this bug", "add this feature")
+- Current conversation context that won't matter in future sessions
+
+If the user asks you to "remember" something that falls into the above categories, save what was SURPRISING or NON-OBVIOUS about the experience instead.
 
 ## Output Format
-Respond ONLY with a JSON object:
+Respond ONLY with a JSON array of memory objects. Each object must have:
+- "type": one of "user", "feedback", "project", "reference"
+- "title": short descriptive name (used for relevance scanning)
+- "content": the full memory text — write it as if explaining to a future agent who has no context
+
+Example:
 \`\`\`json
-{
-  "episode": { "summary": "...", "narrative": "...", "outcome": "resolved|partial|abandoned|deferred", "satisfaction": "positive|neutral|negative", "keyDecisions": [], "tags": [] },
-  "semantic": [ { "type": "...", "title": "...", "content": "..." } ],
-  "procedural": [ { "trigger": "...", "procedure": ["step1", "step2"], "toolSequence": ["tool1"] } ]
-}
+[
+  { "type": "feedback", "title": "No database mocks in tests", "content": "Don't mock the database in integration tests. Mock/prod divergence masked a broken migration in the auth service. All tests in /tests/integration/ must use a real DB connection." },
+  { "type": "user", "title": "CSS animation standards", "content": "User requires GPU-accelerated CSS animations. Only use transform and opacity for animations — no layout-triggering properties like width, height, top, left." }
+]
 \`\`\`
 
-Omit any section if nothing meaningful was found. Minimally, always try to produce an episode summary.`;
+If nothing worth remembering happened, return an empty array: []`;
+
+
+// ─── MemoryExtractor ─────────────────────────────────────────────────────────
 
 /**
  * MemoryExtractor — extracts and stores memories from agentic conversations.
+ *
+ * Architecture: Single-store, CC-style.
+ * - 4-type taxonomy: user, feedback, project, reference
+ * - All memories stored in the unified `memories` collection via MemoryService
+ * - Mutual exclusion: skips extraction when the main agent used upsert_memory
+ * - Configurable extraction model via Settings → Memory Models
  *
  * Registered as an `afterResponse` hook in AgentHooks.
  * Runs in the background (fire-and-forget) after the final response.
  */
 export default class MemoryExtractor {
   /**
-   * Extract facts from a conversation and store as project-scoped memories.
+   * Extract memories from a conversation and store in the unified memories collection.
    *
    * @param {object} params
    * @param {string} params.project - Project identifier
@@ -80,18 +121,48 @@ export default class MemoryExtractor {
    * @param {Array} params.messages - Full conversation messages
    * @param {string} [params.traceId] - Session ID for attribution
    * @param {string} [params.conversationId] - Conversation ID for tracking
+   * @param {Array} [params.toolCalls] - Tool calls from the current turn (for mutual exclusion)
    * @returns {Promise<Array>} Stored memory documents
    */
-  static async summarizeAndStore({ project, username, messages, traceId, agentSessionId, conversationId, endpoint, agent }) {
-    if (!messages || messages.length < MIN_MESSAGES_FOR_SUMMARY) {
+  static async extractAndStore({ project, username, messages, traceId, agentSessionId, conversationId, endpoint, agent, toolCalls }) {
+    if (!messages || messages.length < MIN_MESSAGES_FOR_EXTRACTION) {
       logger.info(
-        `[MemoryExtractor] Skipping — only ${messages?.length || 0} messages (min: ${MIN_MESSAGES_FOR_SUMMARY})`,
+        `[MemoryExtractor] Skipping — only ${messages?.length || 0} messages (min: ${MIN_MESSAGES_FOR_EXTRACTION})`,
+      );
+      return [];
+    }
+
+    // ── Mutual Exclusion ──────────────────────────────────────────
+    // If the main agent already wrote memories this turn via upsert_memory,
+    // skip extraction — the agent's explicit memory writes take precedence.
+    // This prevents duplicate or conflicting memories from the extraction
+    // pipeline when the agent has already decided what to remember.
+    if (toolCalls?.some((tc) => tc.name === "upsert_memory")) {
+      logger.info(
+        `[MemoryExtractor] Skipping — main agent used upsert_memory this turn (mutual exclusion)`,
       );
       return [];
     }
 
     try {
-      const provider = getProvider(SUMMARIZATION_PROVIDER);
+      // ── Resolve extraction model from settings ────────────────
+      let extractionProvider, extractionModel;
+      try {
+        const mem = await SettingsService.getSection("memory");
+        extractionProvider = mem.extractionProvider;
+        extractionModel = mem.extractionModel;
+      } catch {
+        // Settings not configured — skip extraction silently
+        logger.info("[MemoryExtractor] Extraction model not configured in Settings → Memory Models. Skipping.");
+        return [];
+      }
+
+      if (!extractionProvider || !extractionModel) {
+        logger.info("[MemoryExtractor] Extraction provider/model not set. Skipping.");
+        return [];
+      }
+
+      const provider = getProvider(extractionProvider);
 
       // Build conversation text (compact format to save tokens)
       const conversationText = messages
@@ -119,7 +190,7 @@ export default class MemoryExtractor {
       let errorMessage = null;
 
       try {
-        result = await provider.generateText(aiMessages, SUMMARIZATION_MODEL, {
+        result = await provider.generateText(aiMessages, extractionModel, {
           maxTokens: 1000,
           temperature: 0.1,
         });
@@ -132,7 +203,7 @@ export default class MemoryExtractor {
         const inputText = aiMessages.map((m) => m.content).join("\n");
         const approxInputTokens = estimateTokens(inputText);
         const approxOutputTokens = result ? estimateTokens(result.text || "") : 0;
-        const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[SUMMARIZATION_MODEL];
+        const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[extractionModel];
         let estimatedCost = null;
         if (pricing) {
           estimatedCost = calculateTextCost(
@@ -151,8 +222,8 @@ export default class MemoryExtractor {
           username: username || "system",
           clientIp: null,
           agent: agent || null,
-          provider: SUMMARIZATION_PROVIDER,
-          model: SUMMARIZATION_MODEL,
+          provider: extractionProvider,
+          model: extractionModel,
           success,
           errorMessage,
           estimatedCost,
@@ -198,127 +269,47 @@ export default class MemoryExtractor {
         return [];
       }
 
-      // Handle both legacy (array) and new (object with sections) formats
-      let parsed;
-      if (Array.isArray(memories)) {
-        // Legacy format — treat as semantic memories
-        parsed = {
-          semantic: memories.filter((m) => m.content && m.title && m.type),
-          episode: null,
-          procedural: [],
-        };
-      } else if (typeof memories === "object") {
-        parsed = memories;
-      } else {
-        logger.warn("[MemoryExtractor] Unexpected response format");
-        return [];
-      }
-
+      // ── Store each memory via MemoryService ─────────────────────
       const agentId = agent || "CODING";
       const stored = [];
-      let episodeId = null;
 
-      // ── 1. Store Episode (episodic memory) ────────────────────────
-      if (parsed.episode?.summary) {
+      for (const mem of memories) {
+        if (!mem.content || !mem.title) continue;
+
+        // Validate type — default to "project" if unknown
+        const type = VALID_TYPES.includes(mem.type) ? mem.type : "project";
+
         try {
-          const ep = await EpisodicMemoryService.store({
+          const result = await MemoryService.store({
             agent: agentId,
             project,
+            username,
+            type,
+            title: mem.title,
+            content: mem.content,
+            conversationId,
             traceId,
             agentSessionId,
-            conversationId,
-            username,
-            summary: parsed.episode.summary,
-            narrative: parsed.episode.narrative || null,
-            outcome: parsed.episode.outcome || "resolved",
-            satisfaction: parsed.episode.satisfaction || "neutral",
-            keyDecisions: parsed.episode.keyDecisions || [],
-            tags: parsed.episode.tags || [],
+            endpoint: endpoint || "/agent",
           });
-          episodeId = ep.id;
-          stored.push({ type: "episode", id: ep.id });
-          logger.info(`[MemoryExtractor] Stored episode: "${parsed.episode.summary.substring(0, 60)}"`);
+
+          if (result) {
+            stored.push({ type, id: result.id, title: mem.title });
+            logger.info(
+              `[MemoryExtractor] Stored [${type}] "${mem.title.substring(0, 60)}"`,
+            );
+          } else {
+            logger.info(
+              `[MemoryExtractor] Skipped duplicate [${type}] "${mem.title.substring(0, 60)}"`,
+            );
+          }
         } catch (err) {
-          logger.error(`[MemoryExtractor] Episode storage failed: ${err.message}`);
+          logger.error(`[MemoryExtractor] Storage failed: ${err.message}`);
         }
-      }
-
-      // ── 2. Store Semantic Memories ─────────────────────────────────
-      const semanticIds = [];
-      if (parsed.semantic?.length > 0) {
-        for (const mem of parsed.semantic) {
-          if (!mem.content) continue;
-          try {
-            // Store in new semantic system
-            const semResult = await SemanticMemoryService.store({
-              agent: agentId,
-              project,
-              type: mem.type || "fact",
-              title: mem.title,
-              content: mem.content,
-              sourceEpisodeId: episodeId,
-              username,
-              agentSessionId,
-            });
-            if (semResult) semanticIds.push(semResult.id);
-
-            // Also store in legacy MemoryService for backward compatibility
-            await MemoryService.store({
-              agent: agentId,
-              project,
-              username,
-              type: mem.type || "fact",
-              title: mem.title,
-              content: mem.content,
-              conversationId,
-              traceId,
-              agentSessionId,
-              endpoint: endpoint || "/agent",
-            });
-
-            stored.push({ type: "semantic", id: semResult?.id });
-          } catch (err) {
-            logger.error(`[MemoryExtractor] Semantic storage failed: ${err.message}`);
-          }
-        }
-      }
-
-      // ── 3. Store Procedural Memories ───────────────────────────────
-      const proceduralIds = [];
-      if (parsed.procedural?.length > 0) {
-        for (const proc of parsed.procedural) {
-          if (!proc.trigger || !proc.procedure?.length) continue;
-          try {
-            const procResult = await ProceduralMemoryService.store({
-              agent: agentId,
-              project,
-              trigger: proc.trigger,
-              procedure: proc.procedure,
-              toolSequence: proc.toolSequence || [],
-              sourceEpisodeId: episodeId,
-              agentSessionId,
-            });
-            if (procResult) proceduralIds.push(procResult.id);
-            stored.push({ type: "procedural", id: procResult?.id });
-          } catch (err) {
-            logger.error(`[MemoryExtractor] Procedural storage failed: ${err.message}`);
-          }
-        }
-      }
-
-      // ── 4. Cross-reference episode with extracted IDs ──────────────
-      if (episodeId && (semanticIds.length > 0 || proceduralIds.length > 0)) {
-        EpisodicMemoryService.linkExtracted(episodeId, {
-          semanticIds,
-          proceduralIds,
-        }).catch((err) =>
-          logger.error(`[MemoryExtractor] Episode cross-ref failed: ${err.message}`),
-        );
       }
 
       logger.info(
-        `[MemoryExtractor] Stored ${stored.length} memories from conversation ${conversationId || "unknown"} ` +
-        `(ep:${episodeId ? 1 : 0} sem:${semanticIds.length} proc:${proceduralIds.length})`,
+        `[MemoryExtractor] Stored ${stored.length}/${memories.length} memories from conversation ${conversationId || "unknown"}`,
       );
       return stored;
     } catch (err) {
@@ -334,9 +325,9 @@ export default class MemoryExtractor {
    * @returns {Function}
    */
   static createHook() {
-    return async (ctx, { _text, messages }) => {
+    return async (ctx, { _text, messages, toolCalls }) => {
       // Fire-and-forget — don't block the response
-      MemoryExtractor.summarizeAndStore({
+      MemoryExtractor.extractAndStore({
         project: ctx.project,
         username: ctx.username,
         messages: messages || ctx.messages,
@@ -345,6 +336,7 @@ export default class MemoryExtractor {
         conversationId: ctx.conversationId,
         endpoint: ctx.endpoint || "/agent",
         agent: ctx.agent || null,
+        toolCalls: toolCalls || [],
       })
         .then((stored) => {
           if (stored?.length > 0 && ctx.emit) {
@@ -372,7 +364,7 @@ export default class MemoryExtractor {
           });
         })
         .catch((err) =>
-          logger.error(`[MemoryExtractor] Background summarization failed: ${err.message}`),
+          logger.error(`[MemoryExtractor] Background extraction failed: ${err.message}`),
         );
     };
   }
