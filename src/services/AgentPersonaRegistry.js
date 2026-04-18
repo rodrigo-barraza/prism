@@ -1030,8 +1030,12 @@ const AgentPersonaRegistry = {
     const persona = {
       id: doc.agentId,
       name: doc.name,
+      description: doc.description || "",
       project: doc.project || "coding",
       custom: true,
+      icon: doc.icon || "",
+      color: doc.color || "",
+      backgroundImage: doc.backgroundImage || "",
       identity: () => doc.identity || "",
       guidelines: doc.guidelines || "",
       interactionRules: "",

@@ -300,6 +300,11 @@ router.get("/agents", (_req, res) => {
     return {
       id: a.id,
       name: a.name,
+      description: persona?.description || "",
+      custom: a.custom || false,
+      icon: persona?.icon || "",
+      color: persona?.color || "",
+      backgroundImage: persona?.backgroundImage || "",
       project: persona?.project,
       toolCount: persona?.enabledTools?.length || 0,
       usesDirectoryTree: persona?.usesDirectoryTree || false,
