@@ -985,10 +985,14 @@ const AgentPersonaRegistry = {
 
   /**
    * List all registered personas.
-   * @returns {Array<{ id: string, name: string }>}
+   * @returns {Array<{ id: string, name: string, custom?: boolean }>}
    */
   list() {
-    return [...PERSONAS.values()].map((p) => ({ id: p.id, name: p.name }));
+    return [...PERSONAS.values()].map((p) => ({
+      id: p.id,
+      name: p.name,
+      ...(p.custom ? { custom: true } : {}),
+    }));
   },
 
   /**
@@ -1011,6 +1015,73 @@ const AgentPersonaRegistry = {
       if (persona.project === project) return true;
     }
     return false;
+  },
+
+  /**
+   * Register a custom (user-defined) agent persona at runtime.
+   * Converts a MongoDB document into a persona object compatible
+   * with the built-in format, then inserts into the PERSONAS map.
+   *
+   * @param {object} doc - Custom agent document from CustomAgentService
+   */
+  registerCustom(doc) {
+    if (!doc?.agentId) return;
+
+    const persona = {
+      id: doc.agentId,
+      name: doc.name,
+      project: doc.project || "coding",
+      custom: true,
+      identity: () => doc.identity || "",
+      guidelines: doc.guidelines || "",
+      interactionRules: "",
+      toolPolicy: doc.toolPolicy || "",
+      enabledTools: Array.isArray(doc.enabledTools) ? doc.enabledTools : [],
+      capabilities: "",
+      usesDirectoryTree: doc.usesDirectoryTree || false,
+      usesCodingGuidelines: doc.usesCodingGuidelines || false,
+    };
+
+    PERSONAS.set(doc.agentId, persona);
+    logger.info(`[AgentPersonaRegistry] Registered custom agent: "${doc.name}" (${doc.agentId}) with ${persona.enabledTools.length} tools`);
+  },
+
+  /**
+   * Unregister a persona by agent ID (only custom agents should be removed).
+   * @param {string} agentId
+   */
+  unregister(agentId) {
+    if (!agentId) return;
+    const key = agentId.toUpperCase();
+    const persona = PERSONAS.get(key);
+    if (persona?.custom) {
+      PERSONAS.delete(key);
+      logger.info(`[AgentPersonaRegistry] Unregistered custom agent: "${key}"`);
+    }
+  },
+
+  /**
+   * Load all custom agents from the database and register them.
+   * Called at startup and can be called to refresh after mutations.
+   */
+  async loadCustomAgents() {
+    try {
+      const { default: CustomAgentService } = await import("./CustomAgentService.js");
+      const agents = await CustomAgentService.list();
+
+      // Clear existing custom agents first
+      for (const [key, persona] of PERSONAS) {
+        if (persona.custom) PERSONAS.delete(key);
+      }
+
+      for (const doc of agents) {
+        this.registerCustom(doc);
+      }
+
+      logger.info(`[AgentPersonaRegistry] Loaded ${agents.length} custom agent(s) from database`);
+    } catch (err) {
+      logger.warn(`[AgentPersonaRegistry] Failed to load custom agents: ${err.message}`);
+    }
   },
 };
 

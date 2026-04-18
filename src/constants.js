@@ -23,6 +23,7 @@ export const COLLECTIONS = {
   MEMORY_CONSOLIDATION_HISTORY: "memory_consolidation_history",
   VRAM_BENCHMARKS: "vram_benchmarks",
   SETTINGS: "settings",
+  CUSTOM_AGENTS: "custom_agents",
 };
 
 /**

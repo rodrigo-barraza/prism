@@ -378,15 +378,19 @@ export default class SystemPromptAssembler {
       }
     }
 
-    // ── 5. Coding Guidelines ─────────────────────────────────────
-    if (codingFallback || persona?.usesCodingGuidelines) {
-      const guidelines = persona?.guidelines || (
+    // ── 5. Guidelines ─────────────────────────────────────────────
+    // Custom persona guidelines are always injected when present.
+    // The usesCodingGuidelines toggle controls the generic coding
+    // fallback defaults and the coordinator mode addendum.
+    if (persona?.guidelines) {
+      sections.push(persona.guidelines);
+    } else if (codingFallback || persona?.usesCodingGuidelines) {
+      sections.push(
         `## Coding Guidelines\n` +
         `- Always read relevant files before making edits to understand context\n` +
         `- After making changes, verify them by reading the modified section\n` +
-        `- Keep your explanations concise and technical`
+        `- Keep your explanations concise and technical`,
       );
-      sections.push(guidelines);
     }
 
     // ── 5b. Coordinator Mode Addendum (when coordinator tools available) ──

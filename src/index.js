@@ -57,6 +57,7 @@ import synthesisRouter from "./routes/synthesis.js";
 import vramBenchmarksRouter from "./routes/vram-benchmarks.js";
 import coordinatorRouter from "./routes/coordinator.js";
 import settingsRouter from "./routes/settings.js";
+import customAgentsRouter from "./routes/custom-agents.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -96,6 +97,7 @@ const ENDPOINTS = {
     "/vram-benchmarks",
     "/coordinator",
     "/settings",
+    "/custom-agents",
   ],
   websocket: ["/ws/chat", "/ws/text-to-audio"],
   admin: ["/admin", "/admin/lm-studio"],
@@ -147,6 +149,7 @@ app.use("/synthesis", synthesisRouter);
 app.use("/vram-benchmarks", vramBenchmarksRouter);
 app.use("/coordinator", coordinatorRouter);
 app.use("/settings", settingsRouter);
+app.use("/custom-agents", customAgentsRouter);
 
 // Error handler (must be last)
 app.use(errorHandler);
@@ -250,6 +253,14 @@ setupWebSocket(wss);
     }
   } catch (err) {
     logger.error(`Agent session migration failed: ${err.message}`);
+  }
+
+  // Load custom agents from database into the persona registry
+  try {
+    const { default: AgentPersonaRegistryCustom } = await import("./services/AgentPersonaRegistry.js");
+    await AgentPersonaRegistryCustom.loadCustomAgents();
+  } catch (err) {
+    logger.warn(`Custom agent loading failed: ${err.message}`);
   }
 
   // Initialize Change Streams (requires replica set — graceful fallback)
