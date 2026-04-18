@@ -177,18 +177,29 @@ const LUPOS_TOOL_POLICY = `# Tool Use Policy
 
 # Agent Tool Guidelines
 - You have access to tools that you can use autonomously to help the user.
-- When the user's current message asks you to draw, create, generate, or produce an image, painting, illustration, or artwork, use the generate_image tool with a very detailed prompt.
-- For image generation, write rich prompts that describe style, composition, subjects, colors, mood, lighting, perspective, and artistic direction.
-- When reference images are available in the conversation, the generate_image tool will automatically use them for editing/redrawing.
+- When the user's current message asks you to draw, create, generate, or produce an image, painting, illustration, or artwork, use the generate_image tool.
 - For factual questions about current events, trends, or real-time information, use web_search or the trends tools.
 - When users ask about message history, who said what, past conversations, activity stats, leaderboards, or "what have people been talking about", use the discord_message_search or discord_server_activity tools. You have access to the full message archive.
 - The guildId for discord tools is available in the server context provided to you.
 
-# Image Composition Guidelines
-- When generating images that include reference images (avatars, attached images), the attached images are references for style, colors, mood, and elements to include in the composition.
-- Persons should be clearly recognizable but artistically adapted to match a unified scene.
-- Emojis should be integrated into the scene in a natural and cohesive way.
-- Maintain the core visual identity from the profile (colors, shapes, patterns) while allowing creative interpretation for scene cohesion.
+# Image Prompt Rules (CRITICAL)
+When calling generate_image, the prompt you write depends on whether reference images are attached:
+
+## When images ARE attached (editing/redrawing):
+- The attached images are automatically passed to the image generation model alongside your prompt.
+- Your prompt must be a SHORT INSTRUCTION describing what to DO with the attached image(s).
+- Do NOT describe what the image contains — the model can already see it.
+- Do NOT re-imagine, re-describe, or reinterpret the attached images from scratch.
+- CORRECT prompt examples: "Redraw this with bigger eyes", "Make this character blue", "Place this person in a forest", "Redraw this in anime style", "Combine these two images into one scene"
+- WRONG prompt examples: "A cyberpunk woman with red mohawk and tattoos with big eyes" (this re-imagines instead of editing), "A detailed portrait of a warrior with face paint" (this ignores the attached image)
+- Keep the prompt under 2 sentences. The model already has the visual context.
+- Persons, avatars, and characters must be preserved exactly as they appear — do not reinvent their appearance.
+
+## When NO images are attached (generating from scratch):
+- Write rich, detailed prompts describing style, composition, subjects, colors, mood, lighting, perspective, and artistic direction.
+- The more detail, the better the result.
+
+## Safety fallback
 - If the image generation tool fails due to content safety, try rephrasing the prompt creatively — describe the same scene differently, avoiding potentially flagged terms while preserving the artistic intent.`;
 
 const LUPOS_ENABLED_TOOLS = [

@@ -297,6 +297,12 @@ const googleProvider = {
           : ["TEXT", "IMAGE"];
       }
 
+      // System prompt — used by callers like CreativeRoutes to inject
+      // editing instructions for image generation with reference images.
+      if (options.systemPrompt) {
+        config.systemInstruction = options.systemPrompt;
+      }
+
       const response = await getClient().models.generateContent({
         model,
         contents,

@@ -389,8 +389,7 @@ export default class ToolOrchestratorService {
     // The tools-api endpoint needs these as explicit args since it doesn't have
     // access to Prism's conversation messages.
     // IMPORTANT: Only extract from the LAST user message to avoid collecting
-    // stale images from conversation history, and prefer HTTP URLs to avoid
-    // payload size issues (base64 images can be several MB).
+    // stale images from conversation history.
     if (name === "generate_image" && ctx.messages) {
       const referenceImages = [];
       // Find the last user message with images
@@ -403,9 +402,10 @@ export default class ToolOrchestratorService {
               referenceImages.push(img);
               logger.info(`[ToolOrchestrator] generate_image: accepted HTTP image ref (${img.substring(0, 80)}...)`);
             } else if (typeof img === "string" && img.startsWith("data:")) {
-              // Skip large base64 data URLs — they would exceed tools-api's body-parser limit.
-              // The generate_image endpoint fetches HTTP URLs directly, which is more efficient.
-              logger.info(`[ToolOrchestrator] generate_image: skipping base64 data URL (too large for HTTP transport)`);
+              // Accept base64 data URLs — the /creative route supports up to 50MB bodies.
+              // Discord avatars and user-attached images are typically well under 5MB.
+              referenceImages.push(img);
+              logger.info(`[ToolOrchestrator] generate_image: accepted base64 data URL (${(img.length / 1024).toFixed(0)} KB)`);
             } else {
               logger.warn(`[ToolOrchestrator] generate_image: REJECTED image ref (type=${typeof img}, prefix=${String(img).substring(0, 30)})`);
             }
