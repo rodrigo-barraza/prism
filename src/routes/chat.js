@@ -1296,6 +1296,16 @@ async function handleStreamingText(ctx) {
       if (ss.usage && followUpUsage) {
         ss.usage.inputTokens = (ss.usage.inputTokens || 0) + (followUpUsage.inputTokens || 0);
         ss.usage.outputTokens = (ss.usage.outputTokens || 0) + (followUpUsage.outputTokens || 0);
+        // Accumulate cache and reasoning token breakdowns across iterations
+        if (followUpUsage.cacheReadInputTokens) {
+          ss.usage.cacheReadInputTokens = (ss.usage.cacheReadInputTokens || 0) + followUpUsage.cacheReadInputTokens;
+        }
+        if (followUpUsage.cacheCreationInputTokens) {
+          ss.usage.cacheCreationInputTokens = (ss.usage.cacheCreationInputTokens || 0) + followUpUsage.cacheCreationInputTokens;
+        }
+        if (followUpUsage.reasoningOutputTokens) {
+          ss.usage.reasoningOutputTokens = (ss.usage.reasoningOutputTokens || 0) + followUpUsage.reasoningOutputTokens;
+        }
       } else {
         ss.usage = followUpUsage;
       }
