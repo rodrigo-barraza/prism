@@ -307,6 +307,7 @@ router.get("/agents", (_req, res) => {
       backgroundImage: persona?.backgroundImage || "",
       project: persona?.project,
       toolCount: persona?.enabledTools?.length || 0,
+      canSpawnWorkers: persona?.enabledTools?.includes("spawn_agent") || false,
       usesDirectoryTree: persona?.usesDirectoryTree || false,
       usesCodingGuidelines: persona?.usesCodingGuidelines || false,
     };
