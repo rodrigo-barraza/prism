@@ -24,7 +24,7 @@ import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
 const COORDINATOR_TOOL_NAMES = new Set(COORDINATOR_ONLY_TOOLS);
 
 /** Prism-local tools bypass the enabledTools filter (always available to all agents) */
-const PRISM_LOCAL_TOOL_NAMES = new Set(["think", "sleep", "enter_plan_mode", "exit_plan_mode", "skill_create", "skill_execute", "skill_list", "skill_delete", "synthetic_output", "enter_worktree", "exit_worktree"]);
+const PRISM_LOCAL_TOOL_NAMES = new Set(["think", "sleep", "enter_plan_mode", "exit_plan_mode", "skill_create", "skill_execute", "skill_list", "skill_delete", "synthetic_output", "enter_worktree", "exit_worktree", "todo_write", "brief", "ask_user_question"]);
 
 const MAX_TOOL_ITERATIONS = 25;
 const MAX_CONSECUTIVE_TOOL_ERRORS = 3;
@@ -34,6 +34,11 @@ const MAX_CONSECUTIVE_TOOL_ERRORS = 3;
 // Stores pending { resolve, type } objects keyed by agentSessionId.
 // The HTTP endpoint resolves these when the client sends approval.
 const pendingApprovals = new Map();
+
+// ── Question Resolver Registry ─────────────────────────────
+// Stores pending { resolve, question, choices } objects keyed by agentSessionId.
+// The HTTP endpoint resolves these when the user answers an ask_user_question.
+const pendingQuestions = new Map();
 
 /**
  * Executes a fully managed agentic loop server-side.
@@ -1083,5 +1088,43 @@ export default class AgenticLoopService {
     const entry = pendingApprovals.get(agentSessionId);
     if (!entry) return { pending: false };
     return { pending: true, type: entry.type, tools: entry.tools };
+  }
+
+  // ── Ask User Question — Resolution API ─────────────────────
+
+  /**
+   * Store a pending question resolver (called by ToolOrchestratorService).
+   * @param {string} agentSessionId
+   * @param {{ resolve: Function, question: string, choices: string[] }} entry
+   */
+  static _setPendingQuestion(agentSessionId, entry) {
+    pendingQuestions.set(agentSessionId, entry);
+  }
+
+  /**
+   * Resolve a pending question for an agent session.
+   * Called by the HTTP endpoint when the user submits an answer.
+   *
+   * @param {string} agentSessionId
+   * @param {string} answer - The user's answer text
+   * @returns {boolean} true if a pending question was found and resolved
+   */
+  static resolveUserQuestion(agentSessionId, answer) {
+    const entry = pendingQuestions.get(agentSessionId);
+    if (!entry) return false;
+    pendingQuestions.delete(agentSessionId);
+    entry.resolve({ answer });
+    return true;
+  }
+
+  /**
+   * Check if an agent session has a pending question.
+   * @param {string} agentSessionId
+   * @returns {{ pending: boolean, question?: string, choices?: string[] }}
+   */
+  static getPendingQuestion(agentSessionId) {
+    const entry = pendingQuestions.get(agentSessionId);
+    if (!entry) return { pending: false };
+    return { pending: true, question: entry.question, choices: entry.choices };
   }
 }

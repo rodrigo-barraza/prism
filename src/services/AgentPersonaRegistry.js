@@ -257,8 +257,6 @@ const PERSONAS = new Map();
 // sleep, skills, etc.) bypass the enabledTools filter entirely.
 const CODING_ENABLED_TOOLS = [
   L.CODING,
-  L.DATA,
-  L.AUTOMATION,
 ];
 
 // ── CODING Agent (Retina) ────────────────────────────────────────

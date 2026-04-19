@@ -634,6 +634,105 @@ const PRISM_LOCAL_TOOL_SCHEMAS = [
       required: ["action"],
     },
   },
+  {
+    name: "todo_write",
+    description:
+      "Write or update a persistent TODO checklist for the current project. " +
+      "Maintains a structured list of items with completion status. " +
+      "Use this to track multi-step work, record progress, and keep a living " +
+      "checklist that persists across conversation turns. " +
+      "Each item has a status: 'pending', 'in_progress', or 'completed'. " +
+      "Call with the full updated list — it replaces the previous state.",
+    parameters: {
+      type: "object",
+      properties: {
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              content: { type: "string", description: "The todo item text." },
+              status: {
+                type: "string",
+                enum: ["pending", "in_progress", "completed"],
+                description: "Item status. Default: 'pending'.",
+              },
+              priority: {
+                type: "string",
+                enum: ["high", "medium", "low"],
+                description: "Optional priority level.",
+              },
+            },
+            required: ["content"],
+          },
+          description: "Full list of todo items. Replaces the previous list entirely.",
+        },
+      },
+      required: ["items"],
+    },
+  },
+  {
+    name: "brief",
+    description:
+      "Produce a compressed summary of the current conversation context. " +
+      "Use this tool when the conversation is getting long and you need to " +
+      "consolidate your understanding before continuing. The summary you write " +
+      "is stored and can be referenced in future turns to recover context. " +
+      "This is NOT shown to the user — it is your private working memory.",
+    parameters: {
+      type: "object",
+      properties: {
+        summary: {
+          type: "string",
+          description:
+            "Your compressed summary of the conversation so far. Include: " +
+            "key decisions made, files modified, current task state, and what remains to be done.",
+        },
+        keyFiles: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional: list of key file paths relevant to the current work.",
+        },
+        openQuestions: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional: unresolved questions or ambiguities.",
+        },
+      },
+      required: ["summary"],
+    },
+  },
+  {
+    name: "ask_user_question",
+    description:
+      "Ask the user a question and wait for their response before continuing. " +
+      "Use this when you need clarification, a decision between options, or explicit " +
+      "confirmation before proceeding with a potentially impactful action. " +
+      "The agent loop pauses until the user responds. " +
+      "Provide optional choices for multiple-choice questions, or leave choices " +
+      "empty for freeform input.",
+    parameters: {
+      type: "object",
+      properties: {
+        question: {
+          type: "string",
+          description: "The question to present to the user.",
+        },
+        choices: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Optional: predefined answer choices (e.g. ['Option A', 'Option B', 'Skip']). " +
+            "If provided, the user selects one. If omitted, freeform text input is shown.",
+        },
+        context: {
+          type: "string",
+          description: "Optional: additional context to help the user answer (shown below the question).",
+        },
+      },
+      required: ["question"],
+    },
+  },
 ];
 
 // ────────────────────────────────────────────────────────────
@@ -674,6 +773,24 @@ const COORDINATOR_TOOL_SCHEMAS = [
       type: "object",
       properties: {
         agent_id: { type: "string", description: "Agent ID to stop" },
+      },
+      required: ["agent_id"],
+    },
+  },
+  {
+    name: "task_output",
+    description:
+      "Read the output from a previously spawned worker agent by its agent ID. " +
+      "Use this to check on a worker's result after it has completed, or to read " +
+      "partial output from a still-running worker. Returns the worker's final text, " +
+      "tool usage stats, diff summary, and status.",
+    parameters: {
+      type: "object",
+      properties: {
+        agent_id: {
+          type: "string",
+          description: "The agent ID returned by spawn_agent.",
+        },
       },
       required: ["agent_id"],
     },
@@ -748,6 +865,9 @@ export default class ToolOrchestratorService {
       synthetic_output: "Agentic: Structured Output",
       enter_worktree: "Agentic: Git Isolation",
       exit_worktree: "Agentic: Git Isolation",
+      todo_write: "Agentic: Task Management",
+      brief: "Reasoning",
+      ask_user_question: "Agentic: Control Flow",
     };
 
     // Labels — multi-tag arrays matching tools-api TOOL_LABELS format
@@ -763,6 +883,9 @@ export default class ToolOrchestratorService {
       synthetic_output: ["coding"],
       enter_worktree: ["coding", "git"],
       exit_worktree: ["coding", "git"],
+      todo_write: ["coding"],
+      brief: ["coding"],
+      ask_user_question: ["coding"],
     };
 
     const localClient = PRISM_LOCAL_TOOL_SCHEMAS.map((t) => ({
@@ -931,6 +1054,113 @@ export default class ToolOrchestratorService {
 
       logger.info(`[ToolOrchestrator] synthetic_output${label ? `: ${label}` : ""} — ${Object.keys(data).length} fields`);
       return result;
+    }
+
+    // ── Todo write — persistent checklist per session ───────────
+    if (name === "todo_write") {
+      const { items } = args;
+      if (!Array.isArray(items)) {
+        return { error: "'items' must be an array of todo objects" };
+      }
+
+      // Normalize items
+      const normalized = items.map((item, i) => ({
+        id: i + 1,
+        content: item.content || "",
+        status: item.status || "pending",
+        priority: item.priority || "medium",
+      }));
+
+      const stats = {
+        total: normalized.length,
+        pending: normalized.filter((i) => i.status === "pending").length,
+        in_progress: normalized.filter((i) => i.status === "in_progress").length,
+        completed: normalized.filter((i) => i.status === "completed").length,
+      };
+
+      logger.info(`[ToolOrchestrator] todo_write: ${stats.total} items (${stats.completed} done, ${stats.in_progress} in progress, ${stats.pending} pending)`);
+
+      // Emit to Retina so it can render the todo panel
+      if (ctx._emit) {
+        ctx._emit({ type: "todo_update", items: normalized, stats });
+      }
+
+      return { acknowledged: true, items: normalized, stats };
+    }
+
+    // ── Brief — context summarization working memory ────────────
+    if (name === "brief") {
+      const { summary, keyFiles, openQuestions } = args;
+      if (!summary || typeof summary !== "string") {
+        return { error: "'summary' is required and must be a non-empty string" };
+      }
+
+      const brief = {
+        summary,
+        keyFiles: keyFiles || [],
+        openQuestions: openQuestions || [],
+        timestamp: new Date().toISOString(),
+      };
+
+      logger.info(`[ToolOrchestrator] brief: ${summary.length} chars, ${(keyFiles || []).length} files, ${(openQuestions || []).length} questions`);
+
+      // Emit to Retina for optional context panel display
+      if (ctx._emit) {
+        ctx._emit({ type: "brief_update", brief });
+      }
+
+      return { acknowledged: true, brief };
+    }
+
+    // ── Ask user question — pause loop for user input ───────────
+    if (name === "ask_user_question") {
+      const { question, choices, context: questionContext } = args;
+      if (!question || typeof question !== "string") {
+        return { error: "'question' is required and must be a non-empty string" };
+      }
+
+      const sessionId = ctx.agentSessionId;
+      if (!sessionId) {
+        return { error: "No agent session — ask_user_question requires an active session" };
+      }
+
+      logger.info(`[ToolOrchestrator] ask_user_question: "${question.slice(0, 80)}${question.length > 80 ? "..." : ""}" (${choices?.length || 0} choices)`);
+
+      // Emit the question to Retina
+      if (ctx._emit) {
+        ctx._emit({
+          type: "user_question",
+          question,
+          choices: choices || [],
+          context: questionContext || null,
+        });
+      }
+
+      // Pause via the same pendingApprovals mechanism used by tool approval.
+      // AgenticLoopService.resolveUserQuestion() resolves this promise when
+      // the user responds via the HTTP endpoint.
+      const { default: AgenticLoopService } = await import("./AgenticLoopService.js");
+      const answer = await new Promise((resolve) => {
+        const timeoutId = setTimeout(() => {
+          resolve({ answer: null, timedOut: true });
+        }, 300_000); // 5 minute timeout
+        AgenticLoopService._setPendingQuestion(sessionId, {
+          resolve: (val) => {
+            clearTimeout(timeoutId);
+            resolve(val);
+          },
+          question,
+          choices: choices || [],
+        });
+      });
+
+      if (answer.timedOut) {
+        logger.warn(`[ToolOrchestrator] ask_user_question timed out after 5 minutes`);
+        return { answer: null, timedOut: true, message: "The user did not respond within 5 minutes." };
+      }
+
+      logger.info(`[ToolOrchestrator] ask_user_question answered: "${String(answer.answer).slice(0, 80)}"`);
+      return { answer: answer.answer, question };
     }
 
     // ── Worktree isolation — self-isolate main agent ────────────
@@ -1214,6 +1444,9 @@ export default class ToolOrchestratorService {
 
       case "stop_agent":
         return CoordinatorService.stopAgent(args.agent_id);
+
+      case "task_output":
+        return CoordinatorService.getTaskOutput(args.agent_id);
 
       case "team_create":
         return CoordinatorService.createTeam(args, coordinatorCtx);
