@@ -208,18 +208,20 @@ function parseModelQuant(modelKey) {
  */
 function findBestQuantFallback(targetModel, availableModels) {
   const { base: targetBase, quant: targetQuant } = parseModelQuant(targetModel);
-  if (!targetQuant) return null; // No quantization detected — can't do quant fallback
 
-  // Find all available models that share the same base name but at a different quant
+  // Find all available models that share the same base name (any quant variant)
   const candidates = [];
   for (const m of availableModels) {
     const mKey = m.key || m.id;
     const { base, quant } = parseModelQuant(mKey);
-    if (!quant) continue;
 
     // Compare bases case-insensitively
     if (base.toLowerCase() !== targetBase.toLowerCase()) continue;
-    if (quant === targetQuant) continue; // Exact match — skip (already checked)
+
+    // Skip exact same key (already checked before calling this)
+    if (mKey === targetModel) continue;
+    // Skip identical quant (both could be null for no-quant keys)
+    if (quant === targetQuant) continue;
 
     candidates.push({ key: mKey, quant, sizeBytes: m.size_bytes || 0 });
   }
@@ -979,42 +981,41 @@ export default class CoordinatorService {
               const exactMatch = models.some((m) => (m.key || m.id) === defaultModel);
               if (exactMatch) return { exact: true, fallback: null };
 
+              // No exact key match — find the best variant with the same base name
               const fallback = findBestQuantFallback(defaultModel, models);
               return { exact: false, fallback };
             }),
           );
 
-          const exactAvailable = siblings.filter((_, i) =>
-            checks[i].status === "fulfilled" && checks[i].value.exact === true,
-          );
-          const fallbackAvailable = siblings.filter((_, i) =>
-            checks[i].status === "fulfilled" && checks[i].value.fallback != null,
-          );
+          // Build per-instance model map — never filter siblings, just set overrides.
+          // Instances with exact match: no override needed (uses defaultModel).
+          // Instances with variant match: override to the variant key.
+          // Instances with neither: excluded from pool.
+          const usable = [];
+          for (let i = 0; i < siblings.length; i++) {
+            if (checks[i].status !== "fulfilled") continue;
+            const { exact, fallback } = checks[i].value;
 
-          if (exactAvailable.length > 0) {
-            if (exactAvailable.length < siblings.length) {
-              logger.info(
-                `[Coordinator] Model "${defaultModel}" available on ${exactAvailable.length}/${siblings.length} instances: ${exactAvailable.map((s) => s.id).join(", ")}`,
-              );
+            if (exact) {
+              usable.push(siblings[i]);
+            } else if (fallback) {
+              instanceModelOverrides.set(siblings[i].id, fallback);
+              usable.push(siblings[i]);
             }
-            siblings = exactAvailable;
-          } else if (fallbackAvailable.length > 0) {
-            for (let i = 0; i < siblings.length; i++) {
-              if (checks[i].status === "fulfilled" && checks[i].value.fallback) {
-                instanceModelOverrides.set(siblings[i].id, checks[i].value.fallback);
-              }
-            }
-            const overrideSummary = fallbackAvailable.map((s) =>
-              `${s.id}→"${instanceModelOverrides.get(s.id)}"`,
-            ).join(", ");
-            logger.info(
-              `[Coordinator] Model "${defaultModel}" not found — using best available quant on ${fallbackAvailable.length} instance(s): ${overrideSummary}`,
-            );
-            siblings = fallbackAvailable;
+            // else: instance has no matching model — skip it
+          }
+
+          // Log the resolution summary
+          const summary = usable.map((s) => {
+            const override = instanceModelOverrides.get(s.id);
+            return override ? `${s.id}→"${override}"` : `${s.id} (exact)`;
+          }).join(", ");
+          logger.info(`[Coordinator] Model resolution for "${defaultModel}": ${usable.length}/${siblings.length} instances usable [${summary}]`);
+
+          if (usable.length > 0) {
+            siblings = usable;
           } else {
-            logger.warn(
-              `[Coordinator] Model "${defaultModel}" not available on any ${providerType} instance`,
-            );
+            logger.warn(`[Coordinator] Model "${defaultModel}" not available on any ${providerType} instance`);
             siblings = [];
           }
         } catch (err) {
