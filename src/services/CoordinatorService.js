@@ -1175,7 +1175,7 @@ export default class CoordinatorService {
     let workerChunkCount = 0;
     let workerFirstChunkTime = null;
     let workerLastChunkTime = null;
-    const WORKER_PROGRESS_INTERVAL = 25; // emit progress every N chunks
+    const WORKER_PROGRESS_INTERVAL = 10; // emit progress every N chunks
     const workerEmit = (event) => {
       if (event.type === "chunk") {
         workerOutput += event.content || "";
@@ -1195,8 +1195,11 @@ export default class CoordinatorService {
             phase: "generating",
           });
         }
-        // Emit periodic generation progress for live tok/s on frontend
-        if (parentEmit && workerChunkCount % WORKER_PROGRESS_INTERVAL === 0) {
+        // Emit generation progress — first chunk immediately (so tok/s badge
+        // appears right away), then at regular intervals for smooth updates
+        const shouldEmit = workerChunkCount === 1
+          || workerChunkCount % WORKER_PROGRESS_INTERVAL === 0;
+        if (parentEmit && shouldEmit) {
           parentEmit({
             type: "worker_status",
             workerId: worker.agentId,
@@ -1207,6 +1210,18 @@ export default class CoordinatorService {
           });
         }
       } else if (event.type === "thinking") {
+        // Emit final generation_progress for the burst that just ended
+        // so the frontend gets tok/s data even for short generation runs
+        if (parentEmit && lastWorkerPhase === "generating" && workerChunkCount > 0) {
+          parentEmit({
+            type: "worker_status",
+            workerId: worker.agentId,
+            message: "generation_progress",
+            outputTokens: workerChunkCount,
+            firstChunkTime: workerFirstChunkTime,
+            lastChunkTime: workerLastChunkTime,
+          });
+        }
         // Notify the frontend that the worker is in the thinking phase
         if (parentEmit && lastWorkerPhase !== "thinking") {
           lastWorkerPhase = "thinking";
@@ -1220,6 +1235,17 @@ export default class CoordinatorService {
       } else if (event.type === "tool_execution") {
         if (event.status === "calling") {
           workerToolCalls.push({ name: event.tool?.name, args: event.tool?.args });
+        }
+        // Emit final generation_progress before tool execution pauses generation
+        if (parentEmit && lastWorkerPhase === "generating" && workerChunkCount > 0) {
+          parentEmit({
+            type: "worker_status",
+            workerId: worker.agentId,
+            message: "generation_progress",
+            outputTokens: workerChunkCount,
+            firstChunkTime: workerFirstChunkTime,
+            lastChunkTime: workerLastChunkTime,
+          });
         }
         // Reset phase so post-tool generation fires a fresh "generating" event
         lastWorkerPhase = null;
