@@ -701,6 +701,131 @@ export default class CoordinatorService {
     }));
   }
 
+  // ══════════════════════════════════════════════════════════
+  // Team Management (team_create / team_delete)
+  // ══════════════════════════════════════════════════════════
+
+  /** Active teams — keyed by team name, value is { agentIds: string[] } */
+  static _activeTeams = new Map();
+
+  /**
+   * Create a named team of parallel worker agents.
+   * Each member is spawned via spawnFromTool and runs concurrently.
+   * Returns aggregated results from all members when they all complete.
+   *
+   * @param {object} args
+   * @param {string} args.name - Team name
+   * @param {Array} args.members - [{ description, prompt, files?, model? }]
+   * @param {object} coordinatorCtx - Coordinator loop context
+   * @returns {Promise<object>}
+   */
+  static async createTeam(args, coordinatorCtx) {
+    const { name, members } = args;
+
+    if (!name || typeof name !== "string") {
+      return { error: "'name' is required (string)" };
+    }
+    if (!Array.isArray(members) || members.length === 0) {
+      return { error: "'members' must be a non-empty array" };
+    }
+    if (members.length > MAX_WORKERS) {
+      return { error: `Maximum ${MAX_WORKERS} team members. Received ${members.length}.` };
+    }
+    if (CoordinatorService._activeTeams.has(name)) {
+      return { error: `Team "${name}" already exists. Delete it first or use a different name.` };
+    }
+
+    logger.info(`[Coordinator] Creating team "${name}" with ${members.length} member(s)`);
+
+    // Spawn all members in parallel
+    const results = await Promise.allSettled(
+      members.map((member) =>
+        CoordinatorService.spawnFromTool({
+          description: `[${name}] ${member.description}`,
+          prompt: member.prompt,
+          files: member.files,
+          model: member.model,
+          coordinatorCtx,
+        }),
+      ),
+    );
+
+    // Collect agentIds and results
+    const memberResults = results.map((r, i) => {
+      if (r.status === "fulfilled") {
+        return {
+          index: i,
+          description: members[i].description,
+          ...r.value,
+        };
+      }
+      return {
+        index: i,
+        description: members[i].description,
+        status: "failed",
+        error: r.reason?.message || "Unknown error",
+      };
+    });
+
+    // Track team membership
+    const agentIds = memberResults
+      .filter((m) => m.agent_id)
+      .map((m) => m.agent_id);
+
+    CoordinatorService._activeTeams.set(name, {
+      agentIds,
+      createdAt: Date.now(),
+    });
+
+    const succeeded = memberResults.filter((m) => m.status === "completed" || m.agent_id).length;
+    const failed = memberResults.length - succeeded;
+
+    logger.info(`[Coordinator] Team "${name}" created: ${succeeded} succeeded, ${failed} failed`);
+
+    return {
+      team: name,
+      totalMembers: members.length,
+      succeeded,
+      failed,
+      members: memberResults,
+    };
+  }
+
+  /**
+   * Stop and remove all workers in a named team.
+   * @param {string} teamName
+   * @returns {Promise<object>}
+   */
+  static async deleteTeam(teamName) {
+    if (!teamName || typeof teamName !== "string") {
+      return { error: "'teamName' is required (string)" };
+    }
+
+    const team = CoordinatorService._activeTeams.get(teamName);
+    if (!team) {
+      return { error: `Team "${teamName}" not found` };
+    }
+
+    const stopResults = await Promise.allSettled(
+      team.agentIds.map((agentId) => CoordinatorService.stopAgent(agentId)),
+    );
+
+    CoordinatorService._activeTeams.delete(teamName);
+
+    const stopped = stopResults.filter(
+      (r) => r.status === "fulfilled" && r.value?.status === "stopped",
+    ).length;
+
+    logger.info(`[Coordinator] Team "${teamName}" deleted: ${stopped}/${team.agentIds.length} stopped`);
+
+    return {
+      team: teamName,
+      deleted: true,
+      stopped,
+      total: team.agentIds.length,
+    };
+  }
+
   // ──────────────────────────────────────────────────────────
   // Worker Execution Engine
   // ──────────────────────────────────────────────────────────

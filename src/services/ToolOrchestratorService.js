@@ -27,6 +27,16 @@ let cachedWorkspaceRoots = [];
 let initialized = false;
 
 /**
+ * Active worktree sessions — keyed by agentSessionId.
+ * When the main agent calls enter_worktree, its session's workspace root
+ * is redirected to the worktree path. All file/git/shell tool calls
+ * then operate in the worktree until exit_worktree is called.
+ *
+ * @type {Map<string, { originalRoot: string, worktreePath: string, branchName: string, repoPath: string }>}
+ */
+const activeWorktrees = new Map();
+
+/**
  * Fetch tool schemas from tools-api and populate caches.
  * Called eagerly at module load — non-blocking, graceful fallback.
  */
@@ -151,6 +161,96 @@ const ARG_REMAPS = {
   search_products: { query: "q" },
 };
 
+/**
+ * Lightweight JSON Schema validator for synthetic_output.
+ * Handles: type, required, enum, min/max, items (arrays), nested objects.
+ * Not a full JSON Schema implementation — just enough for tool-level validation.
+ *
+ * @param {*} data - Value to validate
+ * @param {object} schema - JSON Schema definition
+ * @param {string} path - Current property path (for error messages)
+ * @param {string[]} errors - Accumulates validation error messages
+ */
+function validateJsonSchema(data, schema, path = "", errors = []) {
+  if (!schema || typeof schema !== "object") return;
+
+  const at = path || "root";
+
+  // Type check
+  if (schema.type) {
+    const expected = schema.type;
+    if (expected === "object" && (typeof data !== "object" || data === null || Array.isArray(data))) {
+      errors.push(`${at}: expected object, got ${Array.isArray(data) ? "array" : typeof data}`);
+      return;
+    }
+    if (expected === "array" && !Array.isArray(data)) {
+      errors.push(`${at}: expected array, got ${typeof data}`);
+      return;
+    }
+    if (expected === "string" && typeof data !== "string") {
+      errors.push(`${at}: expected string, got ${typeof data}`);
+    }
+    if (expected === "number" && typeof data !== "number") {
+      errors.push(`${at}: expected number, got ${typeof data}`);
+    }
+    if (expected === "boolean" && typeof data !== "boolean") {
+      errors.push(`${at}: expected boolean, got ${typeof data}`);
+    }
+  }
+
+  // Enum check
+  if (schema.enum && Array.isArray(schema.enum)) {
+    if (!schema.enum.includes(data)) {
+      errors.push(`${at}: value must be one of [${schema.enum.join(", ")}]`);
+    }
+  }
+
+  // String constraints
+  if (typeof data === "string") {
+    if (schema.minLength !== undefined && data.length < schema.minLength) {
+      errors.push(`${at}: string length ${data.length} < minLength ${schema.minLength}`);
+    }
+    if (schema.maxLength !== undefined && data.length > schema.maxLength) {
+      errors.push(`${at}: string length ${data.length} > maxLength ${schema.maxLength}`);
+    }
+  }
+
+  // Number constraints
+  if (typeof data === "number") {
+    if (schema.minimum !== undefined && data < schema.minimum) {
+      errors.push(`${at}: ${data} < minimum ${schema.minimum}`);
+    }
+    if (schema.maximum !== undefined && data > schema.maximum) {
+      errors.push(`${at}: ${data} > maximum ${schema.maximum}`);
+    }
+  }
+
+  // Required fields
+  if (schema.required && Array.isArray(schema.required) && typeof data === "object" && data !== null) {
+    for (const key of schema.required) {
+      if (data[key] === undefined) {
+        errors.push(`${at}: missing required field "${key}"`);
+      }
+    }
+  }
+
+  // Object properties (recursive)
+  if (schema.properties && typeof data === "object" && data !== null && !Array.isArray(data)) {
+    for (const [key, propSchema] of Object.entries(schema.properties)) {
+      if (data[key] !== undefined) {
+        validateJsonSchema(data[key], propSchema, `${path ? path + "." : ""}${key}`, errors);
+      }
+    }
+  }
+
+  // Array items (recursive)
+  if (schema.items && Array.isArray(data)) {
+    for (let i = 0; i < data.length; i++) {
+      validateJsonSchema(data[i], schema.items, `${path}[${i}]`, errors);
+    }
+  }
+}
+
 async function executeToolGeneric(name, args = {}, ctx = {}) {
   const schema = toolMap.get(name);
   if (!schema || !schema.endpoint) {
@@ -182,6 +282,31 @@ async function executeToolGeneric(name, args = {}, ctx = {}) {
     if (ctx.project) body.project = ctx.project;
     if (ctx.agent) body.agent = ctx.agent;
     if (ctx.username) body.username = ctx.username;
+
+    // Worktree path rewriting — redirect file paths to the worktree directory
+    // when the session has an active worktree.
+    if (ctx.agentSessionId && activeWorktrees.has(ctx.agentSessionId)) {
+      const wt = activeWorktrees.get(ctx.agentSessionId);
+      const rewritePath = (p) => {
+        if (typeof p !== "string") return p;
+        if (p.startsWith(wt.originalRoot)) {
+          return wt.worktreePath + p.slice(wt.originalRoot.length);
+        }
+        return p;
+      };
+
+      // Rewrite common path fields used by file/git/shell tools
+      if (body.path) body.path = rewritePath(body.path);
+      if (body.filePath) body.filePath = rewritePath(body.filePath);
+      if (body.oldPath) body.oldPath = rewritePath(body.oldPath);
+      if (body.newPath) body.newPath = rewritePath(body.newPath);
+      if (body.cwd) body.cwd = rewritePath(body.cwd);
+      if (body.directory) body.directory = rewritePath(body.directory);
+
+      // Inject workspace override header so tools-api sandbox validation passes
+      contextHeaders["X-Workspace-Override"] = wt.worktreePath;
+    }
+
     return fetchJsonPost(url, body, contextHeaders, ctx.signal);
   }
 
@@ -339,6 +464,176 @@ const PRISM_LOCAL_TOOL_SCHEMAS = [
       required: [],
     },
   },
+  {
+    name: "skill_create",
+    description:
+      "Create a reusable workflow skill. Skills are stored prompt templates with variable " +
+      "interpolation ({{variable}}) that can be invoked by name. Use this to capture " +
+      "multi-step workflows (refactor→test→commit, analyze→report, etc.) as reusable atomic operations. " +
+      "Skills persist across sessions and can be shared across agents.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Unique skill name (e.g. 'refactor_and_test', 'code_review'). Used as the skill ID.",
+        },
+        description: {
+          type: "string",
+          description: "What the skill does — shown when listing skills.",
+        },
+        prompt: {
+          type: "string",
+          description:
+            "The prompt template to execute. Use {{variable}} syntax for parameters. " +
+            "Example: 'Refactor {{file_path}} to use {{pattern}}. Then run tests.'",
+        },
+        steps: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional: ordered list of step descriptions for documentation.",
+        },
+        tools: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional: specific tools to enable. If omitted, all tools are available.",
+        },
+        maxIterations: {
+          type: "number",
+          description: "Optional: max agentic loop iterations for the skill run (1-100). Default: 25.",
+        },
+        model: {
+          type: "string",
+          description: "Optional: model override for the skill run.",
+        },
+      },
+      required: ["name", "prompt"],
+    },
+  },
+  {
+    name: "skill_execute",
+    description:
+      "Execute a previously created skill by its ID. The skill's prompt template is " +
+      "interpolated with the provided variables and executed as an inline agentic task. " +
+      "Use skill_list to see available skills.",
+    parameters: {
+      type: "object",
+      properties: {
+        skillId: {
+          type: "string",
+          description: "The skill ID to execute (derived from the skill name).",
+        },
+        variables: {
+          type: "object",
+          description:
+            "Key-value pairs for {{variable}} interpolation in the skill's prompt template. " +
+            "Example: { file_path: '/src/utils.js', pattern: 'Strategy pattern' }.",
+        },
+      },
+      required: ["skillId"],
+    },
+  },
+  {
+    name: "skill_list",
+    description:
+      "List all available skills. Skills are reusable workflow templates created with skill_create.",
+    parameters: {
+      type: "object",
+      properties: {
+        project: {
+          type: "string",
+          description: "Optional: filter by project scope.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "skill_delete",
+    description: "Delete a skill by its ID.",
+    parameters: {
+      type: "object",
+      properties: {
+        skillId: {
+          type: "string",
+          description: "The skill ID to delete.",
+        },
+      },
+      required: ["skillId"],
+    },
+  },
+  {
+    name: "synthetic_output",
+    description:
+      "Produce a structured JSON output conforming to a defined schema. Use this when the user " +
+      "or a downstream system needs machine-readable data rather than natural language. " +
+      "Provide the output format as a JSON Schema object and the data that conforms to it. " +
+      "The tool validates the data against the schema and returns the validated result. " +
+      "Use cases: API-like responses, data extraction, typed reports, pipeline outputs.",
+    parameters: {
+      type: "object",
+      properties: {
+        schema: {
+          type: "object",
+          description:
+            "JSON Schema definition for the expected output structure. " +
+            "Example: { type: 'object', properties: { title: { type: 'string' }, score: { type: 'number' } }, required: ['title'] }.",
+        },
+        data: {
+          type: "object",
+          description:
+            "The structured data to output. Must conform to the provided schema. " +
+            "Example: { title: 'My Report', score: 95 }.",
+        },
+        label: {
+          type: "string",
+          description: "Optional label for this output (e.g. 'analysis_result', 'extracted_entities').",
+        },
+      },
+      required: ["data"],
+    },
+  },
+  {
+    name: "enter_worktree",
+    description:
+      "Enter an isolated git worktree for the current conversation. Creates a new branch " +
+      "and redirects all file/git/shell tool calls to the worktree directory. " +
+      "Use this to try risky refactors, experimental changes, or speculative edits " +
+      "without affecting the main branch. Your full conversation context is preserved. " +
+      "Call exit_worktree to merge or discard when done.",
+    parameters: {
+      type: "object",
+      properties: {
+        reason: {
+          type: "string",
+          description: "Why you're entering an isolated worktree (e.g. 'risky refactor', 'experimental approach').",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "exit_worktree",
+    description:
+      "Exit the current isolated worktree and return to the main workspace. " +
+      "Choose to 'merge' changes back to the main branch or 'discard' them entirely. " +
+      "If merging, changes are committed and merged automatically.",
+    parameters: {
+      type: "object",
+      properties: {
+        action: {
+          type: "string",
+          enum: ["merge", "discard"],
+          description: "'merge' to apply changes to main branch, 'discard' to throw them away.",
+        },
+        commitMessage: {
+          type: "string",
+          description: "Commit message for the merge (used when action is 'merge'). Auto-generated if not provided.",
+        },
+      },
+      required: ["action"],
+    },
+  },
 ];
 
 // ────────────────────────────────────────────────────────────
@@ -383,6 +678,53 @@ const COORDINATOR_TOOL_SCHEMAS = [
       required: ["agent_id"],
     },
   },
+  {
+    name: "team_create",
+    description:
+      "Create a named team of worker agents that execute in parallel. Each team member " +
+      "receives its own prompt and runs in an isolated worktree. Use teams for structured " +
+      "parallel work — e.g. one agent writes code, another writes tests, a third updates docs. " +
+      "Returns results from all members when they all complete.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Team name for identification (e.g. 'feature_x_team').",
+        },
+        members: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              description: { type: "string", description: "Short label for this team member." },
+              prompt: { type: "string", description: "Self-contained task prompt for this member." },
+              files: { type: "array", items: { type: "string" }, description: "Optional: file paths to focus on." },
+              model: { type: "string", description: "Optional: model override for this member." },
+            },
+            required: ["description", "prompt"],
+          },
+          description: "Array of team member definitions. Each member becomes a spawn_agent worker.",
+        },
+      },
+      required: ["name", "members"],
+    },
+  },
+  {
+    name: "team_delete",
+    description:
+      "Stop and remove all workers in a named team. Cleans up worktrees for all members.",
+    parameters: {
+      type: "object",
+      properties: {
+        teamName: {
+          type: "string",
+          description: "The team name to delete (as provided to team_create).",
+        },
+      },
+      required: ["teamName"],
+    },
+  },
 ];
 
 export default class ToolOrchestratorService {
@@ -399,17 +741,40 @@ export default class ToolOrchestratorService {
       sleep: "Agentic: Control Flow",
       enter_plan_mode: "Agentic: Control Flow",
       exit_plan_mode: "Agentic: Control Flow",
+      skill_create: "Agentic: Skills",
+      skill_execute: "Agentic: Skills",
+      skill_list: "Agentic: Skills",
+      skill_delete: "Agentic: Skills",
+      synthetic_output: "Agentic: Structured Output",
+      enter_worktree: "Agentic: Git Isolation",
+      exit_worktree: "Agentic: Git Isolation",
     };
+
+    // Labels — multi-tag arrays matching tools-api TOOL_LABELS format
+    const LOCAL_LABELS = {
+      think: ["coding"],
+      sleep: ["coding"],
+      enter_plan_mode: ["coding"],
+      exit_plan_mode: ["coding"],
+      skill_create: ["coding", "automation"],
+      skill_execute: ["coding", "automation"],
+      skill_list: ["coding", "automation"],
+      skill_delete: ["coding", "automation"],
+      synthetic_output: ["coding"],
+      enter_worktree: ["coding", "git"],
+      exit_worktree: ["coding", "git"],
+    };
+
     const localClient = PRISM_LOCAL_TOOL_SCHEMAS.map((t) => ({
       ...t,
       domain: LOCAL_DOMAINS[t.name] || "Reasoning",
-      labels: { category: LOCAL_DOMAINS[t.name] || "Reasoning" },
+      labels: LOCAL_LABELS[t.name] || ["coding"],
     }));
     // Coordinator tools are Prism-local — add domain metadata for UI grouping
     const coordinatorClient = COORDINATOR_TOOL_SCHEMAS.map((t) => ({
       ...t,
       domain: "Coordinator",
-      labels: { category: "Orchestration" },
+      labels: ["coding", "orchestration"],
     }));
     return [...cachedClientSchemas, ...localClient, ...coordinatorClient];
   }
@@ -422,6 +787,29 @@ export default class ToolOrchestratorService {
   /** Primary workspace root (first entry) */
   static getWorkspaceRoot() {
     return cachedWorkspaceRoots[0] || null;
+  }
+
+  /**
+   * Get the effective workspace root for a session.
+   * Returns the worktree path if the session is in an isolated worktree,
+   * or the normal workspace root otherwise.
+   * @param {string} [agentSessionId]
+   * @returns {string|null}
+   */
+  static getEffectiveWorkspaceRoot(agentSessionId) {
+    if (agentSessionId && activeWorktrees.has(agentSessionId)) {
+      return activeWorktrees.get(agentSessionId).worktreePath;
+    }
+    return cachedWorkspaceRoots[0] || null;
+  }
+
+  /**
+   * Get the active worktree state for a session, if any.
+   * @param {string} agentSessionId
+   * @returns {{ worktreePath: string, branchName: string, originalRoot: string }|null}
+   */
+  static getWorktreeState(agentSessionId) {
+    return activeWorktrees.get(agentSessionId) || null;
   }
 
   static getToolFields(toolName) {
@@ -507,6 +895,199 @@ export default class ToolOrchestratorService {
     if (name === "exit_plan_mode") {
       logger.info(`[ToolOrchestrator] exit_plan_mode${args.summary ? `: ${args.summary}` : ""}`);
       return { acknowledged: true, mode: "execute", summary: args.summary || null };
+    }
+
+    // ── Synthetic output — structured JSON response ─────────────
+    if (name === "synthetic_output") {
+      const { schema, data, label } = args;
+
+      if (!data || typeof data !== "object") {
+        return { error: "'data' is required and must be an object" };
+      }
+
+      // Optional schema validation (best-effort)
+      const validationErrors = [];
+      if (schema && typeof schema === "object") {
+        try {
+          validateJsonSchema(data, schema, "", validationErrors);
+        } catch (err) {
+          validationErrors.push(`Validation error: ${err.message}`);
+        }
+      }
+
+      const result = {
+        acknowledged: true,
+        label: label || null,
+        data,
+      };
+
+      if (validationErrors.length > 0) {
+        result.validationWarnings = validationErrors;
+      }
+
+      // Mark for downstream processing — the AgenticLoopService can
+      // extract this as the structured final response.
+      result._synthetic = true;
+
+      logger.info(`[ToolOrchestrator] synthetic_output${label ? `: ${label}` : ""} — ${Object.keys(data).length} fields`);
+      return result;
+    }
+
+    // ── Worktree isolation — self-isolate main agent ────────────
+    if (name === "enter_worktree") {
+      const sessionId = ctx.agentSessionId;
+      if (!sessionId) {
+        return { error: "No agent session — worktree isolation requires an active session" };
+      }
+      if (activeWorktrees.has(sessionId)) {
+        const existing = activeWorktrees.get(sessionId);
+        return { error: `Already in a worktree (branch: ${existing.branchName}). Call exit_worktree first.` };
+      }
+
+      const workspaceRoot = ToolOrchestratorService.getWorkspaceRoot();
+      if (!workspaceRoot) {
+        return { error: "No workspace root configured" };
+      }
+
+      // Resolve the git repo path (may be a subdirectory)
+      const { resolve } = await import("node:path");
+      const { existsSync } = await import("node:fs");
+      const repoPath = existsSync(resolve(workspaceRoot, ".git"))
+        ? workspaceRoot
+        : workspaceRoot;
+
+      const branchName = `worktree/${sessionId.slice(0, 8)}-${Date.now().toString(36)}`;
+
+      // Create worktree via tools-api
+      const createResult = await fetchJsonPost(
+        `${TOOLS_API_URL}/agentic/git/worktree/create`,
+        { path: repoPath, branch: branchName },
+        buildContextHeaders(ctx),
+        ctx.signal,
+      );
+
+      if (createResult.error) {
+        return { error: `Failed to create worktree: ${createResult.error}` };
+      }
+
+      // Store the worktree state
+      activeWorktrees.set(sessionId, {
+        originalRoot: workspaceRoot,
+        worktreePath: createResult.worktreePath,
+        branchName,
+        repoPath,
+      });
+
+      logger.info(`[ToolOrchestrator] enter_worktree: ${branchName} → ${createResult.worktreePath}`);
+
+      if (ctx._emit) {
+        ctx._emit({ type: "status", message: "worktree_entered", branch: branchName, path: createResult.worktreePath });
+      }
+
+      return {
+        acknowledged: true,
+        branch: branchName,
+        worktreePath: createResult.worktreePath,
+        reason: args.reason || null,
+        message: `Now working in isolated worktree. All file operations are redirected to ${createResult.worktreePath}. Call exit_worktree with action 'merge' or 'discard' when done.`,
+      };
+    }
+
+    if (name === "exit_worktree") {
+      const sessionId = ctx.agentSessionId;
+      if (!sessionId || !activeWorktrees.has(sessionId)) {
+        return { error: "Not currently in a worktree. Call enter_worktree first." };
+      }
+
+      const wt = activeWorktrees.get(sessionId);
+      const { action, commitMessage } = args;
+      let mergeResult = null;
+
+      if (action === "merge") {
+        // Get diff summary before merging
+        const diffResult = await fetchJsonPost(
+          `${TOOLS_API_URL}/agentic/git/worktree/diff`,
+          { path: wt.repoPath, branch: wt.branchName },
+          buildContextHeaders(ctx),
+          ctx.signal,
+        );
+
+        // Merge the worktree branch
+        mergeResult = await fetchJsonPost(
+          `${TOOLS_API_URL}/agentic/git/worktree/merge`,
+          {
+            path: wt.repoPath,
+            branch: wt.branchName,
+            message: commitMessage || `Merge worktree: ${wt.branchName}`,
+          },
+          buildContextHeaders(ctx),
+          ctx.signal,
+        );
+
+        if (mergeResult.error) {
+          // Don't clean up on merge failure — let the user resolve
+          return { error: `Merge failed: ${mergeResult.error}. Worktree preserved at ${wt.worktreePath}. Resolve conflicts and try again, or exit_worktree with action 'discard'.` };
+        }
+
+        mergeResult.diff = diffResult.error ? null : diffResult;
+      }
+
+      // Remove the worktree (both merge and discard)
+      await fetchJsonPost(
+        `${TOOLS_API_URL}/agentic/git/worktree/remove`,
+        { path: wt.repoPath, worktreePath: wt.worktreePath, deleteBranch: true },
+        buildContextHeaders(ctx),
+        ctx.signal,
+      );
+
+      // Restore original workspace
+      activeWorktrees.delete(sessionId);
+
+      logger.info(`[ToolOrchestrator] exit_worktree: ${action} — ${wt.branchName}`);
+
+      if (ctx._emit) {
+        ctx._emit({ type: "status", message: "worktree_exited", action, branch: wt.branchName });
+      }
+
+      return {
+        acknowledged: true,
+        action,
+        branch: wt.branchName,
+        merged: action === "merge" ? mergeResult : undefined,
+        message: action === "merge"
+          ? `Changes from ${wt.branchName} merged into main branch. Workspace restored.`
+          : `Worktree ${wt.branchName} discarded. All changes removed. Workspace restored.`,
+      };
+    }
+
+    // ── Skill tools — MongoDB-backed workflow templates ──────────
+    if (name === "skill_create" || name === "skill_list" || name === "skill_delete" || name === "skill_execute") {
+      const { default: SkillService } = await import("./SkillService.js");
+
+      if (name === "skill_create") {
+        return SkillService.create(args);
+      }
+      if (name === "skill_list") {
+        return SkillService.list({ project: args.project || ctx.project });
+      }
+      if (name === "skill_delete") {
+        return SkillService.delete(args.skillId);
+      }
+      if (name === "skill_execute") {
+        // Prepare the skill (interpolate variables, get config)
+        const prepared = await SkillService.prepare(args.skillId, args.variables || {});
+        if (prepared.error) return prepared;
+
+        // Execute the skill as an inline sub-task using the coordinator's
+        // spawn_agent mechanism — same worktree isolation, diff collection,
+        // and progress forwarding.
+        logger.info(`[ToolOrchestrator] Executing skill "${prepared.name}" (${prepared.skillId})`);
+        return ToolOrchestratorService.executeCoordinatorTool("spawn_agent", {
+          description: `Skill: ${prepared.name}`,
+          prompt: prepared.prompt,
+          model: prepared.config.model || undefined,
+        }, ctx);
+      }
     }
 
     // Route coordinator tools to CoordinatorService (Prism-local)
@@ -633,6 +1214,12 @@ export default class ToolOrchestratorService {
 
       case "stop_agent":
         return CoordinatorService.stopAgent(args.agent_id);
+
+      case "team_create":
+        return CoordinatorService.createTeam(args, coordinatorCtx);
+
+      case "team_delete":
+        return CoordinatorService.deleteTeam(args.teamName);
 
       default:
         return { error: `Unknown coordinator tool: ${name}` };

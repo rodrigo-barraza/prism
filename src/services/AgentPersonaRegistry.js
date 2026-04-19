@@ -314,6 +314,11 @@ const CODING_ENABLED_TOOLS = [
   "remote_trigger",
   // Notebook editing
   "notebook_edit",
+  // Skill management (reusable workflow templates)
+  "skill_create",
+  "skill_execute",
+  "skill_list",
+  "skill_delete",
 ];
 
 // ── CODING Agent (Retina) ────────────────────────────────────────

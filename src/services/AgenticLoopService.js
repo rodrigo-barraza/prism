@@ -24,7 +24,7 @@ import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
 const COORDINATOR_TOOL_NAMES = new Set(COORDINATOR_ONLY_TOOLS);
 
 /** Prism-local tools bypass the enabledTools filter (always available to all agents) */
-const PRISM_LOCAL_TOOL_NAMES = new Set(["think", "sleep", "enter_plan_mode", "exit_plan_mode"]);
+const PRISM_LOCAL_TOOL_NAMES = new Set(["think", "sleep", "enter_plan_mode", "exit_plan_mode", "skill_create", "skill_execute", "skill_list", "skill_delete", "synthetic_output", "enter_worktree", "exit_worktree"]);
 
 const MAX_TOOL_ITERATIONS = 25;
 const MAX_CONSECUTIVE_TOOL_ERRORS = 3;
@@ -119,6 +119,13 @@ export default class AgenticLoopService {
     // If options.enabledTools is passed, filter out any tool not in the array.
     // If none are passed, fall back to the persona's enabledTools (if any).
     // MCP tools (mcp__*) are always included — managed by connect/disconnect
+    //
+    // enabledTools entries support three formats:
+    //   - "tool_name"   → exact tool match
+    //   - "label:X"     → all tools carrying label X
+    //   - "domain:X"    → all tools in domain X
+    // Prefixed entries are expanded here using the client schemas which carry
+    // domain/labels metadata. Overlapping entries are deduplicated via Set.
     let resolvedEnabledTools = options.enabledTools;
     if (!resolvedEnabledTools && agent) {
       const persona = AgentPersonaRegistry.get(agent);
@@ -130,7 +137,36 @@ export default class AgenticLoopService {
 
     let finalTools = dynamicTools;
     if (resolvedEnabledTools && Array.isArray(resolvedEnabledTools)) {
-      const enabledSet = new Set(resolvedEnabledTools);
+      // Check if any prefixed entries need expansion
+      const hasPrefixed = resolvedEnabledTools.some(
+        (e) => e.startsWith("label:") || e.startsWith("domain:"),
+      );
+
+      let enabledSet;
+      if (hasPrefixed) {
+        // Resolve against client schemas (carry domain + labels metadata)
+        const clientSchemas = ToolOrchestratorService.getClientToolSchemas();
+        enabledSet = new Set();
+        for (const entry of resolvedEnabledTools) {
+          if (entry.startsWith("label:")) {
+            const label = entry.slice(6);
+            for (const t of clientSchemas) {
+              if (t.labels?.includes(label)) enabledSet.add(t.name);
+            }
+          } else if (entry.startsWith("domain:")) {
+            const domain = entry.slice(7);
+            for (const t of clientSchemas) {
+              if (t.domain === domain) enabledSet.add(t.name);
+            }
+          } else {
+            enabledSet.add(entry);
+          }
+        }
+        logger.info(`[AgenticLoop] Expanded ${resolvedEnabledTools.length} enabledTools entries → ${enabledSet.size} unique tools`);
+      } else {
+        enabledSet = new Set(resolvedEnabledTools);
+      }
+
       finalTools = finalTools.filter((t) => enabledSet.has(t.name) || t.name.startsWith("mcp__") || COORDINATOR_TOOL_NAMES.has(t.name) || PRISM_LOCAL_TOOL_NAMES.has(t.name));
     }
 

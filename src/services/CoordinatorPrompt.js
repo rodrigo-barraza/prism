@@ -159,4 +159,6 @@ export const COORDINATOR_ONLY_TOOLS = [
   "spawn_agent",
   "send_message",
   "stop_agent",
+  "team_create",
+  "team_delete",
 ];

@@ -55,6 +55,25 @@ const DEFAULT_TIER_MAP = {
   remote_trigger: APPROVAL_TIERS.WRITE,
   notebook_edit: APPROVAL_TIERS.WRITE,
 
+  // Tier 1 — skill management (read-only discovery)
+  skill_list: APPROVAL_TIERS.AUTO,
+
+  // Tier 1 — structured output (data formatting only)
+  synthetic_output: APPROVAL_TIERS.AUTO,
+
+  // Tier 2 — skill mutations + execution
+  skill_create: APPROVAL_TIERS.WRITE,
+  skill_execute: APPROVAL_TIERS.WRITE,
+  skill_delete: APPROVAL_TIERS.WRITE,
+
+  // Tier 2 — team management (spawns/stops workers)
+  team_create: APPROVAL_TIERS.WRITE,
+  team_delete: APPROVAL_TIERS.WRITE,
+
+  // Tier 2 — worktree isolation (creates/merges git branches)
+  enter_worktree: APPROVAL_TIERS.WRITE,
+  exit_worktree: APPROVAL_TIERS.WRITE,
+
   // Tier 2 — write operations
   write_file: APPROVAL_TIERS.WRITE,
   str_replace_file: APPROVAL_TIERS.WRITE,
