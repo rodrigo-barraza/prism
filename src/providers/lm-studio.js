@@ -379,7 +379,7 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
         if (!isLoaded || needsReload) {
           // ── Singleflight: coalesce concurrent loads of the same model ──
           // When multiple workers hit this instance simultaneously (e.g. two
-          // spawn_agent calls), only the first triggers the actual load.
+          // team_create calls), only the first triggers the actual load.
           // Subsequent callers wait for the inflight promise to resolve.
           if (_loadInflight.has(model) && !needsReload) {
             logger.info(`[LM-Studio:${instanceId}] Model "${model}" already loading (singleflight) — waiting…`);
@@ -554,7 +554,7 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
       // the loop to LM Studio, which conflicts with Prism's approval
       // gating, error budgets, and context window management.
       //
-      // Coordinator tools (spawn_agent, etc.) are Prism-local and
+      // Coordinator tools (team_create, etc.) are Prism-local and
       // also require this path since they can't route via MCP.
       const coordinatorSet = new Set(COORDINATOR_ONLY_TOOLS);
       const hasCoordinatorTools = options.tools?.some((t) => coordinatorSet.has(t.name));
@@ -705,7 +705,7 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
    * OpenAI-compat streaming path — used when coordinator tools are enabled.
    * Sends a standard /v1/chat/completions request with `tools` array.
    * Tool calls yield as non-native events, so Prism's agentic loop
-   * executes them (including spawn_agent, send_message, stop_agent).
+   * executes them (including team_create, send_message, stop_agent).
    *
    * @private
    */

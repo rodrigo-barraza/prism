@@ -819,17 +819,36 @@ const PRISM_LOCAL_TOOL_SCHEMAS = [
 
 const COORDINATOR_TOOL_SCHEMAS = [
   {
-    name: "spawn_agent",
-    description: "Spawn a worker agent to execute a task autonomously in an isolated git worktree. Workers have access to the full tool suite (read, write, search, shell). Use for parallelizable research, implementation, or verification tasks.",
+    name: "team_create",
+    description:
+      "Spawn one or more worker agents that execute in parallel, each in an isolated git worktree. " +
+      "Workers have access to the full tool suite (read, write, search, shell). " +
+      "Use for parallelizable research, implementation, or verification tasks. " +
+      "For a single task, provide one member. For parallel work, provide multiple members. " +
+      "Returns results from all members when they all complete.",
     parameters: {
       type: "object",
       properties: {
-        description: { type: "string", description: "Short label for the worker (shown in UI)" },
-        prompt: { type: "string", description: "Self-contained task prompt. Include file paths, line numbers, and exact instructions. Workers cannot see the coordinator's conversation." },
-        files: { type: "array", items: { type: "string" }, description: "Optional: specific file paths the worker should focus on" },
-        model: { type: "string", description: "Optional: model override for the worker (defaults to coordinator's model)" },
+        name: {
+          type: "string",
+          description: "Team name for identification (e.g. 'auth_refactor', 'research').",
+        },
+        members: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              description: { type: "string", description: "Short label for this worker (shown in UI)." },
+              prompt: { type: "string", description: "Self-contained task prompt. Include file paths, line numbers, and exact instructions. Workers cannot see the coordinator's conversation." },
+              files: { type: "array", items: { type: "string" }, description: "Optional: file paths the worker should focus on." },
+              model: { type: "string", description: "Optional: model override for this worker (defaults to coordinator's model)." },
+            },
+            required: ["description", "prompt"],
+          },
+          description: "Array of worker definitions. Each member runs autonomously in its own worktree.",
+        },
       },
-      required: ["description", "prompt"],
+      required: ["name", "members"],
     },
   },
   {
@@ -838,7 +857,7 @@ const COORDINATOR_TOOL_SCHEMAS = [
     parameters: {
       type: "object",
       properties: {
-        to: { type: "string", description: "Agent ID returned by spawn_agent" },
+        to: { type: "string", description: "Agent ID returned by team_create" },
         message: { type: "string", description: "Follow-up instructions for the worker" },
       },
       required: ["to", "message"],
@@ -867,42 +886,10 @@ const COORDINATOR_TOOL_SCHEMAS = [
       properties: {
         agent_id: {
           type: "string",
-          description: "The agent ID returned by spawn_agent.",
+          description: "The agent ID returned by team_create.",
         },
       },
       required: ["agent_id"],
-    },
-  },
-  {
-    name: "team_create",
-    description:
-      "Create a named team of worker agents that execute in parallel. Each team member " +
-      "receives its own prompt and runs in an isolated worktree. Use teams for structured " +
-      "parallel work — e.g. one agent writes code, another writes tests, a third updates docs. " +
-      "Returns results from all members when they all complete.",
-    parameters: {
-      type: "object",
-      properties: {
-        name: {
-          type: "string",
-          description: "Team name for identification (e.g. 'feature_x_team').",
-        },
-        members: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              description: { type: "string", description: "Short label for this team member." },
-              prompt: { type: "string", description: "Self-contained task prompt for this member." },
-              files: { type: "array", items: { type: "string" }, description: "Optional: file paths to focus on." },
-              model: { type: "string", description: "Optional: model override for this member." },
-            },
-            required: ["description", "prompt"],
-          },
-          description: "Array of team member definitions. Each member becomes a spawn_agent worker.",
-        },
-      },
-      required: ["name", "members"],
     },
   },
   {
@@ -1453,13 +1440,16 @@ export default class ToolOrchestratorService {
         if (prepared.error) return prepared;
 
         // Execute the skill as an inline sub-task using the coordinator's
-        // spawn_agent mechanism — same worktree isolation, diff collection,
+        // team_create mechanism — same worktree isolation, diff collection,
         // and progress forwarding.
         logger.info(`[ToolOrchestrator] Executing skill "${prepared.name}" (${prepared.skillId})`);
-        return ToolOrchestratorService.executeCoordinatorTool("spawn_agent", {
-          description: `Skill: ${prepared.name}`,
-          prompt: prepared.prompt,
-          model: prepared.config.model || undefined,
+        return ToolOrchestratorService.executeCoordinatorTool("team_create", {
+          name: `skill_${prepared.skillId}`,
+          members: [{
+            description: `Skill: ${prepared.name}`,
+            prompt: prepared.prompt,
+            model: prepared.config.model || undefined,
+          }],
         }, ctx);
       }
     }
@@ -1542,7 +1532,7 @@ export default class ToolOrchestratorService {
   }
 
   /**
-   * Execute a coordinator tool (spawn_agent, send_message, stop_agent).
+   * Execute a coordinator tool (team_create, send_message, stop_agent).
    * These are Prism-local — they dispatch to CoordinatorService in-process.
    *
    * @param {string} name - Tool name
@@ -1574,14 +1564,8 @@ export default class ToolOrchestratorService {
     };
 
     switch (name) {
-      case "spawn_agent":
-        return CoordinatorService.spawnFromTool({
-          description: args.description,
-          prompt: args.prompt,
-          files: args.files,
-          model: args.model,
-          coordinatorCtx,
-        });
+      case "team_create":
+        return CoordinatorService.createTeam(args, coordinatorCtx);
 
       case "send_message":
         return CoordinatorService.sendMessage(args.to, args.message, coordinatorCtx);
@@ -1591,9 +1575,6 @@ export default class ToolOrchestratorService {
 
       case "task_output":
         return CoordinatorService.getTaskOutput(args.agent_id);
-
-      case "team_create":
-        return CoordinatorService.createTeam(args, coordinatorCtx);
 
       case "team_delete":
         return CoordinatorService.deleteTeam(args.teamName);

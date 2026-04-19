@@ -753,7 +753,7 @@ export default class AgenticLoopService {
                  requestId: ctx.requestId,
                  agenticIteration: iterations,
                  iteration: iterations,
-                 // Coordinator context — used by spawn_agent/send_message/stop_agent
+                 // Coordinator context — used by team_create/send_message/stop_agent
                  _providerName: providerName,
                  _resolvedModel: resolvedModel,
                  _emit: emit,
@@ -823,7 +823,7 @@ export default class AgenticLoopService {
 
           // Notify the client when coordinator tools fired — auto-expand workers panel
           const workerToolsUsed = passPendingToolCalls.some(
-            (tc) => tc.name === "spawn_agent" || tc.name === "stop_agent",
+            (tc) => tc.name === "team_create" || tc.name === "stop_agent",
           );
           if (workerToolsUsed) {
             emit({ type: "status", message: "workers_updated" });
@@ -1018,7 +1018,7 @@ export default class AgenticLoopService {
       // ── Persist worker snapshots to the parent session ──────────
       // Workers live in-memory during execution but must be persisted
       // so they survive page refreshes and server restarts.
-      if (streamedToolCalls.some((tc) => tc.name === "spawn_agent") && agentSessionId) {
+      if (streamedToolCalls.some((tc) => tc.name === "team_create") && agentSessionId) {
         try {
           const { default: CoordinatorService } = await import("./CoordinatorService.js");
           const { COLLECTIONS } = await import("../constants.js");

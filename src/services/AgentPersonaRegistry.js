@@ -253,7 +253,7 @@ const PERSONAS = new Map();
 // covers file ops, search, git, web, command execution, LSP, tasks,
 // memory, scheduling, notebooks, and tool discovery. The "data" label
 // adds compute/utility tools (unit conversion, CSV, diagrams, etc.).
-// Coordinator tools (spawn_agent, etc.) and Prism-local tools (think,
+// Coordinator tools (team_create, etc.) and Prism-local tools (think,
 // sleep, skills, etc.) bypass the enabledTools filter entirely.
 const CODING_ENABLED_TOOLS = [
   L.CODING,

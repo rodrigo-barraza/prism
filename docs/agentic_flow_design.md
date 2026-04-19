@@ -226,11 +226,11 @@ Complete tool-by-tool mapping between Claude Code (from [razakiau/claude-code `s
 
 | Claude Code Tool | Prism Equivalent | Parity | Notes |
 |---|---|---|---|
-| `AgentTool` | `spawn_agent` | ✅ Match | Spawn autonomous worker agents with task description and optional file paths |
+| `AgentTool` | `team_create` (single member) | ✅ Match | Spawn one or more autonomous worker agents with task descriptions and optional file paths. Supports both single-agent and multi-agent (parallel) workflows via a unified `members[]` array |
 | `SendMessageTool` | `send_message` | ✅ Match | Continue a running worker with additional instructions |
 | — | `stop_agent` | ✅ **Extra** | Gracefully stop a running worker — CC lacks an explicit stop tool (workers run to completion) |
 | `TaskOutputTool` | `task_output` | ✅ Match | Read worker agent output. Returns full result if completed, or partial output (last 2000 chars) if still running. Coordinator-only tool |
-| `TeamCreateTool` | — | ❌ Not adopted | See Appendix B — our coordinator handles worker management without a persistent team abstraction |
+| `TeamCreateTool` | `team_create` | ✅ Match | Unified tool — `team_create` handles both individual and team worker spawning via the `members[]` parameter |
 
 **Architectural note:** Our coordinator has a key advantage over CC: **git worktree isolation**. CC runs all workers against the same filesystem, creating potential file conflicts. Our workers each get an isolated git worktree branch, preventing interference. We also distribute workers across multiple local provider instances (least-busy routing), which CC doesn't support.
 
@@ -269,7 +269,7 @@ Complete tool-by-tool mapping between Claude Code (from [razakiau/claude-code `s
 | Web & Network | 2 (WebFetch, WebSearch) | 3 (fetch_url, web_search, browser_action) | ✅ **Superior** |
 | Git | 1 (GitDiff) | 5 (git_status, git_diff, git_log, enter_worktree, exit_worktree) | ✅ **Superior** |
 | MCP | 4 (MCPTool, ListResources, ReadResource, Auth) | 3 + transparent injection (list_mcp_resources, read_mcp_resource, mcp_authenticate, + auto-injected tools) | ✅ **Match** |
-| Orchestration | 3 (Agent, SendMessage, TaskOutput) | 4 (spawn_agent, send_message, stop_agent, task_output) | ✅ **Superior** |
+| Orchestration | 3 (Agent, SendMessage, TaskOutput) | 4 (team_create, send_message, stop_agent, task_output) | ✅ **Superior** |
 | Meta & Control | 4 (Think, TodoWrite, Brief, AskUser) | 10 (think, todo_write, brief, ask_user_question, sleep, enter_plan_mode, exit_plan_mode, synthetic_output, skill_*) | ✅ **Superior** |
 | Memory | 1 (MemoryTool) | 3 (upsert_memory, search_memories, delete_memory) | ✅ **Superior** |
 
@@ -300,16 +300,16 @@ For tasks requiring extensive reasoning, the agent enters a dedicated planning l
 
 The coordinator (lead agent) breaks complex tasks apart, spawns parallel workers in isolated git worktrees, collects results. Adapted from Claude Code's public `coordinatorMode.ts`, `src/utils/swarm/`, `AgentTool/`, `TeamCreateTool/`, and `SendMessageTool/` patterns.
 
-**Paradigm**: Chat-triggered subagent orchestration. The LLM itself decides when to fan out by calling `spawn_agent`, `send_message`, and `stop_agent` tools — identical to how Claude Code's coordinator uses `Agent`, `SendMessage`, and `TaskStop` tool calls.
+**Paradigm**: Chat-triggered subagent orchestration. The LLM itself decides when to fan out by calling `team_create`, `send_message`, and `stop_agent` tools — identical to how Claude Code's coordinator uses `Agent`, `SendMessage`, and `TaskStop` tool calls. `team_create` is the unified entry point: a team with one member is functionally equivalent to a single agent spawn.
 
 **Architecture**:
-Chat Message → Coordinator System Prompt Injection → LLM calls `spawn_agent` tool → Worker spawned with own `AgenticLoopService.runAgenticLoop()` in isolated git worktree → Worker autonomously uses full tool suite → Worker completes → `<task-notification>` XML notification injected as user-role message into coordinator's conversation → Coordinator synthesizes results → Optionally continues worker via `send_message` → User reviews unified diffs → Approve & Merge
+Chat Message → Coordinator System Prompt Injection → LLM calls `team_create` tool → Workers spawned via `spawnFromTool()` in isolated git worktrees → Workers autonomously use full tool suite → Workers complete → `<task-notification>` XML notifications injected as user-role messages into coordinator's conversation → Coordinator synthesizes results → Optionally continues worker via `send_message` → User reviews unified diffs → Approve & Merge
 
 **Implementation** (all ✅):
 
 | Component                      | Description                                                                                                                                                                                                         | Key Files                                                            |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| **Coordinator Tools**          | `spawn_agent`, `send_message`, `stop_agent` tool schemas + dispatch via `ToolOrchestratorService`                                                                                                                   | `ToolSchemaService`, `ToolOrchestratorService`, `AutoApprovalEngine` |
+| **Coordinator Tools**          | `team_create`, `send_message`, `stop_agent` tool schemas + dispatch via `ToolOrchestratorService`                                                                                                                   | `ToolSchemaService`, `ToolOrchestratorService`, `AutoApprovalEngine` |
 | **Worker Execution Engine**    | `AgenticLoopService.runAgenticLoop()` in `_runWorkerLoop()` with per-worker conversation context, AbortController, auto-approve, scoped tools                                                                       | `CoordinatorService.js`                                              |
 | **Coordinator System Prompt**  | Adapted from Claude Code's `getCoordinatorSystemPrompt()`: 4-phase workflow, verification guidance, failure handling, stopping workers, synthesization rules, purpose statements, continue-vs-spawn decision matrix | `CoordinatorPrompt.js`, `SystemPromptAssembler.js`                   |
 | **Task Notification Pipeline** | `<task-notification>` XML generation via `buildTaskNotification()` + injection into coordinator's active conversation as user-role messages via `injectMessage()` + `_notifyWake()`                                 | `AgenticLoopService.js`, `CoordinatorService.js`                     |
@@ -323,7 +323,7 @@ Chat Message → Coordinator System Prompt Injection → LLM calls `spawn_agent`
 | Section                   | Description                                                                                 |
 | ------------------------- | ------------------------------------------------------------------------------------------- |
 | Role definition           | Coordinator identity, synthesize-don't-delegate philosophy                                  |
-| Tool documentation        | `spawn_agent`, `send_message`, `stop_agent` with usage rules                                |
+| Tool documentation        | `team_create`, `send_message`, `stop_agent` with usage rules                                |
 | Notification format       | `<task-notification>` XML schema with field descriptions                                    |
 | 4-phase workflow          | Research → Synthesis → Implementation → Verification                                        |
 | Concurrency rules         | Read-only parallel, write-heavy serial, verification independent                            |
@@ -372,7 +372,7 @@ Claude Code is a CLI REPL — its main loop is always alive, waiting for user in
 
 - **Git worktrees retained** — our differentiator over Claude Code. CC runs all workers against the same filesystem. Our worktree isolation means workers literally cannot interfere with each other
 - **In-process async** — workers are concurrent async loops in the same Node.js process (like Claude Code's `inProcessRunner`), not separate processes. Each gets isolated conversation context
-- **Workers cannot spawn sub-workers** — `spawn_agent`/`send_message`/`stop_agent` excluded from worker tool sets to prevent recursion
+- **Workers cannot spawn sub-workers** — `team_create`/`send_message`/`stop_agent` excluded from worker tool sets to prevent recursion
 - **Coordinator is a mode, not a persona** — the coordinator system prompt is injected as an addendum to the existing `CODING` persona when coordinator tools are available, not a separate identity
 - **File paths optional for chat-triggered flow** — the coordinator LLM discovers files via its existing tools (`project_summary`, `grep_search`). Manual panel still requires explicit file paths
 

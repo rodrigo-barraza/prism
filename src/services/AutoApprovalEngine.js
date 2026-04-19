@@ -37,7 +37,7 @@ const DEFAULT_TIER_MAP = {
   task_update: APPROVAL_TIERS.AUTO,
 
   // Tier 1 — coordinator orchestration
-  spawn_agent: APPROVAL_TIERS.AUTO,
+  team_create: APPROVAL_TIERS.AUTO,
   send_message: APPROVAL_TIERS.AUTO,
   stop_agent: APPROVAL_TIERS.AUTO,
 
@@ -66,8 +66,7 @@ const DEFAULT_TIER_MAP = {
   skill_execute: APPROVAL_TIERS.WRITE,
   skill_delete: APPROVAL_TIERS.WRITE,
 
-  // Tier 2 — team management (spawns/stops workers)
-  team_create: APPROVAL_TIERS.WRITE,
+  // Tier 2 — team deletion (stops workers)
   team_delete: APPROVAL_TIERS.WRITE,
 
   // Tier 2 — worktree isolation (creates/merges git branches)

@@ -27,7 +27,7 @@ import { registerCleanup } from "../utils/CleanupRegistry.js";
 // Two entry points:
 //   1. Manual Panel: decompose() → execute() → approveMerge()
 //   2. Chat Tools:   spawnFromTool() / sendMessage() / stopAgent()
-//      Called when the LLM invokes spawn_agent / send_message / stop_agent
+//      Called when the LLM invokes team_create / send_message / stop_agent
 // ────────────────────────────────────────────────────────────
 
 function getDefaultWorkspaceRoot() {
@@ -101,7 +101,7 @@ const activeWorkers = new Map();
 
 /**
  * Synchronous per-instance reservation counter.
- * Prevents race conditions when multiple spawn_agent calls fire concurrently
+ * Prevents race conditions when multiple team_create calls fire concurrently
  * via Promise.all — each spawn increments the counter immediately at selection
  * time, so the next spawn sees the correct active count.
  * Keyed by instance id (provider name).
@@ -232,6 +232,86 @@ function findBestQuantFallback(targetModel, availableModels) {
 }
 
 // ────────────────────────────────────────────────────────────
+// Instance Selection & Reservation
+// ────────────────────────────────────────────────────────────
+// Shared by both spawnFromTool (single) and createTeam (batch).
+// Selects the least-busy instance and increments the reservation
+// counter synchronously so the next call sees the updated count.
+
+/**
+ * Count active workers + pending reservations on an instance.
+ * @param {string} instanceId
+ * @returns {number}
+ */
+function getActiveOn(instanceId) {
+  const reserved = instanceReservations.get(instanceId) || 0;
+  const running = [...activeWorkers.values()].filter(
+    (w) => w.providerName === instanceId && w.status === "running",
+  ).length;
+  return reserved + running;
+}
+
+/**
+ * Select the best instance from `siblings`, increment its reservation
+ * counter, and return the assignment. Returns null if all instances
+ * are at capacity.
+ *
+ * @param {Array<{id: string, concurrency: number}>} siblings - Available instances
+ * @param {string} coordinatorInstanceId - The coordinator's own instance id
+ * @param {Map<string, string>} instanceModelOverrides - Per-instance model overrides (quant fallback)
+ * @param {string} defaultModel - The default model to use when no override exists
+ * @returns {{ provider: string, model: string, slotsAvailable: number }|null}
+ */
+function selectAndReserveInstance(siblings, coordinatorInstanceId, instanceModelOverrides, defaultModel) {
+  // Debug: log the full instance state for tracing assignment decisions
+  const stateSnapshot = siblings.map((s) => {
+    const active = getActiveOn(s.id);
+    return `${s.id}(concurrency=${s.concurrency}, active=${active}, free=${s.concurrency - active})`;
+  }).join(", ");
+  logger.info(`[Coordinator] selectAndReserveInstance: siblings=[${stateSnapshot}], coordinator=${coordinatorInstanceId}`);
+
+  // Greedy least-loaded: pick the instance with the most available slots.
+  // This distributes workers evenly across all instances rather than
+  // filling the coordinator's instance first.
+  //
+  // The coordinator's own instance gets a small tiebreaker bonus (+0.5)
+  // because its orchestrator inference is IDLE while workers run —
+  // it finished generating tool calls and only resumes after all complete.
+  // This means we slightly prefer the coord instance when slots are equal,
+  // but will use a secondary if it has strictly more capacity.
+  let bestInstance = null;
+  let bestScore = -1; // available + tiebreaker
+
+  for (const inst of siblings) {
+    const active = getActiveOn(inst.id);
+    const available = inst.concurrency - active;
+    if (available <= 0) continue;
+
+    // Tiebreaker: coordinator's instance gets +0.5 since orchestrator is idle
+    const score = inst.id === coordinatorInstanceId ? available + 0.5 : available;
+    if (score > bestScore) {
+      bestScore = score;
+      bestInstance = inst;
+    }
+  }
+
+  if (!bestInstance) {
+    logger.info(`[Coordinator] selectAndReserveInstance: no instance available`);
+    return null;
+  }
+
+  const available = bestInstance.concurrency - getActiveOn(bestInstance.id);
+
+  // Increment reservation synchronously so the next call sees it
+  instanceReservations.set(bestInstance.id, (instanceReservations.get(bestInstance.id) || 0) + 1);
+
+  // Apply quant fallback model if the selected instance has an override
+  const model = instanceModelOverrides.get(bestInstance.id) || defaultModel;
+
+  return { provider: bestInstance.id, model, slotsAvailable: available };
+}
+
+// ────────────────────────────────────────────────────────────
 // Tools-API Helpers
 // ────────────────────────────────────────────────────────────
 
@@ -275,7 +355,7 @@ async function cleanupWorktrees(repoPath) {
 // ────────────────────────────────────────────────────────────
 // Worker Result Builder
 // ────────────────────────────────────────────────────────────
-// Returns a structured result object that becomes the spawn_agent
+// Returns a structured result object that becomes the team_create
 // tool call's response. The coordinator LLM receives it directly
 // as the tool result — no separate user-role notification needed.
 
@@ -368,11 +448,11 @@ Respond with a JSON object (no markdown fences):
 
 export default class CoordinatorService {
   // ══════════════════════════════════════════════════════════
-  // Chat-Triggered Tools (spawn_agent / send_message / stop_agent)
+  // Chat-Triggered Tools (team_create / send_message / stop_agent)
   // ══════════════════════════════════════════════════════════
 
   /**
-   * Spawn a worker agent from a spawn_agent tool call.
+   * Spawn a worker agent from a team_create tool call.
    *
    * Creates a git worktree, runs AgenticLoopService.runAgenticLoop() in it,
    * collects the diff when complete, and injects a [WORKER COMPLETED] notification into
@@ -383,10 +463,12 @@ export default class CoordinatorService {
    * @param {string} params.prompt - Self-contained task prompt for the worker
    * @param {string[]} [params.files] - Optional file paths to focus on
    * @param {string} [params.model] - Optional model override for the worker
+   * @param {string} [params.assignedProvider] - Pre-assigned provider (from createTeam)
+   * @param {string} [params.assignedModel] - Pre-assigned model (from createTeam)
    * @param {object} params.coordinatorCtx - Coordinator's loop context
    * @returns {Promise<object>} Spawn result with agentId
    */
-  static async spawnFromTool({ description, prompt, files, model, coordinatorCtx }) {
+  static async spawnFromTool({ description, prompt, files, model, assignedProvider, assignedModel, coordinatorCtx }) {
     const { project, username, agent, providerName, resolvedModel, traceId, agentSessionId: parentAgentSessionId, maxWorkerIterations: clientMaxWorkerIter, minContextLength } = coordinatorCtx;
 
     // Resolve max worker iterations: 0 = unlimited (Infinity), positive = clamped 1-100, default = constant
@@ -402,18 +484,21 @@ export default class CoordinatorService {
       return { error: `Maximum concurrent workers (${MAX_WORKERS}) reached. Wait for a worker to complete or stop one.` };
     }
 
-    // Resolve the user-configured (or hardcoded) subagent fallback
-    const workerFallback = await getWorkerFallback();
+    // ── Pre-assigned instance (from createTeam batch assignment) ──
+    // When createTeam calls us, it has already resolved model availability
+    // and assigned instances serially with proper reservation counting.
+    // Skip the entire instance selection path to avoid double-counting.
+    let workerProvider = assignedProvider || providerName;
+    // For local providers, the LLM can't know valid GGUF identifiers —
+    // skip the LLM-provided `model` param to prevent hallucinated names.
+    const isLocal = localModelQueue.isLocal(providerName);
+    let workerModel = assignedModel || (isLocal ? resolvedModel : (model || resolvedModel));
+    const preAssigned = !!(assignedProvider);
 
-    // ── Local model guard with instance pooling ────────────────
-    // When the coordinator is on a local provider, distribute workers
-    // across ALL instances of the same type (e.g. lm-studio, lm-studio-2).
-    // Reserve 1 slot on the coordinator's own instance, then fill workers
-    // round-robin on the least-busy instances. If all local slots are full,
-    // fall back to a cloud model.
-    let workerProvider = providerName;
-    let workerModel = model || resolvedModel;
-    if (localModelQueue.isLocal(providerName)) {
+    if (preAssigned) {
+      logger.info(`[Coordinator] spawnFromTool: pre-assigned to ${workerProvider} — model "${workerModel}" (skipping instance selection)`);
+    }
+    if (!preAssigned && localModelQueue.isLocal(providerName)) {
       const providerType = getInstanceType(providerName) || providerName;
       let siblings = getInstancesByType(providerType);
 
@@ -423,9 +508,9 @@ export default class CoordinatorService {
       // from instances that don't have the model on disk.
       //
       // If the exact model isn't found, attempt quantization-level
-      // fallback: search for the same base model at a lower quant
-      // (e.g. Q8_0 → Q4_K_M). This enables heterogeneous GPU setups
-      // where different machines have different quant levels.
+      // fallback: search for the same base model at a different quant.
+      // This enables heterogeneous GPU setups where different machines
+      // have different quant levels.
       /** @type {Map<string, string>} Per-instance model override (when quant fallback is used) */
       const instanceModelOverrides = new Map();
 
@@ -492,61 +577,29 @@ export default class CoordinatorService {
       // ── Instance selection: respect concurrency per instance ──
       // concurrency is the max parallel inference requests an instance handles.
       // The orchestrator's inference is IDLE while workers run (it finished
-      // generating spawn_agent tool calls), but we reserve 1 slot on its
+      // generating team_create tool calls), but we reserve 1 slot on its
       // instance for the continuation turn after workers complete.
       //
-      // instanceReservations prevents race conditions when multiple spawn_agent
+      // instanceReservations prevents race conditions when multiple team_create
       // calls fire concurrently — the counter is incremented synchronously.
-      const getActiveOn = (id) => {
-        const reserved = instanceReservations.get(id) || 0;
-        const running = [...activeWorkers.values()].filter(
-          (w) => w.providerName === id && w.status === "running",
-        ).length;
-        return reserved + running;
-      };
+      const assigned = selectAndReserveInstance(siblings, providerName, instanceModelOverrides, workerModel);
 
-      let bestInstance = null;
-      let bestAvailable = -1;
-
-      // Phase 1: coordinator's own instance (no reservation needed —
-      // orchestrator inference is IDLE while workers run, it finished
-      // generating spawn_agent calls and only resumes after all tools complete)
-      const coordInst = siblings.find((s) => s.id === providerName);
-      if (coordInst) {
-        const coordActive = getActiveOn(coordInst.id);
-        const coordAvailable = coordInst.concurrency - coordActive;
-        if (coordAvailable > 0) {
-          bestInstance = coordInst;
-          bestAvailable = coordAvailable;
-        }
-      }
-
-      // Phase 2: secondary instances (full concurrency, no orchestrator reservation)
-      if (!bestInstance) {
-        for (const inst of siblings) {
-          if (inst.id === providerName) continue;
-          const active = getActiveOn(inst.id);
-          const available = inst.concurrency - active;
-          if (available > bestAvailable) {
-            bestAvailable = available;
-            bestInstance = inst;
-          }
-        }
-      }
-
-      if (bestInstance && bestAvailable > 0) {
-        workerProvider = bestInstance.id;
-        // Increment reservation synchronously so the next concurrent spawn sees it
-        instanceReservations.set(bestInstance.id, (instanceReservations.get(bestInstance.id) || 0) + 1);
+      if (assigned) {
+        workerProvider = assigned.provider;
+        workerModel = assigned.model;
         logger.info(
-          `[Coordinator] Assigned agent to ${bestInstance.id} (${bestAvailable} slots free, ${siblings.length} instance${siblings.length > 1 ? "s" : ""} pooled) — model "${workerModel}"`,
+          `[Coordinator] Assigned agent to ${assigned.provider} (${assigned.slotsAvailable} slots free, ${siblings.length} instance${siblings.length > 1 ? "s" : ""} pooled) — model "${assigned.model}"`,
         );
-      } else if (workerFallback) {
-        workerProvider = workerFallback.provider;
-        workerModel = workerFallback.model;
-        logger.info(`[Coordinator] All instances at capacity — agent will use ${workerFallback.model}`);
       } else {
-        logger.info(`[Coordinator] All instances at capacity and no subagent model configured — agent will queue on local provider`);
+        // Resolve the user-configured (or hardcoded) subagent fallback
+        const workerFallback = await getWorkerFallback();
+        if (workerFallback) {
+          workerProvider = workerFallback.provider;
+          workerModel = workerFallback.model;
+          logger.info(`[Coordinator] All instances at capacity — agent will use ${workerFallback.model}`);
+        } else {
+          logger.info(`[Coordinator] All instances at capacity and no subagent model configured — agent will queue on local provider`);
+        }
       }
     }
 
@@ -606,7 +659,7 @@ export default class CoordinatorService {
 
     activeWorkers.set(agentId, workerState);
 
-    logger.info(`[Coordinator] Spawned worker ${agentId}: "${description}" in ${worktreePath}${workerState.isolated ? " (isolated worktree)" : " (shared workspace)"}`);
+    logger.info(`[Coordinator] Spawned worker ${agentId}: "${description}" → ${workerProvider} (model="${workerModel}") in ${worktreePath}${workerState.isolated ? " (isolated worktree)" : " (shared workspace)"}`);
 
     // Emit early so the frontend can show live status immediately
     // (before the blocking loop starts and before a result is available)
@@ -619,7 +672,7 @@ export default class CoordinatorService {
       });
     }
     // Run the worker loop — blocks until the worker completes.
-    // When multiple spawn_agent calls appear in the same model response,
+    // When multiple team_create calls appear in the same model response,
     // the agentic loop's Promise.all executes them concurrently.
     try {
       await CoordinatorService._runWorkerLoop(workerState, prompt, coordinatorCtx);
@@ -876,6 +929,7 @@ export default class CoordinatorService {
    */
   static async createTeam(args, coordinatorCtx) {
     const { name, members } = args;
+    const { providerName, resolvedModel } = coordinatorCtx;
 
     if (!name || typeof name !== "string") {
       return { error: "'name' is required (string)" };
@@ -892,14 +946,121 @@ export default class CoordinatorService {
 
     logger.info(`[Coordinator] Creating team "${name}" with ${members.length} member(s)`);
 
-    // Spawn all members in parallel
+    // ── Pre-assign instances serially to prevent race conditions ──
+    // When team_create fires N spawnFromTool calls via Promise.allSettled,
+    // each one does async model-availability checks before reaching the
+    // synchronous reservation increment — so they all see 0 reservations
+    // and pick the same instance. Fix: resolve model availability once,
+    // then assign instances in a serial loop with synchronous increments.
+    const assignments = []; // { provider, model } per member
+
+    if (localModelQueue.isLocal(providerName)) {
+      const providerType = getInstanceType(providerName) || providerName;
+      let siblings = getInstancesByType(providerType);
+
+      logger.info(`[Coordinator] Team "${name}": providerName=${providerName}, providerType=${providerType}, siblings=${siblings.length} [${siblings.map((s) => `${s.id}(c=${s.concurrency})`).join(", ")}]`);
+
+      // Run model availability checks once for the entire team
+      const defaultModel = resolvedModel;
+      /** @type {Map<string, string>} */
+      const instanceModelOverrides = new Map();
+
+      if (siblings.length > 1) {
+        try {
+          const checks = await Promise.allSettled(
+            siblings.map(async (inst) => {
+              const provider = getProvider(inst.id);
+              if (!provider?.listModels) return { exact: false, fallback: null };
+              const result = await Promise.race([
+                provider.listModels(),
+                new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000)),
+              ]);
+              const models = result?.models || result?.data || [];
+              const exactMatch = models.some((m) => (m.key || m.id) === defaultModel);
+              if (exactMatch) return { exact: true, fallback: null };
+
+              const fallback = findBestQuantFallback(defaultModel, models);
+              return { exact: false, fallback };
+            }),
+          );
+
+          const exactAvailable = siblings.filter((_, i) =>
+            checks[i].status === "fulfilled" && checks[i].value.exact === true,
+          );
+          const fallbackAvailable = siblings.filter((_, i) =>
+            checks[i].status === "fulfilled" && checks[i].value.fallback != null,
+          );
+
+          if (exactAvailable.length > 0) {
+            if (exactAvailable.length < siblings.length) {
+              logger.info(
+                `[Coordinator] Model "${defaultModel}" available on ${exactAvailable.length}/${siblings.length} instances: ${exactAvailable.map((s) => s.id).join(", ")}`,
+              );
+            }
+            siblings = exactAvailable;
+          } else if (fallbackAvailable.length > 0) {
+            for (let i = 0; i < siblings.length; i++) {
+              if (checks[i].status === "fulfilled" && checks[i].value.fallback) {
+                instanceModelOverrides.set(siblings[i].id, checks[i].value.fallback);
+              }
+            }
+            const overrideSummary = fallbackAvailable.map((s) =>
+              `${s.id}→"${instanceModelOverrides.get(s.id)}"`,
+            ).join(", ");
+            logger.info(
+              `[Coordinator] Model "${defaultModel}" not found — using best available quant on ${fallbackAvailable.length} instance(s): ${overrideSummary}`,
+            );
+            siblings = fallbackAvailable;
+          } else {
+            logger.warn(
+              `[Coordinator] Model "${defaultModel}" not available on any ${providerType} instance`,
+            );
+            siblings = [];
+          }
+        } catch (err) {
+          logger.warn(`[Coordinator] Model availability check failed: ${err.message}`);
+        }
+      }
+
+      // Assign instances serially — each selectAndReserveInstance call
+      // increments the reservation counter synchronously, so the next
+      // member sees the updated count.
+      const workerFallback = await getWorkerFallback();
+      for (let i = 0; i < members.length; i++) {
+        // For local providers, always use the coordinator's model — the LLM
+        // can't know valid GGUF identifiers and will hallucinate names.
+        // member.model overrides only work for cloud providers with well-known names.
+        const memberModel = defaultModel;
+        const assigned = selectAndReserveInstance(siblings, providerName, instanceModelOverrides, memberModel);
+
+        if (assigned) {
+          assignments.push({ provider: assigned.provider, model: assigned.model });
+          logger.info(
+            `[Coordinator] Team "${name}" member ${i}: assigned to ${assigned.provider} (${assigned.slotsAvailable} slots free) — model "${assigned.model}"`,
+          );
+        } else if (workerFallback) {
+          assignments.push({ provider: workerFallback.provider, model: workerFallback.model });
+          logger.info(`[Coordinator] Team "${name}" member ${i}: all instances full — using ${workerFallback.model}`);
+        } else {
+          // No slots and no cloud fallback — will queue on local provider
+          assignments.push({ provider: null, model: null });
+          logger.info(`[Coordinator] Team "${name}" member ${i}: all instances full — will queue on local provider`);
+        }
+      }
+    }
+
+    // Spawn all members in parallel — with pre-assigned instances
     const results = await Promise.allSettled(
-      members.map((member) =>
+      members.map((member, i) =>
         CoordinatorService.spawnFromTool({
           description: `[${name}] ${member.description}`,
           prompt: member.prompt,
           files: member.files,
-          model: member.model,
+          // For local providers, don't pass the LLM's model — the pre-assignment
+          // already resolved the correct GGUF model identifier.
+          model: localModelQueue.isLocal(providerName) ? undefined : member.model,
+          assignedProvider: assignments[i]?.provider || undefined,
+          assignedModel: assignments[i]?.model || undefined,
           coordinatorCtx,
         }),
       ),
@@ -1019,9 +1180,19 @@ export default class CoordinatorService {
     let workerOutput = "";
     const workerToolCalls = [];
     let lastWorkerPhase = null;
+    let workerChunkCount = 0;
+    let workerFirstChunkTime = null;
+    let workerLastChunkTime = null;
+    const WORKER_PROGRESS_INTERVAL = 25; // emit progress every N chunks
     const workerEmit = (event) => {
       if (event.type === "chunk") {
         workerOutput += event.content || "";
+        workerChunkCount++;
+        // Use Date.now() (not performance.now()) since these timestamps
+        // cross process boundaries — the frontend needs wall-clock time
+        // to compute staleness and elapsed generation time correctly.
+        if (!workerFirstChunkTime) workerFirstChunkTime = Date.now();
+        workerLastChunkTime = Date.now();
         // Notify the frontend that the worker is actively generating text
         if (parentEmit && lastWorkerPhase !== "generating") {
           lastWorkerPhase = "generating";
@@ -1030,6 +1201,17 @@ export default class CoordinatorService {
             workerId: worker.agentId,
             message: "phase",
             phase: "generating",
+          });
+        }
+        // Emit periodic generation progress for live tok/s on frontend
+        if (parentEmit && workerChunkCount % WORKER_PROGRESS_INTERVAL === 0) {
+          parentEmit({
+            type: "worker_status",
+            workerId: worker.agentId,
+            message: "generation_progress",
+            outputTokens: workerChunkCount,
+            firstChunkTime: workerFirstChunkTime,
+            lastChunkTime: workerLastChunkTime,
           });
         }
       } else if (event.type === "thinking") {
@@ -1201,6 +1383,11 @@ export default class CoordinatorService {
         message: "complete",
         durationMs: worker.durationMs,
         toolCount: workerToolCalls.length,
+        // Include usage telemetry so the frontend can update token badges
+        // in real-time as each worker finishes, without waiting for the
+        // full backendSessionStats fetch at coordinator completion.
+        usage: worker.usage || null,
+        estimatedCost: worker.totalCost || null,
       });
     }
 

@@ -340,7 +340,7 @@ router.get("/agents", (_req, res) => {
       backgroundImage: persona?.backgroundImage || "",
       project: persona?.project,
       toolCount: resolvedTools.size,
-      canSpawnWorkers: COORDINATOR_ONLY_TOOLS.includes("spawn_agent"),
+      canSpawnWorkers: COORDINATOR_ONLY_TOOLS.includes("team_create"),
       usesDirectoryTree: persona?.usesDirectoryTree || false,
       usesCodingGuidelines: persona?.usesCodingGuidelines || false,
     };
