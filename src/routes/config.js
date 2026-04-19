@@ -15,6 +15,7 @@ import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
 import AgentPersonaRegistry from "../services/AgentPersonaRegistry.js";
 import rateLimitStore from "../services/RateLimitStore.js";
 import LocalProviderGateway from "../services/LocalProviderGateway.js";
+import { COORDINATOR_ONLY_TOOLS } from "../services/CoordinatorPrompt.js";
 import {
   OPENAI_API_KEY,
   ANTHROPIC_API_KEY,
@@ -49,6 +50,37 @@ const AVAILABLE_PROVIDERS = new Set([
   ...AVAILABLE_CLOUD,
   ...localInstances.map((inst) => inst.id),
 ]);
+
+/**
+ * Resolve enabledTools entries (may contain "label:X" / "domain:X" prefixes)
+ * into a flat Set of concrete tool names using client schemas.
+ */
+function resolveEnabledToolsToSet(enabledTools) {
+  if (!enabledTools || !Array.isArray(enabledTools)) return new Set();
+  const hasPrefixed = enabledTools.some(
+    (e) => e.startsWith("label:") || e.startsWith("domain:"),
+  );
+  if (!hasPrefixed) return new Set(enabledTools);
+
+  const clientSchemas = ToolOrchestratorService.getClientToolSchemas();
+  const resolved = new Set();
+  for (const entry of enabledTools) {
+    if (entry.startsWith("label:")) {
+      const label = entry.slice(6);
+      for (const t of clientSchemas) {
+        if (t.labels?.includes(label)) resolved.add(t.name);
+      }
+    } else if (entry.startsWith("domain:")) {
+      const domain = entry.slice(7);
+      for (const t of clientSchemas) {
+        if (t.domain === domain) resolved.add(t.name);
+      }
+    } else {
+      resolved.add(entry);
+    }
+  }
+  return resolved;
+}
 
 /** Keep only available provider keys in a models map. */
 function filterByAvailableProviders(modelsMap) {
@@ -297,6 +329,7 @@ export { localConfigRouter };
 router.get("/agents", (_req, res) => {
   const agents = AgentPersonaRegistry.list().map((a) => {
     const persona = AgentPersonaRegistry.get(a.id);
+    const resolvedTools = resolveEnabledToolsToSet(persona?.enabledTools);
     return {
       id: a.id,
       name: a.name,
@@ -306,8 +339,8 @@ router.get("/agents", (_req, res) => {
       color: persona?.color || "",
       backgroundImage: persona?.backgroundImage || "",
       project: persona?.project,
-      toolCount: persona?.enabledTools?.length || 0,
-      canSpawnWorkers: persona?.enabledTools?.includes("spawn_agent") || false,
+      toolCount: resolvedTools.size,
+      canSpawnWorkers: COORDINATOR_ONLY_TOOLS.includes("spawn_agent"),
       usesDirectoryTree: persona?.usesDirectoryTree || false,
       usesCodingGuidelines: persona?.usesCodingGuidelines || false,
     };
@@ -326,7 +359,7 @@ router.get("/tools", (_req, res) => {
   if (agentId) {
     const persona = AgentPersonaRegistry.get(agentId);
     if (persona?.enabledTools) {
-      const enabledSet = new Set(persona.enabledTools);
+      const enabledSet = resolveEnabledToolsToSet(persona.enabledTools);
       return res.json(schemas.filter((t) => enabledSet.has(t.name)));
     }
   }

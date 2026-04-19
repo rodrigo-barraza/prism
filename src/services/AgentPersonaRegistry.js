@@ -203,20 +203,17 @@ When calling generate_image, the prompt you write depends on whether reference i
 - If the image generation tool fails due to content safety, try rephrasing the prompt creatively — describe the same scene differently, avoiding potentially flagged terms while preserving the artistic intent.`;
 
 const LUPOS_ENABLED_TOOLS = [
+  // Labels — cross-cutting categories
+  "label:discord",
+  "label:media",
+  "label:web",
   // Generative
   "generate_image",
-  // Web & search
-  "web_search",
-  "fetch_url",
   // Trends
   "get_trends",
   "get_hot_trends",
   "get_top_trends",
-  // Media & entertainment
-  "search_media",
-  "get_trending_media",
   // Knowledge & reference
-  "get_youtube_video",
   "get_on_this_day",
   "get_wikipedia_summary",
   // Products
@@ -230,9 +227,6 @@ const LUPOS_ENABLED_TOOLS = [
   // Compute
   "precise_calculator",
   "execute_javascript",
-  // Discord data
-  "discord_message_search",
-  "discord_server_activity",
 ];
 
 // ── Persona Definitions ──────────────────────────────────────────
@@ -245,7 +239,7 @@ const LUPOS_ENABLED_TOOLS = [
  * @property {string} guidelines   - Response guidelines
  * @property {string} interactionRules - Interaction rules
  * @property {string} toolPolicy   - Tool use policy
- * @property {string[]} enabledTools - Default enabled tools
+ * @property {string[]} enabledTools - Enabled tools (supports "name", "label:X", "domain:X" formats)
  * @property {string} capabilities - Generative capabilities description
  * @property {boolean} usesDirectoryTree - Whether to inject project directory tree
  * @property {boolean} usesCodingGuidelines - Whether to inject coding guidelines
@@ -254,71 +248,16 @@ const LUPOS_ENABLED_TOOLS = [
 const PERSONAS = new Map();
 
 // ── CODING Agent enabled tools ───────────────────────────────────
+// Uses label-based references for broad coverage. The "coding" label
+// covers file ops, search, git, web, command execution, LSP, tasks,
+// memory, scheduling, notebooks, and tool discovery. The "data" label
+// adds compute/utility tools (unit conversion, CSV, diagrams, etc.).
+// Coordinator tools (spawn_agent, etc.) and Prism-local tools (think,
+// sleep, skills, etc.) bypass the enabledTools filter entirely.
 const CODING_ENABLED_TOOLS = [
-  // File operations
-  "read_file",
-  "write_file",
-  "str_replace_file",
-  "patch_file",
-  "multi_file_read",
-  "file_info",
-  "file_diff",
-  "move_file",
-  "delete_file",
-  // Search & discovery
-  "list_directory",
-  "grep_search",
-  "glob_files",
-  "project_summary",
-  // Web
-  "fetch_url",
-  "web_search",
-  // Command execution
-  "run_command",
-  // Git (unified)
-  "git",
-  // Browser automation
-  "browser_action",
-  // Code intelligence (LSP)
-  "lsp_action",
-  // Compute
-  "execute_javascript",
-  "execute_shell",
-  "convert_units",
-  "parse_datetime",
-  "transform_json",
-  "generate_csv",
-  "generate_qr_code",
-  "render_latex",
-  "generate_diagram",
-  "diff_text",
-  "generate_hash",
-  "regex_tester",
-  "encode_decode",
-  "convert_color",
-  // Task management
-  "task_create",
-  "task_list",
-  "task_get",
-  "task_update",
-  // Coordinator (multi-agent orchestration)
-  "spawn_agent",
-  "send_message",
-  "stop_agent",
-  // Memory (explicit upsert_memory tool)
-  "upsert_memory",
-  // Tool discovery (meta-tool)
-  "tool_search",
-  // Scheduling (cron + triggers)
-  "cron_create",
-  "remote_trigger",
-  // Notebook editing
-  "notebook_edit",
-  // Skill management (reusable workflow templates)
-  "skill_create",
-  "skill_execute",
-  "skill_list",
-  "skill_delete",
+  "label:coding",
+  "label:data",
+  "label:automation",
 ];
 
 // ── CODING Agent (Retina) ────────────────────────────────────────
@@ -566,11 +505,8 @@ const STICKERS_TOOL_POLICY = `# Tool Use Policy
 - If the image generation tool fails due to content safety, try rephrasing the prompt creatively.`;
 
 const STICKERS_ENABLED_TOOLS = [
-  // Generative
-  "generate_image",
-  // Web & search
-  "web_search",
-  "fetch_url",
+  "label:creative",
+  "label:web",
 ];
 
 // ── STICKERS Agent (Clankerbox Kiosk) ────────────────────────────
@@ -672,19 +608,11 @@ const LIGHTS_TOOL_POLICY = `# Tool Use Policy
 - Use smooth transitions (duration 1-5s) for natural-feeling changes. Instant (duration 0) feels jarring.`;
 
 const LIGHTS_ENABLED_TOOLS = [
-  // LIFX control
-  "lifx_list_lights",
-  "lifx_set_state",
-  "lifx_toggle_power",
-  "lifx_breathe_effect",
-  "lifx_pulse_effect",
-  "lifx_effects_off",
-  "lifx_list_scenes",
-  "lifx_activate_scene",
+  // Smart Home — all LIFX tools via label
+  "label:smart_home",
   // Contextual awareness
+  "label:web",
   "get_weather",
-  "web_search",
-  "fetch_url",
 ];
 
 // ── LIGHTS Agent (Smart Home) ────────────────────────────────
@@ -910,37 +838,10 @@ const DIGEST_TOOL_POLICY = `# Tool Use Policy
 - Always explain your tool results in plain language after presenting the data.`;
 
 const DIGEST_ENABLED_TOOLS = [
-  // Nutrition — USDA database
-  "search_usda_nutrition",
-  "rank_foods",
-  "rank_foods_by_nutrient",
-  "compare_food_nutrition",
-  "get_food_categories",
-  "get_nutrient_types",
-  "list_category_nutrients",
-  "search_foods_by_taxonomy",
-  "browse_food_taxonomy",
-  // Nutrition — requirements & planning
-  "get_nutritional_requirements",
-  "calculate_caloric_needs",
-  "analyze_nutrient_gaps",
-  "find_food_substitutes",
-  "build_meal_plan",
-  "calculate_hydration_needs",
-  // Exercise
-  "search_gym_exercises",
-  "get_gym_exercise_categories",
-  "get_gym_exercise_by_id",
-  "estimate_exercise_calories",
-  // Drugs & interactions
-  "search_drugs",
-  "get_drug_adverse_events",
-  "get_drug_recalls",
-  "list_drug_dosage_forms",
-  "check_drug_nutrient_interactions",
+  // Health — all nutrition, exercise, drug tools via label
+  "label:health",
   // Web & research
-  "web_search",
-  "fetch_url",
+  "label:web",
   // Compute
   "precise_calculator",
   "execute_javascript",
