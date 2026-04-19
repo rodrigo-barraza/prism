@@ -50,6 +50,46 @@ router.post("/approve", async (req, res) => {
 });
 
 // ============================================================
+// Answer endpoint — resolves pending ask_user_question pauses
+// ============================================================
+
+/**
+ * POST /agent/answer
+ *
+ * Body:
+ *   { agentSessionId: string, answer: string }
+ *
+ * Resolves the pending question promise in AgenticLoopService
+ * so the agentic loop can continue with the user's answer.
+ */
+router.post("/answer", async (req, res) => {
+  const { agentSessionId, answer } = req.body;
+
+  if (!agentSessionId) {
+    return res.status(400).json({ error: "Missing agentSessionId" });
+  }
+  if (answer === undefined || answer === null) {
+    return res.status(400).json({ error: "Missing answer" });
+  }
+
+  const resolved = AgenticLoopService.resolveUserQuestion(
+    agentSessionId,
+    String(answer),
+  );
+
+  if (!resolved) {
+    return res.status(404).json({
+      error: "No pending question for this agent session",
+      agentSessionId,
+    });
+  }
+
+  logger.info(`[agent/answer] Answered for session ${agentSessionId}: "${String(answer).slice(0, 80)}"`);
+
+  res.json({ ok: true });
+});
+
+// ============================================================
 // REST endpoint — SSE streaming or JSON fallback
 // ============================================================
 

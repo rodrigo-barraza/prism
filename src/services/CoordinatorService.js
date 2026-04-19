@@ -602,6 +602,35 @@ export default class CoordinatorService {
   }
 
   /**
+   * Read the output from a previously spawned worker agent.
+   * Returns the full result if completed, or partial status if still running.
+   * @param {string} agentId
+   * @returns {object}
+   */
+  static getTaskOutput(agentId) {
+    const worker = activeWorkers.get(agentId);
+    if (!worker) {
+      return { error: `Worker "${agentId}" not found. It may have been cleaned up.` };
+    }
+
+    if (worker.status === "running") {
+      return {
+        agent_id: agentId,
+        description: worker.description,
+        status: "running",
+        partialOutput: (worker.output || "").slice(-2000) || null,
+        toolUses: worker.toolCalls?.length || 0,
+        iterations: worker.iterations || 0,
+        durationMs: Date.now() - worker.startedAt,
+        message: "Worker is still running. Partial output shown (last 2000 chars).",
+      };
+    }
+
+    // Completed, failed, or stopped — return full result
+    return buildWorkerResult(worker);
+  }
+
+  /**
    * Abort all running workers spawned under a given parent agent session.
    * Called when the coordinator's SSE connection is severed (user presses stop)
    * or explicitly via the REST endpoint.

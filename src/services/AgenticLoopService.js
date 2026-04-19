@@ -1054,8 +1054,9 @@ export default class AgenticLoopService {
       );
       throw err; // Re-throw so handleAgent's catch handler can log + emit the error event
     } finally {
-      // Clean up any lingering approval promises
+      // Clean up any lingering approval/question promises
       pendingApprovals.delete(agentSessionId);
+      pendingQuestions.delete(agentSessionId);
     }
   }
 
