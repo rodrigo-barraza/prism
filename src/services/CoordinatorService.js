@@ -530,45 +530,36 @@ export default class CoordinatorService {
               const exactMatch = models.some((m) => (m.key || m.id) === workerModel);
               if (exactMatch) return { exact: true, fallback: null };
 
-              // Exact model not found — try best available quant fallback
+              // No exact key match — find the best variant with the same base name
               const fallback = findBestQuantFallback(workerModel, models);
               return { exact: false, fallback };
             }),
           );
 
-          const exactAvailable = siblings.filter((_, i) =>
-            checks[i].status === "fulfilled" && checks[i].value.exact === true,
-          );
-          const fallbackAvailable = siblings.filter((_, i) =>
-            checks[i].status === "fulfilled" && checks[i].value.fallback != null,
-          );
+          // Build per-instance model map — keep all usable instances
+          const usable = [];
+          for (let i = 0; i < siblings.length; i++) {
+            if (checks[i].status !== "fulfilled") continue;
+            const { exact, fallback } = checks[i].value;
 
-          if (exactAvailable.length > 0) {
-            // Some instances have the exact model — prefer those
-            if (exactAvailable.length < siblings.length) {
-              logger.info(
-                `[Coordinator] Model "${workerModel}" available on ${exactAvailable.length}/${siblings.length} instances: ${exactAvailable.map((s) => s.id).join(", ")}`,
-              );
+            if (exact) {
+              usable.push(siblings[i]);
+            } else if (fallback) {
+              instanceModelOverrides.set(siblings[i].id, fallback);
+              usable.push(siblings[i]);
             }
-            siblings = exactAvailable;
-          } else if (fallbackAvailable.length > 0) {
-            // No exact match, but alternative quant variants exist
-            for (let i = 0; i < siblings.length; i++) {
-              if (checks[i].status === "fulfilled" && checks[i].value.fallback) {
-                instanceModelOverrides.set(siblings[i].id, checks[i].value.fallback);
-              }
-            }
-            const overrideSummary = fallbackAvailable.map((s) =>
-              `${s.id}→"${instanceModelOverrides.get(s.id)}"`,
-            ).join(", ");
-            logger.info(
-              `[Coordinator] Model "${workerModel}" not found — using best available quant on ${fallbackAvailable.length} instance(s): ${overrideSummary}`,
-            );
-            siblings = fallbackAvailable;
+          }
+
+          const summary = usable.map((s) => {
+            const override = instanceModelOverrides.get(s.id);
+            return override ? `${s.id}→"${override}"` : `${s.id} (exact)`;
+          }).join(", ");
+          logger.info(`[Coordinator] Model resolution for "${workerModel}": ${usable.length}/${siblings.length} instances usable [${summary}]`);
+
+          if (usable.length > 0) {
+            siblings = usable;
           } else {
-            logger.warn(
-              `[Coordinator] Model "${workerModel}" not available on any ${providerType} instance (no exact match or quant variant found)`,
-            );
+            logger.warn(`[Coordinator] Model "${workerModel}" not available on any ${getInstanceType(providerName) || providerName} instance`);
             siblings = [];
           }
         } catch (err) {
