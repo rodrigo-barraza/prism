@@ -139,6 +139,99 @@ registerCleanup(async () => {
 });
 
 // ────────────────────────────────────────────────────────────
+// Quantization-Level Fallback for Multi-Device Workers
+// ────────────────────────────────────────────────────────────
+// When the orchestrator's exact model isn't available on a worker
+// instance (e.g. the Desktop has Q8_0 but the Laptop only has Q4_K_M),
+// find the best available variant of the same base model.
+//
+// Instead of maintaining a hardcoded quant ranking list, we use the
+// model's `size_bytes` from the LM Studio API — file size on disk is
+// the canonical proxy for quantization quality (more bits = larger file
+// = higher fidelity). This automatically handles any quant scheme
+// (standard Q/IQ, K-quants, future formats) without updates.
+
+/**
+ * Regex matching known GGUF quantization suffixes.
+ * Captures the quant tag (e.g. "Q8_0", "IQ4_XS", "F16", "BF16").
+ * Used to strip the suffix and extract the base model name.
+ */
+const GGUF_QUANT_SUFFIX_RE = /[-_]((?:I?Q[0-9]+(?:_[A-Z0-9]+)*|[BF](?:16|32)))(?:\.gguf)?$/i;
+
+/**
+ * Extract the base model name from a GGUF model key by stripping the
+ * quantization suffix. Handles both path-style and flat-style keys.
+ *
+ * Examples:
+ *   "lmstudio-community/qwen3-32b-GGUF/qwen3-32b-Q8_0.gguf"
+ *     → base: "lmstudio-community/qwen3-32b-GGUF/qwen3-32b"
+ *     → quant: "Q8_0"
+ *
+ *   "qwen3-32b@q4_k_m"
+ *     → base: "qwen3-32b"
+ *     → quant: "Q4_K_M"
+ *
+ * @param {string} modelKey
+ * @returns {{ base: string, quant: string|null }}
+ */
+function parseModelQuant(modelKey) {
+  // Handle @quant suffix (e.g. "qwen3-32b@q4_k_m")
+  if (modelKey.includes("@")) {
+    const [base, quant] = modelKey.split("@");
+    return { base, quant: quant.toUpperCase() };
+  }
+
+  // Handle GGUF path-style keys — strip .gguf, then match the quant suffix via regex
+  const stripped = modelKey.replace(/\.gguf$/i, "");
+  const match = stripped.match(GGUF_QUANT_SUFFIX_RE);
+  if (match) {
+    const quant = match[1].toUpperCase();
+    const base = stripped.slice(0, match.index);
+    return { base, quant };
+  }
+
+  return { base: modelKey, quant: null };
+}
+
+/**
+ * Find the best available variant of a model among the available models
+ * on a specific instance. Ranks by `size_bytes` (file size on disk) —
+ * the largest file is the highest-quality quantization.
+ *
+ * Unlike the old approach that only considered lower quants, this picks
+ * the best available variant period — so a Laptop with Q8_0 can serve
+ * workers even when the coordinator loaded Q4_K_M on the Desktop.
+ *
+ * @param {string} targetModel - The model key to find a fallback for
+ * @param {Array<{key?: string, id?: string, size_bytes?: number}>} availableModels - Models on the instance
+ * @returns {string|null} The best available model key (by file size), or null
+ */
+function findBestQuantFallback(targetModel, availableModels) {
+  const { base: targetBase, quant: targetQuant } = parseModelQuant(targetModel);
+  if (!targetQuant) return null; // No quantization detected — can't do quant fallback
+
+  // Find all available models that share the same base name but at a different quant
+  const candidates = [];
+  for (const m of availableModels) {
+    const mKey = m.key || m.id;
+    const { base, quant } = parseModelQuant(mKey);
+    if (!quant) continue;
+
+    // Compare bases case-insensitively
+    if (base.toLowerCase() !== targetBase.toLowerCase()) continue;
+    if (quant === targetQuant) continue; // Exact match — skip (already checked)
+
+    candidates.push({ key: mKey, quant, sizeBytes: m.size_bytes || 0 });
+  }
+
+  if (candidates.length === 0) return null;
+
+  // Sort by file size descending — largest file = highest quality quant
+  candidates.sort((a, b) => b.sizeBytes - a.sizeBytes);
+  return candidates[0].key;
+}
+
+// ────────────────────────────────────────────────────────────
 // Tools-API Helpers
 // ────────────────────────────────────────────────────────────
 
@@ -328,33 +421,66 @@ export default class CoordinatorService {
       // When multiple instances exist, verify the worker model is
       // downloaded on each before routing there. Prevents 404 errors
       // from instances that don't have the model on disk.
+      //
+      // If the exact model isn't found, attempt quantization-level
+      // fallback: search for the same base model at a lower quant
+      // (e.g. Q8_0 → Q4_K_M). This enables heterogeneous GPU setups
+      // where different machines have different quant levels.
+      /** @type {Map<string, string>} Per-instance model override (when quant fallback is used) */
+      const instanceModelOverrides = new Map();
+
       if (siblings.length > 1) {
         try {
           const checks = await Promise.allSettled(
             siblings.map(async (inst) => {
               const provider = getProvider(inst.id);
-              if (!provider?.listModels) return false;
+              if (!provider?.listModels) return { exact: false, fallback: null };
               const result = await Promise.race([
                 provider.listModels(),
                 new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000)),
               ]);
               const models = result?.models || result?.data || [];
-              return models.some((m) => (m.key || m.id) === workerModel);
+              const exactMatch = models.some((m) => (m.key || m.id) === workerModel);
+              if (exactMatch) return { exact: true, fallback: null };
+
+              // Exact model not found — try best available quant fallback
+              const fallback = findBestQuantFallback(workerModel, models);
+              return { exact: false, fallback };
             }),
           );
-          const available = siblings.filter((_, i) =>
-            checks[i].status === "fulfilled" && checks[i].value === true,
+
+          const exactAvailable = siblings.filter((_, i) =>
+            checks[i].status === "fulfilled" && checks[i].value.exact === true,
           );
-          if (available.length > 0) {
-            if (available.length < siblings.length) {
+          const fallbackAvailable = siblings.filter((_, i) =>
+            checks[i].status === "fulfilled" && checks[i].value.fallback != null,
+          );
+
+          if (exactAvailable.length > 0) {
+            // Some instances have the exact model — prefer those
+            if (exactAvailable.length < siblings.length) {
               logger.info(
-                `[Coordinator] Model "${workerModel}" available on ${available.length}/${siblings.length} instances: ${available.map((s) => s.id).join(", ")}`,
+                `[Coordinator] Model "${workerModel}" available on ${exactAvailable.length}/${siblings.length} instances: ${exactAvailable.map((s) => s.id).join(", ")}`,
               );
             }
-            siblings = available;
+            siblings = exactAvailable;
+          } else if (fallbackAvailable.length > 0) {
+            // No exact match, but alternative quant variants exist
+            for (let i = 0; i < siblings.length; i++) {
+              if (checks[i].status === "fulfilled" && checks[i].value.fallback) {
+                instanceModelOverrides.set(siblings[i].id, checks[i].value.fallback);
+              }
+            }
+            const overrideSummary = fallbackAvailable.map((s) =>
+              `${s.id}→"${instanceModelOverrides.get(s.id)}"`,
+            ).join(", ");
+            logger.info(
+              `[Coordinator] Model "${workerModel}" not found — using best available quant on ${fallbackAvailable.length} instance(s): ${overrideSummary}`,
+            );
+            siblings = fallbackAvailable;
           } else {
             logger.warn(
-              `[Coordinator] Model "${workerModel}" not available on any ${providerType} instance`,
+              `[Coordinator] Model "${workerModel}" not available on any ${providerType} instance (no exact match or quant variant found)`,
             );
             siblings = [];
           }
