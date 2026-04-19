@@ -44,6 +44,17 @@ const DEFAULT_TIER_MAP = {
   // Tier 1 — memory management (non-destructive upsert)
   upsert_memory: APPROVAL_TIERS.AUTO,
 
+  // Tier 1 — control flow (no side effects)
+  sleep: APPROVAL_TIERS.AUTO,
+  enter_plan_mode: APPROVAL_TIERS.AUTO,
+  exit_plan_mode: APPROVAL_TIERS.AUTO,
+  tool_search: APPROVAL_TIERS.AUTO,
+
+  // Tier 2 — scheduling / notebook (creates persistent state)
+  cron_create: APPROVAL_TIERS.WRITE,
+  remote_trigger: APPROVAL_TIERS.WRITE,
+  notebook_edit: APPROVAL_TIERS.WRITE,
+
   // Tier 2 — write operations
   write_file: APPROVAL_TIERS.WRITE,
   str_replace_file: APPROVAL_TIERS.WRITE,

@@ -23,6 +23,9 @@ import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
 /** Coordinator tools bypass the enabledTools filter (always available) */
 const COORDINATOR_TOOL_NAMES = new Set(COORDINATOR_ONLY_TOOLS);
 
+/** Prism-local tools bypass the enabledTools filter (always available to all agents) */
+const PRISM_LOCAL_TOOL_NAMES = new Set(["think", "sleep", "enter_plan_mode", "exit_plan_mode"]);
+
 const MAX_TOOL_ITERATIONS = 25;
 const MAX_CONSECUTIVE_TOOL_ERRORS = 3;
 
@@ -128,7 +131,7 @@ export default class AgenticLoopService {
     let finalTools = dynamicTools;
     if (resolvedEnabledTools && Array.isArray(resolvedEnabledTools)) {
       const enabledSet = new Set(resolvedEnabledTools);
-      finalTools = finalTools.filter((t) => enabledSet.has(t.name) || t.name.startsWith("mcp__") || COORDINATOR_TOOL_NAMES.has(t.name));
+      finalTools = finalTools.filter((t) => enabledSet.has(t.name) || t.name.startsWith("mcp__") || COORDINATOR_TOOL_NAMES.has(t.name) || PRISM_LOCAL_TOOL_NAMES.has(t.name));
     }
 
     // ── Native tool collision prevention ────────────────────────
@@ -169,6 +172,9 @@ export default class AgenticLoopService {
 
     let iterations = 0;
     let currentMessages = [...messages];
+    // Track dynamic plan mode toggling — when the model calls enter_plan_mode,
+    // tools are stripped until exit_plan_mode is called.
+    let planModeActive = false;
     // Track the initial message count so we can slice only NEW messages
     // for DB persistence. The client sends the full history; we must not
     // re-append already-persisted messages via $push.
@@ -333,7 +339,18 @@ export default class AgenticLoopService {
         const passUsage = { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 };
 
         const passOptions = { ...options, project, agent, username };
-        passOptions.tools = finalTools;
+
+        // Dynamic plan mode: strip tools when model has entered plan mode,
+        // but keep plan mode toggle tools so the model can exit.
+        if (planModeActive) {
+          // Only provide the exit_plan_mode tool + think so the model can
+          // reason and then exit plan mode when ready.
+          passOptions.tools = finalTools.filter(
+            (t) => t.name === "exit_plan_mode" || t.name === "think",
+          );
+        } else {
+          passOptions.tools = finalTools;
+        }
 
         // ── Context window enforcement ─────────────────────────
         // Enforce token budget before expanding messages. This prevents
@@ -777,6 +794,16 @@ export default class AgenticLoopService {
           );
           if (memoryToolsUsed) {
             emit({ type: "status", message: "memories_updated" });
+          }
+
+          // Toggle plan mode state when the model calls enter/exit_plan_mode
+          if (passPendingToolCalls.some((tc) => tc.name === "enter_plan_mode")) {
+            planModeActive = true;
+            emit({ type: "status", message: "plan_mode_entered" });
+          }
+          if (passPendingToolCalls.some((tc) => tc.name === "exit_plan_mode")) {
+            planModeActive = false;
+            emit({ type: "status", message: "plan_mode_exited" });
           }
 
           // Log iteration AFTER tool execution so tool-generated images

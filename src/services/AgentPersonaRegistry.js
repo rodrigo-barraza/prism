@@ -258,8 +258,6 @@ const CODING_ENABLED_TOOLS = [
   // File operations
   "read_file",
   "write_file",
-  "edit_file",
-  "search_file",
   "str_replace_file",
   "patch_file",
   "multi_file_read",
@@ -267,7 +265,6 @@ const CODING_ENABLED_TOOLS = [
   "file_diff",
   "move_file",
   "delete_file",
-  "create_directory",
   // Search & discovery
   "list_directory",
   "grep_search",
@@ -310,6 +307,13 @@ const CODING_ENABLED_TOOLS = [
   "stop_agent",
   // Memory (explicit upsert_memory tool)
   "upsert_memory",
+  // Tool discovery (meta-tool)
+  "tool_search",
+  // Scheduling (cron + triggers)
+  "cron_create",
+  "remote_trigger",
+  // Notebook editing
+  "notebook_edit",
 ];
 
 // ── CODING Agent (Retina) ────────────────────────────────────────

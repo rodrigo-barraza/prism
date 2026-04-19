@@ -261,6 +261,87 @@ async function fetchJsonPost(url, body, extraHeaders = {}, signal) {
 // ────────────────────────────────────────────────────────────
 
 // ────────────────────────────────────────────────────────────
+// Prism-Local Tool Schemas — available to ALL agents, not routed to tools-api
+// ────────────────────────────────────────────────────────────
+
+const PRISM_LOCAL_TOOL_SCHEMAS = [
+  {
+    name: "think",
+    description:
+      "Use this tool to reason through complex problems step-by-step before acting. " +
+      "Write your private reasoning, analysis, or plan here — this content is NOT shown to the user. " +
+      "Use this when you need to: break down a multi-step task, weigh trade-offs between approaches, " +
+      "analyze information from previous tool calls, plan your next actions, or reason about ambiguous requirements. " +
+      "This tool does not execute anything — it simply records your thinking for context continuity.",
+    parameters: {
+      type: "object",
+      properties: {
+        thought: {
+          type: "string",
+          description: "Your private reasoning, analysis, or plan. Be thorough — this is your scratchpad.",
+        },
+      },
+      required: ["thought"],
+    },
+  },
+  {
+    name: "sleep",
+    description:
+      "Pause execution for a specified duration. Use for polling workflows — e.g. wait for a build " +
+      "to finish, a server to restart, or a deployment to propagate before checking results. " +
+      "Maximum duration is 120 seconds. The pause can be cancelled if the user aborts the session.",
+    parameters: {
+      type: "object",
+      properties: {
+        duration_seconds: {
+          type: "number",
+          description: "How long to wait in seconds (1–120). Default: 5.",
+        },
+        reason: {
+          type: "string",
+          description: "Brief explanation of why you are waiting (shown to the user).",
+        },
+      },
+      required: ["duration_seconds"],
+    },
+  },
+  {
+    name: "enter_plan_mode",
+    description:
+      "Switch into planning mode. While in plan mode, you will not have access to any tools — " +
+      "you can only output text. Use this to produce a structured implementation plan before " +
+      "executing changes. Call exit_plan_mode when you are ready to resume tool execution. " +
+      "Use this when the task is complex and benefits from upfront planning.",
+    parameters: {
+      type: "object",
+      properties: {
+        reason: {
+          type: "string",
+          description: "Why you are entering plan mode (shown to the user).",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "exit_plan_mode",
+    description:
+      "Exit planning mode and resume normal tool execution. Call this after you have " +
+      "produced your plan and are ready to execute it with tools.",
+    parameters: {
+      type: "object",
+      properties: {
+        summary: {
+          type: "string",
+          description: "Brief summary of the plan you are about to execute.",
+        },
+      },
+      required: [],
+    },
+  },
+];
+
+// ────────────────────────────────────────────────────────────
 // Coordinator Tool Schemas — Prism-local, not routed to tools-api
 // ────────────────────────────────────────────────────────────
 
@@ -307,18 +388,30 @@ const COORDINATOR_TOOL_SCHEMAS = [
 export default class ToolOrchestratorService {
   /** AI-clean schemas (no endpoint/domain/dataSource/labels) — for LLM tool arrays */
   static getToolSchemas() {
-    return [...cachedAISchemas, ...COORDINATOR_TOOL_SCHEMAS];
+    return [...cachedAISchemas, ...PRISM_LOCAL_TOOL_SCHEMAS, ...COORDINATOR_TOOL_SCHEMAS];
   }
 
   /** Client-facing schemas (with domain/dataSource/labels, no endpoint) — for Retina UI */
   static getClientToolSchemas() {
+    // Prism-local tools — assign domain per tool name
+    const LOCAL_DOMAINS = {
+      think: "Reasoning",
+      sleep: "Agentic: Control Flow",
+      enter_plan_mode: "Agentic: Control Flow",
+      exit_plan_mode: "Agentic: Control Flow",
+    };
+    const localClient = PRISM_LOCAL_TOOL_SCHEMAS.map((t) => ({
+      ...t,
+      domain: LOCAL_DOMAINS[t.name] || "Reasoning",
+      labels: { category: LOCAL_DOMAINS[t.name] || "Reasoning" },
+    }));
     // Coordinator tools are Prism-local — add domain metadata for UI grouping
     const coordinatorClient = COORDINATOR_TOOL_SCHEMAS.map((t) => ({
       ...t,
       domain: "Coordinator",
       labels: { category: "Orchestration" },
     }));
-    return [...cachedClientSchemas, ...coordinatorClient];
+    return [...cachedClientSchemas, ...localClient, ...coordinatorClient];
   }
 
   /** Workspace root paths from tools-api (single source of truth) */
@@ -375,6 +468,47 @@ export default class ToolOrchestratorService {
   }
 
   static async executeTool(name, args = {}, ctx = {}) {
+    // ── Prism-local no-op tools (think/scratchpad) ──────────────
+    if (name === "think") {
+      return { acknowledged: true };
+    }
+
+    // ── Sleep tool — timed pause with abort support ─────────────
+    if (name === "sleep") {
+      const duration = Math.max(1, Math.min(120, args.duration_seconds || 5));
+      const durationMs = duration * 1000;
+      logger.info(`[ToolOrchestrator] sleep: ${duration}s${args.reason ? ` — ${args.reason}` : ""}`);
+
+      // Emit status so Retina can show a countdown
+      if (ctx._emit) {
+        ctx._emit({ type: "status", message: "sleeping", duration, reason: args.reason || null });
+      }
+
+      await new Promise((resolve) => {
+        const timer = setTimeout(resolve, durationMs);
+        // If session is aborted, resolve immediately
+        if (ctx.signal && !ctx.signal.aborted) {
+          const onAbort = () => { clearTimeout(timer); resolve(); };
+          ctx.signal.addEventListener("abort", onAbort, { once: true });
+        } else if (ctx.signal?.aborted) {
+          clearTimeout(timer);
+          resolve();
+        }
+      });
+
+      return { acknowledged: true, slept_seconds: duration, reason: args.reason || null };
+    }
+
+    // ── Plan mode toggle tools ──────────────────────────────────
+    if (name === "enter_plan_mode") {
+      logger.info(`[ToolOrchestrator] enter_plan_mode${args.reason ? `: ${args.reason}` : ""}`);
+      return { acknowledged: true, mode: "plan", reason: args.reason || null };
+    }
+    if (name === "exit_plan_mode") {
+      logger.info(`[ToolOrchestrator] exit_plan_mode${args.summary ? `: ${args.summary}` : ""}`);
+      return { acknowledged: true, mode: "execute", summary: args.summary || null };
+    }
+
     // Route coordinator tools to CoordinatorService (Prism-local)
     if (COORDINATOR_ONLY_TOOLS.includes(name)) {
       return ToolOrchestratorService.executeCoordinatorTool(name, args, ctx);
