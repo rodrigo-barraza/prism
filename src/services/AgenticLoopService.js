@@ -24,7 +24,7 @@ import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
 const COORDINATOR_TOOL_NAMES = new Set(COORDINATOR_ONLY_TOOLS);
 
 /** Prism-local tools bypass the enabledTools filter (always available to all agents) */
-const PRISM_LOCAL_TOOL_NAMES = new Set(["think", "sleep", "enter_plan_mode", "exit_plan_mode", "skill_create", "skill_execute", "skill_list", "skill_delete", "synthetic_output", "enter_worktree", "exit_worktree", "todo_write", "brief", "ask_user_question"]);
+const PRISM_LOCAL_TOOL_NAMES = new Set(["think", "sleep", "enter_plan_mode", "exit_plan_mode", "skill_create", "skill_execute", "skill_list", "skill_delete", "synthetic_output", "enter_worktree", "exit_worktree", "todo_write", "brief", "ask_user_question", "list_mcp_resources", "read_mcp_resource", "mcp_authenticate"]);
 
 const MAX_TOOL_ITERATIONS = 25;
 const MAX_CONSECUTIVE_TOOL_ERRORS = 3;

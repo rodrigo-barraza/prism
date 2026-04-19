@@ -151,6 +151,130 @@ Additionally, custom tools can be defined per-project in MongoDB (`custom_tools`
 
 > **Design principle**: Optimize for the _right_ tools at each capability tier, not raw count. Claude Code ships ~15 tools. Cursor ships fewer. Coverage of capability categories (filesystem, search, execution, network, browser) matters more than quantity.
 
+### Tool Parity Matrix: Prism vs Claude Code
+
+Complete tool-by-tool mapping between Claude Code (from [razakiau/claude-code `src/tools/`](https://github.com/razakiau/claude-code/tree/main/src/tools)) and the Prism/tools-api ecosystem. All Claude Code tools are accounted for — either matched, exceeded, or intentionally not adopted.
+
+#### Filesystem & Code Editing
+
+| Claude Code Tool | Prism Equivalent | Parity | Notes |
+|---|---|---|---|
+| `ReadTool` | `read_file` | ✅ Match | Single-file read with line range support |
+| `ReadTool` (multi) | `multi_file_read` | ✅ **Superior** | Batch read multiple files in one call — CC requires sequential reads |
+| `WriteTool` | `write_file` | ✅ Match | Full file creation/overwrite |
+| `EditTool` | `str_replace_file`, `patch_file` | ✅ **Superior** | Two edit strategies: search-and-replace (`str_replace_file`) and unified diff (`patch_file`). CC only has search-and-replace. `patch_file` applies multi-hunk diffs in a single tool call |
+| — | `file_info` | ✅ **Extra** | File metadata (size, mtime, permissions, MIME type) — no CC equivalent |
+| — | `file_diff` | ✅ **Extra** | Structured diff between two files or file versions — no CC equivalent |
+| — | `move_file` | ✅ **Extra** | Rename/move files — CC uses shell commands for this |
+| — | `delete_file` | ✅ **Extra** | Delete files with safety checks — CC uses shell commands |
+
+**Architectural note:** CC has a single `EditTool` that does search-and-replace. Our dual approach (`str_replace_file` for surgical edits, `patch_file` for multi-hunk diffs) is more expressive — `patch_file` can apply an entire unified diff in one tool call, which CC would need multiple sequential `EditTool` invocations for.
+
+#### Code Intelligence & Search
+
+| Claude Code Tool | Prism Equivalent | Parity | Notes |
+|---|---|---|---|
+| `GrepTool` | `grep_search` | ✅ Match | Regex/literal search across project files |
+| `GlobTool` | `glob_files` | ✅ Match | File discovery by glob pattern |
+| `ListTool` | `list_directory` | ✅ Match | Directory listing with recursive support |
+| — | `project_summary` | ✅ **Extra** | Full project tree snapshot — no CC equivalent |
+| — | `lsp_action` | ✅ **Superior** | LSP-based code intelligence (goToDefinition, findReferences, hover, documentSymbol, goToImplementation). CC relies on `GrepTool` for code navigation — no compiler-grade intelligence |
+
+**Architectural note:** CC's code navigation is purely grep-based. Our `AgenticLspService` wraps actual language servers (`typescript-language-server`, `pyright-langserver`) for compiler-grade precision — zero hallucination on symbol resolution, type information, and cross-file reference tracing.
+
+#### Command Execution
+
+| Claude Code Tool | Prism Equivalent | Parity | Notes |
+|---|---|---|---|
+| `BashTool` | `execute_shell`, `run_command` | ✅ **Superior** | Two execution modes: `execute_shell` (raw shell via tools-api sandbox) and `run_command` (agentic command execution with working directory control). Both stream via SSE. CC's `BashTool` is a single shell executor |
+| `REPLTool` (JS) | `execute_javascript` | ✅ Match | Both spawn a fresh subprocess per call — neither is a true REPL (no state persistence between calls). CC's naming is misleading |
+| `REPLTool` (Python) | `execute_python` | ✅ **Superior** | Our Python executor has better sandboxing: memory limit (256MB via `resource.setrlimit`), network disabled (socket creation blocked), dangerous module blocking (`subprocess`, `shutil`, `ctypes`, `multiprocessing`, `signal`). Also supports SSE streaming of stdout/stderr chunks |
+
+**Architectural note:** Despite the name "REPL Tool", Claude Code's `REPLTool` is NOT a true REPL — it spawns a fresh `child_process.execFile()` per call with no state persistence between invocations. It's functionally identical to our `execute_python` / `execute_javascript`. We are actually ahead in sandbox hardening (CC has no memory limits, no module blocking, no network isolation) and real-time output streaming (SSE for stdout/stderr chunks).
+
+#### Web & Network
+
+| Claude Code Tool | Prism Equivalent | Parity | Notes |
+|---|---|---|---|
+| `WebFetchTool` | `fetch_url` | ✅ Match | Fetch URL content with HTML-to-markdown conversion |
+| `WebSearchTool` | `web_search` | ✅ Match | Web search with provider abstraction |
+| — | `browser_action` | ✅ **Superior** | Playwright-based headless browser automation (navigate, click, type, screenshot, evaluate JS, DOM inspection). CC has `ComputerTool` but it's screen-pixel-based — our DOM-level interaction is more reliable and faster |
+
+#### Git
+
+| Claude Code Tool | Prism Equivalent | Parity | Notes |
+|---|---|---|---|
+| `GitDiffTool` | `git_diff` | ✅ Match | View diffs (staged, unstaged, between commits) |
+| — | `git_status` | ✅ **Extra** | Structured git status — CC uses `BashTool` |
+| — | `git_log` | ✅ **Extra** | Structured git log — CC uses `BashTool` |
+| — | `enter_worktree`, `exit_worktree` | ✅ **Extra** | Self-isolate into a git worktree for safe experimentation. CC workers use worktrees but the main agent cannot self-isolate |
+
+**Architectural note:** CC exposes only `GitDiffTool` as a dedicated tool — all other git operations go through `BashTool`. Our dedicated git tools (`git_status`, `git_diff`, `git_log`) return structured JSON that renders via specialized `ToolResultRenderers` in Retina, providing much richer UI than raw terminal output.
+
+#### MCP (Model Context Protocol)
+
+| Claude Code Tool | Prism Equivalent | Parity | Notes |
+|---|---|---|---|
+| `MCPTool` | MCP tools auto-injected as `mcp__{server}__{tool}` | ✅ Match | Different mechanism, same result. CC has an explicit `MCPTool` wrapper; we inject MCP tools directly into the agent's tool array via namespacing. The agent calls them by name without knowing they're MCP-backed |
+| `ListMcpResourcesTool` | `list_mcp_resources` | ✅ Match | Lists MCP Resources (read-only data sources). Supports querying all connected servers or a specific one. Gracefully handles servers that don't implement the Resources API (JSON-RPC -32601) |
+| `ReadMcpResourceTool` | `read_mcp_resource` | ✅ Match | Reads MCP resource content by URI. Strips blob data to prevent context overflow, flattens single-text responses for cleaner LLM consumption |
+| `McpAuthTool` | `mcp_authenticate` | ✅ Match | Authenticates with MCP servers. Supports bearer tokens, API keys, and environment variable injection. Reconnects the server with updated credentials. CC's approach is similar (credential injection + reconnect) |
+
+**Architectural note:** Our MCP tool calling differs architecturally from CC's but is functionally equivalent. CC has a single `MCPTool` that the agent explicitly invokes with `{ server_name, tool_name, args }`. We inject MCP tools directly into the tool array as `mcp__{server}__{tool}`, so the LLM calls them like any other tool — transparent routing via `MCPClientService.isMCPTool()` + `parseMCPToolName()`. This is arguably cleaner because the LLM doesn't need to know about MCP as a concept — it just sees tools.
+
+#### Orchestration & Multi-Agent
+
+| Claude Code Tool | Prism Equivalent | Parity | Notes |
+|---|---|---|---|
+| `AgentTool` | `spawn_agent` | ✅ Match | Spawn autonomous worker agents with task description and optional file paths |
+| `SendMessageTool` | `send_message` | ✅ Match | Continue a running worker with additional instructions |
+| — | `stop_agent` | ✅ **Extra** | Gracefully stop a running worker — CC lacks an explicit stop tool (workers run to completion) |
+| `TaskOutputTool` | `task_output` | ✅ Match | Read worker agent output. Returns full result if completed, or partial output (last 2000 chars) if still running. Coordinator-only tool |
+| `TeamCreateTool` | — | ❌ Not adopted | See Appendix B — our coordinator handles worker management without a persistent team abstraction |
+
+**Architectural note:** Our coordinator has a key advantage over CC: **git worktree isolation**. CC runs all workers against the same filesystem, creating potential file conflicts. Our workers each get an isolated git worktree branch, preventing interference. We also distribute workers across multiple local provider instances (least-busy routing), which CC doesn't support.
+
+#### Meta, Memory & Control Flow
+
+| Claude Code Tool | Prism Equivalent | Parity | Notes |
+|---|---|---|---|
+| `ThinkTool` | `think` | ✅ Match | Extended reasoning scratchpad — contents not shown to user, used for complex multi-step planning |
+| `TodoWriteTool` | `todo_write` | ✅ Match | Persistent session-based checklist with `pending`/`in_progress`/`completed` status. Emits `todo_update` SSE event to Retina for live UI rendering |
+| `BriefTool` | `brief` | ✅ Match | Context summarization — private working memory for long sessions. Agent writes compressed summaries with key files, open questions, and progress. Emits `brief_update` SSE event |
+| `AskUserQuestionTool` | `ask_user_question` | ✅ Match | Pauses the agentic loop to present a question to the user. Supports freeform text or multiple-choice via `choices` array. Uses the same Promise-based pause/resume pattern as tool approvals. 5-minute timeout with graceful fallback |
+| `MemoryTool` (read/write) | `upsert_memory`, `search_memories`, `delete_memory` | ✅ **Superior** | CC has a single `MemoryTool` with read/write. We have 3 dedicated memory tools + a 5-store cognitive memory architecture (episodic, semantic, procedural, prospective, working). See Section 7.7 for deep comparison |
+| — | `sleep` | ✅ **Extra** | Pause execution for a specified duration — useful for rate limiting and polling |
+| — | `enter_plan_mode`, `exit_plan_mode` | ✅ **Extra** | Toggle planning mode from within the agentic loop — no CC equivalent (CC's planning is UI-triggered only) |
+| — | `synthetic_output` | ✅ **Extra** | Emit structured JSON output for programmatic consumption — no CC equivalent |
+| — | `skill_create`, `skill_execute`, `skill_list`, `skill_delete` | ✅ **Extra** | Full CRUD for project-scoped skills — no CC equivalent (CC skills are file-based, read-only) |
+
+**Architectural note for `ask_user_question`:** This implements a **pause/resume loop** using the `pendingQuestions` registry in `AgenticLoopService` (same pattern as `pendingApprovals`). The agent calls the tool → handler emits `user_question` SSE event → Retina renders UI → user submits → `POST /agent/answer` resolves the pending promise → loop continues. This is architecturally identical to CC's implementation but adapted for our HTTP request lifecycle (CC's REPL loop is always alive).
+
+#### Task Management (Persistent Working Memory)
+
+| Claude Code Tool | Prism Equivalent | Parity | Notes |
+|---|---|---|---|
+| `TodoWriteTool` | `todo_write` (Prism-local) | ✅ Match | Session-scoped checklist |
+| — | `task_create`, `task_get`, `task_list`, `task_update` | ✅ **Superior** | Full persistent task system in MongoDB with status tracking, metadata, project-scoped isolation, filterable queries. CC's `TodoWriteTool` is session-only; our `AgenticTaskService` persists across sessions |
+
+**Architectural note:** We have TWO task systems: (1) `todo_write` (Prism-local, session-scoped, matches CC's `TodoWriteTool`) for lightweight checklists, and (2) `AgenticTaskService` (MongoDB-backed, persistent, 4 CRUD tools) for complex multi-session workflows. CC only has option 1.
+
+#### Summary: Parity Status
+
+| Category | CC Tools | Prism Tools | Status |
+|---|---|---|---|
+| Filesystem & Editing | 3 (Read, Write, Edit) | 9 (read_file, write_file, str_replace_file, patch_file, multi_file_read, file_info, file_diff, move_file, delete_file) | ✅ **Superior** |
+| Code Intelligence | 3 (Grep, Glob, List) | 5 (grep_search, glob_files, list_directory, project_summary, lsp_action) | ✅ **Superior** |
+| Execution | 2 (Bash, REPL) | 4 (execute_shell, run_command, execute_python, execute_javascript) | ✅ **Superior** |
+| Web & Network | 2 (WebFetch, WebSearch) | 3 (fetch_url, web_search, browser_action) | ✅ **Superior** |
+| Git | 1 (GitDiff) | 5 (git_status, git_diff, git_log, enter_worktree, exit_worktree) | ✅ **Superior** |
+| MCP | 4 (MCPTool, ListResources, ReadResource, Auth) | 3 + transparent injection (list_mcp_resources, read_mcp_resource, mcp_authenticate, + auto-injected tools) | ✅ **Match** |
+| Orchestration | 3 (Agent, SendMessage, TaskOutput) | 4 (spawn_agent, send_message, stop_agent, task_output) | ✅ **Superior** |
+| Meta & Control | 4 (Think, TodoWrite, Brief, AskUser) | 10 (think, todo_write, brief, ask_user_question, sleep, enter_plan_mode, exit_plan_mode, synthetic_output, skill_*) | ✅ **Superior** |
+| Memory | 1 (MemoryTool) | 3 (upsert_memory, search_memories, delete_memory) | ✅ **Superior** |
+
+**Total: 23 CC tools → 46+ Prism tools.** Full coverage with significant depth advantages in filesystem operations, code intelligence (LSP), execution sandboxing, git integration, and memory architecture.
+
 ---
 
 ## 4. Advanced Architectural Paradigms

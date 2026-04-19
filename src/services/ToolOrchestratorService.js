@@ -733,6 +733,84 @@ const PRISM_LOCAL_TOOL_SCHEMAS = [
       required: ["question"],
     },
   },
+  {
+    name: "list_mcp_resources",
+    description:
+      "List available resources from a connected MCP server. MCP Resources are " +
+      "read-only data sources (files, database rows, API responses, etc.) " +
+      "exposed by the server. Use this to discover what data is available before " +
+      "reading it with read_mcp_resource. If no server_name is specified, lists " +
+      "resources from all connected servers.",
+    parameters: {
+      type: "object",
+      properties: {
+        server_name: {
+          type: "string",
+          description:
+            "The MCP server name to query. If omitted, queries all connected servers.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "read_mcp_resource",
+    description:
+      "Read a specific resource from a connected MCP server by its URI. " +
+      "Use list_mcp_resources first to discover available URIs. " +
+      "Returns the resource content (typically text, JSON, or structured data).",
+    parameters: {
+      type: "object",
+      properties: {
+        server_name: {
+          type: "string",
+          description: "The MCP server name that hosts the resource.",
+        },
+        uri: {
+          type: "string",
+          description:
+            "The resource URI to read (obtained from list_mcp_resources).",
+        },
+      },
+      required: ["server_name", "uri"],
+    },
+  },
+  {
+    name: "mcp_authenticate",
+    description:
+      "Authenticate with a connected MCP server by providing credentials. " +
+      "The server is reconnected with the new auth configuration. " +
+      "Supports bearer tokens, API keys, and environment variable injection. " +
+      "Use this when an MCP server requires authentication to access its tools or resources.",
+    parameters: {
+      type: "object",
+      properties: {
+        server_name: {
+          type: "string",
+          description: "The MCP server name to authenticate with.",
+        },
+        token: {
+          type: "string",
+          description: "Bearer token for HTTP MCP servers.",
+        },
+        api_key: {
+          type: "string",
+          description: "API key value.",
+        },
+        api_key_header: {
+          type: "string",
+          description:
+            "Header name for the API key (default: 'X-API-Key'). Only used with api_key.",
+        },
+        env: {
+          type: "object",
+          description:
+            "Additional environment variables to inject (for stdio-based MCP servers).",
+        },
+      },
+      required: ["server_name"],
+    },
+  },
 ];
 
 // ────────────────────────────────────────────────────────────
@@ -868,6 +946,9 @@ export default class ToolOrchestratorService {
       todo_write: "Agentic: Task Management",
       brief: "Reasoning",
       ask_user_question: "Agentic: Control Flow",
+      list_mcp_resources: "Agentic: Meta",
+      read_mcp_resource: "Agentic: Meta",
+      mcp_authenticate: "Agentic: Meta",
     };
 
     // Labels — multi-tag arrays matching tools-api TOOL_LABELS format
@@ -886,6 +967,9 @@ export default class ToolOrchestratorService {
       todo_write: ["coding"],
       brief: ["coding"],
       ask_user_question: ["coding"],
+      list_mcp_resources: ["coding", "meta"],
+      read_mcp_resource: ["coding", "meta"],
+      mcp_authenticate: ["coding", "meta"],
     };
 
     const localClient = PRISM_LOCAL_TOOL_SCHEMAS.map((t) => ({
@@ -1161,6 +1245,66 @@ export default class ToolOrchestratorService {
 
       logger.info(`[ToolOrchestrator] ask_user_question answered: "${String(answer.answer).slice(0, 80)}"`);
       return { answer: answer.answer, question };
+    }
+
+    // ── MCP Resources — list and read ───────────────────────────
+    if (name === "list_mcp_resources") {
+      const { server_name } = args;
+
+      if (server_name) {
+        // Query a specific server
+        const result = await MCPClientService.listResources(server_name);
+        logger.info(`[ToolOrchestrator] list_mcp_resources: ${server_name} → ${result.count ?? 0} resources`);
+        return result;
+      }
+
+      // Query all connected servers
+      const servers = MCPClientService.getConnectedServers();
+      if (servers.length === 0) {
+        return { resources: [], count: 0, message: "No MCP servers connected. Connect a server first via the settings panel." };
+      }
+
+      const allResources = [];
+      for (const server of servers) {
+        const result = await MCPClientService.listResources(server.name);
+        if (result.resources) {
+          for (const r of result.resources) {
+            allResources.push({ ...r, server: server.name });
+          }
+        }
+      }
+
+      logger.info(`[ToolOrchestrator] list_mcp_resources: ${servers.length} server(s) → ${allResources.length} total resources`);
+      return { resources: allResources, count: allResources.length, servers: servers.map((s) => s.name) };
+    }
+
+    if (name === "read_mcp_resource") {
+      const { server_name, uri } = args;
+      if (!server_name || !uri) {
+        return { error: "'server_name' and 'uri' are required" };
+      }
+
+      logger.info(`[ToolOrchestrator] read_mcp_resource: ${server_name} → ${uri}`);
+      return MCPClientService.readResource(server_name, uri);
+    }
+
+    if (name === "mcp_authenticate") {
+      const { server_name, token, api_key, api_key_header, env: authEnv } = args;
+      if (!server_name) {
+        return { error: "'server_name' is required" };
+      }
+
+      if (!token && !api_key && !authEnv) {
+        return { error: "At least one of 'token', 'api_key', or 'env' must be provided" };
+      }
+
+      logger.info(`[ToolOrchestrator] mcp_authenticate: ${server_name}`);
+      return MCPClientService.authenticate(server_name, {
+        token,
+        apiKey: api_key,
+        apiKeyHeader: api_key_header,
+        env: authEnv,
+      });
     }
 
     // ── Worktree isolation — self-isolate main agent ────────────

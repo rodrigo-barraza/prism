@@ -318,6 +318,152 @@ const MCPClientService = {
   },
 
   /**
+   * List available resources from a connected MCP server.
+   * MCP Resources are read-only data sources (files, DB rows, API data)
+   * that can be fetched by URI.
+   *
+   * @param {string} serverName - Server slug
+   * @returns {Promise<{ resources: Array<{ uri: string, name: string, description?: string, mimeType?: string }> }>}
+   */
+  async listResources(serverName) {
+    const conn = connections.get(serverName);
+    if (!conn) {
+      return { error: `MCP server "${serverName}" is not connected` };
+    }
+
+    try {
+      const result = await conn.client.listResources();
+      const resources = (result.resources || []).map((r) => ({
+        uri: r.uri,
+        name: r.name || r.uri,
+        description: r.description || null,
+        mimeType: r.mimeType || null,
+      }));
+      return { resources, serverName, count: resources.length };
+    } catch (err) {
+      // Some servers don't implement resources — that's fine
+      if (err.message?.includes("not supported") || err.message?.includes("not implemented") || err.code === -32601) {
+        return { resources: [], serverName, count: 0, note: "Server does not support resources" };
+      }
+      return { error: `Failed to list resources from "${serverName}": ${err.message}` };
+    }
+  },
+
+  /**
+   * Read a specific resource from a connected MCP server by URI.
+   *
+   * @param {string} serverName - Server slug
+   * @param {string} uri - Resource URI (from listResources)
+   * @returns {Promise<object>} Resource content
+   */
+  async readResource(serverName, uri) {
+    const conn = connections.get(serverName);
+    if (!conn) {
+      return { error: `MCP server "${serverName}" is not connected` };
+    }
+
+    try {
+      const result = await conn.client.readResource({ uri });
+      // MCP returns { contents: [{ uri, mimeType?, text?, blob? }] }
+      const contents = (result.contents || []).map((c) => ({
+        uri: c.uri,
+        mimeType: c.mimeType || null,
+        text: c.text || null,
+        // Don't return raw blob data — too large for LLM context
+        hasBlob: !!c.blob,
+      }));
+
+      if (contents.length === 1 && contents[0].text) {
+        // Single text resource — return directly for cleaner LLM consumption
+        return {
+          uri: contents[0].uri,
+          mimeType: contents[0].mimeType,
+          content: contents[0].text,
+          serverName,
+        };
+      }
+
+      return { contents, serverName };
+    } catch (err) {
+      return { error: `Failed to read resource "${uri}" from "${serverName}": ${err.message}` };
+    }
+  },
+
+  /**
+   * Authenticate with an MCP server by updating its connection headers/env.
+   * Reconnects the server with the new credentials.
+   *
+   * Supports:
+   * - Bearer token auth (most common for HTTP MCP servers)
+   * - API key header auth
+   * - Environment variable injection (for stdio servers)
+   *
+   * @param {string} serverName - Server slug
+   * @param {object} auth - Authentication details
+   * @param {string} [auth.token] - Bearer token
+   * @param {string} [auth.apiKey] - API key value
+   * @param {string} [auth.apiKeyHeader] - Header name for API key (default: "X-API-Key")
+   * @param {object} [auth.env] - Additional env vars to inject (for stdio servers)
+   * @param {object} [auth.headers] - Additional headers to inject (for HTTP servers)
+   * @returns {Promise<object>} Reconnection result
+   */
+  async authenticate(serverName, auth = {}) {
+    const conn = connections.get(serverName);
+    if (!conn) {
+      return { error: `MCP server "${serverName}" is not connected` };
+    }
+
+    const updatedConfig = { ...conn.config };
+
+    // Apply auth to config based on transport type
+    if (updatedConfig.transport === "streamable-http") {
+      const headers = { ...(updatedConfig.headers || {}) };
+
+      if (auth.token) {
+        headers["Authorization"] = `Bearer ${auth.token}`;
+      }
+      if (auth.apiKey) {
+        const headerName = auth.apiKeyHeader || "X-API-Key";
+        headers[headerName] = auth.apiKey;
+      }
+      if (auth.headers) {
+        Object.assign(headers, auth.headers);
+      }
+
+      updatedConfig.headers = headers;
+    } else if (updatedConfig.transport === "stdio") {
+      // For stdio, inject auth as env vars
+      const env = { ...(updatedConfig.env || {}) };
+
+      if (auth.token) {
+        env.MCP_AUTH_TOKEN = auth.token;
+      }
+      if (auth.apiKey) {
+        env.MCP_API_KEY = auth.apiKey;
+      }
+      if (auth.env) {
+        Object.assign(env, auth.env);
+      }
+
+      updatedConfig.env = env;
+    }
+
+    // Reconnect with updated config
+    try {
+      const result = await this.connect(updatedConfig);
+      logger.info(`[MCP] Authenticated and reconnected to "${serverName}" — ${result.tools.length} tools`);
+      return {
+        acknowledged: true,
+        serverName,
+        toolCount: result.tools.length,
+        message: `Successfully authenticated with "${serverName}". ${result.tools.length} tools available.`,
+      };
+    } catch (err) {
+      return { error: `Authentication failed for "${serverName}": ${err.message}` };
+    }
+  },
+
+  /**
    * Auto-connect all enabled MCP servers from the database.
    * @param {object} db - MongoDB database reference
    * @param {string} project - Project identifier
