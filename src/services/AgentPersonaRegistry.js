@@ -1,4 +1,5 @@
 import logger from "../utils/logger.js";
+import { L } from "./ToolTaxonomyConstants.js";
 
 // ════════════════════════════════════════════════════════════════
 // Agent Persona Registry
@@ -204,9 +205,9 @@ When calling generate_image, the prompt you write depends on whether reference i
 
 const LUPOS_ENABLED_TOOLS = [
   // Labels — cross-cutting categories
-  "label:discord",
-  "label:media",
-  "label:web",
+  L.DISCORD,
+  L.MEDIA,
+  L.WEB,
   // Generative
   "generate_image",
   // Trends
@@ -255,9 +256,9 @@ const PERSONAS = new Map();
 // Coordinator tools (spawn_agent, etc.) and Prism-local tools (think,
 // sleep, skills, etc.) bypass the enabledTools filter entirely.
 const CODING_ENABLED_TOOLS = [
-  "label:coding",
-  "label:data",
-  "label:automation",
+  L.CODING,
+  L.DATA,
+  L.AUTOMATION,
 ];
 
 // ── CODING Agent (Retina) ────────────────────────────────────────
@@ -505,8 +506,8 @@ const STICKERS_TOOL_POLICY = `# Tool Use Policy
 - If the image generation tool fails due to content safety, try rephrasing the prompt creatively.`;
 
 const STICKERS_ENABLED_TOOLS = [
-  "label:creative",
-  "label:web",
+  L.CREATIVE,
+  L.WEB,
 ];
 
 // ── STICKERS Agent (Clankerbox Kiosk) ────────────────────────────
@@ -609,9 +610,9 @@ const LIGHTS_TOOL_POLICY = `# Tool Use Policy
 
 const LIGHTS_ENABLED_TOOLS = [
   // Smart Home — all LIFX tools via label
-  "label:smart_home",
+  L.SMART_HOME,
   // Contextual awareness
-  "label:web",
+  L.WEB,
   "get_weather",
 ];
 
@@ -839,9 +840,9 @@ const DIGEST_TOOL_POLICY = `# Tool Use Policy
 
 const DIGEST_ENABLED_TOOLS = [
   // Health — all nutrition, exercise, drug tools via label
-  "label:health",
+  L.HEALTH,
   // Web & research
-  "label:web",
+  L.WEB,
   // Compute
   "precise_calculator",
   "execute_javascript",
