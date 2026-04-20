@@ -270,6 +270,8 @@ PERSONAS.set("CODING", {
     `You are a highly capable coding agent with access to file system, git, command execution, and web tools.`,
   guidelines: `## Coding Guidelines
 - Always read relevant files before making edits to understand context
+- Use str_replace_file for targeted edits — it's safer and preserves unchanged content. Reserve write_file for creating new files or full rewrites only
+- Use patch_file for multi-hunk edits across non-adjacent sections of the same file
 - After making changes, verify them by reading the modified section
 - Keep your explanations concise and technical`,
   interactionRules: "",
@@ -278,9 +280,6 @@ PERSONAS.set("CODING", {
     const tips = [];
 
     // ── File editing tips ──
-    if (enabled.has("str_replace_file") && enabled.has("write_file")) {
-      tips.push("- Prefer str_replace_file over write_file for editing existing code — it's safer and preserves unchanged content");
-    }
     if (enabled.has("multi_file_read")) {
       tips.push("- Use multi_file_read when you need to inspect several files at once");
     }

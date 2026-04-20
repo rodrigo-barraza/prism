@@ -9,6 +9,8 @@
 // ────────────────────────────────────────────────────────────
 
 // ── Label Names ─────────────────────────────────────────────
+// Semantic cross-cutting categories. A tool can carry
+// multiple labels (e.g. ["coding", "web"]).
 
 export const LABELS = {
   CODING: "coding",
@@ -35,10 +37,60 @@ export const LABELS = {
   ORCHESTRATION: "orchestration",
 };
 
+// ── Domain Names ────────────────────────────────────────────
+// Functional grouping — each tool belongs to exactly one domain.
+
+export const DOMAINS = {
+  WEATHER: "Weather & Environment",
+  EVENTS: "Events",
+  SPORTS: "Sports",
+  MARKETS: "Markets & Commodities",
+  TRENDS: "Trends",
+  PRODUCTS: "Products",
+  FINANCE: "Finance",
+  KNOWLEDGE: "Knowledge",
+  MOVIES: "Movies & TV",
+  HEALTH: "Health",
+  TRANSIT: "Transit",
+  UTILITIES: "Utilities",
+  COMPUTE: "Compute",
+  MARITIME: "Maritime",
+  ENERGY: "Energy",
+  COMMUNICATION: "Communication",
+  CREATIVE: "Creative",
+  DISCORD: "Discord",
+  SMART_HOME: "Smart Home",
+  // Agentic sub-domains
+  AGENTIC_FILES: "Agentic: File Operations",
+  AGENTIC_SEARCH: "Agentic: Search & Discovery",
+  AGENTIC_WEB: "Agentic: Web",
+  AGENTIC_COMMAND: "Agentic: Command Execution",
+  AGENTIC_GIT: "Agentic: Git",
+  AGENTIC_BROWSER: "Agentic: Browser",
+  AGENTIC_CODE_INTEL: "Agentic: Code Intelligence",
+  AGENTIC_TASKS: "Agentic: Task Management",
+  AGENTIC_MEMORY: "Agentic: Memory",
+  AGENTIC_AGENTS: "Agentic: Agent Management",
+  AGENTIC_META: "Agentic: Meta",
+  AGENTIC_SCHEDULING: "Agentic: Scheduling",
+  // Prism-local domains (added by ToolOrchestratorService)
+  REASONING: "Reasoning",
+  COORDINATOR: "Coordinator",
+  AGENTIC_SKILLS: "Agentic: Skills",
+  AGENTIC_CONTROL: "Agentic: Control Flow",
+  AGENTIC_STRUCTURED: "Agentic: Structured Output",
+  AGENTIC_GIT_ISOLATION: "Agentic: Git Isolation",
+  AGENTIC_TASK_MGMT: "Agentic: Task Management",
+};
+
 // ── Prefixed enabledTools Helpers ────────────────────────────
 // Builds "label:X" and "domain:X" strings for use in
-// agent enabledTools arrays. Prevents typos at the call site.
+// agent enabledTools arrays. Prevents typos.
 
 export const L = Object.fromEntries(
   Object.entries(LABELS).map(([k, v]) => [k, `label:${v}`]),
+);
+
+export const D = Object.fromEntries(
+  Object.entries(DOMAINS).map(([k, v]) => [k, `domain:${v}`]),
 );
