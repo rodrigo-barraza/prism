@@ -184,7 +184,7 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
       return true;
 
     case "status":
-      emit({ type: "status", message: chunk.message, phase: chunk.phase });
+      emit({ type: "status", message: chunk.message, phase: chunk.phase, ...(chunk.progress != null && { progress: chunk.progress }) });
       return true;
 
     default: {

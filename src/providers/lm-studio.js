@@ -86,12 +86,13 @@ async function* parseNativeSSEStream(reader, options = {}) {
           }
           // ── Prompt processing events ──
           else if (type === "prompt_processing.start") {
-            yield { type: "status", message: "Processing prompt…", phase: "processing" };
+            yield { type: "status", message: "Processing prompt…", phase: "processing", progress: 0 };
           } else if (type === "prompt_processing.progress") {
-            const pct = json.progress != null ? Math.round(json.progress * 100) : 0;
-            yield { type: "status", message: `Processing prompt… ${pct}%`, phase: "processing" };
+            const progress = json.progress != null ? json.progress : 0;
+            const pct = Math.round(progress * 100);
+            yield { type: "status", message: `Processing prompt… ${pct}%`, phase: "processing", progress };
           } else if (type === "prompt_processing.end") {
-            yield { type: "status", message: "Processing prompt… done", phase: "processing" };
+            yield { type: "status", message: "Processing prompt… done", phase: "processing", progress: 1 };
           }
           // ── Generation start ──
           else if (type === "message.start") {
@@ -744,7 +745,7 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
       throw new ProviderError("lm-studio", `API error: ${response.status} ${errorText}`, response.status);
     }
 
-    yield { type: "status", message: "Processing prompt…", phase: "processing" };
+    yield { type: "status", message: "Processing prompt…", phase: "processing", progress: 0 };
 
     const reader = response.body.getReader();
     let emittedGenerating = false;

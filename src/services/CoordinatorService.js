@@ -1313,6 +1313,7 @@ export default class CoordinatorService {
             message: "phase",
             phase: event.phase,
             label: event.message || undefined,
+            ...(event.progress != null && { progress: event.progress }),
           });
         }
       } else if (event.type === "done") {
