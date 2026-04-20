@@ -1029,6 +1029,9 @@ export async function finalizeTextGeneration(
       provider: providerName,
       model: resolvedModel,
       conversationId: conversationId || null,
+      // When Direct Chat routes through /chat, agentSessionId maps the
+      // request to the correct agent session for stats aggregation.
+      agentSessionId: agentSessionId || conversationId || null,
       traceId: traceId || null,
       success: true,
       usage,

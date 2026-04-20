@@ -554,6 +554,106 @@ router.get("/stats/models", async (req, res, next) => {
 });
 
 // ============================================================
+// GET /admin/stats/tools — per-tool lifetime usage breakdown
+// Unwinds toolApiNames from every request to aggregate per-tool stats.
+// ============================================================
+router.get("/stats/tools", async (req, res, next) => {
+  try {
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
+    if (!db) return res.status(503).json({ error: "Database not available" });
+
+    const { from, to, project, tool } = req.query;
+    const match = { toolApiNames: { $exists: true, $ne: [] } };
+    if (project) match.project = project;
+    if (from || to) {
+      match.timestamp = {};
+      if (from) match.timestamp.$gte = from;
+      if (to) match.timestamp.$lte = to;
+    }
+
+    const pipeline = [
+      { $match: match },
+      { $unwind: "$toolApiNames" },
+      // Optional: filter to a single tool
+      ...(tool ? [{ $match: { toolApiNames: tool } }] : []),
+      {
+        $group: {
+          _id: "$toolApiNames",
+          totalCalls: { $sum: 1 },
+          totalRequests: { $addToSet: "$requestId" },
+          totalCost: COST_SUM_EXPR,
+          totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
+          totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
+          avgLatency: { $avg: { $ifNull: ["$totalTime", 0] } },
+          firstUsed: { $min: "$timestamp" },
+          lastUsed: { $max: "$timestamp" },
+          _models: { $push: "$model" },
+          _agents: { $push: "$agent" },
+          _providers: { $addToSet: "$provider" },
+          successCount: { $sum: { $cond: [{ $eq: ["$success", true] }, 1, 0] } },
+          failureCount: { $sum: { $cond: [{ $eq: ["$success", false] }, 1, 0] } },
+        },
+      },
+      {
+        $addFields: {
+          totalRequests: { $size: "$totalRequests" },
+        },
+      },
+      { $sort: { totalCalls: -1 } },
+    ];
+
+    const results = await db
+      .collection(REQUESTS_COL)
+      .aggregate(pipeline)
+      .toArray();
+
+    res.json(
+      results.map((r) => {
+        // Count top models
+        const modelCounts = {};
+        for (const m of r._models || []) {
+          if (m) modelCounts[m] = (modelCounts[m] || 0) + 1;
+        }
+        const topModels = Object.entries(modelCounts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([model, count]) => ({ model, count }));
+
+        // Count top agents
+        const agentCounts = {};
+        for (const a of r._agents || []) {
+          if (a) agentCounts[a] = (agentCounts[a] || 0) + 1;
+        }
+        const topAgents = Object.entries(agentCounts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([agent, count]) => ({ agent, count }));
+
+        return {
+          tool: r._id,
+          totalCalls: r.totalCalls,
+          totalRequests: r.totalRequests,
+          totalCost: r.totalCost,
+          totalInputTokens: r.totalInputTokens,
+          totalOutputTokens: r.totalOutputTokens,
+          avgLatency: r.avgLatency,
+          firstUsed: r.firstUsed,
+          lastUsed: r.lastUsed,
+          providers: r._providers?.filter(Boolean) || [],
+          topModels,
+          topAgents,
+          successCount: r.successCount,
+          failureCount: r.failureCount,
+        };
+      }),
+    );
+  } catch (error) {
+    logger.error(`Admin /stats/tools error: ${error.message}`);
+    next(error);
+  }
+});
+
+// ============================================================
 // GET /admin/stats/endpoints — per-endpoint breakdown
 // ============================================================
 router.get("/stats/endpoints", async (req, res, next) => {

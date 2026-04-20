@@ -79,7 +79,12 @@ const FileService = {
     // Falls back to flat {category}/{uuid}.{ext} when project/username not provided
     let key;
     if (project && username) {
-      key = `projects/${project}/${username}/${category}/${crypto.randomUUID()}.${ext}`;
+      // Sanitize: never use raw IP addresses as path segments — they cause
+      // duplicate directories when the same user is later identified by name.
+      const safeUsername = /^\d{1,3}(\.\d{1,3}){3}$/.test(username) || username.includes(":")
+        ? "anonymous"
+        : username;
+      key = `projects/${project}/${safeUsername}/${category}/${crypto.randomUUID()}.${ext}`;
     } else {
       key = `${category}/${crypto.randomUUID()}.${ext}`;
     }
@@ -104,16 +109,37 @@ const FileService = {
   async getFile(key) {
     if (!MinioWrapper.isAvailable()) return null;
 
-    try {
-      const stat = await MinioWrapper.stat(key);
-      const stream = await MinioWrapper.get(key);
+    // Helper to fetch stat + stream for a given key
+    const tryKey = async (k) => {
+      const stat = await MinioWrapper.stat(k);
+      const stream = await MinioWrapper.get(k);
       return {
         stream,
         contentType:
           stat.metaData?.["content-type"] || "application/octet-stream",
       };
-    } catch (error) {
-      logger.error(`FileService: failed to get ${key}: ${error.message}`);
+    };
+
+    try {
+      return await tryKey(key);
+    } catch {
+      // Fallback: try the legacy key with ::ffff: prefix re-inserted before
+      // bare IPv4 addresses.  Old uploads stored keys like
+      // "projects/retina/::ffff:127.0.0.1/uploads/uuid.png" — when the
+      // frontend now strips the prefix we get "projects/retina/127.0.0.1/..."
+      // which won't match the original object.
+      const legacyKey = key.replace(
+        /\/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\//,
+        "/::ffff:$1/",
+      );
+      if (legacyKey !== key) {
+        try {
+          return await tryKey(legacyKey);
+        } catch {
+          // Neither key exists
+        }
+      }
+      logger.error(`FileService: failed to get ${key}`);
       return null;
     }
   },

@@ -29,13 +29,15 @@ export function setupWebSocket(wss) {
 
     const project =
       req.headers["x-project"] || url.searchParams.get("project") || "unknown";
-    const clientIp =
+    const rawIp =
       req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
       req.socket.remoteAddress;
+    // Normalize IPv4-mapped IPv6 (::ffff:127.0.0.1 → 127.0.0.1)
+    const clientIp = rawIp?.replace(/^::ffff:/, "") || rawIp;
     const username =
       req.headers["x-username"] ||
       url.searchParams.get("username") ||
-      clientIp;
+      "anonymous";
     const agent = req.headers["x-agent"] || null;
     logger.info(
       `WebSocket connection on ${pathname} (project: ${project}, user: ${username})`,

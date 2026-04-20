@@ -647,6 +647,8 @@ const MODELS = {
       inputPerMillion: 2.0,
       audioInputPerMillion: 4.0,
       outputPerMillion: 12.0,
+      inputOver200kPerMillion: 4.0,
+      outputOver200kPerMillion: 18.0,
     },
     maxInputTokens: 1_048_576,
     maxOutputTokens: 65_536,

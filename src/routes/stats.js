@@ -2,14 +2,14 @@ import { Router } from "express";
 import logger from "../utils/logger.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
-import { COLLECTIONS } from "../constants.js";
+import { COLLECTIONS, COST_SUM_EXPR, AVG_TOKENS_PER_SEC_EXPR } from "../constants.js";
 
 const router = Router();
 
 /**
  * GET /stats/models
- * Per-model usage stats scoped to the current user (req.username).
- * Returns: [{ model, provider, totalRequests }]
+ * Per-model lifetime usage stats scoped to the current user (req.username).
+ * Returns comprehensive aggregated stats for every model the user has used.
  */
 router.get("/models", async (req, res, next) => {
   try {
@@ -35,6 +35,17 @@ router.get("/models", async (req, res, next) => {
               ],
             },
           },
+          totalCost: COST_SUM_EXPR,
+          avgLatency: { $avg: { $ifNull: ["$totalTime", 0] } },
+          avgTokensPerSec: AVG_TOKENS_PER_SEC_EXPR,
+          firstUsed: { $min: "$timestamp" },
+          lastUsed: { $max: "$timestamp" },
+          successCount: {
+            $sum: { $cond: [{ $eq: ["$success", true] }, 1, 0] },
+          },
+          errorCount: {
+            $sum: { $cond: [{ $eq: ["$success", false] }, 1, 0] },
+          },
         },
       },
       { $sort: { totalRequests: -1 } },
@@ -53,6 +64,13 @@ router.get("/models", async (req, res, next) => {
         totalInputTokens: r.totalInputTokens,
         totalOutputTokens: r.totalOutputTokens,
         totalTokens: r.totalTokens,
+        totalCost: r.totalCost,
+        avgLatency: r.avgLatency,
+        avgTokensPerSec: r.avgTokensPerSec,
+        firstUsed: r.firstUsed,
+        lastUsed: r.lastUsed,
+        successCount: r.successCount,
+        errorCount: r.errorCount,
       })),
     );
   } catch (error) {

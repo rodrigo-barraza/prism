@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import logger from "../utils/logger.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import FileService from "../services/FileService.js";
+import MinioWrapper from "../wrappers/MinioWrapper.js";
 import { assembleGraph } from "../services/WorkflowAssembler.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import { COLLECTIONS } from "../constants.js";
@@ -182,7 +183,12 @@ async function extractNodeResultFiles(
  */
 function resolveMinioRef(value, baseUrl) {
   if (typeof value === "string" && value.startsWith("minio://")) {
-    const key = value.replace("minio://", "");
+    let key = value.replace("minio://", "");
+    // Sanitize IPv4-mapped IPv6 addresses from legacy keys
+    key = key.replace(/::ffff:/g, "");
+    // Use direct MinIO URL when available, otherwise proxy through Prism
+    const minioBase = MinioWrapper.getBucketUrl();
+    if (minioBase) return `${minioBase}/${key}`;
     return `${baseUrl}/files/${key}`;
   }
   return value;

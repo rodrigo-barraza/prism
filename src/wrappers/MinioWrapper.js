@@ -3,11 +3,12 @@ import logger from "../utils/logger.js";
 
 let client = null;
 let bucketName = null;
+let endpointUrl = null;
 
 const MinioWrapper = {
   /**
    * Initialize the MinIO client and ensure the bucket exists.
-   * @param {string} endpoint - e.g. "http://192.168.86.2:9999"
+   * @param {string} endpoint - e.g. "http://192.168.86.2:9000"
    * @param {string} accessKey
    * @param {string} secretKey
    * @param {string} bucket
@@ -23,6 +24,7 @@ const MinioWrapper = {
         secretKey,
       });
       bucketName = bucket;
+      endpointUrl = endpoint.replace(/\/+$/, "");
 
       // Ensure bucket exists
       const exists = await client.bucketExists(bucket);
@@ -31,11 +33,25 @@ const MinioWrapper = {
         logger.info(`MinIO bucket "${bucket}" created`);
       }
 
+      // Ensure bucket has a public read-only policy so browsers can
+      // fetch files directly via the MinIO URL (GetObject only).
+      const publicPolicy = JSON.stringify({
+        Version: "2012-10-17",
+        Statement: [{
+          Effect: "Allow",
+          Principal: { AWS: ["*"] },
+          Action: ["s3:GetObject"],
+          Resource: [`arn:aws:s3:::${bucket}/*`],
+        }],
+      });
+      await client.setBucketPolicy(bucket, publicPolicy);
+
       logger.success(`MinIO connected: ${endpoint} (bucket: ${bucket})`);
     } catch (error) {
       logger.error(`MinIO connection failed: ${error.message}`);
       client = null;
       bucketName = null;
+      endpointUrl = null;
     }
   },
 
@@ -44,6 +60,28 @@ const MinioWrapper = {
    */
   isAvailable() {
     return client !== null;
+  },
+
+  /**
+   * Get the base URL for direct public access to objects in the bucket.
+   * e.g. "http://192.168.86.2:9000/prism"
+   * @returns {string|null}
+   */
+  getBucketUrl() {
+    if (!endpointUrl || !bucketName) return null;
+    return `${endpointUrl}/${bucketName}`;
+  },
+
+  /**
+   * Build a direct public URL for an object key.
+   * e.g. "http://192.168.86.2:9000/prism/projects/retina/127.0.0.1/uploads/uuid.png"
+   * @param {string} key - Object key within the bucket
+   * @returns {string|null}
+   */
+  getPublicUrl(key) {
+    const base = this.getBucketUrl();
+    if (!base) return null;
+    return `${base}/${key}`;
   },
 
   /**

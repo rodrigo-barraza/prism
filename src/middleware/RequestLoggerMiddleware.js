@@ -33,10 +33,12 @@ export function requestLoggerMiddleware(req, res, next) {
       username = segments[4]?.split("?")[0] || null;
     }
   }
-  const clientIp =
+  const rawIp =
     req.clientIp ||
     req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
     req.ip;
+  // Normalize IPv4-mapped IPv6 (::ffff:127.0.0.1 → 127.0.0.1)
+  const clientIp = rawIp?.replace(/^::ffff:/, "") || rawIp;
   const agent = req.headers["x-agent"] || null;
 
   // Log on response finish

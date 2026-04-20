@@ -14,6 +14,7 @@ import logger from "../utils/logger.js";
 import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
 import AgentPersonaRegistry from "../services/AgentPersonaRegistry.js";
 import rateLimitStore from "../services/RateLimitStore.js";
+import MinioWrapper from "../wrappers/MinioWrapper.js";
 import LocalProviderGateway from "../services/LocalProviderGateway.js";
 import { COORDINATOR_ONLY_TOOLS } from "../services/CoordinatorPrompt.js";
 import {
@@ -253,6 +254,9 @@ Guidelines:
   });
 
   res.json({
+    // Direct MinIO URL for resolving minio:// file refs on the client
+    // e.g. "http://192.168.86.2:9000/prism"
+    fileBaseUrl: MinioWrapper.getBucketUrl() || null,
     fcSystemPrompt,
     providers: availableProviderMap,
     providerList: availableProviderList,
