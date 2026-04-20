@@ -288,14 +288,20 @@ export default class SystemPromptAssembler {
    */
   async assemble(ctx) {
     const sections = [];
+    // null/undefined agent = direct chat mode (no persona)
+    const isDirectMode = !ctx.agent;
     const agentId = ctx.agent || "CODING";
-    const persona = AgentPersonaRegistry.get(agentId);
+    const persona = isDirectMode ? null : AgentPersonaRegistry.get(agentId);
 
-    // If no persona found, fall back to CODING defaults
-    const codingFallback = !persona || persona.id === "CODING";
+    // If no persona found, fall back to CODING defaults (unless direct mode)
+    const codingFallback = !isDirectMode && (!persona || persona.id === "CODING");
 
     // ── 1. Agent Identity ────────────────────────────────────────
-    if (persona) {
+    if (isDirectMode) {
+      sections.push(
+        `You are a helpful AI assistant with access to a comprehensive suite of real-time data and utility tools. Present data clearly with relevant formatting. For questions that don't require API data, respond naturally without tool calls.`,
+      );
+    } else if (persona) {
       const identityText = typeof persona.identity === "function"
         ? persona.identity(ctx)
         : persona.identity;
@@ -382,19 +388,22 @@ export default class SystemPromptAssembler {
     // Custom persona guidelines are always injected when present.
     // The usesCodingGuidelines toggle controls the generic coding
     // fallback defaults and the coordinator mode addendum.
-    if (persona?.guidelines) {
-      sections.push(persona.guidelines);
-    } else if (codingFallback || persona?.usesCodingGuidelines) {
-      sections.push(
-        `## Coding Guidelines\n` +
-        `- Always read relevant files before making edits to understand context\n` +
-        `- After making changes, verify them by reading the modified section\n` +
-        `- Keep your explanations concise and technical`,
-      );
+    // Direct mode skips all persona/coding guidelines.
+    if (!isDirectMode) {
+      if (persona?.guidelines) {
+        sections.push(persona.guidelines);
+      } else if (codingFallback || persona?.usesCodingGuidelines) {
+        sections.push(
+          `## Coding Guidelines\n` +
+          `- Always read relevant files before making edits to understand context\n` +
+          `- After making changes, verify them by reading the modified section\n` +
+          `- Keep your explanations concise and technical`,
+        );
+      }
     }
 
     // ── 5b. Coordinator Mode Addendum (when coordinator tools available) ──
-    if (codingFallback || persona?.usesCodingGuidelines) {
+    if (!isDirectMode && (codingFallback || persona?.usesCodingGuidelines)) {
       const enabledSet = ctx.enabledTools ? new Set(ctx.enabledTools) : null;
       const coordinatorAvailable = enabledSet
         ? COORDINATOR_ONLY_TOOLS.some((t) => enabledSet.has(t))
@@ -487,7 +496,7 @@ export default class SystemPromptAssembler {
         }
 
         logger.info(
-          `[SystemPromptAssembler] Assembled ${systemPrompt.length} char system prompt for agent="${ctx.agent || "CODING"}" (${skillNames.length} skills)`,
+          `[SystemPromptAssembler] Assembled ${systemPrompt.length} char system prompt for agent="${ctx.agent || "DIRECT"}" (${skillNames.length} skills)`,
         );
       } catch (err) {
         logger.error(`[SystemPromptAssembler] Assembly failed: ${err.message}`);
