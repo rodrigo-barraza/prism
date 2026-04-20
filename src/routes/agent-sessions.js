@@ -129,6 +129,9 @@ router.get("/:id", async (req, res, next) => {
         success: 1,
         agentSessionId: 1,
         parentAgentSessionId: 1,
+        tokensPerSec: 1,
+        generationTime: 1,
+        timeToGeneration: 1,
       })
       .toArray();
 
@@ -146,6 +149,9 @@ router.get("/:id", async (req, res, next) => {
       let totalReasoningOutputTokens = 0;
       const mergedModalities = {};
       const toolCounts = {};
+      // Collect per-request tok/s for generation-only average
+      const tpsValues = [];
+      const ttftValues = [];
 
       for (const r of reqs) {
         totalCost += r.estimatedCost || 0;
@@ -167,6 +173,13 @@ router.get("/:id", async (req, res, next) => {
             toolCounts[name] = (toolCounts[name] || 0) + 1;
           }
         }
+        // Per-request generation metrics (null-safe)
+        if (r.tokensPerSec != null && r.tokensPerSec > 0) {
+          tpsValues.push(r.tokensPerSec);
+        }
+        if (r.timeToGeneration != null && r.timeToGeneration > 0) {
+          ttftValues.push(r.timeToGeneration);
+        }
       }
 
       const earliest = reqs.reduce((min, r) => (!min || r.timestamp < min ? r.timestamp : min), null);
@@ -174,6 +187,16 @@ router.get("/:id", async (req, res, next) => {
       const totalElapsedTime = earliest && latest
         ? Math.max(0, (new Date(latest).getTime() - new Date(earliest).getTime()) / 1000)
         : 0;
+
+      // Average tok/s across all requests — naturally handles concurrency
+      // (each request measures its own generation speed) and excludes idle
+      // time (only generation phases contribute measurements).
+      const avgTokensPerSec = tpsValues.length > 0
+        ? tpsValues.reduce((a, b) => a + b, 0) / tpsValues.length
+        : null;
+      const avgTimeToGeneration = ttftValues.length > 0
+        ? ttftValues.reduce((a, b) => a + b, 0) / ttftValues.length
+        : null;
 
       return {
         requestCount: reqs.length,
@@ -190,6 +213,8 @@ router.get("/:id", async (req, res, next) => {
         modalities: mergedModalities,
         toolCounts,
         totalElapsedTime,
+        avgTokensPerSec,
+        avgTimeToGeneration,
         createdAt: earliest,
         updatedAt: latest,
       };

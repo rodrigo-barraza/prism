@@ -392,6 +392,15 @@ function buildWorkerResult(worker) {
   // Like Claude Code, we trust the model to produce a concise final report.
   const lastText = getLastAssistantText(worker.messages);
 
+  // Aggregate tool call names into { name: count } for frontend badge display
+  const toolNames = {};
+  if (worker.toolCalls?.length) {
+    for (const tc of worker.toolCalls) {
+      const name = tc.name || "unknown";
+      toolNames[name] = (toolNames[name] || 0) + 1;
+    }
+  }
+
   const result = {
     agent_id: worker.agentId,
     description: worker.description,
@@ -399,6 +408,7 @@ function buildWorkerResult(worker) {
     summary,
     result: lastText || (worker.output || "").trim() || null,
     toolUses: worker.toolCalls?.length || 0,
+    toolNames: Object.keys(toolNames).length > 0 ? toolNames : undefined,
     iterations: worker.iterations || 0,
     durationMs: worker.durationMs || 0,
   };
@@ -1294,6 +1304,7 @@ export default class CoordinatorService {
           });
         }
         // Forward LM Studio lifecycle phases (loading, processing, generating)
+        // Include the label text so worker StatusBars can show progress %
         if (parentEmit && event.phase) {
           lastWorkerPhase = event.phase;
           parentEmit({
@@ -1301,6 +1312,7 @@ export default class CoordinatorService {
             workerId: worker.agentId,
             message: "phase",
             phase: event.phase,
+            label: event.message || undefined,
           });
         }
       } else if (event.type === "done") {
