@@ -330,10 +330,9 @@ export default class AgenticLoopService {
         // Dynamic plan mode: strip tools when model has entered plan mode,
         // but keep plan mode toggle tools so the model can exit.
         if (planModeActive) {
-          // Only provide the exit_plan_mode tool + think so the model can
-          // reason and then exit plan mode when ready.
+          // Only provide exit_plan_mode so the model can submit its plan.
           passOptions.tools = finalTools.filter(
-            (t) => t.name === "exit_plan_mode" || t.name === "think",
+            (t) => t.name === "exit_plan_mode",
           );
           logger.info(`[PlanningMode] Sending ${passOptions.tools.length} tools to provider: ${passOptions.tools.map((t) => t.name).join(", ")}`);
         } else {
@@ -627,9 +626,9 @@ export default class AgenticLoopService {
         if (passPendingToolCalls.length > 0) {
 
           // ── Plan mode enforcement ──────────────────────────────
-          // Hard-reject anything except exit_plan_mode/think during plan mode.
+          // Hard-reject anything except exit_plan_mode during plan mode.
           if (planModeActive) {
-            const PLAN_MODE_ALLOWED = new Set(["exit_plan_mode", "think"]);
+            const PLAN_MODE_ALLOWED = new Set(["exit_plan_mode"]);
             const blocked = passPendingToolCalls.filter((tc) => !PLAN_MODE_ALLOWED.has(tc.name));
             if (blocked.length > 0) {
               const blockedNames = blocked.map((t) => t.name).join(", ");
@@ -653,7 +652,7 @@ export default class AgenticLoopService {
                 // Tell the model WHY its tools were blocked
                 currentMessages.push({
                   role: "user",
-                  content: `[SYSTEM] You are in PLANNING MODE. Your tool call(s) [${blockedNames}] were blocked because only exit_plan_mode and think are available during planning. You MUST call exit_plan_mode to present your plan for approval before any other tools can be used.`,
+                  content: `[SYSTEM] You are in PLANNING MODE. Your tool call(s) [${blockedNames}] were blocked because only exit_plan_mode is available during planning. You MUST call exit_plan_mode to present your plan for approval before any other tools can be used.`,
                 });
                 logIteration();
                 continue;
