@@ -215,7 +215,11 @@ export default class AgenticLoopService {
     let currentMessages = [...messages];
     // Track dynamic plan mode toggling — when the model calls enter_plan_mode,
     // tools are stripped until exit_plan_mode is called.
-    let planModeActive = false;
+    // When planFirst=true, start in plan mode (Claude Code-style: model plans
+    // first, then calls exit_plan_mode to get approval before executing).
+    let planModeActive = !!options.planFirst;
+    // Accumulate text streamed during plan mode for the plan_proposal event
+    let planModeText = "";
     // Track the initial message count so we can slice only NEW messages
     // for DB persistence. The client sends the full history; we must not
     // re-append already-persisted messages via $push.
@@ -261,86 +265,12 @@ export default class AgenticLoopService {
     hooks.register("afterResponse", MemoryExtractor.createHook(), "MemoryExtractor");
 
     // ── Planning Mode ─────────────────────────────────────────
+    // When planFirst=true, the loop starts with planModeActive=true (tools
+    // stripped). The planning instruction is injected AFTER the beforePrompt
+    // hook on iteration 1 so it survives SystemPromptAssembler's system
+    // prompt build. Mirrors Claude Code's tool-based state machine.
     if (options.planFirst) {
-      const { planningMessages, planningOptions } = PlanningModeService.preparePlanningPass(
-        { messages: currentMessages },
-        options,
-      );
-
-      // Run system prompt assembly on planning pass too
-      await hooks.run("beforePrompt", {
-        messages: planningMessages,
-        project,
-        username,
-        agent,
-        traceId,
-        agentSessionId,
-        agentContext: options.agentContext,
-        enabledTools: resolvedEnabledTools,
-      });
-
-      // Generate plan (single non-looping LLM call)
-      const expandedPlanMsgs = expandMessagesForFC(planningMessages, { filterDeleted: false });
-      let planText = "";
-
-      const augmentedPlanningOptions = { ...planningOptions, project, agent, username };
-      const planStream = modelDef?.liveAPI && provider.generateTextStreamLive
-        ? provider.generateTextStreamLive(expandedPlanMsgs, resolvedModel, { ...augmentedPlanningOptions, signal })
-        : provider.generateTextStream(expandedPlanMsgs, resolvedModel, { ...augmentedPlanningOptions, signal });
-
-      for await (const chunk of planStream) {
-        if (signal?.aborted) break;
-        if (chunk && typeof chunk === "object" && chunk.type === "thinking") {
-          emit({ type: "thinking", content: chunk.content });
-          continue;
-        }
-        const chunkStr = typeof chunk === "string" ? chunk : "";
-        planText += chunkStr;
-        emit({ type: "chunk", content: chunkStr });
-      }
-
-      // Emit plan for approval (always shown in UI regardless of auto-approve)
-      const planSteps = PlanningModeService.extractSteps(planText);
-      emit({
-        type: "plan_proposal",
-        plan: planText,
-        steps: planSteps,
-        autoApproved: !!options.autoApprove,
-      });
-
-      let approved;
-      if (options.autoApprove) {
-        // Auto-approve mode: plan is displayed but execution proceeds
-        // immediately — mirrors Claude Code's bypassPermissions behavior.
-        approved = true;
-        logger.info("[PlanningMode] Auto-approved plan (autoApprove=true)");
-      } else {
-        // Manual mode: wait for user approval via the pending approvals registry
-        approved = await new Promise((resolve) => {
-          const timeoutId = setTimeout(() => {
-            pendingApprovals.delete(agentSessionId);
-            resolve(false); // Default: reject on timeout (safe)
-          }, 120_000);
-          pendingApprovals.set(agentSessionId, {
-            resolve: (val) => {
-              clearTimeout(timeoutId);
-              pendingApprovals.delete(agentSessionId);
-              resolve(val);
-            },
-            type: "plan",
-          });
-        });
-      }
-
-      if (!approved || signal?.aborted) {
-        emit({ type: "status", message: "Plan rejected — execution cancelled." });
-        emit({ type: "done", usage: overallUsage, totalTime: (performance.now() - requestStart) / 1000 });
-        return;
-      }
-
-      // Inject approved plan into messages for execution
-      currentMessages = PlanningModeService.buildExecutionMessages(currentMessages, planText);
-      emit({ type: "status", message: "Plan approved — executing..." });
+      emit({ type: "status", message: "plan_mode_entered" });
     }
 
 
@@ -375,6 +305,12 @@ export default class AgenticLoopService {
               message: "skills_injected",
               skills: hookCtx._injectedSkills,
             });
+          }
+
+          // Inject planning instruction AFTER SystemPromptAssembler has
+          // built the system prompt — otherwise the assembler overwrites it.
+          if (planModeActive) {
+            PlanningModeService.injectPlanningInstruction(currentMessages);
           }
         }
         
@@ -619,6 +555,8 @@ export default class AgenticLoopService {
           passOutputCharacters += chunkStr.length;
           finalStreamedText = passStreamedText + chunkStr;
           passStreamedText += chunkStr;
+          // Accumulate plan text while in plan mode
+          if (planModeActive) planModeText += chunkStr;
           // Display segment tracking
           if (lastDisplaySegType !== "text") {
             displaySegments.push({ type: "text", fragmentIndex: displayTextFragments.length });
@@ -850,10 +788,67 @@ export default class AgenticLoopService {
           // Toggle plan mode state when the model calls enter/exit_plan_mode
           if (passPendingToolCalls.some((tc) => tc.name === "enter_plan_mode")) {
             planModeActive = true;
+            planModeText = "";
+            // Inject planning instruction for dynamic enter (idempotent)
+            PlanningModeService.injectPlanningInstruction(currentMessages);
             emit({ type: "status", message: "plan_mode_entered" });
           }
-          if (passPendingToolCalls.some((tc) => tc.name === "exit_plan_mode")) {
+
+          // exit_plan_mode: emit plan_proposal + approval gate (Claude Code pattern)
+          const exitPlanTC = passPendingToolCalls.find((tc) => tc.name === "exit_plan_mode");
+          if (exitPlanTC) {
+            const planText = planModeText.trim() || passStreamedText.trim();
+            const planSteps = PlanningModeService.extractSteps(planText);
+
+            // Emit plan to UI (always — even when auto-approve)
+            emit({
+              type: "plan_proposal",
+              plan: planText,
+              steps: planSteps,
+              autoApproved: !!options.autoApprove,
+            });
+
+            let approved;
+            if (options.autoApprove) {
+              approved = true;
+              logger.info("[PlanningMode] Auto-approved plan (autoApprove=true)");
+            } else {
+              // Wait for user approval
+              approved = await new Promise((resolve) => {
+                const timeoutId = setTimeout(() => {
+                  pendingApprovals.delete(agentSessionId);
+                  resolve(false);
+                }, 120_000);
+                pendingApprovals.set(agentSessionId, {
+                  resolve: (val) => {
+                    clearTimeout(timeoutId);
+                    pendingApprovals.delete(agentSessionId);
+                    resolve(val);
+                  },
+                  type: "plan",
+                });
+              });
+            }
+
+            if (!approved || signal?.aborted) {
+              emit({ type: "status", message: "Plan rejected — execution cancelled." });
+              emit({ type: "done", usage: overallUsage, totalTime: (performance.now() - requestStart) / 1000 });
+              return;
+            }
+
+            // Override the tool result so the model gets the Claude Code-style
+            // approval message instead of the generic acknowledgment.
+            const exitResult = results.find((r) => r.id === exitPlanTC.id || r.name === "exit_plan_mode");
+            if (exitResult) {
+              exitResult.result = {
+                approved: true,
+                message: `User has approved your plan. You can now start coding. Start with updating your todo list if applicable.\n\n${planText}`,
+              };
+            }
+
             planModeActive = false;
+            planModeText = "";
+            PlanningModeService.stripPlanningInstruction(currentMessages);
             emit({ type: "status", message: "plan_mode_exited" });
           }
 

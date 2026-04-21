@@ -1084,10 +1084,17 @@ export default class ToolOrchestratorService {
     // ── Plan mode toggle tools ──────────────────────────────────
     if (name === "enter_plan_mode") {
       logger.info(`[ToolOrchestrator] enter_plan_mode${args.reason ? `: ${args.reason}` : ""}`);
-      return { acknowledged: true, mode: "plan", reason: args.reason || null };
+      return {
+        acknowledged: true,
+        mode: "plan",
+        reason: args.reason || null,
+        message: "Entered plan mode. You should now focus on exploring the codebase and designing an implementation approach.\n\nIn plan mode, you should:\n1. Thoroughly explore the codebase to understand existing patterns\n2. Identify similar features and architectural approaches\n3. Consider multiple approaches and their trade-offs\n4. Design a concrete implementation strategy\n5. When ready, call exit_plan_mode to present your plan for approval\n\nRemember: DO NOT write or edit any files yet. This is a read-only exploration and planning phase.",
+      };
     }
     if (name === "exit_plan_mode") {
       logger.info(`[ToolOrchestrator] exit_plan_mode${args.summary ? `: ${args.summary}` : ""}`);
+      // Note: AgenticLoopService overrides this result with the approved plan
+      // and Claude Code-style approval message after the approval gate.
       return { acknowledged: true, mode: "execute", summary: args.summary || null };
     }
 
