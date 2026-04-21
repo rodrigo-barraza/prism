@@ -1303,6 +1303,15 @@ export default class CoordinatorService {
             maxIterations: event.maxIterations,
           });
         }
+        // Forward server-computed TTFT so the frontend can track per-worker and per-iteration TTFT
+        if (parentEmit && event.message === "generation_started") {
+          parentEmit({
+            type: "worker_status",
+            workerId: worker.agentId,
+            message: "generation_started",
+            timeToFirstToken: event.timeToFirstToken,
+          });
+        }
         // Forward LM Studio lifecycle phases (loading, processing, generating)
         // Include the label text so worker StatusBars can show progress %
         if (parentEmit && event.phase) {
