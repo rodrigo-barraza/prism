@@ -748,14 +748,18 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
     yield { type: "status", message: "Processing prompt…", phase: "processing", progress: 0 };
 
     const reader = response.body.getReader();
-    let emittedGenerating = false;
+    let emittedPhaseTransition = false;
     for await (const chunk of parseSSEStream(reader, {
       signal: options.signal,
       thinkingEnabled: options.thinkingEnabled,
     })) {
-      if (!emittedGenerating) {
-        emittedGenerating = true;
-        yield { type: "status", message: "Generating…", phase: "generating" };
+      // Emit the correct phase based on the first chunk type —
+      // avoids a false "generating" → "thinking" flicker when the
+      // model starts with reasoning tokens.
+      if (!emittedPhaseTransition) {
+        emittedPhaseTransition = true;
+        const isThinking = chunk && typeof chunk === "object" && chunk.type === "thinking";
+        yield { type: "status", message: isThinking ? "Thinking…" : "Generating…", phase: isThinking ? "thinking" : "generating" };
       }
       yield chunk;
     }
