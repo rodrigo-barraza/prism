@@ -272,28 +272,34 @@ function selectAndReserveInstance(siblings, coordinatorInstanceId, instanceModel
   }).join(", ");
   logger.info(`[Coordinator] selectAndReserveInstance: siblings=[${stateSnapshot}], coordinator=${coordinatorInstanceId}`);
 
-  // Greedy least-loaded: pick the instance with the most available slots.
-  // This distributes workers evenly across all instances rather than
-  // filling the coordinator's instance first.
+  // Fill-first (bin-packing): saturate each instance's concurrency
+  // in declaration order (first to last in PROVIDER_LM_STUDIO) before
+  // spilling to the next. This keeps workloads concentrated on a
+  // single machine when possible.
   //
-  // The coordinator's own instance gets a small tiebreaker bonus (+0.5)
-  // because its orchestrator inference is IDLE while workers run —
-  // it finished generating tool calls and only resumes after all complete.
-  // This means we slightly prefer the coord instance when slots are equal,
-  // but will use a secondary if it has strictly more capacity.
-  let bestInstance = null;
-  let bestScore = -1; // available + tiebreaker
+  // The coordinator's own instance gets priority when it has slots —
+  // its orchestrator inference is IDLE while workers run (it finished
+  // generating tool calls and only resumes after all complete).
+  // After the coordinator instance, remaining siblings are tried
+  // in their original array order.
 
+  // Build ordered candidate list: coordinator's instance first, then rest in order
+  const ordered = [];
   for (const inst of siblings) {
+    if (inst.id === coordinatorInstanceId) {
+      ordered.unshift(inst); // coordinator instance goes first
+    } else {
+      ordered.push(inst);
+    }
+  }
+
+  let bestInstance = null;
+  for (const inst of ordered) {
     const active = getActiveOn(inst.id);
     const available = inst.concurrency - active;
-    if (available <= 0) continue;
-
-    // Tiebreaker: coordinator's instance gets +0.5 since orchestrator is idle
-    const score = inst.id === coordinatorInstanceId ? available + 0.5 : available;
-    if (score > bestScore) {
-      bestScore = score;
+    if (available > 0) {
       bestInstance = inst;
+      break; // fill-first: take the first instance with any availability
     }
   }
 
@@ -1185,13 +1191,29 @@ export default class CoordinatorService {
 
     let workerFirstChunkTime = null;
     let workerLastChunkTime = null;
-    let burstChunkCount = 0;       // tokens in current generation burst (resets on phase change)
-    let burstFirstChunkTime = null; // start of current burst
+    let cumulativeChunkCount = 0;    // total tokens across all bursts (for token badge)
+    let burstChunkCount = 0;         // tokens in current generation burst (for tok/s)
+    let burstFirstChunkTime = null;  // start of current burst
     const WORKER_PROGRESS_INTERVAL = 10; // emit progress every N chunks
+
+    /** Build the generation_progress payload for the frontend. */
+    const buildProgress = () => ({
+      type: "worker_status",
+      workerId: worker.agentId,
+      message: "generation_progress",
+      // Burst-scoped values — used for tok/s computation
+      outputTokens: burstChunkCount,
+      firstChunkTime: burstFirstChunkTime,
+      lastChunkTime: workerLastChunkTime,
+      // Cumulative total — used for token badge count
+      totalOutputTokens: cumulativeChunkCount,
+    });
+
     const workerEmit = (event) => {
       if (event.type === "chunk") {
         workerOutput += event.content || "";
 
+        cumulativeChunkCount++;
         burstChunkCount++;
         // Use Date.now() (not performance.now()) since these timestamps
         // cross process boundaries — the frontend needs wall-clock time
@@ -1214,27 +1236,13 @@ export default class CoordinatorService {
         const shouldEmit = burstChunkCount === 1
           || burstChunkCount % WORKER_PROGRESS_INTERVAL === 0;
         if (parentEmit && shouldEmit) {
-          parentEmit({
-            type: "worker_status",
-            workerId: worker.agentId,
-            message: "generation_progress",
-            outputTokens: burstChunkCount,
-            firstChunkTime: burstFirstChunkTime,
-            lastChunkTime: workerLastChunkTime,
-          });
+          parentEmit(buildProgress());
         }
       } else if (event.type === "thinking") {
         // Emit final generation_progress for the burst that just ended
         // so the frontend gets tok/s data even for short generation runs
         if (parentEmit && lastWorkerPhase === "generating" && burstChunkCount > 0) {
-          parentEmit({
-            type: "worker_status",
-            workerId: worker.agentId,
-            message: "generation_progress",
-            outputTokens: burstChunkCount,
-            firstChunkTime: burstFirstChunkTime,
-            lastChunkTime: workerLastChunkTime,
-          });
+          parentEmit(buildProgress());
         }
         // Reset burst counters for next generation burst
         burstChunkCount = 0;
@@ -1255,14 +1263,7 @@ export default class CoordinatorService {
         }
         // Emit final generation_progress before tool execution pauses generation
         if (parentEmit && lastWorkerPhase === "generating" && burstChunkCount > 0) {
-          parentEmit({
-            type: "worker_status",
-            workerId: worker.agentId,
-            message: "generation_progress",
-            outputTokens: burstChunkCount,
-            firstChunkTime: burstFirstChunkTime,
-            lastChunkTime: workerLastChunkTime,
-          });
+          parentEmit(buildProgress());
         }
         // Reset burst counters for next generation burst
         burstChunkCount = 0;
@@ -1759,15 +1760,15 @@ export default class CoordinatorService {
             logger.info(`[Coordinator] Panel worker ${worker.id}: single-slot concurrency, no subagent model configured — queuing on local provider`);
           }
         } else {
-          // Find least-busy instance
+          // Fill-first: saturate each instance in declaration order
+          // before spilling to the next (matches PROVIDER_* array order)
           let bestInstance = null;
-          let bestAvailable = -1;
           for (const inst of siblings) {
             const active = localModelQueue._getQueue(inst.id).activeCount;
             const available = inst.concurrency - active;
-            if (available > bestAvailable) {
-              bestAvailable = available;
+            if (available > 0) {
               bestInstance = inst;
+              break;
             }
           }
           if (bestInstance) {
