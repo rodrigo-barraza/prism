@@ -1206,6 +1206,7 @@ async function handleStreamingText(ctx) {
         });
 
   const ss = createStreamState();
+  ss.requestStart = requestStart;
 
   for await (const chunk of stream) {
     // Client disconnected — abort the upstream provider stream

@@ -396,7 +396,12 @@ export default class AgenticLoopService {
 
           if (chunk && typeof chunk === "object" && chunk.type === "thinking") {
             if (!overallFirstTokenTime) overallFirstTokenTime = performance.now();
-            if (!passFirstTokenTime) passFirstTokenTime = performance.now();
+            if (!passFirstTokenTime) {
+              passFirstTokenTime = performance.now();
+              // Emit server-computed TTFT so the client doesn't need to rely on
+              // provider-specific phase events (which the OpenAI-compat path lacks)
+              emit({ type: "status", message: "generation_started", timeToFirstToken: (passFirstTokenTime - passStart) / 1000 });
+            }
             overallGenerationEnd = performance.now();
             passGenerationEnd = performance.now();
             streamedThinking += chunk.content;
@@ -421,9 +426,11 @@ export default class AgenticLoopService {
           }
 
           if (chunk && typeof chunk === "object" && chunk.type === "toolCall") {
-            // Tool call chunks indicate model output — track generation timing
             if (!overallFirstTokenTime) overallFirstTokenTime = performance.now();
-            if (!passFirstTokenTime) passFirstTokenTime = performance.now();
+            if (!passFirstTokenTime) {
+              passFirstTokenTime = performance.now();
+              emit({ type: "status", message: "generation_started", timeToFirstToken: (passFirstTokenTime - passStart) / 1000 });
+            }
             overallGenerationEnd = performance.now();
             passGenerationEnd = performance.now();
 
@@ -552,12 +559,12 @@ export default class AgenticLoopService {
               continue;
           }
 
-          // Text chunk
           if (!overallFirstTokenTime) {
             overallFirstTokenTime = performance.now();
           }
           if (!passFirstTokenTime) {
             passFirstTokenTime = performance.now();
+            emit({ type: "status", message: "generation_started", timeToFirstToken: (passFirstTokenTime - passStart) / 1000 });
           }
           overallGenerationEnd = performance.now();
           passGenerationEnd = performance.now();

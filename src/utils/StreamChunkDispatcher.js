@@ -76,7 +76,12 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
 
   // Non-object chunks are treated as text (raw string from provider)
   if (!chunk || typeof chunk !== "object") {
-    if (!state.firstTokenTime) state.firstTokenTime = performance.now();
+    if (!state.firstTokenTime) {
+      state.firstTokenTime = performance.now();
+      if (state.requestStart) {
+        emit({ type: "status", message: "generation_started", timeToFirstToken: (state.firstTokenTime - state.requestStart) / 1000 });
+      }
+    }
     state.generationEnd = performance.now();
     const chunkStr = typeof chunk === "string" ? chunk : "";
     state.outputCharacters += chunkStr.length;
@@ -99,7 +104,12 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
       return true;
 
     case "thinking":
-      if (!state.firstTokenTime) state.firstTokenTime = performance.now();
+      if (!state.firstTokenTime) {
+        state.firstTokenTime = performance.now();
+        if (state.requestStart) {
+          emit({ type: "status", message: "generation_started", timeToFirstToken: (state.firstTokenTime - state.requestStart) / 1000 });
+        }
+      }
       state.generationEnd = performance.now();
       state.thinking += chunk.content;
       emit({ type: "thinking", content: chunk.content });
@@ -146,7 +156,12 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
 
     case "toolCall":
       // Tool call chunks indicate model output — track generation timing
-      if (!state.firstTokenTime) state.firstTokenTime = performance.now();
+      if (!state.firstTokenTime) {
+        state.firstTokenTime = performance.now();
+        if (state.requestStart) {
+          emit({ type: "status", message: "generation_started", timeToFirstToken: (state.firstTokenTime - state.requestStart) / 1000 });
+        }
+      }
       state.generationEnd = performance.now();
 
       if (chunk.status === "done" || chunk.status === "error") {
@@ -189,7 +204,12 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
 
     default: {
       // Unknown typed chunk — treat as text
-      if (!state.firstTokenTime) state.firstTokenTime = performance.now();
+      if (!state.firstTokenTime) {
+        state.firstTokenTime = performance.now();
+        if (state.requestStart) {
+          emit({ type: "status", message: "generation_started", timeToFirstToken: (state.firstTokenTime - state.requestStart) / 1000 });
+        }
+      }
       state.generationEnd = performance.now();
       const chunkStr = typeof chunk === "string" ? chunk : "";
       state.outputCharacters += chunkStr.length;
@@ -209,6 +229,7 @@ export function createStreamState() {
     usage: null,
     firstTokenTime: null,
     generationEnd: null,
+    requestStart: null,  // Set by caller to enable server-computed TTFT
     outputCharacters: 0,
     text: "",
     thinking: "",
