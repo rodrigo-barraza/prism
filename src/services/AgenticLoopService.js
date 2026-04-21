@@ -299,28 +299,38 @@ export default class AgenticLoopService {
         emit({ type: "chunk", content: chunkStr });
       }
 
-      // Emit plan for approval
+      // Emit plan for approval (always shown in UI regardless of auto-approve)
+      const planSteps = PlanningModeService.extractSteps(planText);
       emit({
         type: "plan_proposal",
         plan: planText,
-        steps: PlanningModeService.extractSteps(planText),
+        steps: planSteps,
+        autoApproved: !!options.autoApprove,
       });
 
-      // Wait for approval via a Promise that resolves when client responds
-      const approved = await new Promise((resolve) => {
-        const timeoutId = setTimeout(() => {
-          pendingApprovals.delete(agentSessionId);
-          resolve(false); // Default: reject on timeout (safe)
-        }, 120_000);
-        pendingApprovals.set(agentSessionId, {
-          resolve: (val) => {
-            clearTimeout(timeoutId);
+      let approved;
+      if (options.autoApprove) {
+        // Auto-approve mode: plan is displayed but execution proceeds
+        // immediately — mirrors Claude Code's bypassPermissions behavior.
+        approved = true;
+        logger.info("[PlanningMode] Auto-approved plan (autoApprove=true)");
+      } else {
+        // Manual mode: wait for user approval via the pending approvals registry
+        approved = await new Promise((resolve) => {
+          const timeoutId = setTimeout(() => {
             pendingApprovals.delete(agentSessionId);
-            resolve(val);
-          },
-          type: "plan",
+            resolve(false); // Default: reject on timeout (safe)
+          }, 120_000);
+          pendingApprovals.set(agentSessionId, {
+            resolve: (val) => {
+              clearTimeout(timeoutId);
+              pendingApprovals.delete(agentSessionId);
+              resolve(val);
+            },
+            type: "plan",
+          });
         });
-      });
+      }
 
       if (!approved || signal?.aborted) {
         emit({ type: "status", message: "Plan rejected — execution cancelled." });
