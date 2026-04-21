@@ -28,6 +28,39 @@ export function getTotalInputTokens(usage) {
 }
 
 /**
+ * Create a fresh usage accumulator object with all token fields zeroed.
+ * @returns {{ inputTokens: number, outputTokens: number, cacheReadInputTokens: number, cacheCreationInputTokens: number, reasoningOutputTokens: number }}
+ */
+export function createUsageAccumulator() {
+  return {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadInputTokens: 0,
+    cacheCreationInputTokens: 0,
+    reasoningOutputTokens: 0,
+  };
+}
+
+/**
+ * Merge a provider-reported usage chunk into an accumulator (mutates target).
+ * Centralises the `target.X += source.X || 0` pattern that was duplicated
+ * across AgenticLoopService, chat.js, and StreamChunkDispatcher.
+ *
+ * @param {object} target - The accumulator to merge into (mutated in place)
+ * @param {object} source - The usage object from a provider chunk
+ * @returns {object} The target accumulator (for chaining)
+ */
+export function mergeUsage(target, source) {
+  if (!source) return target;
+  target.inputTokens += source.inputTokens || 0;
+  target.outputTokens += source.outputTokens || 0;
+  target.cacheReadInputTokens += source.cacheReadInputTokens || 0;
+  target.cacheCreationInputTokens += source.cacheCreationInputTokens || 0;
+  target.reasoningOutputTokens += source.reasoningOutputTokens || 0;
+  return target;
+}
+
+/**
  * Calculate the estimated cost for a text-to-text request.
  * Supports Anthropic prompt caching: cache reads at reduced rate,
  * cache writes at premium rate.

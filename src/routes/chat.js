@@ -13,6 +13,7 @@ import {
   calculateTextCost,
   calculateImageCost,
   getTotalInputTokens,
+  mergeUsage,
 } from "../utils/CostCalculator.js";
 import logger from "../utils/logger.js";
 import RequestLogger from "../services/RequestLogger.js";
@@ -1297,19 +1298,8 @@ async function handleStreamingText(ctx) {
 
     // Use dispatchChunk with a custom usage merger for follow-up iteration
     const usageMerger = (followUpUsage) => {
-      if (ss.usage && followUpUsage) {
-        ss.usage.inputTokens = (ss.usage.inputTokens || 0) + (followUpUsage.inputTokens || 0);
-        ss.usage.outputTokens = (ss.usage.outputTokens || 0) + (followUpUsage.outputTokens || 0);
-        // Accumulate cache and reasoning token breakdowns across iterations
-        if (followUpUsage.cacheReadInputTokens) {
-          ss.usage.cacheReadInputTokens = (ss.usage.cacheReadInputTokens || 0) + followUpUsage.cacheReadInputTokens;
-        }
-        if (followUpUsage.cacheCreationInputTokens) {
-          ss.usage.cacheCreationInputTokens = (ss.usage.cacheCreationInputTokens || 0) + followUpUsage.cacheCreationInputTokens;
-        }
-        if (followUpUsage.reasoningOutputTokens) {
-          ss.usage.reasoningOutputTokens = (ss.usage.reasoningOutputTokens || 0) + followUpUsage.reasoningOutputTokens;
-        }
+      if (ss.usage) {
+        mergeUsage(ss.usage, followUpUsage);
       } else {
         ss.usage = followUpUsage;
       }
@@ -1321,6 +1311,15 @@ async function handleStreamingText(ctx) {
         break;
       }
       await dispatchChunk(chunk, ss, { emit, project, username }, { onUsage: usageMerger, logPrefix: "chat/FC" });
+    }
+
+    // Emit intermediate usage update so the frontend has authoritative
+    // per-iteration token counts instead of relying on chunk heuristics
+    if (ss.usage) {
+      emit({
+        type: "usage_update",
+        usage: { ...ss.usage, requests: fcIteration + 1 },
+      });
     }
 
     // Update messages ref for potential next iteration

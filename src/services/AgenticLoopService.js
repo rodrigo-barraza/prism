@@ -8,7 +8,7 @@ import FileService from "./FileService.js";
 import { finalizeTextGeneration } from "../routes/chat.js";
 import RequestLogger from "./RequestLogger.js";
 import { TYPES, getPricing } from "../config.js";
-import { calculateTextCost } from "../utils/CostCalculator.js";
+import { calculateTextCost, createUsageAccumulator, mergeUsage } from "../utils/CostCalculator.js";
 import { calculateTokensPerSec } from "../utils/math.js";
 import ContextWindowManager from "../utils/ContextWindowManager.js";
 import AgentHooks from "./AgentHooks.js";
@@ -225,7 +225,8 @@ export default class AgenticLoopService {
     // re-append already-persisted messages via $push.
     const originalMessageCount = currentMessages.length;
 
-    const overallUsage = { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 };
+    const overallUsage = createUsageAccumulator();
+    let outputTokenCount = 0; // Running output token counter — piggybacked on chunk/thinking SSE events
     let overallFirstTokenTime = null;
     let overallGenerationEnd = null;
     let overallOutputCharacters = 0;
@@ -323,7 +324,7 @@ export default class AgenticLoopService {
         let passFirstTokenTime = null;
         let passGenerationEnd = null;
         let passOutputCharacters = 0;
-        const passUsage = { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 };
+        const passUsage = createUsageAccumulator();
 
         const passOptions = { ...options, project, agent, username };
 
@@ -376,15 +377,8 @@ export default class AgenticLoopService {
           }
           
           if (chunk && typeof chunk === "object" && chunk.type === "usage") {
-            overallUsage.inputTokens += chunk.usage.inputTokens || 0;
-            overallUsage.outputTokens += chunk.usage.outputTokens || 0;
-            overallUsage.cacheReadInputTokens += chunk.usage.cacheReadInputTokens || 0;
-            overallUsage.cacheCreationInputTokens += chunk.usage.cacheCreationInputTokens || 0;
-            
-            passUsage.inputTokens += chunk.usage.inputTokens || 0;
-            passUsage.outputTokens += chunk.usage.outputTokens || 0;
-            passUsage.cacheReadInputTokens += chunk.usage.cacheReadInputTokens || 0;
-            passUsage.cacheCreationInputTokens += chunk.usage.cacheCreationInputTokens || 0;
+            mergeUsage(overallUsage, chunk.usage);
+            mergeUsage(passUsage, chunk.usage);
             continue;
           }
 
@@ -413,7 +407,8 @@ export default class AgenticLoopService {
               lastDisplaySegType = "thinking";
             }
             displayThinkingFragments[displayThinkingFragments.length - 1] += chunk.content;
-            emit({ type: "thinking", content: chunk.content });
+            outputTokenCount++;
+            emit({ type: "thinking", content: chunk.content, outputTokens: outputTokenCount });
             continue;
           }
 
@@ -582,10 +577,19 @@ export default class AgenticLoopService {
             lastDisplaySegType = "text";
           }
           displayTextFragments[displayTextFragments.length - 1] += chunkStr;
-          emit({ type: "chunk", content: chunkStr });
+          outputTokenCount++;
+          emit({ type: "chunk", content: chunkStr, outputTokens: outputTokenCount });
         }
 
         if (signal?.aborted) break;
+
+        // ── Emit intermediate usage update ──────────────────────
+        // Give the frontend authoritative per-iteration token counts
+        // instead of relying on the chunk-counting heuristic.
+        emit({
+          type: "usage_update",
+          usage: { ...overallUsage, requests: iterations },
+        });
 
         // ── Deferred iteration log ──────────────────────────────
         // Compute timing/cost eagerly, but defer the actual DB write
@@ -1010,15 +1014,13 @@ export default class AgenticLoopService {
           if (signal?.aborted) break;
 
           if (chunk && typeof chunk === "object" && chunk.type === "usage") {
-            overallUsage.inputTokens += chunk.usage.inputTokens || 0;
-            overallUsage.outputTokens += chunk.usage.outputTokens || 0;
-            overallUsage.cacheReadInputTokens += chunk.usage.cacheReadInputTokens || 0;
-            overallUsage.cacheCreationInputTokens += chunk.usage.cacheCreationInputTokens || 0;
+            mergeUsage(overallUsage, chunk.usage);
             continue;
           }
           if (chunk && typeof chunk === "object" && chunk.type === "thinking") {
             streamedThinking += chunk.content;
-            emit({ type: "thinking", content: chunk.content });
+            outputTokenCount++;
+            emit({ type: "thinking", content: chunk.content, outputTokens: outputTokenCount });
             continue;
           }
           if (chunk && typeof chunk === "object") continue; // skip non-text
@@ -1028,7 +1030,8 @@ export default class AgenticLoopService {
           const chunkStr = typeof chunk === "string" ? chunk : "";
           overallOutputCharacters += chunkStr.length;
           finalStreamedText += chunkStr;
-          emit({ type: "chunk", content: chunkStr });
+          outputTokenCount++;
+          emit({ type: "chunk", content: chunkStr, outputTokens: outputTokenCount });
         }
       }
 

@@ -86,7 +86,8 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
     const chunkStr = typeof chunk === "string" ? chunk : "";
     state.outputCharacters += chunkStr.length;
     state.text += chunkStr;
-    emit({ type: "chunk", content: chunkStr });
+    state.outputTokenCount++;
+    emit({ type: "chunk", content: chunkStr, outputTokens: state.outputTokenCount });
     return true;
   }
 
@@ -112,7 +113,8 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
       }
       state.generationEnd = performance.now();
       state.thinking += chunk.content;
-      emit({ type: "thinking", content: chunk.content });
+      state.outputTokenCount++;
+      emit({ type: "thinking", content: chunk.content, outputTokens: state.outputTokenCount });
       return true;
 
     case "thinking_signature":
@@ -214,7 +216,8 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
       const chunkStr = typeof chunk === "string" ? chunk : "";
       state.outputCharacters += chunkStr.length;
       state.text += chunkStr;
-      emit({ type: "chunk", content: chunkStr });
+      state.outputTokenCount++;
+      emit({ type: "chunk", content: chunkStr, outputTokens: state.outputTokenCount });
       return true;
     }
   }
@@ -238,6 +241,7 @@ export function createStreamState() {
     toolCalls: [],
     audioChunks: [],
     audioSampleRate: 24000,
+    outputTokenCount: 0,  // Running output token counter for live client updates
     rateLimits: null,
   };
 }
