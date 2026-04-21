@@ -335,9 +335,14 @@ export default class AgenticLoopService {
           passOptions.tools = finalTools.filter(
             (t) => t.name === "exit_plan_mode" || t.name === "think",
           );
+          logger.info(`[PlanningMode] Sending ${passOptions.tools.length} tools to provider: ${passOptions.tools.map((t) => t.name).join(", ")}`);
         } else {
           passOptions.tools = finalTools;
         }
+
+        // Build tool allowlist — enforce that only tools in the schema
+        // are accepted from the stream (strict schema enforcement)
+        const allowedToolNames = new Set((passOptions.tools || []).map((t) => t.name));
 
         // ── Context window enforcement ─────────────────────────
         // Enforce token budget before expanding messages. This prevents
@@ -462,6 +467,13 @@ export default class AgenticLoopService {
                 result: chunk.result || undefined,
                 status: chunk.status || "calling",
               });
+              continue;
+            }
+
+            // Schema enforcement — only accept tool calls that match
+            // the tools actually sent to the provider this iteration.
+            if (!allowedToolNames.has(chunk.name)) {
+              logger.warn(`[AgenticLoop] Dropped tool call "${chunk.name}" — not in schema: [${[...allowedToolNames].join(", ")}]`);
               continue;
             }
 
@@ -614,6 +626,40 @@ export default class AgenticLoopService {
         // If the LLM returned tool calls, we execute them and loop
         if (passPendingToolCalls.length > 0) {
 
+          // ── Plan mode enforcement ──────────────────────────────
+          // Hard-reject anything except exit_plan_mode/think during plan mode.
+          if (planModeActive) {
+            const PLAN_MODE_ALLOWED = new Set(["exit_plan_mode", "think"]);
+            const blocked = passPendingToolCalls.filter((tc) => !PLAN_MODE_ALLOWED.has(tc.name));
+            if (blocked.length > 0) {
+              const blockedNames = blocked.map((t) => t.name).join(", ");
+              logger.warn(`[PlanningMode] Blocked ${blocked.length} unauthorized tool call(s) during plan mode: ${blockedNames}`);
+              // Remove blocked tool calls
+              for (const tc of blocked) {
+                const idx = passPendingToolCalls.indexOf(tc);
+                if (idx >= 0) passPendingToolCalls.splice(idx, 1);
+              }
+              // If nothing remains, preserve context and give the model feedback
+              if (passPendingToolCalls.length === 0) {
+                // Append assistant message so the model sees its own output
+                if (passStreamedText) {
+                  currentMessages.push({
+                    role: "assistant",
+                    content: passStreamedText,
+                    ...(passStreamedThinking && { thinking: passStreamedThinking }),
+                    ...(passThinkingSignature && { thinkingSignature: passThinkingSignature }),
+                  });
+                }
+                // Tell the model WHY its tools were blocked
+                currentMessages.push({
+                  role: "user",
+                  content: `[SYSTEM] You are in PLANNING MODE. Your tool call(s) [${blockedNames}] were blocked because only exit_plan_mode and think are available during planning. You MUST call exit_plan_mode to present your plan for approval before any other tools can be used.`,
+                });
+                logIteration();
+                continue;
+              }
+            }
+          }
 
           // ── beforeToolCall hook: auto-approval gating ──────
           const { autoApproved: _autoApproved, needsApproval } = approvalEngine.checkBatch(passPendingToolCalls);
@@ -794,13 +840,15 @@ export default class AgenticLoopService {
             emit({ type: "status", message: "plan_mode_entered" });
           }
 
-          // exit_plan_mode: emit plan_proposal + approval gate (Claude Code pattern)
+          // exit_plan_mode: approval gate (Claude Code pattern)
           const exitPlanTC = passPendingToolCalls.find((tc) => tc.name === "exit_plan_mode");
           if (exitPlanTC) {
             const planText = planModeText.trim() || passStreamedText.trim();
             const planSteps = PlanningModeService.extractSteps(planText);
 
-            // Emit plan to UI (always — even when auto-approve)
+            logger.info(`[PlanningMode] exit_plan_mode called — planText=${planText.length} chars, steps=${planSteps.length}, autoApprove=${!!options.autoApprove}`);
+
+            // Emit plan to UI
             emit({
               type: "plan_proposal",
               plan: planText,
@@ -813,7 +861,8 @@ export default class AgenticLoopService {
               approved = true;
               logger.info("[PlanningMode] Auto-approved plan (autoApprove=true)");
             } else {
-              // Wait for user approval
+              // Wait for user approval — reuse the same pendingApprovals
+              // mechanism that tool approvals use (proven to work)
               approved = await new Promise((resolve) => {
                 const timeoutId = setTimeout(() => {
                   pendingApprovals.delete(agentSessionId);
@@ -894,7 +943,22 @@ export default class AgenticLoopService {
         }
 
         // If text was returned without new tools, we're done
+        // UNLESS we're in plan mode — the model needs to continue
+        // so it can call exit_plan_mode after outputting its plan.
         if (passStreamedText) {
+          if (planModeActive) {
+            // Append plan text to context so the model can see what
+            // it already wrote, then continue to the next iteration
+            // where it should call exit_plan_mode.
+            currentMessages.push({
+              role: "assistant",
+              content: passStreamedText,
+              ...(passStreamedThinking && { thinking: passStreamedThinking }),
+              ...(passThinkingSignature && { thinkingSignature: passThinkingSignature }),
+            });
+            logIteration();
+            continue;
+          }
           logIteration();
           break;
         }

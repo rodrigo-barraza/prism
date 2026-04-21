@@ -28,6 +28,11 @@ export function initSseResponse(res) {
  * @returns {(event: object) => void}
  */
 export function createSseEmitter(res, signal) {
+  // Disable Nagle's algorithm for minimal SSE latency.
+  // Without this, small SSE events can sit in the TCP buffer when
+  // the server blocks on await (e.g. plan approval promise).
+  if (res.socket) res.socket.setNoDelay(true);
+
   return (event) => {
     if (!signal.aborted) {
       if (event.type === "image" && event.minioRef && event.data) {
@@ -35,6 +40,18 @@ export function createSseEmitter(res, signal) {
         res.write(`data: ${JSON.stringify(lightweight)}\n\n`);
       } else {
         res.write(`data: ${JSON.stringify(event)}\n\n`);
+      }
+      // Force-flush the write buffer. Without compression middleware,
+      // res.flush() doesn't exist — use cork()/uncork() to guarantee
+      // Node flushes pending writes to the socket immediately. Critical
+      // for events emitted before an await block (plan_proposal,
+      // approval_required) where no further writes push the buffer.
+      if (typeof res.flush === "function") {
+        res.flush();
+      } else if (res.socket && !res.socket.destroyed) {
+        res.socket.uncork?.();
+        res.socket.cork?.();
+        res.socket.uncork?.();
       }
     }
   };

@@ -7,32 +7,22 @@ import logger from "../utils/logger.js";
  */
 const PLANNING_INSTRUCTION = `
 
-## PLANNING MODE ACTIVE
+## ⚠️ PLANNING MODE ACTIVE — TOOL ACCESS RESTRICTED
 
-You are currently in planning mode. In this mode:
-1. You do NOT have access to any tools except exit_plan_mode and think.
-2. Thoroughly explore the problem and design an implementation approach.
-3. Consider multiple approaches and their trade-offs.
-4. Write out your complete plan as text output.
-5. When your plan is ready, call exit_plan_mode to present it for approval.
+**IMPORTANT**: Although the system prompt above may describe various tools (team_create, execute_shell, read_file, etc.), you are in PLANNING MODE and **CANNOT use any of them**.
 
-Your plan should follow this format:
+The ONLY tools available to you right now are:
+- **exit_plan_mode** — Call this when your plan is complete to submit it for user approval
+- **think** — Use for internal reasoning
 
-### Plan: [Title]
+Any other tool calls WILL BE BLOCKED. Do not attempt to call team_create, execute_shell, read_file, write_file, or any other tool.
 
-**Goal**: [One-sentence description of what will be accomplished]
+**What to do:**
+1. Analyze the user's request
+2. Design your implementation approach as text output
+3. Call exit_plan_mode when ready — the user will review and approve before you can execute
 
-**Steps**:
-1. [Step description] → [file(s) affected]
-2. [Step description] → [file(s) affected]
-3. ...
-
-**Risks/Considerations**:
-- [Any important caveats or risks]
-
-**Estimated Scope**: [small/medium/large]
-
-Remember: DO NOT attempt to use any tools yet. Write your plan as text, then call exit_plan_mode when ready.`;
+Keep your plan concise. For simple tasks, a brief summary is sufficient.`;
 
 /**
  * PlanningModeService — implements the "Plan First" workflow using
@@ -56,7 +46,7 @@ export default class PlanningModeService {
     const systemMsg = messages.find((m) => m.role === "system");
     if (systemMsg) {
       // Idempotency: don't append twice
-      if (systemMsg.content.includes("## PLANNING MODE ACTIVE")) return;
+      if (systemMsg.content.includes("PLANNING MODE ACTIVE")) return;
       systemMsg.content = systemMsg.content + PLANNING_INSTRUCTION;
     } else {
       messages.unshift({ role: "system", content: PLANNING_INSTRUCTION.trim() });
@@ -73,7 +63,7 @@ export default class PlanningModeService {
    */
   static stripPlanningInstruction(messages) {
     const systemMsg = messages.find((m) => m.role === "system");
-    if (systemMsg && systemMsg.content.includes("## PLANNING MODE ACTIVE")) {
+    if (systemMsg && systemMsg.content.includes("PLANNING MODE ACTIVE")) {
       systemMsg.content = systemMsg.content.replace(PLANNING_INSTRUCTION, "");
       logger.info("[PlanningMode] Stripped planning instruction from system prompt");
     }
