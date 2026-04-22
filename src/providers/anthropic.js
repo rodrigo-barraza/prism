@@ -301,6 +301,22 @@ async function prepareMessages(messages) {
     }
   }
 
+  // Anthropic rejects requests where the final assistant message content ends
+  // with trailing whitespace (400: "final assistant content cannot end with
+  // trailing whitespace"). Sanitize all assistant text blocks to be safe.
+  for (const msg of merged) {
+    if (msg.role !== "assistant") continue;
+    if (typeof msg.content === "string") {
+      msg.content = msg.content.trimEnd() || " ";
+    } else if (Array.isArray(msg.content)) {
+      for (const block of msg.content) {
+        if (block.type === "text" && typeof block.text === "string") {
+          block.text = block.text.trimEnd() || " ";
+        }
+      }
+    }
+  }
+
   return { systemMessage, messages: merged };
 }
 
