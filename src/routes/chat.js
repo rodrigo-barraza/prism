@@ -22,6 +22,7 @@ import { createStreamState, dispatchChunk } from "../utils/StreamChunkDispatcher
 import { calculateTokensPerSec } from "../utils/math.js";
 import { compressImageForSizeLimit, constrainImageDimensions } from "../utils/media.js";
 import { formatCostTag, roundMs } from "../utils/utilities.js";
+import SessionGenerationTracker from "../services/SessionGenerationTracker.js";
 
 import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
 import localModelQueue from "../services/LocalModelQueue.js";
@@ -1412,6 +1413,20 @@ async function handleNonStreamingText(ctx) {
   // Mark conversation as generating
   markGenerating(conversationId, project, username, true, getCollectionOpts(project));
 
+  // Track this sub-request in SessionGenerationTracker if it belongs
+  // to an active agent session (e.g., tools-api calling /chat?stream=false
+  // for generate_image prompt-softening or describe_image).
+  const subRequestId = ctx.agentSessionId
+    ? `sub-${ctx.requestId || crypto.randomUUID()}`
+    : null;
+  if (subRequestId && ctx.agentSessionId) {
+    SessionGenerationTracker.register(ctx.agentSessionId, subRequestId, {
+      provider: ctx.providerName,
+      model: resolvedModel,
+      source: "tool-sub-request",
+    });
+  }
+
   const generationStart = performance.now();
   const genResult = await provider.generateText(
     messages,
@@ -1419,6 +1434,15 @@ async function handleNonStreamingText(ctx) {
     options,
   );
   const now = performance.now();
+
+  // Complete sub-request tracking with actual token data
+  if (subRequestId && ctx.agentSessionId) {
+    const outTokens = genResult.usage?.outputTokens || 0;
+    if (outTokens > 0) {
+      SessionGenerationTracker.update(subRequestId, { outputTokens: outTokens });
+    }
+    SessionGenerationTracker.complete(subRequestId);
+  }
 
   // Emit chunk/thinking/toolCall events before finalization
   if (genResult.text) {

@@ -19,6 +19,7 @@ import AgentPersonaRegistry from "./AgentPersonaRegistry.js";
 import PlanningModeService from "./PlanningModeService.js";
 import MemoryExtractor from "./MemoryExtractor.js";
 import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
+import SessionGenerationTracker from "./SessionGenerationTracker.js";
 
 
 /** Coordinator tools bypass the enabledTools filter (always available) */
@@ -328,6 +329,43 @@ export default class AgenticLoopService {
     // Track consecutive errors per tool name for retry budgeting
     const toolErrorCounts = new Map();
 
+    // ── Generation progress emission interval ──────────────
+    // Emit backend-computed tok/s to the frontend every N chunks
+    // or every PROGRESS_INTERVAL_MS, whichever comes first.
+    const PROGRESS_CHUNK_INTERVAL = 10;
+    const PROGRESS_TIME_INTERVAL_MS = 500;
+    let lastProgressEmitTime = 0;
+    let chunksSinceLastProgress = 0;
+
+    // Workers register under the parent session so getSessionStats()
+    // on the coordinator's session aggregates all active requests.
+    const trackerSessionId = parentAgentSessionId || agentSessionId;
+
+    /** Emit a generation_progress status event with current session stats. */
+    const emitGenerationProgress = () => {
+      const stats = SessionGenerationTracker.getSessionStats(trackerSessionId);
+      if (stats.activeRequests > 0) {
+        emit({
+          type: "status",
+          message: "generation_progress",
+          tokPerSec: stats.tokPerSec,
+          activeRequests: stats.activeRequests,
+          outputTokens: stats.totalOutputTokens,
+        });
+      }
+      lastProgressEmitTime = performance.now();
+      chunksSinceLastProgress = 0;
+    };
+
+    /** Check if it's time to emit a progress event. */
+    const maybeEmitProgress = () => {
+      chunksSinceLastProgress++;
+      const timeSinceLast = performance.now() - lastProgressEmitTime;
+      if (chunksSinceLastProgress >= PROGRESS_CHUNK_INTERVAL || timeSinceLast >= PROGRESS_TIME_INTERVAL_MS) {
+        emitGenerationProgress();
+      }
+    };
+
     try {
       while (iterations < resolvedMaxIterations) {
         iterations++;
@@ -415,6 +453,20 @@ export default class AgenticLoopService {
 
         const expandedMessages = expandMessagesForFC(currentMessages, { filterDeleted: false });
 
+        // ── Register LLM request with SessionGenerationTracker ──
+        const passRequestId = `${ctx.requestId || agentSessionId}-iter-${iterations}`;
+        // Per-iteration token counter for the tracker — separate from
+        // the cumulative outputTokenCount which is used for SSE events.
+        // Each tracker request tracks only its own iteration's tokens
+        // to compute accurate tok/s without cross-iteration inflation.
+        let iterationTokenCount = 0;
+        SessionGenerationTracker.register(trackerSessionId, passRequestId, {
+          provider: providerName,
+          model: resolvedModel,
+          source: parentAgentSessionId ? "worker" : "orchestrator",
+          workerId: parentAgentSessionId ? agentSessionId : null,
+        });
+
         // Build the stream!
         const stream =
           modelDef?.liveAPI && provider.generateTextStreamLive
@@ -460,8 +512,12 @@ export default class AgenticLoopService {
             displayThinkingFragments[displayThinkingFragments.length - 1] += chunk.content;
             // Estimate tokens from content length (~4 chars/token). Cloud providers
             // (Anthropic, OpenAI, Google) emit multi-token deltas per chunk.
-            outputTokenCount += Math.max(1, Math.ceil((chunk.content || "").length / 4));
+            const thinkingTokenDelta = Math.max(1, Math.ceil((chunk.content || "").length / 4));
+            outputTokenCount += thinkingTokenDelta;
+            iterationTokenCount += thinkingTokenDelta;
+            SessionGenerationTracker.update(passRequestId, { outputTokens: iterationTokenCount });
             emit({ type: "thinking", content: chunk.content, outputTokens: outputTokenCount });
+            maybeEmitProgress();
             continue;
           }
 
@@ -637,9 +693,28 @@ export default class AgenticLoopService {
           displayTextFragments[displayTextFragments.length - 1] += chunkStr;
           // Estimate tokens from content length (~4 chars/token). Cloud providers
           // (Anthropic, OpenAI, Google) emit multi-token deltas per chunk.
-          outputTokenCount += Math.max(1, Math.ceil(rawChunkStr.length / 4));
+          const textTokenDelta = Math.max(1, Math.ceil(rawChunkStr.length / 4));
+          outputTokenCount += textTokenDelta;
+          iterationTokenCount += textTokenDelta;
+          SessionGenerationTracker.update(passRequestId, { outputTokens: iterationTokenCount });
           if (chunkStr) emit({ type: "chunk", content: chunkStr, outputTokens: outputTokenCount });
+          maybeEmitProgress();
         }
+
+        // ── Complete this iteration's request in the tracker ────
+        // Use provider-reported tokens if available. Use Math.max to
+        // prevent totalOutputTokens from decreasing — the estimated
+        // count (from chunk content length) can overcount, but the
+        // frontend badge should never go backwards.
+        if (passUsage.outputTokens > 0) {
+          SessionGenerationTracker.update(passRequestId, {
+            outputTokens: Math.max(iterationTokenCount, passUsage.outputTokens),
+          });
+        }
+        // Emit a final progress event for this iteration so the
+        // frontend gets an accurate snapshot before tool execution.
+        emitGenerationProgress();
+        SessionGenerationTracker.complete(passRequestId);
 
         if (signal?.aborted) break;
 
@@ -1077,6 +1152,15 @@ export default class AgenticLoopService {
         const expandedExhaustionMsgs = expandMessagesForFC(currentMessages, { filterDeleted: false });
 
         const augmentedExhaustionOptions = { ...exhaustionOptions, project, agent, username };
+        const exhaustionRequestId = `${ctx.requestId || agentSessionId}-exhaustion`;
+        let exhaustionTokenCount = 0;
+        SessionGenerationTracker.register(trackerSessionId, exhaustionRequestId, {
+          provider: providerName,
+          model: resolvedModel,
+          source: parentAgentSessionId ? "worker" : "orchestrator",
+          workerId: parentAgentSessionId ? agentSessionId : null,
+        });
+
         const exhaustionStream =
           modelDef?.liveAPI && provider.generateTextStreamLive
             ? provider.generateTextStreamLive(expandedExhaustionMsgs, resolvedModel, { ...augmentedExhaustionOptions, signal })
@@ -1091,8 +1175,12 @@ export default class AgenticLoopService {
           }
           if (chunk && typeof chunk === "object" && chunk.type === "thinking") {
             streamedThinking += chunk.content;
-            outputTokenCount += Math.max(1, Math.ceil((chunk.content || "").length / 4));
+            const exThinkDelta = Math.max(1, Math.ceil((chunk.content || "").length / 4));
+            outputTokenCount += exThinkDelta;
+            exhaustionTokenCount += exThinkDelta;
+            SessionGenerationTracker.update(exhaustionRequestId, { outputTokens: exhaustionTokenCount });
             emit({ type: "thinking", content: chunk.content, outputTokens: outputTokenCount });
+            maybeEmitProgress();
             continue;
           }
           if (chunk && typeof chunk === "object") continue; // skip non-text
@@ -1102,9 +1190,16 @@ export default class AgenticLoopService {
           const chunkStr = typeof chunk === "string" ? chunk : "";
           overallOutputCharacters += chunkStr.length;
           finalStreamedText += chunkStr;
-          outputTokenCount += Math.max(1, Math.ceil(chunkStr.length / 4));
+          const exTextDelta = Math.max(1, Math.ceil(chunkStr.length / 4));
+          outputTokenCount += exTextDelta;
+          exhaustionTokenCount += exTextDelta;
+          SessionGenerationTracker.update(exhaustionRequestId, { outputTokens: exhaustionTokenCount });
           emit({ type: "chunk", content: chunkStr, outputTokens: outputTokenCount });
+          maybeEmitProgress();
         }
+
+        emitGenerationProgress();
+        SessionGenerationTracker.complete(exhaustionRequestId);
       }
 
       const now = performance.now();
@@ -1207,6 +1302,11 @@ export default class AgenticLoopService {
       // Clean up any lingering approval/question promises
       pendingApprovals.delete(agentSessionId);
       pendingQuestions.delete(agentSessionId);
+      // Clean up session generation tracking — only for the coordinator
+      // (workers register under the parent session, cleaned up by the coordinator)
+      if (!parentAgentSessionId) {
+        SessionGenerationTracker.cleanup(trackerSessionId);
+      }
     }
   }
 
