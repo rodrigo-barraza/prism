@@ -86,7 +86,10 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
     const chunkStr = typeof chunk === "string" ? chunk : "";
     state.outputCharacters += chunkStr.length;
     state.text += chunkStr;
-    state.outputTokenCount++;
+    // Estimate tokens from content length (~4 chars/token). Cloud providers
+    // (Anthropic, OpenAI, Google) emit multi-token text per chunk, so counting
+    // 1 per chunk massively underestimates the live token count.
+    state.outputTokenCount += Math.max(1, Math.ceil(chunkStr.length / 4));
     emit({ type: "chunk", content: chunkStr, outputTokens: state.outputTokenCount });
     return true;
   }
@@ -113,7 +116,9 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
       }
       state.generationEnd = performance.now();
       state.thinking += chunk.content;
-      state.outputTokenCount++;
+      // Estimate tokens from content length (~4 chars/token) — thinking deltas
+      // from cloud providers are multi-token, same as text chunks.
+      state.outputTokenCount += Math.max(1, Math.ceil((chunk.content || "").length / 4));
       emit({ type: "thinking", content: chunk.content, outputTokens: state.outputTokenCount });
       return true;
 
@@ -216,7 +221,7 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
       const chunkStr = typeof chunk === "string" ? chunk : "";
       state.outputCharacters += chunkStr.length;
       state.text += chunkStr;
-      state.outputTokenCount++;
+      state.outputTokenCount += Math.max(1, Math.ceil(chunkStr.length / 4));
       emit({ type: "chunk", content: chunkStr, outputTokens: state.outputTokenCount });
       return true;
     }

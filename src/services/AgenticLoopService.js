@@ -409,7 +409,9 @@ export default class AgenticLoopService {
               lastDisplaySegType = "thinking";
             }
             displayThinkingFragments[displayThinkingFragments.length - 1] += chunk.content;
-            outputTokenCount++;
+            // Estimate tokens from content length (~4 chars/token). Cloud providers
+            // (Anthropic, OpenAI, Google) emit multi-token deltas per chunk.
+            outputTokenCount += Math.max(1, Math.ceil((chunk.content || "").length / 4));
             emit({ type: "thinking", content: chunk.content, outputTokens: outputTokenCount });
             continue;
           }
@@ -579,7 +581,9 @@ export default class AgenticLoopService {
             lastDisplaySegType = "text";
           }
           displayTextFragments[displayTextFragments.length - 1] += chunkStr;
-          outputTokenCount++;
+          // Estimate tokens from content length (~4 chars/token). Cloud providers
+          // (Anthropic, OpenAI, Google) emit multi-token deltas per chunk.
+          outputTokenCount += Math.max(1, Math.ceil(chunkStr.length / 4));
           emit({ type: "chunk", content: chunkStr, outputTokens: outputTokenCount });
         }
 
@@ -1033,7 +1037,7 @@ export default class AgenticLoopService {
           }
           if (chunk && typeof chunk === "object" && chunk.type === "thinking") {
             streamedThinking += chunk.content;
-            outputTokenCount++;
+            outputTokenCount += Math.max(1, Math.ceil((chunk.content || "").length / 4));
             emit({ type: "thinking", content: chunk.content, outputTokens: outputTokenCount });
             continue;
           }
@@ -1044,7 +1048,7 @@ export default class AgenticLoopService {
           const chunkStr = typeof chunk === "string" ? chunk : "";
           overallOutputCharacters += chunkStr.length;
           finalStreamedText += chunkStr;
-          outputTokenCount++;
+          outputTokenCount += Math.max(1, Math.ceil(chunkStr.length / 4));
           emit({ type: "chunk", content: chunkStr, outputTokens: outputTokenCount });
         }
       }
