@@ -955,10 +955,10 @@ export default class AgenticLoopService {
           continue;
         }
 
-        // If text was returned without new tools, we're done
+        // If text or thinking was returned without new tools, we're done.
         // UNLESS we're in plan mode — the model needs to continue
         // so it can call exit_plan_mode after outputting its plan.
-        if (passStreamedText) {
+        if (passStreamedText || passStreamedThinking) {
           if (planModeActive) {
             // Append plan text to context so the model can see what
             // it already wrote, then continue to the next iteration
@@ -975,6 +975,17 @@ export default class AgenticLoopService {
           logIteration();
           break;
         }
+
+        // No text, no thinking, no tool calls — model produced an empty
+        // response. Break to avoid an infinite loop; the exhaustion
+        // recovery pass below will give the user a summary.
+        logger.warn(
+          `[AgenticLoop] Empty model output on iteration ${iterations} — ` +
+          `text=${passStreamedText.length}, thinking=${passStreamedThinking.length}, ` +
+          `toolCalls=${passPendingToolCalls.length}. Breaking.`,
+        );
+        logIteration();
+        break;
       }
 
       // ── Exhaustion Recovery Pass ──────────────────────────────
