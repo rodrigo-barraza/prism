@@ -61,6 +61,7 @@ export default class AgenticLoopService {
       project,
       username,
       agent,
+      workspaceRoot,
       requestStart,
       emit,
       signal,
@@ -259,7 +260,7 @@ export default class AgenticLoopService {
     // Dynamic System Prompt Assembly
     // Always active — the assembler loads the correct persona via AgentPersonaRegistry
     // based on ctx.agent (e.g. "CODING", "LUPOS"). Callers no longer bypass this.
-    const assembler = new SystemPromptAssembler();
+    const assembler = new SystemPromptAssembler({ workspaceRoot: workspaceRoot || undefined });
     hooks.register("beforePrompt", assembler.createHook(), "SystemPromptAssembler");
 
     // Memory Extraction (fire-and-forget on loop exit)
@@ -296,6 +297,7 @@ export default class AgenticLoopService {
             agentSessionId,
             agentContext: options.agentContext,
             enabledTools: resolvedEnabledTools,
+            workspaceRoot: workspaceRoot || undefined,
           };
           await hooks.run("beforePrompt", hookCtx);
 
@@ -739,7 +741,7 @@ export default class AgenticLoopService {
                            data: data || undefined,
                            meta: meta || undefined,
                        });
-                   }, { project, username, agent, requestId: ctx.requestId, agentSessionId, iteration: iterations });
+                   }, { project, username, agent, requestId: ctx.requestId, agentSessionId, iteration: iterations, workspaceRoot });
                    await hooks.run("afterToolCall", tc, result, ctx);
                    return { name: tc.name, id: tc.id, result };
                }
@@ -763,6 +765,7 @@ export default class AgenticLoopService {
                  _emit: emit,
                   _maxWorkerIterations: options.maxWorkerIterations,
                   _minContextLength: options.minContextLength,
+                  workspaceRoot,
                });
                await hooks.run("afterToolCall", tc, result, ctx);
                return { name: tc.name, id: tc.id, result };

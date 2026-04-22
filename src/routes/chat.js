@@ -294,6 +294,9 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
     //  - conversationMeta.systemPrompt → stored as top-level DB field for quick UI access
     // The top-level param is ignored; only the messages array matters for generation.
     systemPrompt: _unusedSystemPrompt,
+    // Multi-workspace: user-selected workspace root path (absolute fs path).
+    // Flows from x-workspace-root header → AuthMiddleware → agent route → here.
+    workspaceRoot,
     ...extraParams
   } = params;
 
@@ -421,6 +424,8 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
     username,
     clientIp,
     agent,
+    // Multi-workspace
+    workspaceRoot: workspaceRoot || null,
     // Timing
     requestStart,
     requestId,
@@ -622,6 +627,7 @@ export async function handleAgent(params, emit, { signal } = {}) {
         username,
         clientIp,
         agent,
+        workspaceRoot: ctx.workspaceRoot,
         requestId,
         requestStart,
         emit,

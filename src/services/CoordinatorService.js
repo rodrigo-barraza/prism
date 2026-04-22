@@ -30,8 +30,9 @@ import { registerCleanup } from "../utils/CleanupRegistry.js";
 //      Called when the LLM invokes team_create / send_message / stop_agent
 // ────────────────────────────────────────────────────────────
 
-function getDefaultWorkspaceRoot() {
-  return ToolOrchestratorService.getWorkspaceRoot()
+function getDefaultWorkspaceRoot(overrideRoot) {
+  return overrideRoot
+    || ToolOrchestratorService.getWorkspaceRoot()
     || resolve(process.env.HOME || "/home");
 }
 
@@ -66,7 +67,7 @@ function resolveRepoPath(workspaceRoot, files) {
 }
 
 /** Max parallel workers */
-const MAX_WORKERS = 5;
+const MAX_WORKERS = 10;
 
 /** Max iterations per worker agent loop */
 const MAX_WORKER_ITERATIONS = 15;
@@ -272,16 +273,18 @@ function selectAndReserveInstance(siblings, coordinatorInstanceId, instanceModel
   }).join(", ");
   logger.info(`[Coordinator] selectAndReserveInstance: siblings=[${stateSnapshot}], coordinator=${coordinatorInstanceId}`);
 
-  // Fill-first (bin-packing): saturate each instance's concurrency
-  // in declaration order (first to last in PROVIDER_LM_STUDIO) before
-  // spilling to the next. This keeps workloads concentrated on a
-  // single machine when possible.
+  // Two-phase assignment strategy:
   //
-  // The coordinator's own instance gets priority when it has slots —
-  // its orchestrator inference is IDLE while workers run (it finished
-  // generating tool calls and only resumes after all complete).
-  // After the coordinator instance, remaining siblings are tried
-  // in their original array order.
+  // Phase 1 — Fill-first (bin-packing): saturate each instance's
+  // concurrency in declaration order before spilling to the next.
+  // The coordinator's own instance gets priority when it has slots
+  // (its orchestrator inference is IDLE while workers run).
+  //
+  // Phase 2 — Least-loaded overflow: when ALL instances are at
+  // capacity, distribute the overflow evenly by picking the instance
+  // with the fewest active workers. This prevents piling all excess
+  // workers onto a single instance or falling through to cloud
+  // fallback unnecessarily.
 
   // Build ordered candidate list: coordinator's instance first, then rest in order
   const ordered = [];
@@ -293,6 +296,7 @@ function selectAndReserveInstance(siblings, coordinatorInstanceId, instanceModel
     }
   }
 
+  // Phase 1: find the first instance with free concurrency slots
   let bestInstance = null;
   for (const inst of ordered) {
     const active = getActiveOn(inst.id);
@@ -303,8 +307,24 @@ function selectAndReserveInstance(siblings, coordinatorInstanceId, instanceModel
     }
   }
 
+  // Phase 2: all instances at capacity — least-loaded overflow
+  // Spread the overload evenly across instances instead of returning
+  // null (which would force all overflow to cloud fallback or queue).
+  if (!bestInstance && siblings.length > 0) {
+    let minActive = Infinity;
+    for (const inst of ordered) {
+      const active = getActiveOn(inst.id);
+      if (active < minActive) {
+        minActive = active;
+        bestInstance = inst;
+      }
+    }
+    const overload = minActive - bestInstance.concurrency;
+    logger.info(`[Coordinator] selectAndReserveInstance: all at capacity — overflow to ${bestInstance.id} (active=${minActive}, overload=+${overload + 1})`);
+  }
+
   if (!bestInstance) {
-    logger.info(`[Coordinator] selectAndReserveInstance: no instance available`);
+    logger.info(`[Coordinator] selectAndReserveInstance: no instances available`);
     return null;
   }
 
@@ -487,7 +507,7 @@ export default class CoordinatorService {
    * @returns {Promise<object>} Spawn result with agentId
    */
   static async spawnFromTool({ description, prompt, files, model, assignedProvider, assignedModel, coordinatorCtx }) {
-    const { project, username, agent, providerName, resolvedModel, traceId, agentSessionId: parentAgentSessionId, maxWorkerIterations: clientMaxWorkerIter, minContextLength } = coordinatorCtx;
+    const { project, username, agent, providerName, resolvedModel, traceId, agentSessionId: parentAgentSessionId, maxWorkerIterations: clientMaxWorkerIter, minContextLength, workspaceRoot: coordinatorWorkspaceRoot } = coordinatorCtx;
 
     // Resolve max worker iterations: 0 = unlimited (Infinity), positive = clamped 1-100, default = constant
     const resolvedMaxWorkerIterations = clientMaxWorkerIter === 0
@@ -614,7 +634,7 @@ export default class CoordinatorService {
 
     const agentId = `agent-${(++agentCounter).toString(36)}-${crypto.randomUUID().slice(0, 4)}`;
     const branchName = `coordinator/${agentId}`;
-    const workspaceRoot = getDefaultWorkspaceRoot();
+    const workspaceRoot = getDefaultWorkspaceRoot(coordinatorWorkspaceRoot);
 
     // Derive the git repo path from worker files.
     // If files live under a git subdirectory (e.g. /workspace/projectA/),

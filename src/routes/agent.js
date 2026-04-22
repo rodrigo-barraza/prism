@@ -116,6 +116,11 @@ router.post("/", async (req, res, next) => {
     username: req.username,
     clientIp: req.clientIp,
     agent: req.body.agent || req.agent || null,
+    // Multi-workspace: override the default workspace root when the user has
+    // selected a non-default workspace in the Retina sidebar. Sources:
+    //   1. x-workspace-root header (set by Retina's serviceHeaders.js)
+    //   2. body.workspaceRoot (for server-to-server / API callers)
+    workspaceRoot: req.workspaceRoot || req.body.workspaceRoot || null,
   };
 
   if (req.query.stream !== "false") {

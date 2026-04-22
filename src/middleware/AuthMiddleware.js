@@ -20,6 +20,9 @@ export function authMiddleware(req, res, next) {
   req.username = req.headers["x-username"] || "anonymous";
   // Workspace ID for multi-workspace scoping (optional — null means default workspace)
   req.workspaceId = req.headers["x-workspace-id"] || null;
+  // Workspace root path — absolute filesystem path selected by the user.
+  // Takes precedence over workspaceId for routing agent tools to the correct directory.
+  req.workspaceRoot = req.headers["x-workspace-root"] || null;
 
   // Update AsyncLocalStorage context with auth-resolved values
   const store = requestContext.getStore();
@@ -28,6 +31,7 @@ export function authMiddleware(req, res, next) {
     store.username = req.username;
     store.clientIp = req.clientIp;
     store.workspaceId = req.workspaceId;
+    store.workspaceRoot = req.workspaceRoot;
   }
 
   next();

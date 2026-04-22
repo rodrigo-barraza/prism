@@ -329,6 +329,9 @@ function buildContextHeaders(ctx = {}) {
   if (ctx.traceId) headers["X-Trace-Id"] = ctx.traceId;
   if (ctx.agentSessionId) headers["X-Agent-Session-Id"] = ctx.agentSessionId;
   if (ctx.iteration !== undefined && ctx.iteration !== null) headers["X-Iteration"] = String(ctx.iteration);
+  // Multi-workspace: when the user has selected a non-default workspace root,
+  // send it to tools-api so file/git/shell tools resolve within it.
+  if (ctx.workspaceRoot) headers["X-Workspace-Root"] = ctx.workspaceRoot;
   return headers;
 }
 
@@ -824,7 +827,7 @@ const COORDINATOR_TOOL_SCHEMAS = [
       "Spawn one or more worker agents that execute in parallel, each in an isolated git worktree. " +
       "Workers have access to the full tool suite (read, write, search, shell). " +
       "Use for parallelizable research, implementation, or verification tasks. " +
-      "For a single task, provide one member. For parallel work, provide multiple members. " +
+      "For a single task, provide one member. For parallel work, provide up to 10 members in a single call. " +
       "Returns results from all members when they all complete.",
     parameters: {
       type: "object",
@@ -835,6 +838,7 @@ const COORDINATOR_TOOL_SCHEMAS = [
         },
         members: {
           type: "array",
+          maxItems: 10,
           items: {
             type: "object",
             properties: {
@@ -845,7 +849,7 @@ const COORDINATOR_TOOL_SCHEMAS = [
             },
             required: ["description", "prompt"],
           },
-          description: "Array of worker definitions. Each member runs autonomously in its own worktree.",
+          description: "Array of worker definitions (max 10). Each member runs autonomously in its own worktree.",
         },
       },
       required: ["name", "members"],

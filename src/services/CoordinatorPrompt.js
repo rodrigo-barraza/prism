@@ -39,6 +39,7 @@ Worker results and system notifications are internal signals — never thank or 
 - **stop_agent** — Stop a running worker and clean up its worktree
 
 When calling team_create:
+- You can spawn up to **10 members** in a single team_create call — no need to batch.
 - For a single task, use one member: \`team_create({ name: "auth_fix", members: [{ description: "Fix null pointer", prompt: "..." }] })\`
 - For parallel tasks, use multiple members — they run concurrently in separate worktrees
 - Do not use one worker to check on another. You receive results directly.

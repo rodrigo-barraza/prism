@@ -379,10 +379,18 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
 
         if (!isLoaded || needsReload) {
           // ── Singleflight: coalesce concurrent loads of the same model ──
-          // When multiple workers hit this instance simultaneously (e.g. two
-          // team_create calls), only the first triggers the actual load.
-          // Subsequent callers wait for the inflight promise to resolve.
+          // When multiple workers hit this instance simultaneously (e.g.
+          // team_create spawns 3 workers on the same instance), only the
+          // first triggers the actual load. Subsequent callers wait for
+          // the inflight promise to resolve, then proceed to inference.
+          //
+          // CRITICAL: The check-and-register is fully synchronous (no
+          // awaits between the check and the set). This closes the race
+          // window where concurrent workers could all pass the check
+          // before any of them registers the inflight.
+
           if (_loadInflight.has(model) && !needsReload) {
+            // ── Another caller is already loading this model — wait ──
             logger.info(`[LM-Studio:${instanceId}] Model "${model}" already loading (singleflight) — waiting…`);
             yield { type: "status", message: "Waiting for model load…", phase: "loading" };
             try {
@@ -390,130 +398,154 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
             } catch {
               // If the original load failed, we'll re-detect below
             }
-            // Re-check: the model should now be loaded
             if (options.signal?.aborted) return;
+
+            // Model should now be loaded — capture its context length
             const refreshed = await this.listModels();
             const entry = (refreshed.models || []).find((m) => m.key === model);
             if (entry?.loaded_instances?.length > 0) {
               const ctx = entry.loaded_instances[0]?.config?.context_length;
               if (ctx) options._loadedContextLength = ctx;
               logger.info(`[LM-Studio:${instanceId}] Singleflight resolved — model "${model}" ready (ctx=${ctx})`);
+              // Skip to inference — model is loaded
             } else {
               logger.warn(`[LM-Studio:${instanceId}] Singleflight resolved but model "${model}" not loaded — will attempt load`);
-              // Fall through to load below (the inflight entry was cleaned up)
+              // The inflight was cleaned up by the original loader's finally block.
+              // Fall through — the next synchronous check will NOT find an inflight,
+              // so this worker becomes the new loader.
             }
           }
 
-          // Re-check after singleflight wait — model may now be loaded
-          const nowLoaded = _loadInflight.has(model)
-            ? false // still inflight (shouldn't happen), proceed with load
-            : await this.listModels().then(({ models: ms }) =>
-                (ms || []).find((m) => m.key === model)?.loaded_instances?.length > 0,
-              ).catch(() => false);
+          // ── Synchronous gate: check + register with NO async gap ──
+          // If no inflight exists, register one IMMEDIATELY (synchronous)
+          // before doing any async work. This guarantees only one caller
+          // enters the load path — all others will see the inflight above.
+          if (!_loadInflight.has(model)) {
+            // Check if the model was loaded by a previous singleflight or externally
+            const recheck = await this.listModels().then(({ models: ms }) =>
+              (ms || []).find((m) => m.key === model),
+            ).catch(() => null);
 
-          if (!nowLoaded || needsReload) {
-            // Register this load as inflight so concurrent callers coalesce
-            let resolveInflight, rejectInflight;
-            const inflightPromise = new Promise((res, rej) => {
-              resolveInflight = res;
-              rejectInflight = rej;
-            });
-            // Prevent unhandled rejection if no other worker is awaiting
-            inflightPromise.catch(() => {});
-            _loadInflight.set(model, inflightPromise);
+            const isNowLoaded = recheck?.loaded_instances?.length > 0;
 
-            try {
-              // Unload any other loaded models first (single-model enforcement)
-              if (!needsReload) {
-                for (const m of models || []) {
-                  if (options.signal?.aborted) return;
-                  for (const inst of m.loaded_instances || []) {
-                    yield { type: "status", message: "Unloading previous model…" };
-                    logger.info(`Auto-unloading ${inst.id} before loading ${model}`);
-                    await this.unloadModel(inst.id);
+            if (isNowLoaded && !needsReload) {
+              // Model is loaded — capture context and skip to inference
+              const ctx = recheck?.loaded_instances?.[0]?.config?.context_length;
+              if (ctx) options._loadedContextLength = ctx;
+            } else if (!_loadInflight.has(model)) {
+              // ── SYNCHRONOUS registration — no awaits after this point ──
+              // Double-check: between our listModels() and here, another
+              // worker may have registered. Only register if still clear.
+              let resolveInflight, rejectInflight;
+              const inflightPromise = new Promise((res, rej) => {
+                resolveInflight = res;
+                rejectInflight = rej;
+              });
+              inflightPromise.catch(() => {}); // prevent unhandled rejection
+              _loadInflight.set(model, inflightPromise);
+
+              try {
+                // Unload any other loaded models first (single-model enforcement)
+                if (!needsReload) {
+                  for (const m of models || []) {
+                    if (options.signal?.aborted) return;
+                    for (const inst of m.loaded_instances || []) {
+                      yield { type: "status", message: "Unloading previous model…" };
+                      logger.info(`Auto-unloading ${inst.id} before loading ${model}`);
+                      await this.unloadModel(inst.id);
+                    }
                   }
                 }
-              }
 
-              if (options.signal?.aborted) return;
-              logger.info(`Auto-loading model ${model} for streaming`);
-              yield { type: "status", message: "Loading model… 0%", phase: "loading" };
+                if (options.signal?.aborted) return;
+                logger.info(`Auto-loading model ${model} for streaming`);
+                yield { type: "status", message: "Loading model… 0%", phase: "loading" };
 
-              // Build load options — enforce minContextLength if set
-              const loadOpts = {};
-              if (options.minContextLength) {
-                const maxCtx = modelEntry?.max_context_length || 262144;
-                loadOpts.context_length = Math.min(options.minContextLength, maxCtx);
-                logger.info(`[LM-Studio] Loading with context_length=${loadOpts.context_length} (min=${options.minContextLength}, max=${maxCtx})`);
-              }
+                // Build load options — enforce minContextLength if set
+                const loadOpts = {};
+                if (options.minContextLength) {
+                  const maxCtx = modelEntry?.max_context_length || 262144;
+                  loadOpts.context_length = Math.min(options.minContextLength, maxCtx);
+                  logger.info(`[LM-Studio] Loading with context_length=${loadOpts.context_length} (min=${options.minContextLength}, max=${maxCtx})`);
+                }
 
-              // Start load (non-blocking) and poll for progress
-              let loadDone = false;
-              let loadError = null;
-              const loadPromise = this.loadModel(model, loadOpts, options.signal)
-                .then(() => {
-                  loadDone = true;
-                })
-                .catch((err) => {
-                  loadDone = true;
-                  // Don't treat AbortError as a load failure
-                  if (err.name !== "AbortError") loadError = err;
-                });
+                // Start load (non-blocking) and poll for progress
+                let loadDone = false;
+                let loadError = null;
+                const loadPromise = this.loadModel(model, loadOpts, options.signal)
+                  .then(() => {
+                    loadDone = true;
+                  })
+                  .catch((err) => {
+                    loadDone = true;
+                    if (err.name !== "AbortError") loadError = err;
+                  });
 
-              const startTime = Date.now();
-              const EXPECTED_LOAD_MS = 15_000;
-              let lastPct = 0;
+                const startTime = Date.now();
+                const EXPECTED_LOAD_MS = 15_000;
+                let lastPct = 0;
 
-              while (!loadDone) {
-                await sleep(500);
+                while (!loadDone) {
+                  await sleep(500);
+                  if (options.signal?.aborted) {
+                    logger.info(`[LM-Studio] Aborted during model load for ${model}`);
+                    this.unloadModelByKey(model).catch((e) =>
+                      logger.warn(`[LM-Studio] Failed to unload ${model} after abort: ${e.message}`),
+                    );
+                    return;
+                  }
+                  if (loadDone) break;
+
+                  const elapsed = Date.now() - startTime;
+                  const pct = Math.min(
+                    95,
+                    Math.round((elapsed / (elapsed + EXPECTED_LOAD_MS)) * 100),
+                  );
+                  if (pct > lastPct) {
+                    lastPct = pct;
+                    yield { type: "status", message: `Loading model… ${pct}%`, phase: "loading" };
+                  }
+                }
+
+                await loadPromise;
                 if (options.signal?.aborted) {
-                  logger.info(`[LM-Studio] Aborted during model load for ${model}`);
-                  // Schedule background unload to free VRAM
+                  logger.info(`[LM-Studio] Model ${model} loaded but benchmark aborted — unloading`);
                   this.unloadModelByKey(model).catch((e) =>
                     logger.warn(`[LM-Studio] Failed to unload ${model} after abort: ${e.message}`),
                   );
                   return;
                 }
-                if (loadDone) break;
-
-                const elapsed = Date.now() - startTime;
-                const pct = Math.min(
-                  95,
-                  Math.round((elapsed / (elapsed + EXPECTED_LOAD_MS)) * 100),
-                );
-                if (pct > lastPct) {
-                  lastPct = pct;
-                  yield { type: "status", message: `Loading model… ${pct}%`, phase: "loading" };
+                if (loadError) {
+                  rejectInflight(loadError);
+                  throw loadError;
                 }
+
+                yield { type: "status", message: "Loading model… 100%", phase: "loading" };
+
+                // Re-fetch to get the loaded context length
+                try {
+                  const refreshed = await this.listModels();
+                  const entry = (refreshed.models || []).find((m) => m.key === model);
+                  const ctx = entry?.loaded_instances?.[0]?.config?.context_length;
+                  if (ctx) options._loadedContextLength = ctx;
+                } catch { /* ignore */ }
+
+                resolveInflight();
+              } finally {
+                _loadInflight.delete(model);
               }
-
-              await loadPromise;
-              if (options.signal?.aborted) {
-                // Model finished loading but we're aborting — unload it
-                logger.info(`[LM-Studio] Model ${model} loaded but benchmark aborted — unloading`);
-                this.unloadModelByKey(model).catch((e) =>
-                  logger.warn(`[LM-Studio] Failed to unload ${model} after abort: ${e.message}`),
-                );
-                return;
-              }
-              if (loadError) {
-                rejectInflight(loadError);
-                throw loadError;
-              }
-
-              yield { type: "status", message: "Loading model… 100%", phase: "loading" };
-
-              // Re-fetch to get the loaded context length
-              try {
-                const refreshed = await this.listModels();
-                const entry = (refreshed.models || []).find((m) => m.key === model);
-                const ctx = entry?.loaded_instances?.[0]?.config?.context_length;
-                if (ctx) options._loadedContextLength = ctx;
-              } catch { /* ignore */ }
-
-              resolveInflight();
-            } finally {
-              _loadInflight.delete(model);
+            } else {
+              // Another worker registered between our recheck and here —
+              // loop back by recursing into the singleflight wait above.
+              // In practice this is extremely rare but handles the edge case.
+              logger.info(`[LM-Studio:${instanceId}] Inflight appeared during recheck — waiting…`);
+              yield { type: "status", message: "Waiting for model load…", phase: "loading" };
+              try { await _loadInflight.get(model); } catch { /* ignore */ }
+              if (options.signal?.aborted) return;
+              const refreshed = await this.listModels().catch(() => ({ models: [] }));
+              const entry = (refreshed.models || []).find((m) => m.key === model);
+              const ctx = entry?.loaded_instances?.[0]?.config?.context_length;
+              if (ctx) options._loadedContextLength = ctx;
             }
           }
         }
