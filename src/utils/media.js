@@ -9,10 +9,18 @@ import { join } from "path";
 import sharp from "sharp";
 import logger from "./logger.js";
 
-// ── Provider Image Size Limits ──────────────────────────────
+// ── Provider Image Limits ───────────────────────────────────
 
 /** Anthropic's per-image inline base64 limit. */
 const ANTHROPIC_IMAGE_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+
+/**
+ * Maximum pixel dimension (width or height) for images sent to providers.
+ * Anthropic hard-rejects >8000px, but most vision models gain little
+ * beyond ~1500px. Capping at 2000px saves bandwidth, memory, and tokens
+ * while preserving enough detail for accurate captioning/analysis.
+ */
+const MAX_IMAGE_DIMENSION = 2000;
 
 /**
  * Compress a base64-encoded image to fit within a byte-size limit.
@@ -31,6 +39,11 @@ export async function compressImageForSizeLimit(
   mediaType,
   maxBytes = ANTHROPIC_IMAGE_MAX_BYTES,
 ) {
+  // Step 0: enforce pixel dimension limits first (avoids sending oversized pixels)
+  const dimensionResult = await constrainImageDimensions(base64Data, mediaType);
+  base64Data = dimensionResult.data;
+  mediaType = dimensionResult.mediaType;
+
   // Anthropic measures the base64 STRING length, not decoded binary size
   const rawBytes = base64Data.length;
   if (rawBytes <= maxBytes) {
@@ -50,6 +63,79 @@ export async function compressImageForSizeLimit(
 
   // Everything else → sharp (converts to JPEG)
   return compressWithSharp(base64Data, maxBytes);
+}
+
+/**
+ * Constrain image pixel dimensions to MAX_IMAGE_DIMENSION.
+ * If either width or height exceeds the limit, the image is downscaled
+ * proportionally using sharp's Lanczos3 resampler.
+ *
+ * GIFs are skipped (ffmpeg handles them separately in byte-size compression).
+ *
+ * @param {string} base64Data  - Raw base64 string (no data: prefix)
+ * @param {string} mediaType   - MIME type, e.g. "image/png"
+ * @param {number} [maxDim]    - Max pixels for either axis (default: 7680)
+ * @returns {Promise<{ data: string, mediaType: string }>} Possibly resized base64 + MIME
+ */
+export async function constrainImageDimensions(
+  base64Data,
+  mediaType,
+  maxDim = MAX_IMAGE_DIMENSION,
+) {
+  // GIFs are animated — skip (ffmpeg handles them in compressGifWithFfmpeg)
+  if (mediaType === "image/gif") {
+    return { data: base64Data, mediaType };
+  }
+
+  try {
+    const buffer = Buffer.from(base64Data, "base64");
+    const metadata = await sharp(buffer).metadata();
+    const { width, height } = metadata;
+
+    if (!width || !height || (width <= maxDim && height <= maxDim)) {
+      return { data: base64Data, mediaType };
+    }
+
+    // Calculate scale factor to fit within maxDim on the longest axis
+    const scale = maxDim / Math.max(width, height);
+    const newWidth = Math.round(width * scale);
+    const newHeight = Math.round(height * scale);
+
+    logger.info(
+      `[media] Image dimensions ${width}×${height} exceed ${maxDim}px limit. ` +
+      `Resizing to ${newWidth}×${newHeight}...`,
+    );
+
+    // Preserve original format when possible, fall back to JPEG
+    let pipeline = sharp(buffer).resize(newWidth, newHeight, {
+      fit: "inside",
+      withoutEnlargement: true,
+    });
+
+    let outputMime = mediaType;
+    if (mediaType === "image/png") {
+      pipeline = pipeline.png();
+    } else if (mediaType === "image/webp") {
+      pipeline = pipeline.webp();
+    } else {
+      // JPEG for everything else (bmp, tiff, avif, unknown)
+      pipeline = pipeline.jpeg({ quality: 90, mozjpeg: true });
+      outputMime = "image/jpeg";
+    }
+
+    const resized = await pipeline.toBuffer();
+    const resizedB64 = resized.toString("base64");
+
+    logger.info(
+      `[media] Dimension-constrained: ${width}×${height} → ${newWidth}×${newHeight} ` +
+      `(${(resizedB64.length / 1024 / 1024).toFixed(2)} MB b64)`,
+    );
+
+    return { data: resizedB64, mediaType: outputMime };
+  } catch (err) {
+    logger.warn(`[media] Dimension check failed (${err.message}), passing through`);
+    return { data: base64Data, mediaType };
+  }
 }
 
 /**

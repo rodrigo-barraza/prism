@@ -20,7 +20,7 @@ import RequestLogger from "../services/RequestLogger.js";
 import FileService from "../services/FileService.js";
 import { createStreamState, dispatchChunk } from "../utils/StreamChunkDispatcher.js";
 import { calculateTokensPerSec } from "../utils/math.js";
-import { compressImageForSizeLimit } from "../utils/media.js";
+import { compressImageForSizeLimit, constrainImageDimensions } from "../utils/media.js";
 import { formatCostTag, roundMs } from "../utils/utilities.js";
 
 import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
@@ -109,14 +109,33 @@ async function compressDataUrlIfOversized(dataUrl) {
   const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
   if (!match) return dataUrl;
 
-  const mimeType = match[1];
+  let mimeType = match[1];
   if (!mimeType.startsWith("image/")) return dataUrl;
 
-  const base64Data = match[2];
+  let base64Data = match[2];
+
+  // Step 1: enforce pixel dimension limits (Anthropic rejects >8000px)
+  try {
+    const dimResult = await constrainImageDimensions(base64Data, mimeType);
+    if (dimResult.data !== base64Data) {
+      base64Data = dimResult.data;
+      mimeType = dimResult.mediaType;
+      logger.info(
+        `[chat] Dimension-constrained image: now ${(base64Data.length / 1024 / 1024).toFixed(2)} MB b64 (${mimeType})`,
+      );
+    }
+  } catch (err) {
+    logger.warn(`[chat] Dimension constraint failed: ${err.message}`);
+  }
+
+  // Step 2: enforce byte-size limit
   const b64Len = base64Data.length; // Anthropic checks base64 STRING length
   const MAX = 5 * 1024 * 1024;
 
-  if (b64Len <= MAX) return dataUrl;
+  if (b64Len <= MAX) {
+    // Dimensions may have changed even if size is fine — rebuild URL
+    return `data:${mimeType};base64,${base64Data}`;
+  }
 
   logger.info(
     `[chat] Oversized image detected: ${(b64Len / 1024 / 1024).toFixed(2)} MB b64 (${mimeType}). Compressing...`,
@@ -132,7 +151,7 @@ async function compressDataUrlIfOversized(dataUrl) {
     return newUrl;
   } catch (err) {
     logger.error(`[chat] Image compression failed: ${err.message}. Sending original.`);
-    return dataUrl;
+    return `data:${mimeType};base64,${base64Data}`;
   }
 }
 
@@ -176,8 +195,11 @@ async function resolveMediaRef(ref, project, username) {
       }
       const buffer = Buffer.concat(chunks);
       const base64 = buffer.toString("base64");
+      let providerRef = `data:${file.contentType};base64,${base64}`;
+      // Constrain dimensions + compress oversized images before they reach any provider
+      providerRef = await compressDataUrlIfOversized(providerRef);
       return {
-        providerRef: `data:${file.contentType};base64,${base64}`,
+        providerRef,
         storageRef: ref,
       };
     } catch (err) {

@@ -40,13 +40,14 @@ async function enforceImageSizeLimits(messages) {
       const data = block.source.data;
       if (!data) continue;
 
+      // Enforce byte-size limit
       const size = data.length; // Anthropic checks base64 STRING length
       if (size <= MAX_IMAGE_BYTES) continue;
 
       logger.warn(
         `[anthropic] SAFETY NET: image still ${(size / 1024 / 1024).toFixed(2)} MB after prepareMessages. Compressing now...`,
       );
-      const result = await compressImageForSizeLimit(data, block.source.media_type || "image/png");
+      const result = await compressImageForSizeLimit(block.source.data, block.source.media_type || "image/png");
       block.source.data = result.data;
       block.source.media_type = result.mediaType;
 
