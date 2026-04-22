@@ -5,10 +5,8 @@ import RequestLogger from "./RequestLogger.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
-import { cosineSimilarity, calculateTokensPerSec } from "../utils/math.js";
-import { estimateTokens, calculateTextCost } from "../utils/CostCalculator.js";
-import { TYPES, getPricing } from "../config.js";
-import { roundMs } from "../utils/utilities.js";
+import { cosineSimilarity } from "../utils/math.js";
+import { parseJsonFromLlmResponse, daysSinceIso } from "../utils/utilities.js";
 import { COLLECTIONS } from "../constants.js";
 import SettingsService from "./SettingsService.js";
 
@@ -16,13 +14,7 @@ import SettingsService from "./SettingsService.js";
 
 /** Resolve the current consolidation provider + model from settings. */
 async function getConsolidationConfig() {
-  const mem = await SettingsService.getSection("memory");
-  const provider = mem.consolidationProvider;
-  const model = mem.consolidationModel;
-  if (!provider || !model) {
-    throw new Error("Consolidation model not configured — set it in Settings → Memory Models");
-  }
-  return { provider, model };
+  return SettingsService.getMemoryModelConfig("consolidation");
 }
 
 /** Cosine similarity above which two memories are clustered together */
@@ -45,7 +37,7 @@ const HISTORY_COLLECTION = COLLECTIONS.MEMORY_CONSOLIDATION_HISTORY;
 
 
 function daysSince(isoDate) {
-  return Math.max(0, Math.floor((Date.now() - new Date(isoDate).getTime()) / 86_400_000));
+  return daysSinceIso(isoDate);
 }
 
 // ─── Cluster Detection ───────────────────────────────────────────────────────
@@ -397,61 +389,32 @@ const MemoryConsolidationService = {
     });
 
     // Log the consolidation LLM call
-    {
-      const llmTotalSec = (performance.now() - llmStart) / 1000;
-      const inputText = aiMessages.map((m) => m.content).join("\n");
-      const approxInputTokens = estimateTokens(inputText);
-      const approxOutputTokens = result ? estimateTokens(result.text || "") : 0;
-      const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[consolidationModel];
-      let estimatedCost = null;
-      if (pricing) {
-        estimatedCost = calculateTextCost(
-          { inputTokens: approxInputTokens, outputTokens: approxOutputTokens },
-          pricing,
-        );
-      }
-
-      RequestLogger.log({
-        requestId: llmRequestId,
-        endpoint: endpoint || null,
-        operation: "memory:consolidate",
-        project,
-        username: username || "system",
-        clientIp: null,
-        agent: agent || null,
-        traceId: traceId || null,
-        agentSessionId: agentSessionId || null,
-        provider: consolidationProvider,
-        model: consolidationModel,
-        success: llmSuccess,
-        errorMessage: llmError,
-        estimatedCost,
-        inputTokens: approxInputTokens,
-        outputTokens: approxOutputTokens,
-        tokensPerSec: calculateTokensPerSec(approxOutputTokens, llmTotalSec),
-        inputCharacters: inputText.length,
-        totalTime: roundMs(llmTotalSec),
-        modalities: { textIn: true, textOut: true },
-        requestPayload: {
-          operation: "memory:consolidate",
-          trigger,
-          clusterCount: clusters.length,
-          memoryCount: allMemories.length,
-        },
-        responsePayload: llmSuccess
-          ? { textPreview: (result?.text || "").slice(0, 200) }
-          : { error: llmError },
-      });
-    }
+    RequestLogger.logBackgroundLlmCall({
+      requestId: llmRequestId,
+      endpoint: endpoint || null,
+      operation: "memory:consolidate",
+      project,
+      username: username || "system",
+      agent: agent || null,
+      provider: consolidationProvider,
+      model: consolidationModel,
+      traceId: traceId || null,
+      agentSessionId: agentSessionId || null,
+      aiMessages,
+      resultText: result?.text || "",
+      success: llmSuccess,
+      errorMessage: llmError,
+      requestStartMs: llmStart,
+      extraRequestPayload: {
+        trigger,
+        clusterCount: clusters.length,
+        memoryCount: allMemories.length,
+      },
+    });
 
     // Parse response
-    let parsed;
-    try {
-      let jsonText = (result.text || "").trim();
-      const jsonMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (jsonMatch) jsonText = jsonMatch[1].trim();
-      parsed = JSON.parse(jsonText);
-    } catch {
+    const parsed = parseJsonFromLlmResponse(result.text);
+    if (!parsed) {
       logger.warn("[MemoryConsolidation] Failed to parse LLM response");
       await resetRunCount(project);
       return { error: "parse_failed", total: allMemories.length };

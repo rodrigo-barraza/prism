@@ -5,10 +5,8 @@ import { MONGO_DB_NAME } from "../../secrets.js";
 import EmbeddingService from "./EmbeddingService.js";
 import RequestLogger from "./RequestLogger.js";
 import logger from "../utils/logger.js";
-import { cosineSimilarity, calculateTokensPerSec } from "../utils/math.js";
-import { estimateTokens, calculateTextCost } from "../utils/CostCalculator.js";
-import { TYPES, getPricing } from "../config.js";
-import { roundMs } from "../utils/utilities.js";
+import { cosineSimilarity } from "../utils/math.js";
+import { parseJsonFromLlmResponse, daysSinceIso } from "../utils/utilities.js";
 import { COLLECTIONS } from "../constants.js";
 import SettingsService from "./SettingsService.js";
 
@@ -19,13 +17,7 @@ const COLLECTION = COLLECTIONS.MEMORIES;
 
 /** Resolve the current extraction provider + model from settings. */
 async function getExtractionConfig() {
-  const mem = await SettingsService.getSection("memory");
-  const provider = mem.extractionProvider;
-  const model = mem.extractionModel;
-  if (!provider || !model) {
-    throw new Error("Extraction model not configured — set it in Settings → Memory Models");
-  }
-  return { provider, model };
+  return SettingsService.getMemoryModelConfig("extraction");
 }
 
 /**
@@ -46,7 +38,7 @@ const RELEVANCE_THRESHOLD = 0.3;
  * category values (personal, preference, gaming, etc.) stored in the `type`
  * field — the schema is flexible per agent.
  */
-const CODING_MEMORY_TYPES = ["user", "feedback", "project", "reference"];
+export const CODING_MEMORY_TYPES = ["user", "feedback", "project", "reference"];
 
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -65,8 +57,7 @@ async function generateEmbedding(text, options = {}) {
  * Calculate days elapsed since a timestamp.
  */
 function memoryAgeDays(createdAt) {
-  const ms = Date.now() - new Date(createdAt).getTime();
-  return Math.max(0, Math.floor(ms / 86_400_000));
+  return daysSinceIso(createdAt);
 }
 
 /**
@@ -171,79 +162,40 @@ ${participantList}`;
     errorMessage = err.message;
     throw err;
   } finally {
-    const totalSec = (performance.now() - requestStart) / 1000;
-    const inputText = aiMessages.map((m) => m.content).join("\n");
-    const approxInputTokens = estimateTokens(inputText);
-    const approxOutputTokens = result ? estimateTokens(result.text || "") : 0;
-    const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[extractionModel];
-    let estimatedCost = null;
-    if (pricing) {
-      estimatedCost = calculateTextCost(
-        { inputTokens: approxInputTokens, outputTokens: approxOutputTokens },
-        pricing,
-      );
-    }
-
-    RequestLogger.log({
+    RequestLogger.logBackgroundLlmCall({
       requestId,
       endpoint,
       operation: "memory:extract",
       project: meta.project || null,
       username: meta.username || "system",
-      clientIp: null,
+      agent,
       provider: extractionProvider,
       model: extractionModel,
       traceId: meta.traceId || null,
       agentSessionId: meta.agentSessionId || null,
-      agent,
+      aiMessages,
+      resultText: result?.text || "",
       success,
       errorMessage,
-      estimatedCost,
-      inputTokens: approxInputTokens,
-      outputTokens: approxOutputTokens,
-      tokensPerSec: calculateTokensPerSec(approxOutputTokens, totalSec),
-      inputCharacters: inputText.length,
-      totalTime: roundMs(totalSec),
-      modalities: { textIn: true, textOut: true },
-      requestPayload: {
-        operation: "memory:extract",
+      requestStartMs: requestStart,
+      extraRequestPayload: {
         participantCount: participants.length,
         messageCount: messages.length,
       },
-      responsePayload: success
-        ? { textPreview: (result?.text || "").slice(0, 200) }
-        : { error: errorMessage },
     });
   }
 
-  const text = result.text || "";
-
-  // Parse JSON from the response (handle markdown code blocks)
-  let jsonText = text.trim();
-  const jsonMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (jsonMatch) {
-    jsonText = jsonMatch[1].trim();
-  }
-
-  try {
-    const facts = JSON.parse(jsonText);
-    if (!Array.isArray(facts)) return [];
-    // Validate each fact has the required fields
-    return facts.filter(
-      (f) =>
-        f.fact &&
-        f.aboutUserId &&
-        f.aboutUsername &&
-        typeof f.confidence === "number" &&
-        f.confidence >= 0.5,
-    );
-  } catch {
-    logger.warn(
-      "[MemoryService] Failed to parse extraction result:",
-      jsonText.substring(0, 200),
-    );
-    return [];
-  }
+  const facts = parseJsonFromLlmResponse(result.text);
+  if (!Array.isArray(facts)) return [];
+  // Validate each fact has the required fields
+  return facts.filter(
+    (f) =>
+      f.fact &&
+      f.aboutUserId &&
+      f.aboutUsername &&
+      typeof f.confidence === "number" &&
+      f.confidence >= 0.5,
+  );
 }
 
 

@@ -32,3 +32,32 @@ export function formatCostTag(estimatedCost) {
 export function roundMs(sec) {
   return parseFloat(sec.toFixed(3));
 }
+
+/**
+ * Parse JSON from an LLM response, handling markdown code blocks.
+ * Many LLMs wrap JSON in ```json ... ``` — this strips that before parsing.
+ *
+ * @param {string} text - Raw LLM response text
+ * @returns {object|Array|null} Parsed JSON, or null if parsing fails
+ */
+export function parseJsonFromLlmResponse(text) {
+  if (!text) return null;
+  let jsonText = text.trim();
+  const jsonMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (jsonMatch) jsonText = jsonMatch[1].trim();
+  try {
+    return JSON.parse(jsonText);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Calculate whole days elapsed since an ISO 8601 timestamp.
+ *
+ * @param {string} isoDate - ISO date string
+ * @returns {number} Non-negative integer days
+ */
+export function daysSinceIso(isoDate) {
+  return Math.max(0, Math.floor((Date.now() - new Date(isoDate).getTime()) / 86_400_000));
+}

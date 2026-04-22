@@ -1,10 +1,10 @@
 import { Router } from "express";
 import logger from "../utils/logger.js";
-import MongoWrapper from "../wrappers/MongoWrapper.js";
-import { MONGO_DB_NAME } from "../../secrets.js";
+import requireDb from "../middleware/RequireDbMiddleware.js";
+import { COLLECTIONS } from "../constants.js";
 
 const router = Router();
-import { COLLECTIONS } from "../constants.js";
+router.use(requireDb);
 
 const COLLECTION = COLLECTIONS.VRAM_BENCHMARKS;
 
@@ -21,8 +21,7 @@ const COLLECTION = COLLECTIONS.VRAM_BENCHMARKS;
  */
 router.get("/", async (req, res, next) => {
   try {
-    const db = MongoWrapper.getDb(MONGO_DB_NAME);
-    if (!db) return res.status(503).json({ error: "Database not available" });
+    const { db } = req;
 
     const filter = { error: null };
 
@@ -119,8 +118,7 @@ router.get("/", async (req, res, next) => {
  */
 router.get("/machines", async (req, res, next) => {
   try {
-    const db = MongoWrapper.getDb(MONGO_DB_NAME);
-    if (!db) return res.status(503).json({ error: "Database not available" });
+    const { db } = req;
 
     const pipeline = [
       { $match: { "system.hostname": { $exists: true } } },
@@ -178,8 +176,7 @@ router.get("/machines", async (req, res, next) => {
  */
 router.get("/settings", async (req, res, next) => {
   try {
-    const db = MongoWrapper.getDb(MONGO_DB_NAME);
-    if (!db) return res.status(503).json({ error: "Database not available" });
+    const { db } = req;
 
     const labels = await db
       .collection(COLLECTION)
@@ -205,8 +202,7 @@ router.get("/settings", async (req, res, next) => {
  */
 router.get("/contexts", async (req, res, next) => {
   try {
-    const db = MongoWrapper.getDb(MONGO_DB_NAME);
-    if (!db) return res.status(503).json({ error: "Database not available" });
+    const { db } = req;
 
     const filter = { error: null };
     if (req.query.settings) {

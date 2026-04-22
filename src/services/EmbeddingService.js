@@ -10,13 +10,7 @@ import SettingsService from "./SettingsService.js";
 
 /** Resolve the current embedding provider + model from settings. */
 async function getEmbeddingConfig() {
-  const mem = await SettingsService.getSection("memory");
-  const provider = mem.embeddingProvider;
-  const model = mem.embeddingModel;
-  if (!provider || !model) {
-    throw new Error("Embedding model not configured — set it in Settings → Memory Models");
-  }
-  return { provider, model };
+  return SettingsService.getMemoryModelConfig("embedding");
 }
 
 /**

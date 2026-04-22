@@ -9,6 +9,29 @@ import FileService from "../services/FileService.js";
 import logger from "./logger.js";
 
 /**
+ * Strip XML tool call markup that some local models (e.g. Gemma 4) leak into
+ * text output. Applied server-side so SSE chunk events arrive clean.
+ *
+ * Handles both completed tags (matched pairs) and incomplete tags at the
+ * end of a streaming buffer (closing tag hasn't arrived yet).
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+export function stripToolCallMarkup(text) {
+  return text
+    // Completed tag pairs
+    .replace(/<\|?tool_call\|?>[\s\S]*?<\/?\|?tool_call\|?>/gi, "")
+    .replace(/<\|?tool_response\|?>[\s\S]*?<\/?\|?tool_response\|?>/gi, "")
+    .replace(/<\|?result\|?>[\s\S]*?<\/?\|?result\|?>/gi, "")
+    .replace(/\[END_TOOL_REQUEST\]/gi, "")
+    // Incomplete tags at end of stream (closing tag hasn't arrived yet)
+    .replace(/<\|?tool_call\|?>[\s\S]*$/gi, "")
+    .replace(/<\|?tool_response\|?>[\s\S]*$/gi, "")
+    .replace(/<\|?result\|?>[\s\S]*$/gi, "");
+}
+
+/**
  * Process a provider image chunk: upload to MinIO and track the ref.
  *
  * @param {object} chunk - Image chunk from the provider stream
@@ -83,14 +106,17 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
       }
     }
     state.generationEnd = performance.now();
-    const chunkStr = typeof chunk === "string" ? chunk : "";
-    state.outputCharacters += chunkStr.length;
-    state.text += chunkStr;
+    const rawStr = typeof chunk === "string" ? chunk : "";
+    state.text += rawStr;
+    // Strip tool call XML markup leaked by some local models (Gemma 4)
+    const cleanText = stripToolCallMarkup(state.text);
+    const chunkStr = cleanText.slice(state.outputCharacters);
+    state.outputCharacters = cleanText.length;
     // Estimate tokens from content length (~4 chars/token). Cloud providers
     // (Anthropic, OpenAI, Google) emit multi-token text per chunk, so counting
     // 1 per chunk massively underestimates the live token count.
-    state.outputTokenCount += Math.max(1, Math.ceil(chunkStr.length / 4));
-    emit({ type: "chunk", content: chunkStr, outputTokens: state.outputTokenCount });
+    state.outputTokenCount += Math.max(1, Math.ceil(rawStr.length / 4));
+    if (chunkStr) emit({ type: "chunk", content: chunkStr, outputTokens: state.outputTokenCount });
     return true;
   }
 
@@ -218,11 +244,14 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
         }
       }
       state.generationEnd = performance.now();
-      const chunkStr = typeof chunk === "string" ? chunk : "";
-      state.outputCharacters += chunkStr.length;
-      state.text += chunkStr;
-      state.outputTokenCount += Math.max(1, Math.ceil(chunkStr.length / 4));
-      emit({ type: "chunk", content: chunkStr, outputTokens: state.outputTokenCount });
+      const rawStr = typeof chunk === "string" ? chunk : "";
+      state.text += rawStr;
+      // Strip tool call XML markup leaked by some local models (Gemma 4)
+      const cleanText = stripToolCallMarkup(state.text);
+      const chunkStr = cleanText.slice(state.outputCharacters);
+      state.outputCharacters = cleanText.length;
+      state.outputTokenCount += Math.max(1, Math.ceil(rawStr.length / 4));
+      if (chunkStr) emit({ type: "chunk", content: chunkStr, outputTokens: state.outputTokenCount });
       return true;
     }
   }

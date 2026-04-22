@@ -6,10 +6,7 @@ import mutationQueue from "./MutationQueue.js";
 import { getProvider } from "../providers/index.js";
 import { getInstancesByType, getInstanceType } from "../providers/instance-registry.js";
 import RequestLogger from "./RequestLogger.js";
-import { estimateTokens, calculateTextCost } from "../utils/CostCalculator.js";
-import { TYPES, getPricing } from "../config.js";
-import { calculateTokensPerSec } from "../utils/math.js";
-import { roundMs } from "../utils/utilities.js";
+import { parseJsonFromLlmResponse } from "../utils/utilities.js";
 import localModelQueue from "./LocalModelQueue.js";
 import ToolOrchestratorService from "./ToolOrchestratorService.js";
 import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
@@ -1541,57 +1538,28 @@ export default class CoordinatorService {
     });
 
     // Log the decomposition LLM call
-    {
-      const llmTotalSec = (performance.now() - requestStart) / 1000;
-      const inputText = messages.map((m) => m.content).join("\n");
-      const approxInputTokens = estimateTokens(inputText);
-      const approxOutputTokens = result ? estimateTokens(result.text || "") : 0;
-      const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[DECOMPOSITION_MODEL];
-      let estimatedCost = null;
-      if (pricing) {
-        estimatedCost = calculateTextCost(
-          { inputTokens: approxInputTokens, outputTokens: approxOutputTokens },
-          pricing,
-        );
-      }
+    RequestLogger.logBackgroundLlmCall({
+      requestId,
+      endpoint: endpoint || "/coordinator/plan",
+      operation: "coordinator:decompose",
+      project: null,
+      username: "system",
+      provider: DECOMPOSITION_PROVIDER,
+      model: DECOMPOSITION_MODEL,
+      agentSessionId: agentSessionId || null,
+      aiMessages: messages,
+      resultText: result?.text || "",
+      success: llmSuccess,
+      errorMessage: llmError,
+      requestStartMs: requestStart,
+      extraRequestPayload: {
+        task: task.slice(0, 200),
+        fileCount: files.length,
+      },
+    });
 
-      RequestLogger.log({
-        requestId,
-        endpoint: endpoint || "/coordinator/plan",
-        operation: "coordinator:decompose",
-        project: null,
-        username: "system",
-        clientIp: null,
-        provider: DECOMPOSITION_PROVIDER,
-        model: DECOMPOSITION_MODEL,
-        success: llmSuccess,
-        errorMessage: llmError,
-        agentSessionId: agentSessionId || null,
-        estimatedCost,
-        inputTokens: approxInputTokens,
-        outputTokens: approxOutputTokens,
-        tokensPerSec: calculateTokensPerSec(approxOutputTokens, llmTotalSec),
-        inputCharacters: inputText.length,
-        totalTime: roundMs(llmTotalSec),
-        modalities: { textIn: true, textOut: true },
-        requestPayload: {
-          operation: "coordinator:decompose",
-          task: task.slice(0, 200),
-          fileCount: files.length,
-        },
-        responsePayload: llmSuccess
-          ? { textPreview: (result?.text || "").slice(0, 200) }
-          : { error: llmError },
-      });
-    }
-
-    let parsed;
-    try {
-      let jsonText = (result.text || "").trim();
-      const jsonMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (jsonMatch) jsonText = jsonMatch[1].trim();
-      parsed = JSON.parse(jsonText);
-    } catch {
+    const parsed = parseJsonFromLlmResponse(result.text);
+    if (!parsed) {
       return { error: "Failed to parse decomposition result", raw: result.text };
     }
 

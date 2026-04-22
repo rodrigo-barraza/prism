@@ -1,11 +1,11 @@
 import express from "express";
 import { ObjectId } from "mongodb";
-import MongoWrapper from "../wrappers/MongoWrapper.js";
-import { MONGO_DB_NAME } from "../../secrets.js";
+import requireDb from "../middleware/RequireDbMiddleware.js";
 import logger from "../utils/logger.js";
+import { COLLECTIONS } from "../constants.js";
 
 const router = express.Router();
-import { COLLECTIONS } from "../constants.js";
+router.use(requireDb);
 
 const COLLECTION = COLLECTIONS.CUSTOM_TOOLS;
 
@@ -15,16 +15,9 @@ const COLLECTION = COLLECTIONS.CUSTOM_TOOLS;
  */
 router.get("/", async (req, res, next) => {
   try {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) {
-      return res.status(503).json({ error: "Database not available" });
-    }
+    const { project, username, db } = req;
 
-    const project = req.project;
-    const username = req.username;
-
-    const tools = await client
-      .db(MONGO_DB_NAME)
+    const tools = await db
       .collection(COLLECTION)
       .find({ project, username })
       .sort({ createdAt: -1 })
@@ -42,13 +35,7 @@ router.get("/", async (req, res, next) => {
  */
 router.post("/", async (req, res, next) => {
   try {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) {
-      return res.status(503).json({ error: "Database not available" });
-    }
-
-    const project = req.project;
-    const username = req.username;
+    const { project, username, db } = req;
 
     const doc = {
       project,
@@ -63,8 +50,7 @@ router.post("/", async (req, res, next) => {
       updatedAt: new Date(),
     };
 
-    const result = await client
-      .db(MONGO_DB_NAME)
+    const result = await db
       .collection(COLLECTION)
       .insertOne(doc);
 
@@ -81,10 +67,7 @@ router.post("/", async (req, res, next) => {
  */
 router.put("/:id", async (req, res, next) => {
   try {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) {
-      return res.status(503).json({ error: "Database not available" });
-    }
+    const { db } = req;
 
     const updates = {
       ...(req.body.name !== undefined && { name: req.body.name }),
@@ -100,8 +83,7 @@ router.put("/:id", async (req, res, next) => {
       updatedAt: new Date(),
     };
 
-    const result = await client
-      .db(MONGO_DB_NAME)
+    const result = await db
       .collection(COLLECTION)
       .findOneAndUpdate(
         { _id: new ObjectId(req.params.id) },
@@ -126,13 +108,9 @@ router.put("/:id", async (req, res, next) => {
  */
 router.delete("/:id", async (req, res, next) => {
   try {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) {
-      return res.status(503).json({ error: "Database not available" });
-    }
+    const { db } = req;
 
-    const result = await client
-      .db(MONGO_DB_NAME)
+    const result = await db
       .collection(COLLECTION)
       .findOneAndDelete({ _id: new ObjectId(req.params.id) });
 

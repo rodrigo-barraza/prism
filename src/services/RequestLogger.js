@@ -1,10 +1,12 @@
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
-import { getTotalInputTokens } from "../utils/CostCalculator.js";
+import { getTotalInputTokens, estimateTokens, calculateTextCost } from "../utils/CostCalculator.js";
 import { computeModalities } from "./ConversationService.js";
 import { roundMs } from "../utils/utilities.js";
 import { COLLECTIONS } from "../constants.js";
+import { TYPES, getPricing } from "../config.js";
+import { calculateTokensPerSec } from "../utils/math.js";
 
 const COLLECTION = COLLECTIONS.REQUESTS;
 
@@ -267,6 +269,77 @@ const RequestLogger = {
       },
       modalities,
       rateLimits,
+    });
+  },
+  /**
+   * Log a background (non-streaming) LLM call with automatic cost estimation.
+   * Centralises the identical pattern used by MemoryService, MemoryExtractor,
+   * MemoryConsolidationService, and CoordinatorService for fire-and-forget
+   * AI calls (extraction, consolidation, decomposition).
+   *
+   * Handles: estimateTokens, getPricing, calculateTextCost, calculateTokensPerSec,
+   * roundMs, and calls this.log().
+   */
+  async logBackgroundLlmCall({
+    requestId,
+    endpoint,
+    operation,
+    project,
+    username,
+    agent,
+    provider: providerName,
+    model,
+    traceId,
+    agentSessionId,
+    aiMessages,
+    resultText,
+    success,
+    errorMessage,
+    requestStartMs,
+    extraRequestPayload,
+    extraResponsePayload,
+  }) {
+    const totalSec = (performance.now() - requestStartMs) / 1000;
+    const inputText = aiMessages.map((m) => m.content).join("\n");
+    const approxInputTokens = estimateTokens(inputText);
+    const approxOutputTokens = resultText ? estimateTokens(resultText) : 0;
+    const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[model];
+    let estimatedCost = null;
+    if (pricing) {
+      estimatedCost = calculateTextCost(
+        { inputTokens: approxInputTokens, outputTokens: approxOutputTokens },
+        pricing,
+      );
+    }
+
+    return this.log({
+      requestId,
+      endpoint: endpoint || null,
+      operation,
+      project,
+      username: username || "system",
+      clientIp: null,
+      agent: agent || null,
+      traceId: traceId || null,
+      agentSessionId: agentSessionId || null,
+      provider: providerName,
+      model,
+      success,
+      errorMessage,
+      estimatedCost,
+      inputTokens: approxInputTokens,
+      outputTokens: approxOutputTokens,
+      tokensPerSec: calculateTokensPerSec(approxOutputTokens, totalSec),
+      inputCharacters: inputText.length,
+      totalTime: roundMs(totalSec),
+      modalities: { textIn: true, textOut: true },
+      requestPayload: {
+        operation,
+        ...extraRequestPayload,
+      },
+      responsePayload: success
+        ? { textPreview: (resultText || "").slice(0, 200), ...extraResponsePayload }
+        : { error: errorMessage },
     });
   },
 };

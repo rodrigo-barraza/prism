@@ -206,6 +206,29 @@ export function computeTotalCost(messages) {
 }
 
 /**
+ * Build the $set fields for a conversation/agent-session PATCH request.
+ * Centralises the identical logic shared by conversations.js and agent-sessions.js.
+ *
+ * @param {object} body - req.body from the PATCH request
+ * @returns {object} $set fields ready for updateOne
+ */
+export function buildConversationPatchFields({ title, messages, systemPrompt, settings }) {
+  const setFields = { updatedAt: new Date().toISOString() };
+  if (title !== undefined) setFields.title = title;
+  if (messages !== undefined) {
+    setFields.messages = messages;
+    setFields.modalities = computeModalities(messages);
+    setFields.providers = extractProviders(messages, settings);
+    setFields.totalCost = computeTotalCost(messages);
+  }
+  if (systemPrompt !== undefined) setFields.systemPrompt = systemPrompt;
+  if (settings !== undefined) {
+    setFields.settings = { ...settings, systemPrompt: systemPrompt || "" };
+  }
+  return setFields;
+}
+
+/**
  * ConversationService — shared logic for managing conversations in MongoDB.
  * Used by both the conversations REST API and generation routes.
  */

@@ -1,10 +1,10 @@
 import { Router } from "express";
 import logger from "../utils/logger.js";
-import MongoWrapper from "../wrappers/MongoWrapper.js";
-import { MONGO_DB_NAME } from "../../secrets.js";
+import requireDb from "../middleware/RequireDbMiddleware.js";
 import { COLLECTIONS, COST_SUM_EXPR, AVG_TOKENS_PER_SEC_EXPR } from "../constants.js";
 
 const router = Router();
+router.use(requireDb);
 
 /**
  * GET /stats/models
@@ -13,10 +13,7 @@ const router = Router();
  */
 router.get("/models", async (req, res, next) => {
   try {
-    const db = MongoWrapper.getDb(MONGO_DB_NAME);
-    if (!db) return res.status(503).json({ error: "Database not available" });
-
-    const username = req.username;
+    const { db, username } = req;
     if (!username) return res.json([]);
 
     const pipeline = [

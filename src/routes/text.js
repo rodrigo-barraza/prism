@@ -1,18 +1,17 @@
 import express from "express";
-import MongoWrapper from "../wrappers/MongoWrapper.js";
-import { MONGO_DB_NAME } from "../../secrets.js";
+import requireDb from "../middleware/RequireDbMiddleware.js";
 import logger from "../utils/logger.js";
 import { COLLECTIONS } from "../constants.js";
 
 const router = express.Router();
+router.use(requireDb);
 
 // ============================================================
 // GET /text — extract text content from the caller's project conversations
 // ============================================================
 router.get("/", async (req, res, next) => {
   try {
-    const db = MongoWrapper.getDb(MONGO_DB_NAME);
-    if (!db) return res.status(503).json({ error: "Database not available" });
+    const { db } = req;
 
     const {
       page = 1,

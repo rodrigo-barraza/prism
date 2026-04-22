@@ -101,6 +101,24 @@ const SettingsService = {
   },
 
   /**
+   * Resolve provider + model for a memory subsystem role.
+   * Centralises the identical getXxxConfig() helpers in MemoryService,
+   * MemoryConsolidationService, and EmbeddingService.
+   *
+   * @param {"extraction"|"consolidation"|"embedding"} role
+   * @returns {Promise<{ provider: string, model: string }>}
+   */
+  async getMemoryModelConfig(role) {
+    const mem = await this.getSection("memory");
+    const provider = mem[`${role}Provider`];
+    const model = mem[`${role}Model`];
+    if (!provider || !model) {
+      throw new Error(`${role} model not configured — set it in Settings → Memory Models`);
+    }
+    return { provider, model };
+  },
+
+  /**
    * Clear the in-memory cache (useful for testing).
    */
   invalidateCache() {

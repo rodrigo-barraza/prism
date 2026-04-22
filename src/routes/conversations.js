@@ -1,15 +1,14 @@
 import express from "express";
-import MongoWrapper from "../wrappers/MongoWrapper.js";
+import requireDb from "../middleware/RequireDbMiddleware.js";
 import ConversationService, {
-  computeModalities,
-  extractProviders,
-  computeTotalCost,
+  buildConversationPatchFields,
 } from "../services/ConversationService.js";
-import { MONGO_DB_NAME } from "../../secrets.js";
 import { COLLECTIONS } from "../constants.js";
 import logger from "../utils/logger.js";
 
 const router = express.Router();
+router.use(requireDb);
+
 const COLLECTION = COLLECTIONS.CONVERSATIONS;
 
 /**
@@ -18,15 +17,8 @@ const COLLECTION = COLLECTIONS.CONVERSATIONS;
  */
 router.get("/", async (req, res, next) => {
   try {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) {
-      return res.status(503).json({ error: "Database not available" });
-    }
-
-    const project = req.project;
-    const username = req.username;
-    const conversations = await client
-      .db(MONGO_DB_NAME)
+    const { project, username, db } = req;
+    const conversations = await db
       .collection(COLLECTION)
       .find({ project, username })
       .sort({ updatedAt: -1 })
@@ -45,15 +37,8 @@ router.get("/", async (req, res, next) => {
  */
 router.get("/:id", async (req, res, next) => {
   try {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) {
-      return res.status(503).json({ error: "Database not available" });
-    }
-
-    const project = req.project;
-    const username = req.username;
-    const conversation = await client
-      .db(MONGO_DB_NAME)
+    const { project, username, db } = req;
+    const conversation = await db
       .collection(COLLECTION)
       .findOne({ id: req.params.id, project, username });
 
@@ -74,13 +59,9 @@ router.get("/:id", async (req, res, next) => {
  */
 router.get("/:id/workflows", async (req, res, next) => {
   try {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) {
-      return res.status(503).json({ error: "Database not available" });
-    }
+    const { db } = req;
 
-    const workflows = await client
-      .db(MONGO_DB_NAME)
+    const workflows = await db
       .collection("workflows")
       .find({ conversationIds: req.params.id })
       .project({ workflowName: 1, updatedAt: 1 })
@@ -99,8 +80,7 @@ router.get("/:id/workflows", async (req, res, next) => {
  */
 router.post("/:id/messages", async (req, res, next) => {
   try {
-    const project = req.project;
-    const username = req.username;
+    const { project, username } = req;
     const { messages, conversationMeta } = req.body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
@@ -131,31 +111,10 @@ router.post("/:id/messages", async (req, res, next) => {
  */
 router.patch("/:id", async (req, res, next) => {
   try {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) {
-      return res.status(503).json({ error: "Database not available" });
-    }
+    const { project, username, db } = req;
+    const setFields = buildConversationPatchFields(req.body);
 
-    const project = req.project;
-    const username = req.username;
-    const { title, messages, systemPrompt, settings } = req.body;
-
-    const setFields = { updatedAt: new Date().toISOString() };
-    if (title !== undefined) setFields.title = title;
-    if (messages !== undefined) {
-      setFields.messages = messages;
-      // Recompute derived fields when messages change
-      setFields.modalities = computeModalities(messages);
-      setFields.providers = extractProviders(messages, settings);
-      setFields.totalCost = computeTotalCost(messages);
-    }
-    if (systemPrompt !== undefined) setFields.systemPrompt = systemPrompt;
-    if (settings !== undefined) {
-      setFields.settings = { ...settings, systemPrompt: systemPrompt || "" };
-    }
-
-    const result = await client
-      .db(MONGO_DB_NAME)
+    const result = await db
       .collection(COLLECTION)
       .updateOne({ id: req.params.id, project, username }, { $set: setFields });
 
@@ -163,8 +122,7 @@ router.patch("/:id", async (req, res, next) => {
       return res.status(404).json({ error: "Conversation not found" });
     }
 
-    const conversation = await client
-      .db(MONGO_DB_NAME)
+    const conversation = await db
       .collection(COLLECTION)
       .findOne({ id: req.params.id, project, username });
 
@@ -181,15 +139,8 @@ router.patch("/:id", async (req, res, next) => {
  */
 router.delete("/:id", async (req, res, next) => {
   try {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) {
-      return res.status(503).json({ error: "Database not available" });
-    }
-
-    const project = req.project;
-    const username = req.username;
-    const result = await client
-      .db(MONGO_DB_NAME)
+    const { project, username, db } = req;
+    const result = await db
       .collection(COLLECTION)
       .deleteOne({ id: req.params.id, project, username });
 

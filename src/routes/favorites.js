@@ -1,10 +1,10 @@
 import express from "express";
-import MongoWrapper from "../wrappers/MongoWrapper.js";
-import { MONGO_DB_NAME } from "../../secrets.js";
+import requireDb from "../middleware/RequireDbMiddleware.js";
 import logger from "../utils/logger.js";
+import { COLLECTIONS } from "../constants.js";
 
 const router = express.Router();
-import { COLLECTIONS } from "../constants.js";
+router.use(requireDb);
 
 const COLLECTION = COLLECTIONS.FAVORITES;
 
@@ -14,18 +14,11 @@ const COLLECTION = COLLECTIONS.FAVORITES;
  */
 router.get("/", async (req, res, next) => {
   try {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) {
-      return res.status(503).json({ error: "Database not available" });
-    }
-
-    const project = req.project;
-    const username = req.username;
+    const { project, username, db } = req;
     const filter = { project, username };
     if (req.query.type) filter.type = req.query.type;
 
-    const favorites = await client
-      .db(MONGO_DB_NAME)
+    const favorites = await db
       .collection(COLLECTION)
       .find(filter)
       .sort({ createdAt: -1 })
@@ -47,13 +40,7 @@ router.get("/", async (req, res, next) => {
  */
 router.post("/", async (req, res, next) => {
   try {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) {
-      return res.status(503).json({ error: "Database not available" });
-    }
-
-    const project = req.project;
-    const username = req.username;
+    const { project, username, db } = req;
     const { type, key, meta } = req.body;
 
     if (!type || !key) {
@@ -70,8 +57,7 @@ router.post("/", async (req, res, next) => {
     };
 
     // Upsert to prevent duplicates
-    await client
-      .db(MONGO_DB_NAME)
+    await db
       .collection(COLLECTION)
       .updateOne(
         { project, username, type, key },
@@ -92,13 +78,7 @@ router.post("/", async (req, res, next) => {
  */
 router.delete("/", async (req, res, next) => {
   try {
-    const client = MongoWrapper.getClient(MONGO_DB_NAME);
-    if (!client) {
-      return res.status(503).json({ error: "Database not available" });
-    }
-
-    const project = req.project;
-    const username = req.username;
+    const { project, username, db } = req;
     const { type, key } = req.query;
 
     if (!type || !key) {
@@ -107,8 +87,7 @@ router.delete("/", async (req, res, next) => {
         .json({ error: "type and key query params are required" });
     }
 
-    const result = await client
-      .db(MONGO_DB_NAME)
+    const result = await db
       .collection(COLLECTION)
       .deleteOne({ project, username, type, key });
 

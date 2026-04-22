@@ -261,12 +261,33 @@ export async function handleVoice(params, emitBinary, emitJSON) {
 /**
  * POST /text-to-audio
  * Body: { provider, text, voice?, instructions?, model?, options?, conversationId?, conversationMeta? }
- * Response: binary audio stream with content-type header
+ *
+ * Default:          Binary audio stream with content-type header
+ * ?format=dataUrl:  JSON response { audioDataUrl, contentType }
  */
 router.post("/", async (req, res, next) => {
   // Skip TTS handler when mounted at /audio-to-text
   if (req.baseUrl.includes("audio-to-text")) return next();
   try {
+    // ── Data URL format: collect chunks → base64-encode → return JSON ──
+    if (req.query.format === "dataUrl") {
+      const audioChunks = [];
+      const resultContentType = await handleVoice(
+        {
+          ...req.body,
+          project: req.project,
+          username: req.username,
+          clientIp: req.clientIp,
+        },
+        (chunk) => audioChunks.push(Buffer.from(chunk)),
+        (_event) => { /* JSON events not needed for dataUrl format */ },
+      );
+      const ct = resultContentType || "audio/mpeg";
+      const audioDataUrl = `data:${ct};base64,${Buffer.concat(audioChunks).toString("base64")}`;
+      return res.json({ audioDataUrl, contentType: ct });
+    }
+
+    // ── Default: stream binary audio chunks ──
     let contentType = "audio/mpeg";
 
     const resultContentType = await handleVoice(

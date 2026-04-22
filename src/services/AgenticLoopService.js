@@ -1,5 +1,6 @@
 import ToolOrchestratorService from "./ToolOrchestratorService.js";
 import { expandMessagesForFC, truncateToolResult as _truncateToolResult } from "../utils/FunctionCallingUtilities.js";
+import { stripToolCallMarkup } from "../utils/StreamChunkDispatcher.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
@@ -122,9 +123,16 @@ export default class AgenticLoopService {
       logger.info(`[AgenticLoop] Merged ${mcpTools.length} MCP tools from connected servers`);
     }
 
-    // If options.enabledTools is passed, filter out any tool not in the array.
-    // If none are passed, fall back to the persona's enabledTools (if any).
-    // MCP tools (mcp__*) are always included — managed by connect/disconnect
+    // ── Tool filtering ────────────────────────────────────────────
+    // Three modes (in priority order):
+    //   1. options.enabledTools  — explicit allowlist from the client (legacy)
+    //   2. options.disabledBuiltIns — client sends only the disabled tools;
+    //      the server resolves the enabled set by starting from the persona's
+    //      enabledTools and subtracting disabled ones. This avoids downloading
+    //      all 150+ tool schemas on the client just to send names back.
+    //   3. persona.enabledTools — fallback to the agent persona's default set
+    //
+    // MCP tools (mcp__*) are always included — managed by connect/disconnect.
     //
     // enabledTools entries support three formats:
     //   - "tool_name"   → exact tool match
@@ -133,6 +141,47 @@ export default class AgenticLoopService {
     // Prefixed entries are expanded here using the client schemas which carry
     // domain/labels metadata. Overlapping entries are deduplicated via Set.
     let resolvedEnabledTools = options.enabledTools;
+
+    // Mode 2: disabledBuiltIns — resolve server-side
+    if (!resolvedEnabledTools && options.disabledBuiltIns && Array.isArray(options.disabledBuiltIns)) {
+      const disabledSet = new Set(options.disabledBuiltIns);
+      // Start from persona's enabled tools (label:/domain: entries)
+      const persona = agent ? AgentPersonaRegistry.get(agent) : null;
+      const baseTools = persona?.enabledTools || null;
+
+      if (baseTools) {
+        // Expand label:/domain: entries from persona, then subtract disabled
+        const clientSchemas = ToolOrchestratorService.getClientToolSchemas();
+        const expandedSet = new Set();
+        for (const entry of baseTools) {
+          if (entry.startsWith("label:")) {
+            const label = entry.slice(6);
+            for (const t of clientSchemas) {
+              if (t.labels?.includes(label)) expandedSet.add(t.name);
+            }
+          } else if (entry.startsWith("domain:")) {
+            const domain = entry.slice(7);
+            for (const t of clientSchemas) {
+              if (t.domain === domain) expandedSet.add(t.name);
+            }
+          } else {
+            expandedSet.add(entry);
+          }
+        }
+        // Remove disabled tools
+        for (const name of disabledSet) expandedSet.delete(name);
+        resolvedEnabledTools = [...expandedSet];
+        logger.info(`[AgenticLoop] disabledBuiltIns mode: ${disabledSet.size} disabled → ${resolvedEnabledTools.length} enabled tools`);
+      } else {
+        // No persona — start from all available tools and subtract disabled
+        resolvedEnabledTools = dynamicTools
+          .map((t) => t.name)
+          .filter((name) => !disabledSet.has(name));
+        logger.info(`[AgenticLoop] disabledBuiltIns mode (no persona): ${disabledSet.size} disabled → ${resolvedEnabledTools.length} enabled tools`);
+      }
+    }
+
+    // Mode 3: fallback to persona's enabledTools
     if (!resolvedEnabledTools && agent) {
       const persona = AgentPersonaRegistry.get(agent);
       if (persona?.enabledTools) {
@@ -567,11 +616,16 @@ export default class AgenticLoopService {
           }
           overallGenerationEnd = performance.now();
           passGenerationEnd = performance.now();
-          const chunkStr = typeof chunk === "string" ? chunk : "";
-          overallOutputCharacters += chunkStr.length;
-          passOutputCharacters += chunkStr.length;
-          finalStreamedText = passStreamedText + chunkStr;
-          passStreamedText += chunkStr;
+          const rawChunkStr = typeof chunk === "string" ? chunk : "";
+          // Accumulate raw text for accurate token estimation
+          overallOutputCharacters += rawChunkStr.length;
+          passOutputCharacters += rawChunkStr.length;
+          passStreamedText += rawChunkStr;
+          // Strip tool call XML markup leaked by some local models (Gemma 4)
+          // before emitting to the client and accumulating in display fragments.
+          const cleanedPassText = stripToolCallMarkup(passStreamedText);
+          const chunkStr = cleanedPassText.slice(finalStreamedText.length);
+          finalStreamedText = cleanedPassText;
           // Accumulate plan text while in plan mode
           if (planModeActive) planModeText += chunkStr;
           // Display segment tracking
@@ -583,8 +637,8 @@ export default class AgenticLoopService {
           displayTextFragments[displayTextFragments.length - 1] += chunkStr;
           // Estimate tokens from content length (~4 chars/token). Cloud providers
           // (Anthropic, OpenAI, Google) emit multi-token deltas per chunk.
-          outputTokenCount += Math.max(1, Math.ceil(chunkStr.length / 4));
-          emit({ type: "chunk", content: chunkStr, outputTokens: outputTokenCount });
+          outputTokenCount += Math.max(1, Math.ceil(rawChunkStr.length / 4));
+          if (chunkStr) emit({ type: "chunk", content: chunkStr, outputTokens: outputTokenCount });
         }
 
         if (signal?.aborted) break;

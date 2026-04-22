@@ -296,6 +296,7 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
     functionCallingEnabled,
     agenticLoopEnabled,
     enabledTools,
+    disabledBuiltIns,
     minContextLength,
     forceImageGeneration,
     responseFormat,
@@ -348,6 +349,7 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
     ...(functionCallingEnabled !== undefined && { functionCallingEnabled }),
     ...(agenticLoopEnabled !== undefined && { agenticLoopEnabled }),
     ...(enabledTools && { enabledTools }),
+    ...(disabledBuiltIns && { disabledBuiltIns }),
     ...(minContextLength && { minContextLength }),
     ...(forceImageGeneration && { forceImageGeneration }),
     ...(responseFormat && { responseFormat }),
@@ -534,6 +536,9 @@ export async function handleConversation(params, emit, { signal } = {}) {
           if (options.enabledTools && Array.isArray(options.enabledTools)) {
             const enabledSet = new Set(options.enabledTools);
             tools = tools.filter((t) => enabledSet.has(t.name));
+          } else if (options.disabledBuiltIns && Array.isArray(options.disabledBuiltIns)) {
+            const disabledSet = new Set(options.disabledBuiltIns);
+            tools = tools.filter((t) => !disabledSet.has(t.name));
           }
           options.tools = tools;
           if (ctx.modelDef?.contextLength) {
@@ -551,6 +556,9 @@ export async function handleConversation(params, emit, { signal } = {}) {
           if (options.enabledTools && Array.isArray(options.enabledTools)) {
             const enabledSet = new Set(options.enabledTools);
             tools = tools.filter((t) => enabledSet.has(t.name));
+          } else if (options.disabledBuiltIns && Array.isArray(options.disabledBuiltIns)) {
+            const disabledSet = new Set(options.disabledBuiltIns);
+            tools = tools.filter((t) => !disabledSet.has(t.name));
           }
           options.tools = tools;
           logger.info(`[chat] FC tools injected: ${tools.length} tools enabled for ${providerName} ${resolvedModel}`);

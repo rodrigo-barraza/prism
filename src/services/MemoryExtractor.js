@@ -1,24 +1,17 @@
 import crypto from "crypto";
 import { getProvider } from "../providers/index.js";
-import MemoryService from "./MemoryService.js";
+import MemoryService, { CODING_MEMORY_TYPES } from "./MemoryService.js";
 import MemoryConsolidationService from "./MemoryConsolidationService.js";
 import RequestLogger from "./RequestLogger.js";
 import SettingsService from "./SettingsService.js";
 import logger from "../utils/logger.js";
-import { estimateTokens, calculateTextCost } from "../utils/CostCalculator.js";
-import { TYPES, getPricing } from "../config.js";
-import { calculateTokensPerSec } from "../utils/math.js";
-import { roundMs } from "../utils/utilities.js";
+import { parseJsonFromLlmResponse } from "../utils/utilities.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const MIN_MESSAGES_FOR_EXTRACTION = 4;
 
-/**
- * Valid memory types — Claude Code's memdir taxonomy.
- * All memories stored in a single `memories` collection, differentiated by type.
- */
-const VALID_TYPES = ["user", "feedback", "project", "reference"];
+
 
 /**
  * Extraction prompt — CC-style 4-type taxonomy with explicit negative constraints.
@@ -199,73 +192,32 @@ export default class MemoryExtractor {
         errorMessage = err.message;
         throw err;
       } finally {
-        const totalSec = (performance.now() - requestStart) / 1000;
-        const inputText = aiMessages.map((m) => m.content).join("\n");
-        const approxInputTokens = estimateTokens(inputText);
-        const approxOutputTokens = result ? estimateTokens(result.text || "") : 0;
-        const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[extractionModel];
-        let estimatedCost = null;
-        if (pricing) {
-          estimatedCost = calculateTextCost(
-            { inputTokens: approxInputTokens, outputTokens: approxOutputTokens },
-            pricing,
-          );
-        }
-
-        RequestLogger.log({
+        RequestLogger.logBackgroundLlmCall({
           requestId,
           endpoint: endpoint || "/agent",
           operation: "memory:extract",
           project,
-          traceId: traceId || null,
-          agentSessionId: agentSessionId || null,
           username: username || "system",
-          clientIp: null,
           agent: agent || null,
           provider: extractionProvider,
           model: extractionModel,
+          traceId: traceId || null,
+          agentSessionId: agentSessionId || null,
+          aiMessages,
+          resultText: result?.text || "",
           success,
           errorMessage,
-          estimatedCost,
-          inputTokens: approxInputTokens,
-          outputTokens: approxOutputTokens,
-          tokensPerSec: calculateTokensPerSec(approxOutputTokens, totalSec),
-          inputCharacters: inputText.length,
-          totalTime: roundMs(totalSec),
-          modalities: { textIn: true, textOut: true },
-          requestPayload: {
-            operation: "memory:extract",
+          requestStartMs: requestStart,
+          extraRequestPayload: {
             messageCount: messages.length,
             conversationId: conversationId || null,
-            messages: aiMessages,
           },
-          responsePayload: success
-            ? { textPreview: (result?.text || "").slice(0, 200) }
-            : { error: errorMessage },
         });
       }
 
-      const text = result.text || "";
-
-      // Parse JSON from the response (handle markdown code blocks)
-      let jsonText = text.trim();
-      const jsonMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (jsonMatch) {
-        jsonText = jsonMatch[1].trim();
-      }
-
-      let memories;
-      try {
-        memories = JSON.parse(jsonText);
-        if (!Array.isArray(memories)) {
-          logger.warn("[MemoryExtractor] Response was not an array");
-          return [];
-        }
-      } catch {
-        logger.warn(
-          "[MemoryExtractor] Failed to parse extraction result:",
-          jsonText.substring(0, 200),
-        );
+      const memories = parseJsonFromLlmResponse(result.text);
+      if (!Array.isArray(memories)) {
+        logger.warn("[MemoryExtractor] Response was not an array");
         return [];
       }
 
@@ -277,7 +229,7 @@ export default class MemoryExtractor {
         if (!mem.content || !mem.title) continue;
 
         // Validate type — default to "project" if unknown
-        const type = VALID_TYPES.includes(mem.type) ? mem.type : "project";
+        const type = CODING_MEMORY_TYPES.includes(mem.type) ? mem.type : "project";
 
         try {
           const result = await MemoryService.store({
