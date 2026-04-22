@@ -630,6 +630,12 @@ export async function handleAgent(params, emit, { signal } = {}) {
   const traceId = incomingTraceId || null;
   const conversationMeta = incomingConversationMeta || null;
 
+  // ── Eager session stub ───────────────────────────────────────
+  // Create the session document immediately via upsert so that
+  // GET /agent-sessions/:id never 404s while the loop is running
+  // (e.g. when the user switches away and back during generation).
+  markGenerating(agentSessionId, project, username, true, getCollectionOpts(project));
+
   try {
     try {
       if (!ctx.provider.generateTextStream && !ctx.provider.generateText) {
