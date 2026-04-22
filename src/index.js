@@ -58,6 +58,7 @@ import vramBenchmarksRouter from "./routes/vram-benchmarks.js";
 import coordinatorRouter from "./routes/coordinator.js";
 import settingsRouter from "./routes/settings.js";
 import customAgentsRouter from "./routes/custom-agents.js";
+import workspacesRouter from "./routes/workspaces.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -98,6 +99,7 @@ const ENDPOINTS = {
     "/coordinator",
     "/settings",
     "/custom-agents",
+    "/workspaces",
   ],
   websocket: ["/ws/chat", "/ws/text-to-audio"],
   admin: ["/admin", "/admin/lm-studio"],
@@ -150,6 +152,7 @@ app.use("/vram-benchmarks", vramBenchmarksRouter);
 app.use("/coordinator", coordinatorRouter);
 app.use("/settings", settingsRouter);
 app.use("/custom-agents", customAgentsRouter);
+app.use("/workspaces", workspacesRouter);
 
 // Error handler (must be last)
 app.use(errorHandler);
@@ -200,6 +203,9 @@ setupWebSocket(wss);
         db.collection("agent_skills").createIndex({ project: 1, username: 1 }),
         // mcp_servers
         db.collection("mcp_servers").createIndex({ project: 1, username: 1 }),
+        // workspaces
+        db.collection("workspaces").createIndex({ project: 1, username: 1 }),
+        db.collection("workspaces").createIndex({ id: 1 }, { unique: true }),
       ]);
       logger.success("Database indexes ensured");
     }

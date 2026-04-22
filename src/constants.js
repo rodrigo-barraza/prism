@@ -24,6 +24,7 @@ export const COLLECTIONS = {
   VRAM_BENCHMARKS: "vram_benchmarks",
   SETTINGS: "settings",
   CUSTOM_AGENTS: "custom_agents",
+  WORKSPACES: "workspaces",
 };
 
 /**
