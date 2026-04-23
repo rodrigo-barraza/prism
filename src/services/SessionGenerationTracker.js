@@ -287,10 +287,12 @@ const SessionGenerationTracker = {
     const allTtftCount = ttftSamples.length + activeTtftCount;
     const avgTtft = allTtftCount > 0 ? allTtftSum / allTtftCount : null;
 
-    // Tok/s: prefer active request rate, fall back to last completed rate
+    // Tok/s: aggregate throughput across all active requests (sum, not average).
+    // When multiple workers generate in parallel, the session-level rate
+    // reflects total tokens/sec being produced across the entire session.
     let tokPerSec = null;
     if (generatingCount > 0) {
-      tokPerSec = parseFloat((totalTokPerSec / generatingCount).toFixed(1));
+      tokPerSec = parseFloat(totalTokPerSec.toFixed(1));
     } else {
       const completedSamples = acc?.completedTokPerSecSamples || [];
       if (completedSamples.length > 0) {

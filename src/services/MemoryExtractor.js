@@ -6,6 +6,7 @@ import RequestLogger from "./RequestLogger.js";
 import SettingsService from "./SettingsService.js";
 import logger from "../utils/logger.js";
 import { parseJsonFromLlmResponse } from "../utils/utilities.js";
+import { estimateTokens } from "../utils/CostCalculator.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -117,7 +118,7 @@ export default class MemoryExtractor {
    * @param {Array} [params.toolCalls] - Tool calls from the current turn (for mutual exclusion)
    * @returns {Promise<Array>} Stored memory documents
    */
-  static async extractAndStore({ project, username, messages, traceId, agentSessionId, conversationId, endpoint, agent, toolCalls }) {
+  static async extractAndStore({ project, username, messages, traceId, agentSessionId, conversationId, endpoint, agent, toolCalls, emit }) {
     if (!messages || messages.length < MIN_MESSAGES_FOR_EXTRACTION) {
       logger.info(
         `[MemoryExtractor] Skipping — only ${messages?.length || 0} messages (min: ${MIN_MESSAGES_FOR_EXTRACTION})`,
@@ -192,6 +193,11 @@ export default class MemoryExtractor {
         errorMessage = err.message;
         throw err;
       } finally {
+        // Compute estimated tokens for logging and live UI updates
+        const inputText = aiMessages.map((m) => m.content).join("\n");
+        const approxInputTokens = estimateTokens(inputText);
+        const approxOutputTokens = result?.text ? estimateTokens(result.text) : 0;
+
         RequestLogger.logBackgroundLlmCall({
           requestId,
           endpoint: endpoint || "/agent",
@@ -213,6 +219,21 @@ export default class MemoryExtractor {
             conversationId: conversationId || null,
           },
         });
+
+        // Emit incremental usage so the UI token badge updates in real-time
+        // instead of jumping when fetchSessionStats runs 2-8s later
+        if (emit && success) {
+          try {
+            emit({
+              type: "usage_update",
+              operation: "memory:extract",
+              usage: {
+                inputTokens: approxInputTokens,
+                outputTokens: approxOutputTokens,
+              },
+            });
+          } catch { /* SSE channel may be closed */ }
+        }
       }
 
       const memories = parseJsonFromLlmResponse(result.text);
@@ -289,6 +310,7 @@ export default class MemoryExtractor {
         endpoint: ctx.endpoint || "/agent",
         agent: ctx.agent || null,
         toolCalls: toolCalls || [],
+        emit: ctx.emit || null,
       })
         .then((stored) => {
           if (stored?.length > 0 && ctx.emit) {

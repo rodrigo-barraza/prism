@@ -9,6 +9,7 @@ import { cosineSimilarity } from "../utils/math.js";
 import { parseJsonFromLlmResponse, daysSinceIso } from "../utils/utilities.js";
 import { COLLECTIONS } from "../constants.js";
 import SettingsService from "./SettingsService.js";
+import { estimateTokens } from "../utils/CostCalculator.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -389,6 +390,10 @@ const MemoryConsolidationService = {
     });
 
     // Log the consolidation LLM call
+    const inputText = aiMessages.map((m) => m.content).join("\n");
+    const approxInputTokens = estimateTokens(inputText);
+    const approxOutputTokens = result?.text ? estimateTokens(result.text) : 0;
+
     RequestLogger.logBackgroundLlmCall({
       requestId: llmRequestId,
       endpoint: endpoint || null,
@@ -411,6 +416,20 @@ const MemoryConsolidationService = {
         memoryCount: allMemories.length,
       },
     });
+
+    // Emit incremental usage so the UI token badge updates in real-time
+    if (typeof broadcast === "function" && llmSuccess) {
+      try {
+        broadcast({
+          type: "usage_update",
+          operation: "memory:consolidate",
+          usage: {
+            inputTokens: approxInputTokens,
+            outputTokens: approxOutputTokens,
+          },
+        });
+      } catch { /* SSE channel may be closed */ }
+    }
 
     // Parse response
     const parsed = parseJsonFromLlmResponse(result.text);
