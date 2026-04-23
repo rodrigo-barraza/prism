@@ -62,7 +62,7 @@ export function setupWebSocket(wss) {
 }
 
 /**
- * WebSocket chat handler — delegates to shared handleChat() from chat.js.
+ * WebSocket chat handler — delegates to handleConversation() from chat.js.
  */
 function handleWsChat(ws, project, username, clientIp, agent) {
   ws.on("message", async (rawData) => {

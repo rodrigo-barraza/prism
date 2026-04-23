@@ -54,9 +54,10 @@ const sessionIndex = new Map();
 
 /**
  * @typedef {object} SessionAccumulator
- * @property {number} completedOutputTokens - cumulative output tokens from completed requests
- * @property {number} completedInputTokens  - cumulative input tokens from completed requests
- * @property {number[]} ttftSamples         - TTFT values (seconds) from each completed request
+ * @property {number} completedOutputTokens   - cumulative output tokens from completed requests
+ * @property {number} completedInputTokens    - cumulative input tokens from completed requests
+ * @property {number[]} ttftSamples           - TTFT values (seconds) from each completed request
+ * @property {number[]} completedTokPerSecSamples - tok/s from each completed request
  */
 
 /** @type {Map<string, SessionAccumulator>} agentSessionId → cumulative session counters */
@@ -106,6 +107,7 @@ const SessionGenerationTracker = {
         completedOutputTokens: 0,
         completedInputTokens: 0,
         ttftSamples: [],
+        completedTokPerSecSamples: [],
       });
     }
   },
@@ -140,9 +142,25 @@ const SessionGenerationTracker = {
   },
 
   /**
+   * Record chunk timing without updating token counts.
+   * Called on each streaming chunk so the tracker can compute
+   * accurate tok/s when provider-reported tokens arrive at stream end.
+   *
+   * @param {string} requestId
+   */
+  recordChunkTiming(requestId) {
+    const entry = activeRequests.get(requestId);
+    if (!entry) return;
+    const now = performance.now();
+    if (!entry.firstTokenTime) entry.firstTokenTime = now;
+    entry.lastTokenTime = now;
+  },
+
+  /**
    * Mark a request as complete and remove it from active tracking.
-   * Rolls the request's final token counts into the session accumulator
-   * so cumulative totals remain monotonically non-decreasing.
+   * Rolls the request's final token counts and computed tok/s into
+   * the session accumulator so cumulative totals remain monotonically
+   * non-decreasing.
    *
    * @param {string} requestId
    */
@@ -150,13 +168,27 @@ const SessionGenerationTracker = {
     const entry = activeRequests.get(requestId);
     if (!entry) return;
 
-    // Roll completed tokens into the session accumulator
+    // Compute this request's tok/s from provider-reported tokens and
+    // the timing window captured during streaming.
+    let requestTokPerSec = null;
+    if (entry.outputTokens > 0 && entry.firstTokenTime && entry.lastTokenTime) {
+      const elapsed = (entry.lastTokenTime - entry.firstTokenTime) / 1000;
+      if (elapsed >= MIN_ELAPSED_SEC) {
+        requestTokPerSec = entry.outputTokens / elapsed;
+      }
+    }
+
+    // Roll completed metrics into the session accumulator
     const acc = sessionAccumulators.get(entry.agentSessionId);
     if (acc) {
       acc.completedOutputTokens += entry.outputTokens;
       acc.completedInputTokens += entry.inputTokens;
       if (entry.ttft != null) {
         acc.ttftSamples.push(entry.ttft);
+      }
+      // Persist tok/s so it survives across iteration boundaries
+      if (requestTokPerSec != null) {
+        acc.completedTokPerSecSamples.push(requestTokPerSec);
       }
     }
 
@@ -200,8 +232,13 @@ const SessionGenerationTracker = {
       const avgTtft = ttftSamples.length > 0
         ? ttftSamples.reduce((a, b) => a + b, 0) / ttftSamples.length
         : null;
+      // Use the most recent completed tok/s (last iteration's rate)
+      const completedSamples = acc?.completedTokPerSecSamples || [];
+      const lastTokPerSec = completedSamples.length > 0
+        ? parseFloat(completedSamples[completedSamples.length - 1].toFixed(1))
+        : null;
       return {
-        tokPerSec: null,
+        tokPerSec: lastTokPerSec,
         activeRequests: 0,
         totalOutputTokens: totalOut,
         totalInputTokens: totalIn,
@@ -250,10 +287,19 @@ const SessionGenerationTracker = {
     const allTtftCount = ttftSamples.length + activeTtftCount;
     const avgTtft = allTtftCount > 0 ? allTtftSum / allTtftCount : null;
 
+    // Tok/s: prefer active request rate, fall back to last completed rate
+    let tokPerSec = null;
+    if (generatingCount > 0) {
+      tokPerSec = parseFloat((totalTokPerSec / generatingCount).toFixed(1));
+    } else {
+      const completedSamples = acc?.completedTokPerSecSamples || [];
+      if (completedSamples.length > 0) {
+        tokPerSec = parseFloat(completedSamples[completedSamples.length - 1].toFixed(1));
+      }
+    }
+
     return {
-      tokPerSec: generatingCount > 0
-        ? parseFloat((totalTokPerSec / generatingCount).toFixed(1))
-        : null,
+      tokPerSec,
       activeRequests: requestIds.size,
       // Cumulative: completed requests + in-flight requests
       totalOutputTokens: totalOut,

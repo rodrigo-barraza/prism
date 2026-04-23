@@ -341,18 +341,32 @@ export default class AgenticLoopService {
     // on the coordinator's session aggregates all active requests.
     const trackerSessionId = parentAgentSessionId || agentSessionId;
 
+    // ── High-water marks ────────────────────────────────────────
+    // Token counts emitted to the frontend must be monotonically
+    // non-decreasing. Estimation (chars/4) can overcount, and
+    // cross-iteration boundaries can cause temporary dips when a
+    // completed request's tokens are rolled into the accumulator
+    // and a new request starts at 0. These HWMs prevent that.
+    let hwmOutputTokens = 0;
+    let hwmInputTokens = 0;
+    let hwmTotalTokens = 0;
+
     /** Emit a generation_progress status event with current session stats. */
     const emitGenerationProgress = () => {
       const stats = SessionGenerationTracker.getSessionStats(trackerSessionId);
-      if (stats.activeRequests > 0) {
+      if (stats.activeRequests > 0 || stats.totalOutputTokens > 0) {
+        // Enforce monotonicity — never emit values lower than previous
+        hwmOutputTokens = Math.max(hwmOutputTokens, stats.totalOutputTokens);
+        hwmInputTokens = Math.max(hwmInputTokens, stats.totalInputTokens);
+        hwmTotalTokens = Math.max(hwmTotalTokens, stats.totalTokens);
         emit({
           type: "status",
           message: "generation_progress",
           tokPerSec: stats.tokPerSec,
           activeRequests: stats.activeRequests,
-          outputTokens: stats.totalOutputTokens,
-          inputTokens: stats.totalInputTokens,
-          totalTokens: stats.totalTokens,
+          outputTokens: hwmOutputTokens,
+          inputTokens: hwmInputTokens,
+          totalTokens: hwmTotalTokens,
           avgTtft: stats.avgTtft,
         });
       }
@@ -521,12 +535,9 @@ export default class AgenticLoopService {
               lastDisplaySegType = "thinking";
             }
             displayThinkingFragments[displayThinkingFragments.length - 1] += chunk.content;
-            // Estimate tokens from content length (~4 chars/token). Cloud providers
-            // (Anthropic, OpenAI, Google) emit multi-token deltas per chunk.
-            const thinkingTokenDelta = Math.max(1, Math.ceil((chunk.content || "").length / 4));
-            outputTokenCount += thinkingTokenDelta;
-            iterationTokenCount += thinkingTokenDelta;
-            SessionGenerationTracker.update(passRequestId, { outputTokens: iterationTokenCount });
+            outputTokenCount++;
+            iterationTokenCount++;
+            SessionGenerationTracker.recordChunkTiming(passRequestId);
             emit({ type: "thinking", content: chunk.content, outputTokens: outputTokenCount });
             maybeEmitProgress();
             continue;
@@ -704,26 +715,24 @@ export default class AgenticLoopService {
             lastDisplaySegType = "text";
           }
           displayTextFragments[displayTextFragments.length - 1] += chunkStr;
-          // Estimate tokens from content length (~4 chars/token). Cloud providers
-          // (Anthropic, OpenAI, Google) emit multi-token deltas per chunk.
-          const textTokenDelta = Math.max(1, Math.ceil(rawChunkStr.length / 4));
-          outputTokenCount += textTokenDelta;
-          iterationTokenCount += textTokenDelta;
-          SessionGenerationTracker.update(passRequestId, { outputTokens: iterationTokenCount });
+          outputTokenCount++;
+          iterationTokenCount++;
+          SessionGenerationTracker.recordChunkTiming(passRequestId);
           if (chunkStr) emit({ type: "chunk", content: chunkStr, outputTokens: outputTokenCount });
           maybeEmitProgress();
         }
 
-        // ── Complete this iteration's request in the tracker ────
-        // Use provider-reported tokens if available. Use Math.max to
-        // prevent totalOutputTokens from decreasing — the estimated
-        // count (from chunk content length) can overcount, but the
-        // frontend badge should never go backwards.
+        // ── Finalize with provider-reported token counts ────────
+        // Only the provider's usage report is authoritative. The tracker
+        // receives output tokens exclusively here — never from per-chunk
+        // estimates or approximations.
         if (passUsage.outputTokens > 0) {
+          iterationTokenCount = passUsage.outputTokens;
           SessionGenerationTracker.update(passRequestId, {
-            outputTokens: Math.max(iterationTokenCount, passUsage.outputTokens),
+            outputTokens: passUsage.outputTokens,
           });
         }
+
         // Finalize input tokens from provider-reported usage (may not
         // have arrived via streaming usage chunks on all providers).
         const finalInputTokens = passUsage.inputTokens || passUsage.promptTokens || 0;
@@ -1194,10 +1203,8 @@ export default class AgenticLoopService {
           }
           if (chunk && typeof chunk === "object" && chunk.type === "thinking") {
             streamedThinking += chunk.content;
-            const exThinkDelta = Math.max(1, Math.ceil((chunk.content || "").length / 4));
-            outputTokenCount += exThinkDelta;
-            exhaustionTokenCount += exThinkDelta;
-            SessionGenerationTracker.update(exhaustionRequestId, { outputTokens: exhaustionTokenCount });
+            outputTokenCount++;
+            exhaustionTokenCount++;
             emit({ type: "thinking", content: chunk.content, outputTokens: outputTokenCount });
             maybeEmitProgress();
             continue;
@@ -1209,10 +1216,8 @@ export default class AgenticLoopService {
           const chunkStr = typeof chunk === "string" ? chunk : "";
           overallOutputCharacters += chunkStr.length;
           finalStreamedText += chunkStr;
-          const exTextDelta = Math.max(1, Math.ceil(chunkStr.length / 4));
-          outputTokenCount += exTextDelta;
-          exhaustionTokenCount += exTextDelta;
-          SessionGenerationTracker.update(exhaustionRequestId, { outputTokens: exhaustionTokenCount });
+          outputTokenCount++;
+          exhaustionTokenCount++;
           emit({ type: "chunk", content: chunkStr, outputTokens: outputTokenCount });
           maybeEmitProgress();
         }

@@ -757,10 +757,25 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
 
     // Convert tool schemas to OpenAI format
     const tools = convertToolsToOpenAI(options.tools);
-    if (tools) payload.tools = tools;
+    if (tools) {
+      // ── Cap tool count based on loaded model context ──────────
+      // Each tool schema averages ~500 tokens. Reserve 50% of context
+      // for the conversation. Without this cap, 65+ tool schemas
+      // overflow the context and LM Studio returns empty responses.
+      const contextLength = options._loadedContextLength || options.contextLength || 8192;
+      const maxTools = Math.max(1, Math.floor((contextLength * 0.5) / 500));
+      if (tools.length > maxTools) {
+        logger.warn(
+          `[LM-Studio] OpenAI-compat: tool count (${tools.length}) exceeds safe limit for ctx=${contextLength}. Capping at ${maxTools}.`,
+        );
+        payload.tools = tools.slice(0, maxTools);
+      } else {
+        payload.tools = tools;
+      }
+    }
 
     logger.info(
-      `[LM-Studio] OpenAI-compat streaming (coordinator tools active): model=${model}, tools=${options.tools?.length || 0}`,
+      `[LM-Studio] OpenAI-compat streaming (agentic): model=${model}, tools=${payload.tools?.length || 0}/${options.tools?.length || 0}, ctx=${options._loadedContextLength || 'unset'}`,
     );
 
     yield { type: "status", message: "Starting…", phase: "starting" };

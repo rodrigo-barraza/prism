@@ -711,20 +711,6 @@ export async function handleAgent(params, emit, { signal } = {}) {
   }
 }
 
-// ============================================================
-// handleChat — @deprecated backward-compat router
-// ============================================================
-
-/**
- * @deprecated Use handleConversation or handleAgent directly.
- * Routes to handleAgent when agenticLoopEnabled, otherwise handleConversation.
- */
-export async function handleChat(params, emit, { signal } = {}) {
-  if (params.agenticLoopEnabled) {
-    return handleAgent(params, emit, { signal });
-  }
-  return handleConversation(params, emit, { signal });
-}
 
 // ============================================================
 // Dispatch: Image API models (e.g. GPT Image 1.5, OpenAI images)

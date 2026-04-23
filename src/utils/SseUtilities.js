@@ -61,7 +61,7 @@ export function createSseEmitter(res, signal) {
  * Build a flat JSON response from collected SSE events.
  * Used by non-streaming callers (?stream=false).
  *
- * @param {Array<object>} events   - Collected events from handleChat
+ * @param {Array<object>} events   - Collected events from the handler
  * @param {object}        reqBody  - The original request body (for fallback provider/model)
  * @returns {{ error?: object, response?: object }}
  */
