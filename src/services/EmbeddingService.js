@@ -122,7 +122,7 @@ const EmbeddingService = {
         errorMessage,
         estimatedCost,
         inputTokens: approxInputTokens,
-        outputTokens: result?.dimensions || 0,
+        outputTokens: 0, // Embeddings produce vectors, not output tokens
         tokensPerSec: calculateTokensPerSec(approxInputTokens, totalSec),
         inputCharacters,
         totalTime: roundMs(totalSec),

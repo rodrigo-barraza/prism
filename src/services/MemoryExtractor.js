@@ -228,6 +228,7 @@ export default class MemoryExtractor {
               type: "usage_update",
               operation: "memory:extract",
               usage: {
+                requests: 1,
                 inputTokens: approxInputTokens,
                 outputTokens: approxOutputTokens,
               },
@@ -284,6 +285,24 @@ export default class MemoryExtractor {
       logger.info(
         `[MemoryExtractor] Stored ${stored.length}/${memories.length} memories from conversation ${conversationId || "unknown"}`,
       );
+
+      // Emit usage for the embedding calls that happened during storage.
+      // Each MemoryService.store() generates one embedding — report the
+      // aggregate so the UI request count grows incrementally.
+      if (emit && stored.length > 0) {
+        try {
+          emit({
+            type: "usage_update",
+            operation: "embed:memory",
+            usage: {
+              requests: stored.length,
+              inputTokens: stored.length * 50, // ~50 tokens per memory title+content
+              outputTokens: 0,
+            },
+          });
+        } catch { /* SSE channel may be closed */ }
+      }
+
       return stored;
     } catch (err) {
       logger.error(`[MemoryExtractor] Failed: ${err.message}`);

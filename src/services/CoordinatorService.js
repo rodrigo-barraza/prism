@@ -1398,6 +1398,13 @@ export default class CoordinatorService {
         // Capture cost and usage from finalizeTextGeneration
         worker.totalCost = event.estimatedCost || null;
         worker.usage = event.usage || null;
+      } else if (event.type === "usage_update") {
+        // Forward background usage events (memory extraction, embeddings)
+        // directly to the parent SSE stream so the frontend can accumulate
+        // them into the session token badge in real-time.
+        if (parentEmit) {
+          parentEmit(event);
+        }
       }
     };
 

@@ -424,6 +424,7 @@ const MemoryConsolidationService = {
           type: "usage_update",
           operation: "memory:consolidate",
           usage: {
+            requests: 1,
             inputTokens: approxInputTokens,
             outputTokens: approxOutputTokens,
           },
