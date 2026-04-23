@@ -123,22 +123,6 @@ const FileService = {
     try {
       return await tryKey(key);
     } catch {
-      // Fallback: try the legacy key with ::ffff: prefix re-inserted before
-      // bare IPv4 addresses.  Old uploads stored keys like
-      // "projects/retina/::ffff:127.0.0.1/uploads/uuid.png" — when the
-      // frontend now strips the prefix we get "projects/retina/127.0.0.1/..."
-      // which won't match the original object.
-      const legacyKey = key.replace(
-        /\/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\//,
-        "/::ffff:$1/",
-      );
-      if (legacyKey !== key) {
-        try {
-          return await tryKey(legacyKey);
-        } catch {
-          // Neither key exists
-        }
-      }
       logger.error(`FileService: failed to get ${key}`);
       return null;
     }

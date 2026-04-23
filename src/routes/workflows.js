@@ -184,9 +184,7 @@ async function extractNodeResultFiles(
  */
 function resolveMinioRef(value, baseUrl) {
   if (typeof value === "string" && value.startsWith("minio://")) {
-    let key = value.replace("minio://", "");
-    // Sanitize IPv4-mapped IPv6 addresses from legacy keys
-    key = key.replace(/::ffff:/g, "");
+    const key = value.replace("minio://", "");
     // Use direct MinIO URL when available, otherwise proxy through Prism
     const minioBase = MinioWrapper.getBucketUrl();
     if (minioBase) return `${minioBase}/${key}`;

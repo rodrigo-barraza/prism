@@ -126,7 +126,7 @@ export default class AgenticLoopService {
 
     // ── Tool filtering ────────────────────────────────────────────
     // Three modes (in priority order):
-    //   1. options.enabledTools  — explicit allowlist from the client (legacy)
+    //   1. options.enabledTools  — explicit allowlist from the client
     //   2. options.disabledBuiltIns — client sends only the disabled tools;
     //      the server resolves the enabled set by starting from the persona's
     //      enabledTools and subtracting disabled ones. This avoids downloading
@@ -277,7 +277,6 @@ export default class AgenticLoopService {
     const originalMessageCount = currentMessages.length;
 
     const overallUsage = createUsageAccumulator();
-    let outputTokenCount = 0; // Running output token counter — piggybacked on chunk/thinking SSE events
     let overallFirstTokenTime = null;
     let overallGenerationEnd = null;
     let overallOutputCharacters = 0;
@@ -343,13 +342,13 @@ export default class AgenticLoopService {
 
     // ── High-water marks ────────────────────────────────────────
     // Token counts emitted to the frontend must be monotonically
-    // non-decreasing. Estimation (chars/4) can overcount, and
-    // cross-iteration boundaries can cause temporary dips when a
-    // completed request's tokens are rolled into the accumulator
-    // and a new request starts at 0. These HWMs prevent that.
+    // non-decreasing. Cross-iteration boundaries can cause temporary
+    // dips when a completed request's tokens are rolled into the
+    // accumulator and a new request starts at 0. These HWMs prevent that.
     let hwmOutputTokens = 0;
     let hwmInputTokens = 0;
     let hwmTotalTokens = 0;
+    let hwmOutputCharacters = 0;
 
     /** Emit a generation_progress status event with current session stats. */
     const emitGenerationProgress = () => {
@@ -359,6 +358,7 @@ export default class AgenticLoopService {
         hwmOutputTokens = Math.max(hwmOutputTokens, stats.totalOutputTokens);
         hwmInputTokens = Math.max(hwmInputTokens, stats.totalInputTokens);
         hwmTotalTokens = Math.max(hwmTotalTokens, stats.totalTokens);
+        hwmOutputCharacters = Math.max(hwmOutputCharacters, overallOutputCharacters);
         emit({
           type: "status",
           message: "generation_progress",
@@ -367,6 +367,7 @@ export default class AgenticLoopService {
           outputTokens: hwmOutputTokens,
           inputTokens: hwmInputTokens,
           totalTokens: hwmTotalTokens,
+          outputCharacters: hwmOutputCharacters,
           avgTtft: stats.avgTtft,
         });
       }
@@ -472,11 +473,6 @@ export default class AgenticLoopService {
 
         // ── Register LLM request with SessionGenerationTracker ──
         const passRequestId = `${ctx.requestId || agentSessionId}-iter-${iterations}`;
-        // Per-iteration token counter for the tracker — separate from
-        // the cumulative outputTokenCount which is used for SSE events.
-        // Each tracker request tracks only its own iteration's tokens
-        // to compute accurate tok/s without cross-iteration inflation.
-        let iterationTokenCount = 0;
         SessionGenerationTracker.register(trackerSessionId, passRequestId, {
           provider: providerName,
           model: resolvedModel,
@@ -535,10 +531,11 @@ export default class AgenticLoopService {
               lastDisplaySegType = "thinking";
             }
             displayThinkingFragments[displayThinkingFragments.length - 1] += chunk.content;
-            outputTokenCount++;
-            iterationTokenCount++;
+            overallOutputCharacters += chunk.content.length;
+            // Only record timing — authoritative token count arrives in
+            // the usage event at stream end. No fake per-chunk token counts.
             SessionGenerationTracker.recordChunkTiming(passRequestId);
-            emit({ type: "thinking", content: chunk.content, outputTokens: outputTokenCount });
+            emit({ type: "thinking", content: chunk.content, outputCharacters: overallOutputCharacters });
             maybeEmitProgress();
             continue;
           }
@@ -715,19 +712,18 @@ export default class AgenticLoopService {
             lastDisplaySegType = "text";
           }
           displayTextFragments[displayTextFragments.length - 1] += chunkStr;
-          outputTokenCount++;
-          iterationTokenCount++;
+          // Only record timing — authoritative token count arrives in
+          // the usage event at stream end. No fake per-chunk token counts.
           SessionGenerationTracker.recordChunkTiming(passRequestId);
-          if (chunkStr) emit({ type: "chunk", content: chunkStr, outputTokens: outputTokenCount });
+          if (chunkStr) emit({ type: "chunk", content: chunkStr, outputCharacters: overallOutputCharacters });
           maybeEmitProgress();
         }
 
         // ── Finalize with provider-reported token counts ────────
-        // Only the provider's usage report is authoritative. The tracker
-        // receives output tokens exclusively here — never from per-chunk
-        // estimates or approximations.
+        // The provider's usage report is the ONLY source of truth for
+        // token counts. Feed real data to the tracker so generation_progress
+        // events and tok/s computation use authoritative values.
         if (passUsage.outputTokens > 0) {
-          iterationTokenCount = passUsage.outputTokens;
           SessionGenerationTracker.update(passRequestId, {
             outputTokens: passUsage.outputTokens,
           });
@@ -1181,7 +1177,6 @@ export default class AgenticLoopService {
 
         const augmentedExhaustionOptions = { ...exhaustionOptions, project, agent, username };
         const exhaustionRequestId = `${ctx.requestId || agentSessionId}-exhaustion`;
-        let exhaustionTokenCount = 0;
         SessionGenerationTracker.register(trackerSessionId, exhaustionRequestId, {
           provider: providerName,
           model: resolvedModel,
@@ -1199,13 +1194,17 @@ export default class AgenticLoopService {
 
           if (chunk && typeof chunk === "object" && chunk.type === "usage") {
             mergeUsage(overallUsage, chunk.usage);
+            // Feed real provider-reported tokens to tracker
+            if (chunk.usage?.outputTokens > 0) {
+              SessionGenerationTracker.update(exhaustionRequestId, { outputTokens: chunk.usage.outputTokens });
+            }
             continue;
           }
           if (chunk && typeof chunk === "object" && chunk.type === "thinking") {
             streamedThinking += chunk.content;
-            outputTokenCount++;
-            exhaustionTokenCount++;
-            emit({ type: "thinking", content: chunk.content, outputTokens: outputTokenCount });
+            overallOutputCharacters += chunk.content.length;
+            SessionGenerationTracker.recordChunkTiming(exhaustionRequestId);
+            emit({ type: "thinking", content: chunk.content, outputCharacters: overallOutputCharacters });
             maybeEmitProgress();
             continue;
           }
@@ -1216,9 +1215,8 @@ export default class AgenticLoopService {
           const chunkStr = typeof chunk === "string" ? chunk : "";
           overallOutputCharacters += chunkStr.length;
           finalStreamedText += chunkStr;
-          outputTokenCount++;
-          exhaustionTokenCount++;
-          emit({ type: "chunk", content: chunkStr, outputTokens: outputTokenCount });
+          SessionGenerationTracker.recordChunkTiming(exhaustionRequestId);
+          emit({ type: "chunk", content: chunkStr, outputCharacters: overallOutputCharacters });
           maybeEmitProgress();
         }
 

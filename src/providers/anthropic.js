@@ -103,8 +103,8 @@ async function prepareMessages(messages) {
         // Preserve thinking blocks for multi-step reasoning continuity.
         // The signature field is REQUIRED by Anthropic's API for multi-turn
         // conversations — without it the API returns a 400.
-        // Only include thinking when we have the signature; for legacy
-        // conversations missing it, omit the block entirely.
+        // Only include thinking when we have the signature; conversations
+        // missing it must omit the block to avoid API 400 errors.
         if (m.thinking && m.thinkingSignature) {
           contentBlocks.push({
             type: "thinking",
@@ -199,8 +199,8 @@ async function prepareMessages(messages) {
       // Handle assistant messages that have thinking but no toolCalls.
       // Anthropic requires thinking blocks as structured content blocks,
       // not top-level fields — convert them into the proper format.
-      // Only include thinking when we have the signature; legacy conversations
-      // without it must omit the block entirely to avoid a 400.
+      // Only include thinking when we have the signature; conversations
+      // without it must omit the block to avoid API 400 errors.
       if (m.role === "assistant" && m.thinking && !m.toolCalls?.length) {
         const contentBlocks = [];
         if (m.thinkingSignature) {

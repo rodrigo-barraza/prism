@@ -23,6 +23,9 @@ const toolMap = new Map();
 /** @type {string[]} Allowed workspace root paths (fetched from tools-api) */
 let cachedWorkspaceRoots = [];
 
+/** @type {string[]} Static roots from secrets.js (immutable, for "pinned" UI) */
+let cachedStaticRoots = [];
+
 /** @type {boolean} Whether initial fetch has completed */
 let initialized = false;
 
@@ -100,6 +103,9 @@ async function fetchSchemas() {
           logger.info(
             `[ToolOrchestrator] Workspace roots: ${cachedWorkspaceRoots.join(", ")}`,
           );
+        }
+        if (Array.isArray(config.staticRoots)) {
+          cachedStaticRoots = config.staticRoots;
         }
       }
     } catch (cfgErr) {
@@ -985,6 +991,71 @@ export default class ToolOrchestratorService {
   /** Primary workspace root (first entry) */
   static getWorkspaceRoot() {
     return cachedWorkspaceRoots[0] || null;
+  }
+
+  /** Static roots from secrets.js (immutable, for "pinned" UI distinction) */
+  static getStaticRoots() {
+    return [...cachedStaticRoots];
+  }
+
+  /** Re-fetch workspace roots from tools-api config */
+  static async refreshWorkspaceRoots() {
+    try {
+      const configRes = await fetch(`${TOOLS_API_URL}/admin/config`, {
+        signal: AbortSignal.timeout(3000),
+      });
+      if (configRes.ok) {
+        const config = await configRes.json();
+        if (Array.isArray(config.workspaceRoots)) {
+          cachedWorkspaceRoots = config.workspaceRoots;
+        }
+        if (Array.isArray(config.staticRoots)) {
+          cachedStaticRoots = config.staticRoots;
+        }
+      }
+    } catch (err) {
+      logger.warn(`[ToolOrchestrator] refreshWorkspaceRoots failed: ${err.message}`);
+    }
+  }
+
+  /**
+   * Update user-configured workspace roots via tools-api.
+   * @param {string[]} roots - New user roots to persist
+   * @returns {Promise<object>}
+   */
+  static async updateWorkspaceRoots(roots) {
+    const res = await fetch(`${TOOLS_API_URL}/admin/config/workspaces`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ roots }),
+      signal: AbortSignal.timeout(10000),
+    });
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.error || "Failed to update workspace roots");
+
+    // Refresh local cache
+    if (Array.isArray(result.workspaceRoots)) {
+      cachedWorkspaceRoots = result.workspaceRoots;
+    }
+    if (Array.isArray(result.staticRoots)) {
+      cachedStaticRoots = result.staticRoots;
+    }
+    return result;
+  }
+
+  /**
+   * Validate a single workspace path via tools-api.
+   * @param {string} path - Path to validate
+   * @returns {Promise<object>}
+   */
+  static async validateWorkspacePath(path) {
+    const res = await fetch(`${TOOLS_API_URL}/admin/config/workspaces/validate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path }),
+      signal: AbortSignal.timeout(5000),
+    });
+    return res.json();
   }
 
   /**

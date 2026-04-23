@@ -75,21 +75,17 @@ function evaluate(response, expected, matchMode = MATCH_MODES.CONTAINS) {
 
 /**
  * Evaluate a response against multiple assertions using AND/OR logic.
- * Falls back to single evaluate() for legacy benchmarks without assertions.
  *
  * @param {string} response          The raw model output
  * @param {Object} benchmark         The benchmark definition
  * @param {Array}  benchmark.assertions       Array of { expectedValue, matchMode }
  * @param {string} benchmark.assertionOperator "AND" or "OR"
- * @param {string} benchmark.expectedValue     Legacy single expected value
- * @param {string} benchmark.matchMode         Legacy single match mode
  * @returns {boolean}
  */
 function evaluateAssertions(response, benchmark) {
   const assertions = benchmark.assertions;
   if (!assertions || assertions.length === 0) {
-    // Legacy: fall back to single expectedValue/matchMode
-    return evaluate(response, benchmark.expectedValue, benchmark.matchMode || MATCH_MODES.CONTAINS);
+    return false;
   }
 
   const operator = benchmark.assertionOperator || "AND";

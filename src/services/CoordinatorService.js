@@ -13,6 +13,7 @@ import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
 import SettingsService from "./SettingsService.js";
 import { createAbortController } from "../utils/AbortController.js";
 import { registerCleanup } from "../utils/CleanupRegistry.js";
+import SessionGenerationTracker from "./SessionGenerationTracker.js";
 
 // ────────────────────────────────────────────────────────────
 // CoordinatorService — Multi-Agent Orchestration
@@ -1226,6 +1227,36 @@ export default class CoordinatorService {
       totalOutputTokens: cumulativeChunkCount,
     });
 
+    // ── Aggregate progress HWMs ────────────────────────────
+    // When workers stream, emit aggregate session-level progress
+    // so the main token badges update in real-time. HWMs prevent
+    // non-monotonic values across workers and iteration boundaries.
+    const parentSessionId = coordinatorCtx.agentSessionId;
+    let hwmOutputTokens = 0;
+    let hwmInputTokens = 0;
+    let hwmTotalTokens = 0;
+
+    /** Emit aggregate session-level generation_progress from the tracker. */
+    const emitAggregateProgress = () => {
+      if (!parentEmit || !parentSessionId) return;
+      const stats = SessionGenerationTracker.getSessionStats(parentSessionId);
+      if (stats.totalOutputTokens > 0 || stats.activeRequests > 0) {
+        hwmOutputTokens = Math.max(hwmOutputTokens, stats.totalOutputTokens);
+        hwmInputTokens = Math.max(hwmInputTokens, stats.totalInputTokens);
+        hwmTotalTokens = Math.max(hwmTotalTokens, stats.totalTokens);
+        parentEmit({
+          type: "status",
+          message: "generation_progress",
+          tokPerSec: stats.tokPerSec,
+          activeRequests: stats.activeRequests,
+          outputTokens: hwmOutputTokens,
+          inputTokens: hwmInputTokens,
+          totalTokens: hwmTotalTokens,
+          avgTtft: stats.avgTtft,
+        });
+      }
+    };
+
     const workerEmit = (event) => {
       if (event.type === "chunk") {
         workerOutput += event.content || "";
@@ -1254,12 +1285,15 @@ export default class CoordinatorService {
           || burstChunkCount % WORKER_PROGRESS_INTERVAL === 0;
         if (parentEmit && shouldEmit) {
           parentEmit(buildProgress());
+          // Also emit aggregate progress for the main token badges
+          emitAggregateProgress();
         }
       } else if (event.type === "thinking") {
         // Emit final generation_progress for the burst that just ended
         // so the frontend gets tok/s data even for short generation runs
         if (parentEmit && lastWorkerPhase === "generating" && burstChunkCount > 0) {
           parentEmit(buildProgress());
+          emitAggregateProgress();
         }
         // Reset burst counters for next generation burst
         burstChunkCount = 0;
@@ -1281,6 +1315,7 @@ export default class CoordinatorService {
         // Emit final generation_progress before tool execution pauses generation
         if (parentEmit && lastWorkerPhase === "generating" && burstChunkCount > 0) {
           parentEmit(buildProgress());
+          emitAggregateProgress();
         }
         // Reset burst counters for next generation burst
         burstChunkCount = 0;

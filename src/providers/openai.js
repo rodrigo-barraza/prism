@@ -874,7 +874,7 @@ const openaiProvider = {
           imageBuffer = Buffer.from(lastImage.imageData, "base64");
           mimeType = lastImage.mimeType || "image/png";
         } else {
-          // Legacy data URL format: data:image/png;base64,...
+          // Data URL format: data:image/png;base64,...
           const base64Match = lastImage.match(/^data:([^;]+);base64,(.+)$/);
           if (!base64Match) {
             throw new Error("Invalid image data format");

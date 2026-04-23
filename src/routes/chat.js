@@ -309,15 +309,6 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
     maxIterations,
     maxWorkerIterations,
     agentContext,
-    // customSystemPrompt is deprecated — the assembler always runs and
-    // loads the correct persona via AgentPersonaRegistry. Kept here to
-    // avoid breaking old callers silently; the value is simply ignored.
-    customSystemPrompt: _deprecatedCustomSystemPrompt,
-    // systemPrompt arrives in two places by design:
-    //  - messages[0] with role:"system" → what the LLM actually sees
-    //  - conversationMeta.systemPrompt → stored as top-level DB field for quick UI access
-    // The top-level param is ignored; only the messages array matters for generation.
-    systemPrompt: _unusedSystemPrompt,
     // Multi-workspace: user-selected workspace root path (absolute fs path).
     // Flows from x-workspace-root header → AuthMiddleware → agent route → here.
     workspaceRoot,
@@ -626,7 +617,6 @@ export async function handleAgent(params, emit, { signal } = {}) {
   } = ctx;
 
   // ── Agent session identity ─────────────────────────────────
-  // The client sends agentSessionId directly; falls back to conversationId for backward compat
   const agentSessionId = incomingAgentSessionId || incomingConversationId || crypto.randomUUID();
   const traceId = incomingTraceId || null;
   const conversationMeta = incomingConversationMeta || null;

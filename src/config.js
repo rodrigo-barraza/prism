@@ -127,7 +127,7 @@ const MODELS = {
     webSearch: true,
     tools: ["Web Search", "Tool Calling", "File Search"],
   },
-  // ----- Legacy OpenAI Models (unlisted, kept for cost tracking) -----
+  // ----- Unlisted OpenAI Models (retained for historical cost tracking) -----
   GPT_41_MINI: {
     name: "gpt-4.1-mini",
     label: "GPT 4.1 Mini",
@@ -919,7 +919,7 @@ const MODELS = {
   },
   TEXT_EMBEDDING_ADA_002: {
     name: "text-embedding-ada-002",
-    label: "Ada 002 (Legacy)",
+    label: "Ada 002",
     provider: PROVIDERS.OPENAI,
     year: 2022,
     modelType: MODEL_TYPES.EMBED,

@@ -112,11 +112,7 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
     const cleanText = stripToolCallMarkup(state.text);
     const chunkStr = cleanText.slice(state.outputCharacters);
     state.outputCharacters = cleanText.length;
-    // Estimate tokens from content length (~4 chars/token). Cloud providers
-    // (Anthropic, OpenAI, Google) emit multi-token text per chunk, so counting
-    // 1 per chunk massively underestimates the live token count.
-    state.outputTokenCount += Math.max(1, Math.ceil(rawStr.length / 4));
-    if (chunkStr) emit({ type: "chunk", content: chunkStr, outputTokens: state.outputTokenCount });
+    if (chunkStr) emit({ type: "chunk", content: chunkStr, outputCharacters: state.outputCharacters });
     return true;
   }
 
@@ -142,10 +138,8 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
       }
       state.generationEnd = performance.now();
       state.thinking += chunk.content;
-      // Estimate tokens from content length (~4 chars/token) — thinking deltas
-      // from cloud providers are multi-token, same as text chunks.
-      state.outputTokenCount += Math.max(1, Math.ceil((chunk.content || "").length / 4));
-      emit({ type: "thinking", content: chunk.content, outputTokens: state.outputTokenCount });
+      state.outputCharacters += (chunk.content || "").length;
+      emit({ type: "thinking", content: chunk.content, outputCharacters: state.outputCharacters });
       return true;
 
     case "thinking_signature":
@@ -250,8 +244,7 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
       const cleanText = stripToolCallMarkup(state.text);
       const chunkStr = cleanText.slice(state.outputCharacters);
       state.outputCharacters = cleanText.length;
-      state.outputTokenCount += Math.max(1, Math.ceil(rawStr.length / 4));
-      if (chunkStr) emit({ type: "chunk", content: chunkStr, outputTokens: state.outputTokenCount });
+      if (chunkStr) emit({ type: "chunk", content: chunkStr, outputCharacters: state.outputCharacters });
       return true;
     }
   }
@@ -275,7 +268,6 @@ export function createStreamState() {
     toolCalls: [],
     audioChunks: [],
     audioSampleRate: 24000,
-    outputTokenCount: 0,  // Running output token counter for live client updates
     rateLimits: null,
   };
 }
