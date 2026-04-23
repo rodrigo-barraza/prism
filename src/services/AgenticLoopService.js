@@ -552,10 +552,16 @@ export default class AgenticLoopService {
             if (!overallFirstTokenTime) overallFirstTokenTime = performance.now();
             if (!passFirstTokenTime) {
               passFirstTokenTime = performance.now();
-              emit({ type: "status", message: "generation_started", timeToFirstToken: (passFirstTokenTime - passStart) / 1000 });
+              const ttftSec = (passFirstTokenTime - passStart) / 1000;
+              SessionGenerationTracker.update(passRequestId, { ttft: ttftSec });
+              emit({ type: "status", message: "generation_started", timeToFirstToken: ttftSec });
             }
             overallGenerationEnd = performance.now();
             passGenerationEnd = performance.now();
+            // Tool call tokens are still LLM-generated output — track them
+            // so the SessionGenerationTracker continues reporting live tok/s.
+            SessionGenerationTracker.recordChunkTiming(passRequestId);
+            maybeEmitProgress();
 
             // Native MCP tool calls (e.g. LM Studio): already executed by provider,
             // pass through directly as toolCall events — do NOT re-execute.
