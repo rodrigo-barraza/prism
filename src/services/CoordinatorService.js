@@ -1212,20 +1212,33 @@ export default class CoordinatorService {
     let cumulativeChunkCount = 0;    // total tokens across all bursts (for token badge)
     let burstChunkCount = 0;         // tokens in current generation burst (for tok/s)
     let burstFirstChunkTime = null;  // start of current burst
-    const WORKER_PROGRESS_INTERVAL = 10; // emit progress every N chunks
+    const WORKER_PROGRESS_INTERVAL = 1; // emit on every chunk — LM Studio batches SSE deltas heavily under continuous batching
 
     /** Build the generation_progress payload for the frontend. */
-    const buildProgress = () => ({
-      type: "worker_status",
-      workerId: worker.agentId,
-      message: "generation_progress",
-      // Burst-scoped values — used for tok/s computation
-      outputTokens: burstChunkCount,
-      firstChunkTime: burstFirstChunkTime,
-      lastChunkTime: workerLastChunkTime,
-      // Cumulative total — used for token badge count
-      totalOutputTokens: cumulativeChunkCount,
-    });
+    const buildProgress = () => {
+      // Compute per-worker tok/s from burst-scoped counters.
+      // This is the ONLY source of per-worker throughput — the
+      // SessionGenerationTracker aggregates across all workers
+      // and must NOT be used for individual worker display.
+      let workerTokPerSec = null;
+      if (burstChunkCount > 1 && burstFirstChunkTime && workerLastChunkTime) {
+        const elapsedSec = (workerLastChunkTime - burstFirstChunkTime) / 1000;
+        if (elapsedSec > 0.1) workerTokPerSec = burstChunkCount / elapsedSec;
+      }
+      return {
+        type: "worker_status",
+        workerId: worker.agentId,
+        message: "generation_progress",
+        // Burst-scoped values — used for tok/s computation
+        outputTokens: burstChunkCount,
+        firstChunkTime: burstFirstChunkTime,
+        lastChunkTime: workerLastChunkTime,
+        // Per-worker tok/s computed from burst counters
+        tokPerSec: workerTokPerSec,
+        // Cumulative total — used for token badge count
+        totalOutputTokens: cumulativeChunkCount,
+      };
+    };
 
     // ── Aggregate progress HWMs ────────────────────────────
     // When workers stream, emit aggregate session-level progress
@@ -1261,6 +1274,17 @@ export default class CoordinatorService {
       if (event.type === "chunk") {
         workerOutput += event.content || "";
 
+        // Reset burst counters on phase transition (thinking → generating)
+        // so each phase's tok/s is computed independently.
+        if (lastWorkerPhase === "thinking" && burstChunkCount > 0) {
+          if (parentEmit) {
+            parentEmit(buildProgress());
+            emitAggregateProgress();
+          }
+          burstChunkCount = 0;
+          burstFirstChunkTime = null;
+        }
+
         cumulativeChunkCount++;
         burstChunkCount++;
         // Use Date.now() (not performance.now()) since these timestamps
@@ -1283,21 +1307,33 @@ export default class CoordinatorService {
         // appears right away), then at regular intervals for smooth updates
         const shouldEmit = burstChunkCount === 1
           || burstChunkCount % WORKER_PROGRESS_INTERVAL === 0;
+
         if (parentEmit && shouldEmit) {
           parentEmit(buildProgress());
           // Also emit aggregate progress for the main token badges
           emitAggregateProgress();
         }
       } else if (event.type === "thinking") {
-        // Emit final generation_progress for the burst that just ended
-        // so the frontend gets tok/s data even for short generation runs
-        if (parentEmit && lastWorkerPhase === "generating" && burstChunkCount > 0) {
-          parentEmit(buildProgress());
-          emitAggregateProgress();
+        // Thinking IS active generation — the model is producing output
+        // tokens during reasoning. Track thinking tokens in the same burst
+        // counters so per-worker tok/s is reported during thinking phase.
+
+        // Reset burst counters on phase transition (generating → thinking)
+        // so each phase's tok/s is computed independently.
+        if (lastWorkerPhase === "generating" && burstChunkCount > 0) {
+          if (parentEmit) {
+            parentEmit(buildProgress());
+            emitAggregateProgress();
+          }
+          burstChunkCount = 0;
+          burstFirstChunkTime = null;
         }
-        // Reset burst counters for next generation burst
-        burstChunkCount = 0;
-        burstFirstChunkTime = null;
+
+        cumulativeChunkCount++;
+        burstChunkCount++;
+        if (!workerFirstChunkTime) workerFirstChunkTime = Date.now();
+        if (!burstFirstChunkTime) burstFirstChunkTime = Date.now();
+        workerLastChunkTime = Date.now();
         // Notify the frontend that the worker is in the thinking phase
         if (parentEmit && lastWorkerPhase !== "thinking") {
           lastWorkerPhase = "thinking";
@@ -1307,6 +1343,14 @@ export default class CoordinatorService {
             message: "phase",
             phase: "thinking",
           });
+        }
+        // Emit generation progress at regular intervals
+        const shouldEmitThinking = burstChunkCount === 1
+          || burstChunkCount % WORKER_PROGRESS_INTERVAL === 0;
+
+        if (parentEmit && shouldEmitThinking) {
+          parentEmit(buildProgress());
+          emitAggregateProgress();
         }
       } else if (event.type === "tool_execution") {
         if (event.status === "calling") {
@@ -1356,22 +1400,13 @@ export default class CoordinatorService {
             maxIterations: event.maxIterations,
           });
         }
-        // Forward backend-computed generation_progress from
-        // SessionGenerationTracker so the frontend can display per-worker
-        // throughput and token counts in the worker's toolCallItem UI.
-        if (parentEmit && event.message === "generation_progress") {
-          parentEmit({
-            type: "worker_status",
-            workerId: worker.agentId,
-            message: "generation_progress",
-            tokPerSec: event.tokPerSec,
-            activeRequests: event.activeRequests,
-            outputTokens: event.outputTokens,
-            inputTokens: event.inputTokens,
-            totalTokens: event.totalTokens,
-            avgTtft: event.avgTtft,
-          });
-        }
+        // NOTE: Do NOT forward AgenticLoopService's generation_progress
+        // as worker_status. That event uses getSessionStats(parentSessionId)
+        // which returns the AGGREGATE across all workers — forwarding it
+        // per-worker makes them all display the same tok/s.
+        // Per-worker tok/s comes exclusively from buildProgress() above,
+        // which uses per-worker burst counters. The aggregate is already
+        // emitted by emitAggregateProgress() as a top-level status event.
         // Forward server-computed TTFT so the frontend can track per-worker and per-iteration TTFT
         if (parentEmit && event.message === "generation_started") {
           parentEmit({
@@ -1398,6 +1433,28 @@ export default class CoordinatorService {
         // Capture cost and usage from finalizeTextGeneration
         worker.totalCost = event.estimatedCost || null;
         worker.usage = event.usage || null;
+        // Emit final generation_progress so the frontend gets a definitive
+        // tok/s reading. Under continuous batching, LM Studio coalesces
+        // SSE deltas so heavily that workerEmit may receive ZERO individual
+        // chunk/thinking events despite the model producing hundreds of tokens.
+        // The provider-reported usage is the only reliable source.
+        if (parentEmit && event.usage) {
+          // tokensPerSec lives at the done event's top level (computed by
+          // finalizeTextGeneration), not inside the usage sub-object.
+          const finalTokPerSec = event.tokensPerSec || null;
+          const finalOutputTokens = event.usage.outputTokens || cumulativeChunkCount;
+          parentEmit({
+            type: "worker_status",
+            workerId: worker.agentId,
+            message: "generation_progress",
+            outputTokens: burstChunkCount || finalOutputTokens,
+            firstChunkTime: burstFirstChunkTime || workerFirstChunkTime,
+            lastChunkTime: workerLastChunkTime || Date.now(),
+            tokPerSec: finalTokPerSec,
+            totalOutputTokens: finalOutputTokens,
+          });
+          emitAggregateProgress();
+        }
       } else if (event.type === "usage_update") {
         // Forward background usage events (memory extraction, embeddings)
         // directly to the parent SSE stream so the frontend can accumulate
@@ -1475,6 +1532,7 @@ export default class CoordinatorService {
     worker.messages = workerMessages;
     worker.durationMs = Date.now() - worker.startedAt;
 
+
     // Stage and commit changes in the worktree
     await toolsApiPost("/agentic/command/run", {
       command: "git add -A",
@@ -1513,6 +1571,7 @@ export default class CoordinatorService {
         // full backendSessionStats fetch at coordinator completion.
         usage: worker.usage || null,
         estimatedCost: worker.totalCost || null,
+
       });
     }
 
