@@ -462,7 +462,10 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
                 yield { type: "status", message: "Loading model… 0%", phase: "loading" };
 
                 // Build load options — enforce minContextLength if set
-                const loadOpts = {};
+                // Apply default hardware params for consistent auto-load behavior
+                const loadOpts = {
+                  eval_batch_size: 512,
+                };
                 if (options.minContextLength) {
                   const maxCtx = modelEntry?.max_context_length || 262144;
                   loadOpts.context_length = Math.min(options.minContextLength, maxCtx);
@@ -1006,6 +1009,7 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
       if (options.context_length != null) payload.context_length = options.context_length;
       if (options.flash_attention != null) payload.flash_attention = options.flash_attention;
       if (options.offload_kv_cache_to_gpu != null) payload.offload_kv_cache_to_gpu = options.offload_kv_cache_to_gpu;
+      if (options.eval_batch_size != null) payload.eval_batch_size = options.eval_batch_size;
 
       const response = await fetch(`${baseUrl}/api/v1/models/load`, {
         method: "POST",
