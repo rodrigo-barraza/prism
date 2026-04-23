@@ -38,6 +38,7 @@ const MIN_TOKENS_FOR_RATE = 10; // minimum tokens before reporting rate
  * @property {number} firstTokenTime   - performance.now() of first token (null until first token)
  * @property {number} lastTokenTime    - performance.now() of most recent token
  * @property {number} outputTokens     - running output token count (per-iteration)
+ * @property {number} chunkCount       - running count of streamed chunks (proxy for tokens during streaming)
  * @property {number} inputTokens      - input token count (set from provider usage)
  * @property {number|null} ttft        - time to first token in seconds (null until first token)
  * @property {string} provider
@@ -85,6 +86,7 @@ const SessionGenerationTracker = {
       firstTokenTime: null,
       lastTokenTime: null,
       outputTokens: 0,
+      chunkCount: 0,
       inputTokens: 0,
       ttft: null,
       provider: provider || "unknown",
@@ -142,9 +144,13 @@ const SessionGenerationTracker = {
   },
 
   /**
-   * Record chunk timing without updating token counts.
+   * Record chunk timing and increment the streaming chunk counter.
    * Called on each streaming chunk so the tracker can compute
-   * accurate tok/s when provider-reported tokens arrive at stream end.
+   * live tok/s from chunk count during streaming (before the
+   * authoritative provider-reported token count arrives at stream end).
+   *
+   * Each streamed chunk approximates ~1 token (varies by tokenizer,
+   * but accurate enough for a live throughput indicator).
    *
    * @param {string} requestId
    */
@@ -154,6 +160,7 @@ const SessionGenerationTracker = {
     const now = performance.now();
     if (!entry.firstTokenTime) entry.firstTokenTime = now;
     entry.lastTokenTime = now;
+    entry.chunkCount++;
   },
 
   /**
@@ -268,12 +275,17 @@ const SessionGenerationTracker = {
 
       // Only compute tok/s for requests that have warmed up:
       // - firstTokenTime and lastTokenTime must exist
-      // - enough tokens to be statistically meaningful
+      // - enough tokens/chunks to be statistically meaningful
       // - enough elapsed time to avoid early-burst spikes
-      if (req.firstTokenTime && req.lastTokenTime && req.outputTokens >= MIN_TOKENS_FOR_RATE) {
+      //
+      // Use provider-reported outputTokens when available (authoritative,
+      // set at stream end). During streaming, fall back to chunkCount
+      // as a proxy (~1 token per chunk for most providers).
+      const effectiveTokens = req.outputTokens > 0 ? req.outputTokens : req.chunkCount;
+      if (req.firstTokenTime && req.lastTokenTime && effectiveTokens >= MIN_TOKENS_FOR_RATE) {
         const elapsed = (req.lastTokenTime - req.firstTokenTime) / 1000;
         if (elapsed >= MIN_ELAPSED_SEC) {
-          totalTokPerSec += req.outputTokens / elapsed;
+          totalTokPerSec += effectiveTokens / elapsed;
           generatingCount++;
         }
       }
