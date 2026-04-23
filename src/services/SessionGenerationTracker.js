@@ -10,6 +10,14 @@
 // token data. The aggregate session tok/s is computed on demand
 // from all active requests — covering the coordinator, workers,
 // and tool sub-requests (e.g. generate_image → Prism /chat).
+//
+// Tracked metrics per request:
+//   - outputTokens  (incremental, per chunk/thinking)
+//   - inputTokens   (set once, from provider usage report)
+//   - ttft          (time to first token, seconds)
+//
+// Session-level accumulators persist across request completions
+// so cumulative counts never decrease.
 // ─────────────────────────────────────────────────────────────
 
 // ── Rate computation guards ─────────────────────────────────
@@ -29,7 +37,9 @@ const MIN_TOKENS_FOR_RATE = 10; // minimum tokens before reporting rate
  * @property {number} startTime        - performance.now() when request began
  * @property {number} firstTokenTime   - performance.now() of first token (null until first token)
  * @property {number} lastTokenTime    - performance.now() of most recent token
- * @property {number} outputTokens     - running output token count
+ * @property {number} outputTokens     - running output token count (per-iteration)
+ * @property {number} inputTokens      - input token count (set from provider usage)
+ * @property {number|null} ttft        - time to first token in seconds (null until first token)
  * @property {string} provider
  * @property {string} model
  * @property {string} source           - "orchestrator" | "worker" | "tool-sub-request"
@@ -44,7 +54,9 @@ const sessionIndex = new Map();
 
 /**
  * @typedef {object} SessionAccumulator
- * @property {number} completedTokens - cumulative output tokens from completed requests
+ * @property {number} completedOutputTokens - cumulative output tokens from completed requests
+ * @property {number} completedInputTokens  - cumulative input tokens from completed requests
+ * @property {number[]} ttftSamples         - TTFT values (seconds) from each completed request
  */
 
 /** @type {Map<string, SessionAccumulator>} agentSessionId → cumulative session counters */
@@ -72,6 +84,8 @@ const SessionGenerationTracker = {
       firstTokenTime: null,
       lastTokenTime: null,
       outputTokens: 0,
+      inputTokens: 0,
+      ttft: null,
       provider: provider || "unknown",
       model: model || "unknown",
       source,
@@ -88,7 +102,11 @@ const SessionGenerationTracker = {
 
     // Initialize session accumulator (idempotent — preserves across iterations)
     if (!sessionAccumulators.has(agentSessionId)) {
-      sessionAccumulators.set(agentSessionId, { completedTokens: 0 });
+      sessionAccumulators.set(agentSessionId, {
+        completedOutputTokens: 0,
+        completedInputTokens: 0,
+        ttftSamples: [],
+      });
     }
   },
 
@@ -99,8 +117,10 @@ const SessionGenerationTracker = {
    * @param {string} requestId
    * @param {object} data
    * @param {number} [data.outputTokens] - Running output token count
+   * @param {number} [data.inputTokens]  - Input token count (from provider usage)
+   * @param {number} [data.ttft]         - Time to first token in seconds
    */
-  update(requestId, { outputTokens } = {}) {
+  update(requestId, { outputTokens, inputTokens, ttft } = {}) {
     const entry = activeRequests.get(requestId);
     if (!entry) return;
 
@@ -111,12 +131,18 @@ const SessionGenerationTracker = {
     if (outputTokens != null) {
       entry.outputTokens = outputTokens;
     }
+    if (inputTokens != null) {
+      entry.inputTokens = inputTokens;
+    }
+    if (ttft != null) {
+      entry.ttft = ttft;
+    }
   },
 
   /**
    * Mark a request as complete and remove it from active tracking.
-   * Rolls the request's final token count into the session accumulator
-   * so totalOutputTokens remains monotonically non-decreasing.
+   * Rolls the request's final token counts into the session accumulator
+   * so cumulative totals remain monotonically non-decreasing.
    *
    * @param {string} requestId
    */
@@ -127,7 +153,11 @@ const SessionGenerationTracker = {
     // Roll completed tokens into the session accumulator
     const acc = sessionAccumulators.get(entry.agentSessionId);
     if (acc) {
-      acc.completedTokens += entry.outputTokens;
+      acc.completedOutputTokens += entry.outputTokens;
+      acc.completedInputTokens += entry.inputTokens;
+      if (entry.ttft != null) {
+        acc.ttftSamples.push(entry.ttft);
+      }
     }
 
     activeRequests.delete(requestId);
@@ -140,7 +170,7 @@ const SessionGenerationTracker = {
   },
 
   /**
-   * Compute aggregate tok/s and stats for all active requests in a session.
+   * Compute aggregate stats for all active requests in a session.
    *
    * Rate computation uses a warm-up guard: tok/s is only reported once
    * a request has accumulated at least MIN_TOKENS_FOR_RATE tokens over
@@ -148,26 +178,56 @@ const SessionGenerationTracker = {
    * from single large chunks arriving in near-zero elapsed time.
    *
    * @param {string} agentSessionId
-   * @returns {{ tokPerSec: number|null, activeRequests: number, totalOutputTokens: number }}
+   * @returns {{
+   *   tokPerSec: number|null,
+   *   activeRequests: number,
+   *   totalOutputTokens: number,
+   *   totalInputTokens: number,
+   *   totalTokens: number,
+   *   avgTtft: number|null,
+   * }}
    */
   getSessionStats(agentSessionId) {
     const requestIds = sessionIndex.get(agentSessionId);
     const acc = sessionAccumulators.get(agentSessionId);
-    const completedTokens = acc?.completedTokens || 0;
+    const completedOutputTokens = acc?.completedOutputTokens || 0;
+    const completedInputTokens = acc?.completedInputTokens || 0;
+    const ttftSamples = acc?.ttftSamples || [];
 
     if (!requestIds || requestIds.size === 0) {
-      return { tokPerSec: null, activeRequests: 0, totalOutputTokens: completedTokens };
+      const totalOut = completedOutputTokens;
+      const totalIn = completedInputTokens;
+      const avgTtft = ttftSamples.length > 0
+        ? ttftSamples.reduce((a, b) => a + b, 0) / ttftSamples.length
+        : null;
+      return {
+        tokPerSec: null,
+        activeRequests: 0,
+        totalOutputTokens: totalOut,
+        totalInputTokens: totalIn,
+        totalTokens: totalIn + totalOut,
+        avgTtft,
+      };
     }
 
     let totalTokPerSec = 0;
     let generatingCount = 0;
     let activeOutputTokens = 0;
+    let activeInputTokens = 0;
+    let activeTtftSum = 0;
+    let activeTtftCount = 0;
 
     for (const rid of requestIds) {
       const req = activeRequests.get(rid);
       if (!req) continue;
 
       activeOutputTokens += req.outputTokens;
+      activeInputTokens += req.inputTokens;
+
+      if (req.ttft != null) {
+        activeTtftSum += req.ttft;
+        activeTtftCount++;
+      }
 
       // Only compute tok/s for requests that have warmed up:
       // - firstTokenTime and lastTokenTime must exist
@@ -182,13 +242,24 @@ const SessionGenerationTracker = {
       }
     }
 
+    const totalOut = completedOutputTokens + activeOutputTokens;
+    const totalIn = completedInputTokens + activeInputTokens;
+
+    // Average TTFT across completed + active samples
+    const allTtftSum = ttftSamples.reduce((a, b) => a + b, 0) + activeTtftSum;
+    const allTtftCount = ttftSamples.length + activeTtftCount;
+    const avgTtft = allTtftCount > 0 ? allTtftSum / allTtftCount : null;
+
     return {
       tokPerSec: generatingCount > 0
         ? parseFloat((totalTokPerSec / generatingCount).toFixed(1))
         : null,
       activeRequests: requestIds.size,
       // Cumulative: completed requests + in-flight requests
-      totalOutputTokens: completedTokens + activeOutputTokens,
+      totalOutputTokens: totalOut,
+      totalInputTokens: totalIn,
+      totalTokens: totalIn + totalOut,
+      avgTtft: avgTtft != null ? parseFloat(avgTtft.toFixed(3)) : null,
     };
   },
 

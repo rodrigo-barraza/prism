@@ -1,12 +1,12 @@
 /**
- * Session Generation Tracker — Tok/s Live Integration Tests
+ * Session Generation Tracker — Live Integration Tests
  * ═══════════════════════════════════════════════════════════════
- * Validates backend-sourced token throughput (tok/s) tracking from
+ * Validates backend-sourced token throughput and metrics from
  * SessionGenerationTracker. Uses the /agent endpoint with a Qwen3
  * model loaded in LM Studio to verify:
  *
- *   1. Combined tok/s is emitted via generation_progress SSE events
- *      and would appear in SettingsPanel statsBadges
+ *   1. tok/s, inputTokens, outputTokens, totalTokens, avgTtft
+ *      are emitted via generation_progress SSE events
  *   2. Coordinator + 4 workers report aggregate tok/s via the unified
  *      tracker (workers register under the parent session)
  *   3. Per-worker tok/s is forwarded as worker_status events and
@@ -150,6 +150,9 @@ async function consumeAgentSSE(response, { timeoutMs = AGENT_TIMEOUT_MS, control
                   tokPerSec: event.tokPerSec,
                   activeRequests: event.activeRequests,
                   outputTokens: event.outputTokens,
+                  inputTokens: event.inputTokens,
+                  totalTokens: event.totalTokens,
+                  avgTtft: event.avgTtft,
                   timestamp: Date.now(),
                 });
               }
@@ -174,6 +177,9 @@ async function consumeAgentSSE(response, { timeoutMs = AGENT_TIMEOUT_MS, control
                   tokPerSec: event.tokPerSec,
                   activeRequests: event.activeRequests,
                   outputTokens: event.outputTokens,
+                  inputTokens: event.inputTokens,
+                  totalTokens: event.totalTokens,
+                  avgTtft: event.avgTtft,
                   timestamp: Date.now(),
                 });
               }
@@ -254,6 +260,9 @@ function logTokPerSecResult(label, result) {
   console.log(`  │ Last tok/s:          ${lastProg?.tokPerSec != null ? lastProg.tokPerSec.toFixed(1) : "N/A".padEnd(37)}│`);
   console.log(`  │ Last activeRequests: ${lastProg?.activeRequests ?? "N/A".padEnd(37)}│`);
   console.log(`  │ Last outputTokens:   ${lastProg?.outputTokens ?? "N/A".padEnd(37)}│`);
+  console.log(`  │ Last inputTokens:    ${lastProg?.inputTokens ?? "N/A".padEnd(37)}│`);
+  console.log(`  │ Last totalTokens:    ${lastProg?.totalTokens ?? "N/A".padEnd(37)}│`);
+  console.log(`  │ Last avgTtft:        ${lastProg?.avgTtft != null ? lastProg.avgTtft.toFixed(3) + "s" : "N/A".padEnd(37)}│`);
   console.log(`  │ Worker IDs tracked:  ${workerIds.length > 0 ? workerIds.join(", ").slice(0, 37) : "none".padEnd(37)}│`);
   console.log(`  │ Worker completions:  ${String(result.workerCompleteEvents.length).padEnd(37)}│`);
   console.log(`  │ usage_update events: ${String(result.usageUpdateEvents.length).padEnd(37)}│`);
@@ -346,8 +355,10 @@ describe("SessionGenerationTracker — Tok/s Attribution", () => {
       expect(event).toHaveProperty("tokPerSec");
       expect(event).toHaveProperty("activeRequests");
       expect(event).toHaveProperty("outputTokens");
-      // activeRequests should be 1 (single request) during generation
-      // or 0 after completion (the final progress event fires after complete())
+      expect(event).toHaveProperty("inputTokens");
+      expect(event).toHaveProperty("totalTokens");
+      // avgTtft may be null early on (before first token arrives)
+      expect("avgTtft" in event).toBe(true);
     }
 
     // Sanity: tok/s should be reasonable (0.1 – 500 tok/s for local models)
@@ -564,6 +575,91 @@ describe("SessionGenerationTracker — Tok/s Attribution", () => {
       // but should be within 5x
       expect(ratio).toBeGreaterThan(0.1);
       expect(ratio).toBeLessThan(5);
+    }
+  }, AGENT_TIMEOUT_MS + 10_000);
+
+  // ── Test 5: Full metrics — inputTokens, totalTokens, avgTtft ─────
+  // Validates that all backend-sourced metrics are present and accurate
+  // in generation_progress events: input tokens match provider usage,
+  // totalTokens = inputTokens + outputTokens, and avgTtft matches
+  // the separately-emitted generation_started TTFT.
+  it("generation_progress includes inputTokens, totalTokens, and avgTtft", async () => {
+    const result = await agentStream({
+      provider: "lm-studio",
+      model: targetModel,
+      messages: [
+        { role: "user", content: "What is the Fibonacci sequence? One paragraph." },
+      ],
+      agent: "CODING",
+      agentSessionId: crypto.randomUUID(),
+      maxTokens: 300,
+      autoApprove: true,
+    });
+
+    logTokPerSecResult("Full Metrics — inputTokens/totalTokens/avgTtft", result);
+
+    expect(result.timedOut).toBe(false);
+    expect(result.done).toBeTruthy();
+    expect(result.generationProgressEvents.length).toBeGreaterThan(0);
+
+    const lastEvent = result.generationProgressEvents[result.generationProgressEvents.length - 1];
+
+    // ── inputTokens ──────────────────────────────────────────
+    // After the iteration completes, the final generation_progress
+    // event should report the provider's input token count.
+    expect(lastEvent.inputTokens).toBeDefined();
+    expect(typeof lastEvent.inputTokens).toBe("number");
+    expect(lastEvent.inputTokens).toBeGreaterThan(0);
+    console.log(`  📊 inputTokens: ${lastEvent.inputTokens}`);
+
+    // Cross-validate with usage_update or done event
+    const doneInputTokens = result.done?.usage?.inputTokens
+      || result.done?.usage?.promptTokens || 0;
+    if (doneInputTokens > 0) {
+      console.log(`     done.usage inputTokens: ${doneInputTokens}`);
+      // Should match exactly (both come from the provider)
+      expect(lastEvent.inputTokens).toBe(doneInputTokens);
+    }
+
+    // ── totalTokens ─────────────────────────────────────────
+    // totalTokens = inputTokens + outputTokens
+    expect(lastEvent.totalTokens).toBeDefined();
+    expect(lastEvent.totalTokens).toBe(lastEvent.inputTokens + lastEvent.outputTokens);
+    console.log(`     totalTokens: ${lastEvent.totalTokens} (${lastEvent.inputTokens} in + ${lastEvent.outputTokens} out)`);
+
+    // ── avgTtft ────────────────────────────────────────────
+    // avgTtft should be populated after the first token arrives.
+    // For a single-iteration request it equals the TTFT for that one request.
+    expect(lastEvent.avgTtft).toBeDefined();
+    expect(typeof lastEvent.avgTtft).toBe("number");
+    expect(lastEvent.avgTtft).toBeGreaterThan(0);
+    // Sanity: TTFT should be < 30s for a local model
+    expect(lastEvent.avgTtft).toBeLessThan(30);
+    console.log(`     avgTtft: ${lastEvent.avgTtft.toFixed(3)}s`);
+
+    // Cross-validate with the generation_started event TTFT
+    const genStartedEvents = result.statuses.filter(
+      (s) => s.message === "generation_started" && s.timeToFirstToken != null,
+    );
+    if (genStartedEvents.length > 0) {
+      const serverTtft = genStartedEvents[0].timeToFirstToken;
+      console.log(`     generation_started TTFT: ${serverTtft.toFixed(3)}s`);
+      // They should match closely (both computed from the same passStart/passFirstTokenTime)
+      expect(Math.abs(lastEvent.avgTtft - serverTtft)).toBeLessThan(0.1);
+    }
+
+    // ── All events must include the full field set ──────────────
+    for (const event of result.generationProgressEvents) {
+      expect(event).toHaveProperty("tokPerSec");
+      expect(event).toHaveProperty("activeRequests");
+      expect(event).toHaveProperty("outputTokens");
+      expect(event).toHaveProperty("inputTokens");
+      expect(event).toHaveProperty("totalTokens");
+      expect("avgTtft" in event).toBe(true);
+      // totalTokens identity must hold
+      if (event.inputTokens != null && event.outputTokens != null) {
+        expect(event.totalTokens).toBe(event.inputTokens + event.outputTokens);
+      }
     }
   }, AGENT_TIMEOUT_MS + 10_000);
 });

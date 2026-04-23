@@ -1321,9 +1321,9 @@ export default class CoordinatorService {
             maxIterations: event.maxIterations,
           });
         }
-        // Forward backend-computed generation_progress (tok/s) from
+        // Forward backend-computed generation_progress from
         // SessionGenerationTracker so the frontend can display per-worker
-        // throughput in the worker's toolCallItem UI.
+        // throughput and token counts in the worker's toolCallItem UI.
         if (parentEmit && event.message === "generation_progress") {
           parentEmit({
             type: "worker_status",
@@ -1332,6 +1332,9 @@ export default class CoordinatorService {
             tokPerSec: event.tokPerSec,
             activeRequests: event.activeRequests,
             outputTokens: event.outputTokens,
+            inputTokens: event.inputTokens,
+            totalTokens: event.totalTokens,
+            avgTtft: event.avgTtft,
           });
         }
         // Forward server-computed TTFT so the frontend can track per-worker and per-iteration TTFT

@@ -351,6 +351,9 @@ export default class AgenticLoopService {
           tokPerSec: stats.tokPerSec,
           activeRequests: stats.activeRequests,
           outputTokens: stats.totalOutputTokens,
+          inputTokens: stats.totalInputTokens,
+          totalTokens: stats.totalTokens,
+          avgTtft: stats.avgTtft,
         });
       }
       lastProgressEmitTime = performance.now();
@@ -482,6 +485,11 @@ export default class AgenticLoopService {
           if (chunk && typeof chunk === "object" && chunk.type === "usage") {
             mergeUsage(overallUsage, chunk.usage);
             mergeUsage(passUsage, chunk.usage);
+            // Feed input tokens to the tracker as soon as provider reports them
+            const reportedInput = chunk.usage?.inputTokens || chunk.usage?.promptTokens || 0;
+            if (reportedInput > 0) {
+              SessionGenerationTracker.update(passRequestId, { inputTokens: reportedInput });
+            }
             continue;
           }
 
@@ -495,9 +503,12 @@ export default class AgenticLoopService {
             if (!overallFirstTokenTime) overallFirstTokenTime = performance.now();
             if (!passFirstTokenTime) {
               passFirstTokenTime = performance.now();
+              const ttftSec = (passFirstTokenTime - passStart) / 1000;
+              // Feed TTFT to tracker for session-level averaging
+              SessionGenerationTracker.update(passRequestId, { ttft: ttftSec });
               // Emit server-computed TTFT so the client doesn't need to rely on
               // provider-specific phase events (which the OpenAI-compat path lacks)
-              emit({ type: "status", message: "generation_started", timeToFirstToken: (passFirstTokenTime - passStart) / 1000 });
+              emit({ type: "status", message: "generation_started", timeToFirstToken: ttftSec });
             }
             overallGenerationEnd = performance.now();
             passGenerationEnd = performance.now();
@@ -668,7 +679,9 @@ export default class AgenticLoopService {
           }
           if (!passFirstTokenTime) {
             passFirstTokenTime = performance.now();
-            emit({ type: "status", message: "generation_started", timeToFirstToken: (passFirstTokenTime - passStart) / 1000 });
+            const ttftSec = (passFirstTokenTime - passStart) / 1000;
+            SessionGenerationTracker.update(passRequestId, { ttft: ttftSec });
+            emit({ type: "status", message: "generation_started", timeToFirstToken: ttftSec });
           }
           overallGenerationEnd = performance.now();
           passGenerationEnd = performance.now();
@@ -710,6 +723,12 @@ export default class AgenticLoopService {
           SessionGenerationTracker.update(passRequestId, {
             outputTokens: Math.max(iterationTokenCount, passUsage.outputTokens),
           });
+        }
+        // Finalize input tokens from provider-reported usage (may not
+        // have arrived via streaming usage chunks on all providers).
+        const finalInputTokens = passUsage.inputTokens || passUsage.promptTokens || 0;
+        if (finalInputTokens > 0) {
+          SessionGenerationTracker.update(passRequestId, { inputTokens: finalInputTokens });
         }
         // Emit a final progress event for this iteration so the
         // frontend gets an accurate snapshot before tool execution.
