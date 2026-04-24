@@ -225,6 +225,19 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
       });
       return true;
 
+    case "toolCallDelta":
+      // Incremental tool call argument streaming — track generation timing
+      // so the throughput badge stays alive, but don't emit to the client.
+      if (!state.firstTokenTime) {
+        state.firstTokenTime = performance.now();
+        if (state.requestStart) {
+          emit({ type: "status", message: "generation_started", timeToFirstToken: (state.firstTokenTime - state.requestStart) / 1000 });
+        }
+      }
+      state.generationEnd = performance.now();
+      state.outputCharacters += Math.ceil((chunk.characters || 0) / 4);
+      return true;
+
     case "status":
       emit({ type: "status", message: chunk.message, phase: chunk.phase, ...(chunk.progress != null && { progress: chunk.progress }) });
       return true;

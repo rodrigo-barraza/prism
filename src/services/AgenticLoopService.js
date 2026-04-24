@@ -548,6 +548,27 @@ export default class AgenticLoopService {
             continue;
           }
 
+          // ── Tool call argument delta (incremental JSON streaming) ──
+          // Providers yield these as tool call arguments stream in
+          // token-by-token. Feed character counts to the tracker so
+          // generation_progress events keep flowing to the frontend,
+          // preventing the throughput badge from stalling during FC.
+          if (chunk && typeof chunk === "object" && chunk.type === "toolCallDelta") {
+            if (!overallFirstTokenTime) overallFirstTokenTime = performance.now();
+            if (!passFirstTokenTime) {
+              passFirstTokenTime = performance.now();
+              const ttftSec = (passFirstTokenTime - passStart) / 1000;
+              SessionGenerationTracker.update(passRequestId, { ttft: ttftSec });
+              emit({ type: "status", message: "generation_started", timeToFirstToken: ttftSec });
+            }
+            overallGenerationEnd = performance.now();
+            passGenerationEnd = performance.now();
+            overallOutputCharacters += chunk.characters;
+            SessionGenerationTracker.recordChunkTiming(passRequestId, chunk.characters);
+            maybeEmitProgress();
+            continue;
+          }
+
           if (chunk && typeof chunk === "object" && chunk.type === "toolCall") {
             if (!overallFirstTokenTime) overallFirstTokenTime = performance.now();
             if (!passFirstTokenTime) {

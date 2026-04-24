@@ -627,8 +627,14 @@ const openaiProvider = {
       // Accumulate argument deltas (keyed by item_id)
       if (event.type === "response.function_call_arguments.delta") {
         const entry = pendingFunctions[event.item_id];
+        const partial = event.delta || "";
         if (entry) {
-          entry.args += event.delta || "";
+          entry.args += partial;
+        }
+        // Yield progress event so generation throughput tracking stays
+        // alive during FC argument streaming.
+        if (partial.length > 0) {
+          yield { type: "toolCallDelta", characters: partial.length };
         }
       }
       // Function call completed (Responses API)
@@ -789,6 +795,7 @@ const openaiProvider = {
 
       // Accumulate tool call deltas
       if (delta?.tool_calls) {
+        let deltaChars = 0;
         for (const tc of delta.tool_calls) {
           const idx = tc.index;
           if (!pendingToolCalls[idx]) {
@@ -800,8 +807,15 @@ const openaiProvider = {
           }
           if (tc.id) pendingToolCalls[idx].id = tc.id;
           if (tc.function?.name) pendingToolCalls[idx].name = tc.function.name;
-          if (tc.function?.arguments)
+          if (tc.function?.arguments) {
             pendingToolCalls[idx].args += tc.function.arguments;
+            deltaChars += tc.function.arguments.length;
+          }
+        }
+        // Yield progress event so generation throughput tracking stays
+        // alive during FC argument streaming.
+        if (deltaChars > 0) {
+          yield { type: "toolCallDelta", characters: deltaChars };
         }
       }
 

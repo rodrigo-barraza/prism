@@ -463,8 +463,11 @@ export async function* parseSSEStream(reader, options = {}) {
             }
           }
 
-          // Accumulate tool call deltas
+          // Accumulate tool call deltas and yield progress events so
+          // consumers (AgenticLoopService) can track generation throughput
+          // during tool call argument streaming.
           if (delta?.tool_calls) {
+            let deltaChars = 0;
             for (const tc of delta.tool_calls) {
               const idx = tc.index;
               if (!pendingToolCalls[idx]) {
@@ -478,7 +481,15 @@ export async function* parseSSEStream(reader, options = {}) {
               const chunkName = tc.function?.name || tc.name;
               if (chunkName) pendingToolCalls[idx].name = chunkName;
               const chunkArgs = tc.function?.arguments || tc.arguments;
-              if (chunkArgs) pendingToolCalls[idx].args += chunkArgs;
+              if (chunkArgs) {
+                pendingToolCalls[idx].args += chunkArgs;
+                deltaChars += chunkArgs.length;
+              }
+            }
+            // Yield a lightweight progress event so the generation tracker
+            // sees continuous output during tool call JSON streaming.
+            if (deltaChars > 0) {
+              yield { type: "toolCallDelta", characters: deltaChars };
             }
           }
 

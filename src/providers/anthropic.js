@@ -739,7 +739,13 @@ const anthropicProvider = {
             (currentBlockType === "server_tool_use" ||
               currentBlockType === "tool_use")
           ) {
-            codeInput += chunk.delta.partial_json || "";
+            const partial = chunk.delta.partial_json || "";
+            codeInput += partial;
+            // Yield progress event for tool_use blocks so generation
+            // throughput tracking stays alive during FC argument streaming.
+            if (currentBlockType === "tool_use" && partial.length > 0) {
+              yield { type: "toolCallDelta", characters: partial.length };
+            }
             continue;
           }
         }
