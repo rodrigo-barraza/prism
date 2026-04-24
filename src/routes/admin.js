@@ -8,6 +8,8 @@ import ActiveGenerationTracker from "../services/ActiveGenerationTracker.js";
 import logger from "../utils/logger.js";
 import { resolveArchParams, estimateMemory } from "../utils/gguf-arch.js";
 import { COLLECTIONS, COST_SUM_EXPR, TOTAL_TOKENS_EXPR, AVG_TOKENS_PER_SEC_EXPR } from "../constants.js";
+import AgentPersonaRegistry from "../services/AgentPersonaRegistry.js";
+import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
 import os from "os";
 
 const router = express.Router();
@@ -207,6 +209,7 @@ router.get("/stats", async (req, res, next) => {
           totalCost: COST_SUM_EXPR,
           avgLatency: { $avg: { $ifNull: ["$totalTime", 0] } },
           avgTokensPerSec: AVG_TOKENS_PER_SEC_EXPR,
+          totalDuration: { $sum: { $ifNull: ["$totalTime", 0] } },
           successCount: {
             $sum: { $cond: [{ $eq: ["$success", true] }, 1, 0] },
           },
@@ -215,6 +218,14 @@ router.get("/stats", async (req, res, next) => {
           },
         },
       },
+    ];
+
+    // Tool call count: sum the lengths of toolApiNames arrays across all matching requests
+    const toolCallPipeline = [
+      ...(Object.keys(match).length ? [{ $match: match }] : []),
+      { $match: { toolApiNames: { $exists: true, $ne: [] } } },
+      { $unwind: "$toolApiNames" },
+      { $count: "total" },
     ];
 
     // Count total traces and conversations (respecting date + project filters)
@@ -240,12 +251,18 @@ router.get("/stats", async (req, res, next) => {
       { $count: "total" },
     ];
 
-    const [result, traceResult, conversationCount] = await Promise.all([
+    // Count agents: the registry includes both built-in and custom agents loaded at startup
+    const agentCount = AgentPersonaRegistry.list().length;
+    const workspaceCount = ToolOrchestratorService.getWorkspaceRoots().length;
+
+    const [result, toolCallResult, traceResult, conversationCount] = await Promise.all([
       db.collection(REQUESTS_COL).aggregate(pipeline).toArray().then((r) => r[0]),
+      db.collection(REQUESTS_COL).aggregate(toolCallPipeline).toArray(),
       db.collection(REQUESTS_COL).aggregate(traceCountPipeline).toArray(),
       db.collection(CONVERSATIONS_COL).countDocuments(convMatch),
     ]);
     const traceCount = traceResult[0]?.total || 0;
+    const totalToolCalls = toolCallResult[0]?.total || 0;
 
     res.json({
       totalRequests: 0,
@@ -254,11 +271,15 @@ router.get("/stats", async (req, res, next) => {
       totalCost: 0,
       avgLatency: 0,
       avgTokensPerSec: 0,
+      totalDuration: 0,
       successCount: 0,
       errorCount: 0,
       ...result,
       traceCount,
       conversationCount,
+      totalToolCalls,
+      agentCount,
+      workspaceCount,
     });
   } catch (error) {
     logger.error(`Admin /stats error: ${error.message}`);

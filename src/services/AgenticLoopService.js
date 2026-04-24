@@ -1341,6 +1341,10 @@ export default class AgenticLoopService {
       }).catch((err) =>
         logger.error(`[AgenticLoopService] afterResponse hooks failed: ${err.message}`),
       );
+
+      // Return final messages so callers (CoordinatorService) can
+      // capture the full conversation history from the loop.
+      return { messages: currentMessages };
     } catch (err) {
       // ── onError hook ───────────────────────────────────────
       hooks.run("onError", err, ctx).catch((hookErr) =>

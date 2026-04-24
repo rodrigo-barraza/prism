@@ -435,6 +435,9 @@ function buildWorkerResult(worker) {
     toolNames: Object.keys(toolNames).length > 0 ? toolNames : undefined,
     iterations: worker.iterations || 0,
     durationMs: worker.durationMs || 0,
+    // Include full conversation for frontend MessageList rendering.
+    // Strip system messages — they're large and not useful for display.
+    messages: (worker.messages || []).filter((m) => m.role !== "system"),
   };
 
   if (worker.diff?.hasChanges) {
@@ -1509,8 +1512,9 @@ export default class CoordinatorService {
     const { getModelByName } = await import("../config.js");
     const workerModelDef = getModelByName(worker.resolvedModel);
 
+    let loopResult;
     try {
-      await AgenticLoopService.runAgenticLoop({
+      loopResult = await AgenticLoopService.runAgenticLoop({
         provider: workerProvider,
         providerName: worker.providerName,
         resolvedModel: worker.resolvedModel,
@@ -1542,10 +1546,15 @@ export default class CoordinatorService {
       }
     }
 
+    // Capture the full conversation from the loop (includes all assistant
+    // responses, tool calls, and results). Falls back to the initial
+    // workerMessages on error/abort paths where the loop didn't return.
+    const finalMessages = loopResult?.messages || workerMessages;
+
     // Always populate — including on abort/error paths
-    worker.output = getLastAssistantText(workerMessages) || workerOutput;
+    worker.output = getLastAssistantText(finalMessages) || workerOutput;
     worker.toolCalls = workerToolCalls;
-    worker.messages = workerMessages;
+    worker.messages = finalMessages;
     worker.durationMs = Date.now() - worker.startedAt;
 
 
