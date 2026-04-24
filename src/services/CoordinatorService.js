@@ -1209,34 +1209,39 @@ export default class CoordinatorService {
 
     let workerFirstChunkTime = null;
     let workerLastChunkTime = null;
-    let cumulativeChunkCount = 0;    // total tokens across all bursts (for token badge)
-    let burstChunkCount = 0;         // tokens in current generation burst (for tok/s)
-    let burstFirstChunkTime = null;  // start of current burst
+    let cumulativeOutputChars = 0;    // total output characters across all bursts
+    let burstOutputChars = 0;         // output characters in current generation burst
+    let burstFirstChunkTime = null;   // start of current burst
     const WORKER_PROGRESS_INTERVAL = 1; // emit on every chunk — LM Studio batches SSE deltas heavily under continuous batching
+    let burstChunkCount = 0;          // raw chunk count for interval gating only
+
+    /** Estimate tokens from character count (~4 chars/token for English). */
+    const estimateTokens = (chars) => chars > 0 ? Math.ceil(chars / 4) : 0;
 
     /** Build the generation_progress payload for the frontend. */
     const buildProgress = () => {
-      // Compute per-worker tok/s from burst-scoped counters.
+      // Compute per-worker tok/s from burst-scoped character accumulation.
       // This is the ONLY source of per-worker throughput — the
       // SessionGenerationTracker aggregates across all workers
       // and must NOT be used for individual worker display.
+      const burstTokens = estimateTokens(burstOutputChars);
       let workerTokPerSec = null;
-      if (burstChunkCount > 1 && burstFirstChunkTime && workerLastChunkTime) {
+      if (burstTokens > 1 && burstFirstChunkTime && workerLastChunkTime) {
         const elapsedSec = (workerLastChunkTime - burstFirstChunkTime) / 1000;
-        if (elapsedSec > 0.1) workerTokPerSec = burstChunkCount / elapsedSec;
+        if (elapsedSec > 0.1) workerTokPerSec = burstTokens / elapsedSec;
       }
       return {
         type: "worker_status",
         workerId: worker.agentId,
         message: "generation_progress",
         // Burst-scoped values — used for tok/s computation
-        outputTokens: burstChunkCount,
+        outputTokens: burstTokens,
         firstChunkTime: burstFirstChunkTime,
         lastChunkTime: workerLastChunkTime,
         // Per-worker tok/s computed from burst counters
         tokPerSec: workerTokPerSec,
         // Cumulative total — used for token badge count
-        totalOutputTokens: cumulativeChunkCount,
+        totalOutputTokens: estimateTokens(cumulativeOutputChars),
       };
     };
 
@@ -1273,19 +1278,22 @@ export default class CoordinatorService {
     const workerEmit = (event) => {
       if (event.type === "chunk") {
         workerOutput += event.content || "";
+        const chunkChars = (event.content || "").length;
 
         // Reset burst counters on phase transition (thinking → generating)
         // so each phase's tok/s is computed independently.
-        if (lastWorkerPhase === "thinking" && burstChunkCount > 0) {
+        if (lastWorkerPhase === "thinking" && burstOutputChars > 0) {
           if (parentEmit) {
             parentEmit(buildProgress());
             emitAggregateProgress();
           }
+          burstOutputChars = 0;
           burstChunkCount = 0;
           burstFirstChunkTime = null;
         }
 
-        cumulativeChunkCount++;
+        cumulativeOutputChars += chunkChars;
+        burstOutputChars += chunkChars;
         burstChunkCount++;
         // Use Date.now() (not performance.now()) since these timestamps
         // cross process boundaries — the frontend needs wall-clock time
@@ -1315,21 +1323,24 @@ export default class CoordinatorService {
         }
       } else if (event.type === "thinking") {
         // Thinking IS active generation — the model is producing output
-        // tokens during reasoning. Track thinking tokens in the same burst
-        // counters so per-worker tok/s is reported during thinking phase.
+        // tokens during reasoning. Track thinking characters in the same
+        // burst counters so per-worker tok/s is reported during thinking.
+        const thinkChars = (event.content || "").length;
 
         // Reset burst counters on phase transition (generating → thinking)
         // so each phase's tok/s is computed independently.
-        if (lastWorkerPhase === "generating" && burstChunkCount > 0) {
+        if (lastWorkerPhase === "generating" && burstOutputChars > 0) {
           if (parentEmit) {
             parentEmit(buildProgress());
             emitAggregateProgress();
           }
+          burstOutputChars = 0;
           burstChunkCount = 0;
           burstFirstChunkTime = null;
         }
 
-        cumulativeChunkCount++;
+        cumulativeOutputChars += thinkChars;
+        burstOutputChars += thinkChars;
         burstChunkCount++;
         if (!workerFirstChunkTime) workerFirstChunkTime = Date.now();
         if (!burstFirstChunkTime) burstFirstChunkTime = Date.now();
@@ -1357,11 +1368,12 @@ export default class CoordinatorService {
           workerToolCalls.push({ name: event.tool?.name, args: event.tool?.args });
         }
         // Emit final generation_progress before tool execution pauses generation
-        if (parentEmit && lastWorkerPhase === "generating" && burstChunkCount > 0) {
+        if (parentEmit && lastWorkerPhase === "generating" && burstOutputChars > 0) {
           parentEmit(buildProgress());
           emitAggregateProgress();
         }
         // Reset burst counters for next generation burst
+        burstOutputChars = 0;
         burstChunkCount = 0;
         burstFirstChunkTime = null;
         lastWorkerPhase = null;
@@ -1442,12 +1454,16 @@ export default class CoordinatorService {
           // tokensPerSec lives at the done event's top level (computed by
           // finalizeTextGeneration), not inside the usage sub-object.
           const finalTokPerSec = event.tokensPerSec || null;
-          const finalOutputTokens = event.usage.outputTokens || cumulativeChunkCount;
+          // Use provider-reported output tokens (authoritative) when available,
+          // fall back to chars/4 estimation from accumulated characters.
+          const estimatedOutput = estimateTokens(cumulativeOutputChars);
+          const finalOutputTokens = event.usage.outputTokens || estimatedOutput;
+          const burstTokens = estimateTokens(burstOutputChars);
           parentEmit({
             type: "worker_status",
             workerId: worker.agentId,
             message: "generation_progress",
-            outputTokens: burstChunkCount || finalOutputTokens,
+            outputTokens: burstTokens || finalOutputTokens,
             firstChunkTime: burstFirstChunkTime || workerFirstChunkTime,
             lastChunkTime: workerLastChunkTime || Date.now(),
             tokPerSec: finalTokPerSec,

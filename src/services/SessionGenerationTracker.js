@@ -180,20 +180,27 @@ const SessionGenerationTracker = {
     const entry = activeRequests.get(requestId);
     if (!entry) return;
 
-    // Compute this request's tok/s from provider-reported tokens and
+    // Use provider-reported output tokens when available (authoritative).
+    // Fall back to chars/4 estimation when the provider didn't report usage
+    // (e.g. OpenAI response.completed event intermittently missing).
+    const effectiveOutputTokens = entry.outputTokens > 0
+      ? entry.outputTokens
+      : (entry.outputCharacters > 0 ? Math.ceil(entry.outputCharacters / 4) : 0);
+
+    // Compute this request's tok/s from the effective token count and
     // the timing window captured during streaming.
     let requestTokPerSec = null;
-    if (entry.outputTokens > 0 && entry.firstTokenTime && entry.lastTokenTime) {
+    if (effectiveOutputTokens > 0 && entry.firstTokenTime && entry.lastTokenTime) {
       const elapsed = (entry.lastTokenTime - entry.firstTokenTime) / 1000;
       if (elapsed >= MIN_ELAPSED_SEC) {
-        requestTokPerSec = entry.outputTokens / elapsed;
+        requestTokPerSec = effectiveOutputTokens / elapsed;
       }
     }
 
     // Roll completed metrics into the session accumulator
     const acc = sessionAccumulators.get(entry.agentSessionId);
     if (acc) {
-      acc.completedOutputTokens += entry.outputTokens;
+      acc.completedOutputTokens += effectiveOutputTokens;
       acc.completedInputTokens += entry.inputTokens;
       if (entry.ttft != null) {
         acc.ttftSamples.push(entry.ttft);

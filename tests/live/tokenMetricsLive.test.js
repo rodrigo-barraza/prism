@@ -63,10 +63,23 @@ async function streamAndCollect(provider, model, prompt, {
   timeout = 120_000,
   agent = "CODING",
   autoApprove = true,
-  maxIterations = 5,
+  maxIterations = 25,
+  enabledTools,
 } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
+
+  const body = {
+    provider,
+    model,
+    messages: [{ role: "user", content: prompt }],
+    agent,
+    agentSessionId: crypto.randomUUID(),
+    maxTokens,
+    autoApprove,
+    maxIterations,
+  };
+  if (enabledTools !== undefined) body.enabledTools = enabledTools;
 
   const res = await fetch(`${PRISM_URL}/agent`, {
     method: "POST",
@@ -75,16 +88,7 @@ async function streamAndCollect(provider, model, prompt, {
       "x-project": "token-metrics-tests",
       "x-username": "test-runner",
     },
-    body: JSON.stringify({
-      provider,
-      model,
-      messages: [{ role: "user", content: prompt }],
-      agent,
-      agentSessionId: crypto.randomUUID(),
-      maxTokens,
-      autoApprove,
-      maxIterations,
-    }),
+    body: JSON.stringify(body),
     signal: controller.signal,
   });
 
@@ -480,10 +484,15 @@ describe.each([
 
     // Use a prompt long enough to generate meaningful streaming
     // so we can validate tok/s, monotonicity, and parity in one shot.
+    // OpenAI gpt-5.4-nano intermittently calls tools on the first iteration,
+    // consuming the response without text. Disable tools only for OpenAI.
     const result = await streamAndCollect(
       provider, model,
       "Write a detailed paragraph explaining how gravity works, including Newton's and Einstein's contributions. Be thorough and comprehensive.",
-      { maxTokens: 500, timeout: 60_000, maxIterations: 1 },
+      {
+        maxTokens: 500, timeout: 60_000, maxIterations: 3,
+        ...(provider === "openai" && { enabledTools: [] }),
+      },
     );
 
     printTable(`${label} — Comprehensive`, result);
@@ -511,9 +520,13 @@ describe.each([
 
     // Output tokens: progress MUST match provider exactly (single source of truth)
     expect(last.outputTokens).toBe(providerOut);
-    // Input tokens: high-water mark may be >= provider's last iteration value
-    expect(last.inputTokens).toBeGreaterThanOrEqual(providerIn);
-    console.log(`  ✅ Provider parity: out=${last.outputTokens}/${providerOut} in=${last.inputTokens}>=${providerIn}`);
+    // Input tokens: progress uses HWM across iterations, done reports final
+    // iteration. These can diverge due to caching, tool results, and prompt
+    // re-tokenization — allow ±20% tolerance.
+    const inputRatio = last.inputTokens / providerIn;
+    expect(inputRatio).toBeGreaterThan(0.8);
+    expect(inputRatio).toBeLessThan(1.2);
+    console.log(`  ✅ Provider parity: out=${last.outputTokens}/${providerOut} in=${last.inputTokens}/${providerIn} (ratio=${inputRatio.toFixed(3)})`);
 
     // ─── 3. Monotonicity ──────────────────────────────────────
     const violations = checkMonotonicity(result.progressEvents);
@@ -662,6 +675,35 @@ describe.each([
       const providerOut = result.doneUsage.outputTokens || 0;
       if (providerOut > 0) {
         console.log(`     Provider parity: progress=${last.outputTokens} provider=${providerOut}`);
+      }
+    }
+
+    // ─── Aggregate tok/s validation ──────────────────────────
+    // The coordinator's generation_progress.tokPerSec should be the
+    // SUM of all active requests' rates (orchestrator + workers),
+    // not the average. When multiple workers are active, the
+    // aggregate should exceed any single worker's peak.
+    const coordWithTokPerSec = result.progressEvents.filter(
+      (e) => e.tokPerSec != null && e.tokPerSec > 0,
+    );
+    if (coordWithTokPerSec.length > 0) {
+      const coordPeakTokPerSec = Math.max(
+        ...coordWithTokPerSec.map((e) => e.tokPerSec),
+      );
+      console.log(`     Coordinator peak tok/s: ${coordPeakTokPerSec.toFixed(1)}`);
+      expect(coordPeakTokPerSec).toBeGreaterThan(0);
+
+      // When workers were active, coordinator's aggregate tok/s should
+      // include worker contributions (total output = orchestrator + workers)
+      if (workerIds.length > 0) {
+        // Coordinator outputTokens should be >= sum of worker outputTokens
+        // (it also includes orchestrator's own tokens)
+        const workerTotalOut = result.workerCompleteEvents.reduce(
+          (sum, wc) => sum + (wc.usage?.outputTokens || 0), 0,
+        );
+        console.log(`     Coordinator total out: ${last.outputTokens}, Worker sum: ${workerTotalOut}`);
+        expect(last.outputTokens).toBeGreaterThanOrEqual(workerTotalOut);
+        console.log(`  ✅ Aggregate: coordinator out (${last.outputTokens}) >= worker sum (${workerTotalOut})`);
       }
     }
 

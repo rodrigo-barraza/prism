@@ -1017,63 +1017,75 @@ router.get("/stats/timeline", async (req, res, next) => {
     const spanHours = spanMinutes / 60;
     const spanDays = spanHours / 24;
 
-    // Six-tier granularity for sub-day through yearly ranges
+    // Eight-tier granularity — targets ~200 data points for every time range.
+    // Each tier boundary is chosen so the maximum bin count stays in the 120–288 range.
     let granularity, groupId;
     if (spanMinutes <= 2) {
-      // ≤ 2 minutes → 1-second bins  ("2026-04-02T22:05:31")
+      // ≤ 2 minutes → 1-second bins  (max 120 pts)  "2026-04-02T22:05:31"
       granularity = "1s";
       groupId = { $dateToString: { format: "%Y-%m-%dT%H:%M:%S", date: { $toDate: "$timestamp" }, timezone: "UTC" } };
     } else if (spanMinutes <= 10) {
-      // ≤ 10 minutes → 30-second bins ("2026-04-02T22:05:30")
-      granularity = "30s";
+      // ≤ 10 minutes → 5-second bins  (max 120 pts)  "2026-04-02T22:05:05"
+      granularity = "5s";
       groupId = {
         $concat: [
           { $dateToString: { format: "%Y-%m-%dT%H:%M:", date: { $toDate: "$timestamp" }, timezone: "UTC" } },
-          { $toString: { $multiply: [{ $floor: { $divide: [{ $second: { $toDate: "$timestamp" } }, 30] } }, 30] } },
+          { $cond: [{ $lt: [{ $multiply: [{ $floor: { $divide: [{ $second: { $toDate: "$timestamp" } }, 5] } }, 5] }, 10] },
+            { $concat: ["0", { $toString: { $multiply: [{ $floor: { $divide: [{ $second: { $toDate: "$timestamp" } }, 5] } }, 5] } }] },
+            { $toString: { $multiply: [{ $floor: { $divide: [{ $second: { $toDate: "$timestamp" } }, 5] } }, 5] } },
+          ] },
         ],
       };
-    } else if (spanHours <= 2) {
-      // ≤ 2 hours → 1-minute bins ("2026-04-02T22:05")
-      granularity = "1min";
-      groupId = { $dateToString: { format: "%Y-%m-%dT%H:%M", date: { $toDate: "$timestamp" }, timezone: "UTC" } };
-    } else if (spanHours <= 8) {
-      // ≤ 8 hours → 30-minute bins
-      granularity = "30min";
+    } else if (spanHours <= 1) {
+      // ≤ 1 hour → 15-second bins  (max 240 pts)  "2026-04-02T22:05:15"
+      granularity = "15s";
       groupId = {
         $concat: [
-          { $dateToString: { format: "%Y-%m-%dT%H:", date: { $toDate: "$timestamp" }, timezone: "UTC" } },
-          { $toString: { $multiply: [{ $floor: { $divide: [{ $minute: { $toDate: "$timestamp" } }, 30] } }, 30] } },
+          { $dateToString: { format: "%Y-%m-%dT%H:%M:", date: { $toDate: "$timestamp" }, timezone: "UTC" } },
+          { $cond: [{ $lt: [{ $multiply: [{ $floor: { $divide: [{ $second: { $toDate: "$timestamp" } }, 15] } }, 15] }, 10] },
+            { $concat: ["0", { $toString: { $multiply: [{ $floor: { $divide: [{ $second: { $toDate: "$timestamp" } }, 15] } }, 15] } }] },
+            { $toString: { $multiply: [{ $floor: { $divide: [{ $second: { $toDate: "$timestamp" } }, 15] } }, 15] } },
+          ] },
         ],
       };
+    } else if (spanHours <= 4) {
+      // ≤ 4 hours → 1-minute bins  (max 240 pts)  "2026-04-02T22:05"
+      granularity = "1min";
+      groupId = { $dateToString: { format: "%Y-%m-%dT%H:%M", date: { $toDate: "$timestamp" }, timezone: "UTC" } };
     } else if (spanDays <= 1) {
-      // ≤ 1 day → 10-minute bins
-      granularity = "10min";
+      // ≤ 24 hours → 5-minute bins  (max 288 pts)
+      granularity = "5min";
       groupId = {
         $concat: [
           { $substr: ["$timestamp", 0, 14] },
           {
             $toString: {
               $multiply: [
-                {
-                  $floor: {
-                    $divide: [
-                      { $toInt: { $substr: ["$timestamp", 14, 2] } },
-                      10,
-                    ],
-                  },
-                },
-                10,
+                { $floor: { $divide: [{ $toInt: { $substr: ["$timestamp", 14, 2] } }, 5] } },
+                5,
               ],
             },
           },
         ],
       };
     } else if (spanDays <= 7) {
-      // 1–7 days → hourly bins
+      // 1–7 days → hourly bins  (max 168 pts)
       granularity = "hour";
       groupId = { $substr: ["$timestamp", 0, 13] };  // "2026-03-21T14"
+    } else if (spanDays <= 60) {
+      // 7–60 days → 6-hour bins  (max 240 pts)
+      granularity = "6h";
+      groupId = {
+        $concat: [
+          { $dateToString: { format: "%Y-%m-%dT", date: { $toDate: "$timestamp" }, timezone: "UTC" } },
+          { $cond: [{ $lt: [{ $multiply: [{ $floor: { $divide: [{ $hour: { $toDate: "$timestamp" } }, 6] } }, 6] }, 10] },
+            { $concat: ["0", { $toString: { $multiply: [{ $floor: { $divide: [{ $hour: { $toDate: "$timestamp" } }, 6] } }, 6] } }] },
+            { $toString: { $multiply: [{ $floor: { $divide: [{ $hour: { $toDate: "$timestamp" } }, 6] } }, 6] } },
+          ] },
+        ],
+      };
     } else {
-      // > 7 days → daily bins
+      // > 60 days → daily bins
       granularity = "day";
       groupId = { $substr: ["$timestamp", 0, 10] };  // "2026-03-21"
     }
