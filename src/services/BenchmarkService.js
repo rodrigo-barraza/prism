@@ -104,6 +104,82 @@ function evaluateAssertions(response, benchmark) {
 }
 
 // ============================================================
+// Agent Assertion Evaluation — behavioral assertions
+// ============================================================
+
+/**
+ * Comparison operators for numeric agent assertions.
+ */
+const COMPARATORS = {
+  gte: (a, b) => a >= b,
+  lte: (a, b) => a <= b,
+  gt:  (a, b) => a > b,
+  lt:  (a, b) => a < b,
+  eq:  (a, b) => a === b,
+};
+
+/**
+ * Evaluate a single agent assertion against execution result data.
+ *
+ * @param {Object} assertion       — { type, operator?, operand? }
+ * @param {Object} executionData   — { response, thinking, toolCalls, turnCount }
+ * @returns {boolean}
+ */
+function evaluateSingleAgentAssertion(assertion, executionData) {
+  const { type, operator, operand } = assertion;
+
+  switch (type) {
+    case "replied":
+      return !!executionData.response && executionData.response.trim().length > 0;
+
+    case "used_tool_calls": {
+      const count = executionData.toolCalls?.length || 0;
+      const target = parseInt(operand, 10);
+      if (isNaN(target)) return count > 0; // Fallback: any tool calls
+      const compareFn = COMPARATORS[operator || "gte"];
+      return compareFn ? compareFn(count, target) : count >= target;
+    }
+
+    case "thought":
+      return !!executionData.thinking && executionData.thinking.trim().length > 0;
+
+    case "max_turns": {
+      const turns = executionData.turnCount || 1;
+      const limit = parseInt(operand, 10);
+      if (isNaN(limit)) return true; // No limit specified
+      const compareFn = COMPARATORS[operator || "lte"];
+      return compareFn ? compareFn(turns, limit) : turns <= limit;
+    }
+
+    default:
+      logger.warn(`[benchmark] Unknown agent assertion type: ${type}`);
+      return false;
+  }
+}
+
+/**
+ * Evaluate all agent assertions against execution result data.
+ *
+ * @param {Object} benchmark       The benchmark definition
+ * @param {Object} executionData   — { response, thinking, toolCalls, turnCount }
+ * @returns {boolean}
+ */
+function evaluateAgentAssertions(benchmark, executionData) {
+  const assertions = benchmark.agentAssertions;
+  if (!assertions || assertions.length === 0) {
+    return true; // No agent assertions = pass by default
+  }
+
+  const operator = benchmark.agentAssertionOperator || "AND";
+
+  if (operator === "OR") {
+    return assertions.some((a) => evaluateSingleAgentAssertion(a, executionData));
+  }
+
+  return assertions.every((a) => evaluateSingleAgentAssertion(a, executionData));
+}
+
+// ============================================================
 // Model Discovery — list available conversation models
 // ============================================================
 
@@ -300,7 +376,6 @@ async function runSingleModel(benchmark, model, project, username, { signal, onE
 
     const doneEvent = events.find((e) => e.type === "done") || {};
     const matchMode = benchmark.matchMode || MATCH_MODES.CONTAINS;
-    const passed = evaluateAssertions(text, benchmark);
 
     // Extract thinking content (emitted as type: "thinking")
     const thinkingText = events
@@ -320,6 +395,31 @@ async function runSingleModel(benchmark, model, project, username, { signal, onE
     const toolCalls = [...nativeToolCalls, ...agenticToolCalls];
     const toolCallsResult = toolCalls.length > 0 ? toolCalls : null;
 
+    // Count agentic loop turns (each chunk of tool calls + response = 1 turn)
+    // A turn is roughly: user→model→(tools)→model. Count "done" events as turn markers.
+    const turnCount = events.filter((e) => e.type === "done").length || 1;
+
+    // ── Mode-aware pass/fail evaluation ──────────────────────
+    const mode = benchmark.benchmarkMode || "model";
+    let passed;
+
+    if (mode === "agent") {
+      // Agent mode: only behavioral assertions
+      passed = evaluateAgentAssertions(benchmark, {
+        response: text, thinking: thinkingText, toolCalls, turnCount,
+      });
+    } else if (mode === "combined") {
+      // Combined mode: both text + behavioral assertions must pass
+      const textPassed = evaluateAssertions(text, benchmark);
+      const agentPassed = evaluateAgentAssertions(benchmark, {
+        response: text, thinking: thinkingText, toolCalls, turnCount,
+      });
+      passed = textPassed && agentPassed;
+    } else {
+      // Model mode (default): text assertions only
+      passed = evaluateAssertions(text, benchmark);
+    }
+
     return {
       provider: model.provider,
       model: model.model,
@@ -330,6 +430,7 @@ async function runSingleModel(benchmark, model, project, username, { signal, onE
       toolCalls: toolCallsResult,
       passed,
       matchMode,
+      turnCount,
       latency: roundMs(latency),
       usage: doneEvent.usage || null,
       estimatedCost: doneEvent.estimatedCost ?? null,
@@ -563,8 +664,11 @@ const BenchmarkService = {
       systemPrompt: data.systemPrompt || null,
       expectedValue: data.expectedValue,
       matchMode: data.matchMode || MATCH_MODES.CONTAINS,
+      benchmarkMode: data.benchmarkMode || "model",
       assertions: data.assertions || [],
       assertionOperator: data.assertionOperator || "AND",
+      agentAssertions: data.agentAssertions || [],
+      agentAssertionOperator: data.agentAssertionOperator || "AND",
       temperature: data.temperature ?? 0,
       maxTokens: data.maxTokens ?? 256,
       tags: data.tags || [],

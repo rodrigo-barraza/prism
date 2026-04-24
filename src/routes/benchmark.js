@@ -246,13 +246,27 @@ router.get("/active-list", (_req, res) => {
 
 router.post("/", async (req, res, next) => {
   try {
-    const { name, prompt, systemPrompt, expectedValue, matchMode, temperature, maxTokens, tags, assertions, assertionOperator } =
+    const { name, prompt, systemPrompt, expectedValue, matchMode, temperature, maxTokens, tags, assertions, assertionOperator, benchmarkMode, agentAssertions, agentAssertionOperator } =
       req.body;
 
-    if (!name || !prompt || !expectedValue) {
+    if (!name || !prompt) {
       return res
         .status(400)
-        .json({ error: "Missing required fields: name, prompt, expectedValue" });
+        .json({ error: "Missing required fields: name, prompt" });
+    }
+
+    // Model and combined benchmarks require at least an expectedValue or assertions
+    if (benchmarkMode !== "agent" && !expectedValue && (!assertions || !assertions.some(a => a.expectedValue))) {
+      return res
+        .status(400)
+        .json({ error: "Model/combined benchmarks require at least one text assertion (expectedValue)" });
+    }
+
+    // Agent benchmarks require at least one agent assertion
+    if (benchmarkMode === "agent" && (!agentAssertions || agentAssertions.length === 0)) {
+      return res
+        .status(400)
+        .json({ error: "Agent benchmarks require at least one behavioral assertion" });
     }
 
     const validModes = Object.values(BenchmarkService.MATCH_MODES);
@@ -282,7 +296,7 @@ router.post("/", async (req, res, next) => {
     }
 
     const benchmark = await BenchmarkService.create(
-      { name, prompt, systemPrompt, expectedValue, matchMode, temperature, maxTokens, tags, assertions, assertionOperator },
+      { name, prompt, systemPrompt, expectedValue, matchMode, temperature, maxTokens, tags, assertions, assertionOperator, benchmarkMode, agentAssertions, agentAssertionOperator },
       req.project,
       req.username,
     );
