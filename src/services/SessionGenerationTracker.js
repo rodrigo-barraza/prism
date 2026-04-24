@@ -38,7 +38,8 @@ const MIN_TOKENS_FOR_RATE = 10; // minimum tokens before reporting rate
  * @property {number} firstTokenTime   - performance.now() of first token (null until first token)
  * @property {number} lastTokenTime    - performance.now() of most recent token
  * @property {number} outputTokens     - running output token count (per-iteration)
- * @property {number} chunkCount       - running count of streamed chunks (proxy for tokens during streaming)
+ * @property {number} chunkCount       - running count of streamed chunks
+ * @property {number} outputCharacters - cumulative output character count (used for token estimation)
  * @property {number} inputTokens      - input token count (set from provider usage)
  * @property {number|null} ttft        - time to first token in seconds (null until first token)
  * @property {string} provider
@@ -87,6 +88,7 @@ const SessionGenerationTracker = {
       lastTokenTime: null,
       outputTokens: 0,
       chunkCount: 0,
+      outputCharacters: 0,
       inputTokens: 0,
       ttft: null,
       provider: provider || "unknown",
@@ -144,23 +146,26 @@ const SessionGenerationTracker = {
   },
 
   /**
-   * Record chunk timing and increment the streaming chunk counter.
-   * Called on each streaming chunk so the tracker can compute
-   * live tok/s from chunk count during streaming (before the
-   * authoritative provider-reported token count arrives at stream end).
+   * Record chunk timing, increment the chunk counter, and accumulate
+   * output characters for token estimation.
    *
-   * Each streamed chunk approximates ~1 token (varies by tokenizer,
-   * but accurate enough for a live throughput indicator).
+   * The character count provides a much more accurate token estimate
+   * than raw chunk count: Anthropic sends large thinking deltas
+   * (50-200+ chars) as a single chunk, so chunkCount severely
+   * undercounts tokens. Using `outputCharacters / 4` (~4 chars/token
+   * for English) gives a reliable cross-provider heuristic.
    *
    * @param {string} requestId
+   * @param {number} [charCount=0] - Number of characters in this chunk
    */
-  recordChunkTiming(requestId) {
+  recordChunkTiming(requestId, charCount = 0) {
     const entry = activeRequests.get(requestId);
     if (!entry) return;
     const now = performance.now();
     if (!entry.firstTokenTime) entry.firstTokenTime = now;
     entry.lastTokenTime = now;
     entry.chunkCount++;
+    entry.outputCharacters += charCount;
   },
 
   /**
@@ -279,9 +284,14 @@ const SessionGenerationTracker = {
       // - enough elapsed time to avoid early-burst spikes
       //
       // Use provider-reported outputTokens when available (authoritative,
-      // set at stream end). During streaming, fall back to chunkCount
-      // as a proxy (~1 token per chunk for most providers).
-      const effectiveTokens = req.outputTokens > 0 ? req.outputTokens : req.chunkCount;
+      // set at stream end). During streaming, estimate from cumulative
+      // output characters using ~4 chars/token heuristic. This is far
+      // more accurate than raw chunkCount for providers like Anthropic
+      // that send large thinking deltas as single chunks.
+      const estimatedFromChars = req.outputCharacters > 0
+        ? Math.ceil(req.outputCharacters / 4)
+        : req.chunkCount;
+      const effectiveTokens = req.outputTokens > 0 ? req.outputTokens : estimatedFromChars;
       if (req.firstTokenTime && req.lastTokenTime && effectiveTokens >= MIN_TOKENS_FOR_RATE) {
         const elapsed = (req.lastTokenTime - req.firstTokenTime) / 1000;
         if (elapsed >= MIN_ELAPSED_SEC) {

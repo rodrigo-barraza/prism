@@ -534,7 +534,7 @@ export default class AgenticLoopService {
             overallOutputCharacters += chunk.content.length;
             // Only record timing — authoritative token count arrives in
             // the usage event at stream end. No fake per-chunk token counts.
-            SessionGenerationTracker.recordChunkTiming(passRequestId);
+            SessionGenerationTracker.recordChunkTiming(passRequestId, chunk.content.length);
             emit({ type: "thinking", content: chunk.content, outputCharacters: overallOutputCharacters });
             maybeEmitProgress();
             continue;
@@ -560,7 +560,7 @@ export default class AgenticLoopService {
             passGenerationEnd = performance.now();
             // Tool call tokens are still LLM-generated output — track them
             // so the SessionGenerationTracker continues reporting live tok/s.
-            SessionGenerationTracker.recordChunkTiming(passRequestId);
+            SessionGenerationTracker.recordChunkTiming(passRequestId, JSON.stringify(chunk.args || {}).length);
             maybeEmitProgress();
 
             // Native MCP tool calls (e.g. LM Studio): already executed by provider,
@@ -720,7 +720,7 @@ export default class AgenticLoopService {
           displayTextFragments[displayTextFragments.length - 1] += chunkStr;
           // Only record timing — authoritative token count arrives in
           // the usage event at stream end. No fake per-chunk token counts.
-          SessionGenerationTracker.recordChunkTiming(passRequestId);
+          SessionGenerationTracker.recordChunkTiming(passRequestId, rawChunkStr.length);
           if (chunkStr) emit({ type: "chunk", content: chunkStr, outputCharacters: overallOutputCharacters });
           maybeEmitProgress();
         }
@@ -1209,7 +1209,7 @@ export default class AgenticLoopService {
           if (chunk && typeof chunk === "object" && chunk.type === "thinking") {
             streamedThinking += chunk.content;
             overallOutputCharacters += chunk.content.length;
-            SessionGenerationTracker.recordChunkTiming(exhaustionRequestId);
+            SessionGenerationTracker.recordChunkTiming(exhaustionRequestId, chunk.content.length);
             emit({ type: "thinking", content: chunk.content, outputCharacters: overallOutputCharacters });
             maybeEmitProgress();
             continue;
@@ -1221,7 +1221,7 @@ export default class AgenticLoopService {
           const chunkStr = typeof chunk === "string" ? chunk : "";
           overallOutputCharacters += chunkStr.length;
           finalStreamedText += chunkStr;
-          SessionGenerationTracker.recordChunkTiming(exhaustionRequestId);
+          SessionGenerationTracker.recordChunkTiming(exhaustionRequestId, chunkStr.length);
           emit({ type: "chunk", content: chunkStr, outputCharacters: overallOutputCharacters });
           maybeEmitProgress();
         }
