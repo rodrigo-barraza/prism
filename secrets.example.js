@@ -50,7 +50,7 @@ export const PROVIDER_LLAMA_CPP = [
 ];
 
 // Mongo
-export const MONGO_URI = 'mongodb://192.168.86.2:27017/?directConnection=true&replicaSet=rs0';
+export const MONGO_URI = 'mongodb://user:password@192.168.86.2:27017/?directConnection=true&replicaSet=rs0&authSource=admin';
 export const MONGO_DB_NAME = '';
 
 // MinIO (Optional — files stored inline in MongoDB if not set)
