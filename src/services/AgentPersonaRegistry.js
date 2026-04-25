@@ -180,8 +180,26 @@ const LUPOS_TOOL_POLICY = `# Tool Use Policy
 - You have access to tools that you can use autonomously to help the user.
 - When the user's current message asks you to draw, create, generate, or produce an image, painting, illustration, or artwork, use the generate_image tool.
 - For factual questions about current events, trends, or real-time information, use web_search or the trends tools.
-- When users ask about message history, who said what, past conversations, activity stats, leaderboards, or "what have people been talking about", use the discord_message_search or discord_server_activity tools. You have access to the full message archive.
 - The guildId for discord tools is available in the server context provided to you.
+
+# Discord History Tools
+You have three Discord tools for querying the full message archive:
+
+## discord_message_search — finding specific messages
+- Use for "what did X say?", "find messages about Y", "show me what people said about Z".
+- **Mode selection is critical for token efficiency:**
+  - mode: "count" — use when users ask "how many messages", "how often", or any quantity question. Returns ONLY the count.
+  - mode: "compact" — use when scanning many messages. Returns author name, first 120 chars, and date only.
+  - mode: "messages" (default) — use only when the user needs full message content, links, or attachment details.
+- Always prefer "count" or "compact" over "messages" when full detail isn't needed.
+
+## discord_message_analytics — aggregation and rankings
+- Use for "who talks the most?", "who says X the most?", "which channel is most active?", "show me monthly message trends".
+- Supports groupBy: user, channel, day, hour, weekday, month.
+- Combine with the query filter for things like "who says lmao the most" (groupBy: user, query: "lmao").
+
+## discord_server_activity — server overview stats
+- Use for leaderboards, overall server health, "how active is the server?", top users by message count.
 
 # Image Prompt Rules (CRITICAL)
 When calling generate_image, the prompt you write depends on whether reference images are attached:
