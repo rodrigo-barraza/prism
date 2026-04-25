@@ -214,17 +214,27 @@ const LUPOS_ENABLED_TOOLS = [
   "get_trends",
   "get_hot_trends",
   "get_top_trends",
+  // Events
+  "get_events",
   // Knowledge & reference
   "get_on_this_day",
   "get_wikipedia_summary",
   // Products
   "search_products",
+  "get_trending_products",
   // Health & fitness
   "search_gym_exercises",
   "rank_foods",
   "search_usda_nutrition",
-  // Weather
+  // Weather & environment
   "get_weather",
+  "get_weather_forecast",
+  "get_local_environment",
+  "get_earthquakes",
+  "get_wildfires",
+  "get_iss_location",
+  "get_near_earth_objects",
+  "get_solar_activity",
   // Compute
   "precise_calculator",
   "execute_javascript",

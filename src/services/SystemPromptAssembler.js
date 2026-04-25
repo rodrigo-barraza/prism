@@ -326,9 +326,6 @@ export default class SystemPromptAssembler {
       if (ac.serverContext) {
         sections.push(ac.serverContext);
       }
-      if (ac.trendingData) {
-        sections.push(ac.trendingData);
-      }
       if (ac.imageContext) {
         sections.push(ac.imageContext);
       }
