@@ -19,6 +19,7 @@
 import { createVaultClient } from "./utils/vault-client.js";
 
 const vault = createVaultClient({
+  localEnvFile: "./.env",
   fallbackEnvFile: "../vault/.env",
 });
 
