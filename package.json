@@ -17,7 +17,9 @@
     "test:lm-studio": "vitest run --config vitest.live.config.js tests/live/lmStudioModels.test.js",
     "vram:bench": "node scripts/vram-bench.js",
     "vram:quick": "node scripts/vram-bench.js --skip-settings --contexts=4k,8k",
-    "vram:model": "node scripts/vram-bench.js --skip-settings --contexts=4k"
+    "vram:model": "node scripts/vram-bench.js --skip-settings --contexts=4k",
+    "deploy": "bash deploy.sh",
+    "deploy:dry": "bash deploy.sh --dry-run"
   },
   "keywords": [
     "ai",
