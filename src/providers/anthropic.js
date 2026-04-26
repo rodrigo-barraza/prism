@@ -78,7 +78,16 @@ async function prepareMessages(messages) {
       (m) => m.role === "user" || m.role === "assistant" || m.role === "tool",
     )
     .map(async (m) => {
-      const { name: _name, id: _id, tool_call_id: _tcId, images, thinking: _thinking, thinkingSignature: _tSig, toolCalls: _toolCalls, ...rest } = m;
+      const {
+        name: _name, id: _id, tool_call_id: _tcId,
+        images, thinking: _thinking, thinkingSignature: _tSig, toolCalls: _toolCalls,
+        // Strip persistence-only metadata that must never reach the API
+        timestamp: _ts, model: _model, provider: _provider, usage: _usage,
+        totalTime: _tt, tokensPerSec: _tps, estimatedCost: _ec,
+        generationSettings: _gs, contentSegments: _cs,
+        textFragments: _tf, thinkingFragments: _thf, audio: _audio,
+        ...rest
+      } = m;
 
       // Convert tool role messages to tool_result user messages for Anthropic
       if (m.role === "tool") {
