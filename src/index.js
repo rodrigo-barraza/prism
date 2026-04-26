@@ -11,7 +11,7 @@ import { setupWebSocket } from "./websocket/index.js";
 import { authMiddleware } from "./middleware/AuthMiddleware.js";
 import { requestLoggerMiddleware } from "./middleware/RequestLoggerMiddleware.js";
 import {
-  PORT,
+  PRISM_PORT as PORT,
   MONGO_URI,
   MONGO_DB_NAME,
   MINIO_ENDPOINT,

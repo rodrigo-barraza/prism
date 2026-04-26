@@ -6,7 +6,7 @@
 // ============================================================
 
 // Server
-export const PORT = 3000;
+export const PRISM_PORT = 3000;
 
 
 
