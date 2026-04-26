@@ -115,6 +115,11 @@ app.get("/", (_req, res) => {
   });
 });
 
+// Health check (public — standard path for Docker, load balancers, portal)
+app.get("/health", (_req, res) => {
+  res.json({ status: "ok" });
+});
+
 // Admin routes
 app.use("/admin", adminRouter);
 
