@@ -294,4 +294,4 @@ npm run test:watch   # Run tests in watch mode
 
 ## ☀️ Part of [Sun](https://github.com/rodrigo-barraza)
 
-Prism is one service in the Sun ecosystem — a collection of composable backend services and frontends designed to be mixed and matched.
+Prism is one service in a collection of composable backend services and frontends by Rodrigo Barraza.
