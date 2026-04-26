@@ -1,63 +1,72 @@
 // ============================================================
 // Prism the AI Gateway — Secrets Template
 // ============================================================
-// Copy this file to secrets.js and fill in your real values.
-//   cp src/secrets.example.js src/secrets.js
+// Prism resolves secrets from (in priority order):
+//   1. process.env (manual env vars, Docker --env)
+//   2. Vault service (via src/boot.js → VAULT_URL + VAULT_TOKEN)
+//   3. Fallback .env file (../vault/.env)
+//
+// All secrets are read from process.env — configure them via
+// your Vault master .env, or set them as environment variables.
+//
+// See vault/.env.example for the full list of variables.
+// ============================================================
+// This file (secrets.js) is a process.env shim and does NOT
+// need to be edited for normal operation. The values below are
+// the env var names and their defaults.
 // ============================================================
 
 // Server
-export const PRISM_PORT = 3000;
-
-
+// PRISM_PORT=7777
 
 // OpenAI
-export const OPENAI_API_KEY = '';
+// OPENAI_API_KEY=
 
 // Anthropic
-export const ANTHROPIC_API_KEY = '';
+// ANTHROPIC_API_KEY=
 
 // Google GenAI
-export const GOOGLE_API_KEY = '';
+// GOOGLE_API_KEY=
 
 // ElevenLabs
-export const ELEVENLABS_API_KEY = '';
+// ELEVENLABS_API_KEY=
 
 // Inworld (Base64-encoded apiKey:apiSecret)
-export const INWORLD_BASIC = '';
+// INWORLD_BASIC=
 
-// Local Providers
-// Each entry is an instance: { url, concurrency, nickname? }
-// Multiple entries = multiple instances (auto-numbered #1, #2, ...)
-// nickname (optional) = display label shown in UI, e.g. "Desktop" → "LM Studio (Desktop)"
-// Empty array = provider not configured
-
+// Local Providers (indexed env vars)
+// Each instance is defined with indexed keys: _<N>_URL, _<N>_CONCURRENCY, _<N>_NICKNAME
+//
 // LM Studio
-export const PROVIDER_LM_STUDIO = [
-  { url: 'http://localhost:1234', concurrency: 1, nickname: '' },
-];
-
+// PROVIDER_LM_STUDIO_1_URL=http://localhost:1234
+// PROVIDER_LM_STUDIO_1_CONCURRENCY=1
+// PROVIDER_LM_STUDIO_1_NICKNAME=
+//
 // vLLM
-export const PROVIDER_VLLM = [];
-
+// PROVIDER_VLLM_1_URL=
+// PROVIDER_VLLM_1_CONCURRENCY=
+//
 // Ollama
-export const PROVIDER_OLLAMA = [
-  { url: 'http://localhost:11434', concurrency: 1 },
-];
-
+// PROVIDER_OLLAMA_1_URL=http://localhost:11434
+// PROVIDER_OLLAMA_1_CONCURRENCY=1
+//
 // llama.cpp (llama-server)
-export const PROVIDER_LLAMA_CPP = [
-  { url: 'http://localhost:8080', concurrency: 1 },
-];
+// PROVIDER_LLAMA_CPP_1_URL=http://localhost:8080
+// PROVIDER_LLAMA_CPP_1_CONCURRENCY=1
 
 // Mongo
-export const MONGO_URI = 'mongodb://user:password@<host>:27017/?directConnection=true&replicaSet=rs0&authSource=admin';
-export const MONGO_DB_NAME = '';
+// MONGO_URI=mongodb://user:password@<host>:27017/?directConnection=true&replicaSet=rs0&authSource=admin
+// PRISM_MONGO_DB_NAME=prism
 
 // MinIO (Optional — files stored inline in MongoDB if not set)
-export const MINIO_ENDPOINT = '';
-export const MINIO_ACCESS_KEY = '';
-export const MINIO_SECRET_KEY = '';
-export const MINIO_BUCKET_NAME = '';
+// MINIO_ENDPOINT=
+// MINIO_ACCESS_KEY=
+// MINIO_SECRET_KEY=
+// PRISM_MINIO_BUCKET_NAME=prism
 
 // Tools API (workspace config is fetched from tools-api at startup)
-export const TOOLS_API_URL = 'http://localhost:5590';
+// TOOLS_API_URL=http://localhost:5590
+
+// Vault
+// VAULT_URL=http://192.168.86.2:5599
+// VAULT_TOKEN=
