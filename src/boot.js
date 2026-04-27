@@ -7,7 +7,7 @@
 // Resolution order (first wins per key):
 //   1. Already-set process.env values (manual env vars)
 //   2. Vault service (fetched over HTTP)
-//   3. Fallback .env file (../vault/.env)
+//   3. Fallback .env file (../vault-service/.env)
 //   4. Static secrets.js hardcoded values (legacy)
 //
 // This allows flexible deployment:
@@ -20,7 +20,7 @@ import { createVaultClient } from "./utils/vault-client.js";
 
 const vault = createVaultClient({
   localEnvFile: "./.env",
-  fallbackEnvFile: "../vault/.env",
+  fallbackEnvFile: "../vault-service/.env",
 });
 
 const secrets = await vault.fetch();

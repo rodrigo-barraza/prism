@@ -1,5 +1,5 @@
 {
-  "name": "prism-ai-gateway",
+  "name": "prism-service",
   "version": "1.0.0",
   "description": "Prism the AI Gateway — a centralized backend for routing requests to multiple AI providers",
   "type": "module",

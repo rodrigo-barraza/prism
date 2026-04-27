@@ -19,7 +19,7 @@
  */
 import { describe, it, expect, beforeAll } from "vitest";
 
-const PRISM_URL = "http://localhost:7777";
+const PRISM_SERVICE_URL = "http://localhost:7777";
 const LM_STUDIO_URL = "http://localhost:1234";
 
 // ═══════════════════════════════════════════════════════════════
@@ -81,7 +81,7 @@ async function streamAndCollect(provider, model, prompt, {
   };
   if (enabledTools !== undefined) body.enabledTools = enabledTools;
 
-  const res = await fetch(`${PRISM_URL}/agent`, {
+  const res = await fetch(`${PRISM_SERVICE_URL}/agent`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -279,7 +279,7 @@ async function findLmStudioModel() {
  */
 async function probeOnlineProviders() {
   try {
-    const res = await fetch(`${PRISM_URL}/config`);
+    const res = await fetch(`${PRISM_SERVICE_URL}/config`);
     if (!res.ok) return;
     const cfg = await res.json();
     const textModels = cfg?.textToText?.models || {};
@@ -298,10 +298,10 @@ async function probeOnlineProviders() {
 beforeAll(async () => {
   // Check Prism
   try {
-    await fetch(PRISM_URL);
+    await fetch(PRISM_SERVICE_URL);
     _prismAvailable = true;
   } catch {
-    throw new Error(`Prism not running at ${PRISM_URL}`);
+    throw new Error(`Prism not running at ${PRISM_SERVICE_URL}`);
   }
 
   // Discover LM Studio

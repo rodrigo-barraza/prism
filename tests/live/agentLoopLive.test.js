@@ -21,7 +21,7 @@
  */
 import { describe, it, expect, beforeAll } from "vitest";
 
-const PRISM_URL = "http://localhost:7777";
+const PRISM_SERVICE_URL = "http://localhost:7777";
 const LM_STUDIO_URL = "http://localhost:1234";
 
 // Target model — auto-discovered from LM Studio if not found exactly
@@ -225,7 +225,7 @@ async function consumeAgentSSE(response, { timeoutMs = AGENT_TIMEOUT_MS, control
  */
 async function agentStream(payload, { timeoutMs = AGENT_TIMEOUT_MS } = {}) {
   const controller = new AbortController();
-  const response = await fetch(`${PRISM_URL}/agent`, {
+  const response = await fetch(`${PRISM_SERVICE_URL}/agent`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -249,7 +249,7 @@ async function agentStream(payload, { timeoutMs = AGENT_TIMEOUT_MS } = {}) {
  * Simpler for basic tests — returns JSON directly.
  */
 async function agentJSON(payload) {
-  const response = await fetch(`${PRISM_URL}/agent?stream=false`, {
+  const response = await fetch(`${PRISM_SERVICE_URL}/agent?stream=false`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -320,9 +320,9 @@ const agentSessionId = crypto.randomUUID();
 beforeAll(async () => {
   // Check services are running
   try {
-    await fetch(PRISM_URL);
+    await fetch(PRISM_SERVICE_URL);
   } catch {
-    throw new Error(`Prism not running at ${PRISM_URL}`);
+    throw new Error(`Prism not running at ${PRISM_SERVICE_URL}`);
   }
   try {
     await fetch(LM_STUDIO_URL);
@@ -499,7 +499,7 @@ describe("Agent Loop — LM Studio Agentic Endpoint", () => {
     console.log("\n  📝 Starting generation to abort…");
     const controller = new AbortController();
 
-    const response = await fetch(`${PRISM_URL}/agent`, {
+    const response = await fetch(`${PRISM_SERVICE_URL}/agent`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

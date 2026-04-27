@@ -20,7 +20,7 @@
  */
 import { describe, it, expect, beforeAll } from "vitest";
 
-const PRISM_URL = "http://localhost:7777";
+const PRISM_SERVICE_URL = "http://localhost:7777";
 const LM_STUDIO_URL = "http://localhost:1234";
 
 // ── Target model discovery ─────────────────────────────────
@@ -221,7 +221,7 @@ async function consumeAgentSSE(response, { timeoutMs = AGENT_TIMEOUT_MS, control
  */
 async function agentStream(payload, { timeoutMs = AGENT_TIMEOUT_MS } = {}) {
   const controller = new AbortController();
-  const response = await fetch(`${PRISM_URL}/agent`, {
+  const response = await fetch(`${PRISM_SERVICE_URL}/agent`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -294,9 +294,9 @@ let targetModel = null;
 
 beforeAll(async () => {
   try {
-    await fetch(PRISM_URL);
+    await fetch(PRISM_SERVICE_URL);
   } catch {
-    throw new Error(`Prism not running at ${PRISM_URL}`);
+    throw new Error(`Prism not running at ${PRISM_SERVICE_URL}`);
   }
   try {
     await fetch(LM_STUDIO_URL);

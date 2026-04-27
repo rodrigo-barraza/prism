@@ -13,7 +13,7 @@
 //   node tests/token-calc-verification.js
 // ============================================================
 
-const PRISM_URL = "http://localhost:7777";
+const PRISM_SERVICE_URL = "http://localhost:7777";
 const PROJECT = "retina";
 const PROVIDER = "lm-studio";
 const MODEL = "qwen3.6-35b-a3b";
@@ -118,7 +118,7 @@ async function streamAgentRequest(prompt, options = {}) {
     ...(options.maxWorkerIterations != null && { maxWorkerIterations: options.maxWorkerIterations }),
   };
 
-  const res = await fetch(`${PRISM_URL}/agent`, {
+  const res = await fetch(`${PRISM_SERVICE_URL}/agent`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-project": PROJECT },
     body: JSON.stringify(payload),

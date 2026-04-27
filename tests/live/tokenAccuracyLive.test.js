@@ -16,7 +16,7 @@
  */
 import { describe, it, expect, beforeAll } from "vitest";
 
-const PRISM_URL = "http://localhost:7777";
+const PRISM_SERVICE_URL = "http://localhost:7777";
 const LM_STUDIO_URL = "http://localhost:1234";
 
 const TARGET_MODEL_PATTERNS = [
@@ -57,7 +57,7 @@ async function streamAndCollect(prompt, { maxTokens = 500, timeout = 120000, can
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
 
-  const res = await fetch(`${PRISM_URL}/agent`, {
+  const res = await fetch(`${PRISM_SERVICE_URL}/agent`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -273,8 +273,8 @@ function printSampleTable(label, result) {
 // ═══════════════════════════════════════════════════════════════
 
 beforeAll(async () => {
-  try { await fetch(PRISM_URL); } catch {
-    throw new Error(`Prism not running at ${PRISM_URL}`);
+  try { await fetch(PRISM_SERVICE_URL); } catch {
+    throw new Error(`Prism not running at ${PRISM_SERVICE_URL}`);
   }
   try { await fetch(LM_STUDIO_URL); } catch {
     throw new Error(`LM Studio not running at ${LM_STUDIO_URL}`);

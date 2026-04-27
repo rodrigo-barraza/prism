@@ -27,6 +27,7 @@ import SessionGenerationTracker from "../services/SessionGenerationTracker.js";
 import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
 import localModelQueue from "../services/LocalModelQueue.js";
 import LocalProviderGateway from "../services/LocalProviderGateway.js";
+import { getInstancesByType } from "../providers/instance-registry.js";
 
 import {
   markGenerating,
@@ -261,7 +262,7 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
   const requestStart = performance.now();
   const requestId = crypto.randomUUID();
   const {
-    provider: providerName,
+    provider: _providerName,
     model: requestedModel,
     messages,
     conversationId: incomingConversationId,
@@ -314,6 +315,7 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
     workspaceRoot,
     ...extraParams
   } = params;
+  let providerName = _providerName;
 
   // Build the internal options object that providers expect
   const options = {
@@ -394,6 +396,36 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
     project,
     username,
   );
+
+  // ── Multi-instance load balancing ─────────────────────────
+  // When the caller sends a base provider type (e.g. "lm-studio") and
+  // multiple instances are registered, pick the least-busy instance.
+  // This gives every /chat caller automatic round-robin distribution
+  // without needing to know about instance IDs — same strategy the
+  // coordinator uses for worker agents.
+  if (localModelQueue.isLocal(providerName)) {
+    const siblings = getInstancesByType(providerName);
+    if (siblings.length > 1) {
+      // Least-busy: pick the instance with the most available slots
+      let bestId = providerName;
+      let bestAvailable = -Infinity;
+      for (const inst of siblings) {
+        const q = localModelQueue._getQueue(inst.id);
+        const available = inst.concurrency - q.activeCount;
+        if (available > bestAvailable) {
+          bestAvailable = available;
+          bestId = inst.id;
+        }
+      }
+      if (bestId !== providerName) {
+        logger.info(
+          `[chat] ⚖️ Load balance: ${providerName} → ${bestId} ` +
+          `(${siblings.map(s => `${s.id}:${s.concurrency - localModelQueue._getQueue(s.id).activeCount}free`).join(", ")})`,
+        );
+        providerName = bestId;
+      }
+    }
+  }
 
   const provider = getProvider(providerName);
 

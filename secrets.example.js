@@ -3,7 +3,7 @@
 // ============================================================
 // Prism resolves secrets from (in priority order):
 //   1. process.env (manual env vars, Docker --env)
-//   2. Vault service (via src/boot.js → VAULT_URL + VAULT_TOKEN)
+//   2. Vault service (via src/boot.js → VAULT_SERVICE_URL + VAULT_SERVICE_TOKEN)
 //   3. Fallback .env file (../vault/.env)
 //
 // All secrets are read from process.env — configure them via
@@ -17,7 +17,7 @@
 // ============================================================
 
 // Server
-// PRISM_PORT=7777
+// PRISM_SERVICE_PORT=7777
 
 // OpenAI
 // OPENAI_API_KEY=
@@ -65,8 +65,8 @@
 // PRISM_MINIO_BUCKET_NAME=prism
 
 // Tools API (workspace config is fetched from tools-api at startup)
-// TOOLS_API_URL=http://localhost:5590
+// TOOLS_SERVICE_URL=http://localhost:5590
 
 // Vault
-// VAULT_URL=http://192.168.86.2:5599
-// VAULT_TOKEN=
+// VAULT_SERVICE_URL=http://192.168.86.2:5599
+// VAULT_SERVICE_TOKEN=

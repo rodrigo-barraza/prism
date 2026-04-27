@@ -9,12 +9,12 @@
 import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
 import { resolveArchParams } from "../utils/gguf-arch.js";
-import { TOOLS_API_URL } from "../../secrets.js";
+import { TOOLS_SERVICE_URL } from "../../secrets.js";
 import { TYPES, getDefaultModels } from "../config.js";
 import { sleep } from "../utils/utilities.js";
 
 // Default MCP server URL for ephemeral tool integrations
-const DEFAULT_MCP_SERVER_URL = TOOLS_API_URL || "http://localhost:5590";
+const DEFAULT_MCP_SERVER_URL = TOOLS_SERVICE_URL || "http://localhost:5590";
 import {
   convertToolsToOpenAI,
   buildPayloadParams,

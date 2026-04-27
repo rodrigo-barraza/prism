@@ -3,7 +3,7 @@ import MemoryService from "./MemoryService.js";
 import AgentPersonaRegistry from "./AgentPersonaRegistry.js";
 import EmbeddingService from "./EmbeddingService.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
-import { TOOLS_API_URL, MONGO_DB_NAME } from "../../secrets.js";
+import { TOOLS_SERVICE_URL, MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 import { cosineSimilarity } from "../utils/math.js";
 import { getCoordinatorPromptAddendum, COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
@@ -58,7 +58,7 @@ export default class SystemPromptAssembler {
       const controller = createAbortController();
       const timeout = setTimeout(() => controller.abort(), 5000);
 
-      const url = `${TOOLS_API_URL}/filesystem/list?path=${encodeURIComponent(this.workspaceRoot)}&depth=2`;
+      const url = `${TOOLS_SERVICE_URL}/filesystem/list?path=${encodeURIComponent(this.workspaceRoot)}&depth=2`;
       const res = await fetch(url, { signal: controller.signal });
       clearTimeout(timeout);
 

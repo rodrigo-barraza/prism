@@ -23,7 +23,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { calculateTextCost } from "../../src/utils/CostCalculator.js";
 import { TYPES, getPricing } from "../../src/config.js";
 
-const PRISM_URL = "http://localhost:7777";
+const PRISM_SERVICE_URL = "http://localhost:7777";
 const TEXT_PRICING = getPricing(TYPES.TEXT, TYPES.TEXT);
 const SIMPLE_PROMPT = "Reply with exactly one word: hello.";
 
@@ -288,7 +288,7 @@ const SAMPLE_TOOLS = [
 // ── Helpers ──────────────────────────────────────────────────
 
 async function chat(payload) {
-  const res = await fetch(`${PRISM_URL}/chat?stream=false`, {
+  const res = await fetch(`${PRISM_SERVICE_URL}/chat?stream=false`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -337,11 +337,11 @@ let lmStudioModel = null;
 beforeAll(async () => {
   // Check Prism is running
   try {
-    const res = await fetch(PRISM_URL);
+    const res = await fetch(PRISM_SERVICE_URL);
     if (!res.ok) throw new Error("Prism not responding");
   } catch {
     throw new Error(
-      `Prism is not running at ${PRISM_URL}. Start it with: npm run dev`,
+      `Prism is not running at ${PRISM_SERVICE_URL}. Start it with: npm run dev`,
     );
   }
 

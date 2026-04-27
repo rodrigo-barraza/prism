@@ -6,7 +6,7 @@ import { vi } from 'vitest';
 
 // ── Mock secrets before anything imports them ──────────────────────────
 vi.mock('../secrets.js', () => ({
-    PRISM_PORT: 0,
+    PRISM_SERVICE_PORT: 0,
     GATEWAY_SECRET: 'test-secret',
     OPENAI_API_KEY: 'fake',
     ANTHROPIC_API_KEY: 'fake',
@@ -18,7 +18,7 @@ vi.mock('../secrets.js', () => ({
     PROVIDER_OLLAMA: [],
     PROVIDER_LLAMA_CPP: [],
     OPENAI_COMPATIBLE_BASE_URL: 'http://localhost:9999',
-    TOOLS_API_URL: 'http://localhost:5590',
+    TOOLS_SERVICE_URL: 'http://localhost:5590',
     MONGO_URI: 'mongodb://test:test@localhost:27017/?directConnection=true&replicaSet=rs0&authSource=admin',
     MONGO_DB_NAME: 'prism-test',
 }));

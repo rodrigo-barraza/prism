@@ -1,14 +1,14 @@
 import { describe, it, expect, beforeAll } from "vitest";
 
-const PRISM_URL = process.env.PRISM_URL || "http://localhost:7777";
+const PRISM_SERVICE_URL = process.env.PRISM_SERVICE_URL || "http://localhost:7777";
 
 describe("Live Function Calling Orchestration", () => {
   beforeAll(async () => {
     try {
-      const res = await fetch(`${PRISM_URL}`);
+      const res = await fetch(`${PRISM_SERVICE_URL}`);
       if (!res.ok) throw new Error("Health check failed");
     } catch {
-      throw new Error(`Prism not running at ${PRISM_URL}`);
+      throw new Error(`Prism not running at ${PRISM_SERVICE_URL}`);
     }
   });
 
@@ -23,7 +23,7 @@ describe("Live Function Calling Orchestration", () => {
       username: "vitest",
     };
 
-    const res = await fetch(`${PRISM_URL}/chat?stream=false`, {
+    const res = await fetch(`${PRISM_SERVICE_URL}/chat?stream=false`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),

@@ -1,4 +1,4 @@
-import { TOOLS_API_URL } from "../../secrets.js";
+import { TOOLS_SERVICE_URL } from "../../secrets.js";
 import { resolve, relative } from "node:path";
 import { existsSync } from "node:fs";
 import logger from "../utils/logger.js";
@@ -343,7 +343,7 @@ function selectAndReserveInstance(siblings, coordinatorInstanceId, instanceModel
 
 async function toolsApiPost(path, body) {
   try {
-    const res = await fetch(`${TOOLS_API_URL}${path}`, {
+    const res = await fetch(`${TOOLS_SERVICE_URL}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),

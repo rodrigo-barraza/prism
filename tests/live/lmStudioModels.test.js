@@ -17,7 +17,7 @@
  */
 import { describe, it, expect, beforeAll } from "vitest";
 
-const PRISM_URL = "http://localhost:7777";
+const PRISM_SERVICE_URL = "http://localhost:7777";
 const LM_STUDIO_URL = "http://localhost:1234";
 
 // Models we know are embeddings/TTS — skip these for chat tests
@@ -125,7 +125,7 @@ function detectCapabilities(modelId) {
 }
 
 async function chat(payload) {
-  const res = await fetch(`${PRISM_URL}/chat?stream=false`, {
+  const res = await fetch(`${PRISM_SERVICE_URL}/chat?stream=false`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -218,9 +218,9 @@ let modelsToTest = [];
 beforeAll(async () => {
   // Check both services are running
   try {
-    await fetch(PRISM_URL);
+    await fetch(PRISM_SERVICE_URL);
   } catch {
-    throw new Error(`Prism not running at ${PRISM_URL}`);
+    throw new Error(`Prism not running at ${PRISM_SERVICE_URL}`);
   }
 
   const allModels = await getAvailableModels();

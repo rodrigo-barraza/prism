@@ -1,4 +1,4 @@
-import { TOOLS_API_URL } from "../../secrets.js";
+import { TOOLS_SERVICE_URL } from "../../secrets.js";
 import MCPClientService from "./MCPClientService.js";
 import logger from "../utils/logger.js";
 import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
@@ -49,7 +49,7 @@ async function fetchSchemas() {
     const controller = createAbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
 
-    const res = await fetch(`${TOOLS_API_URL}/admin/tool-schemas`, {
+    const res = await fetch(`${TOOLS_SERVICE_URL}/admin/tool-schemas`, {
       signal: controller.signal,
     });
     clearTimeout(timeout);
@@ -94,7 +94,7 @@ async function fetchSchemas() {
 
     // Fetch workspace config from tools-api (single source of truth)
     try {
-      const configRes = await fetch(`${TOOLS_API_URL}/admin/config`, {
+      const configRes = await fetch(`${TOOLS_SERVICE_URL}/admin/config`, {
         signal: AbortSignal.timeout(3000),
       });
       if (configRes.ok) {
@@ -160,7 +160,7 @@ function buildUrlFromEndpoint(endpoint, args = {}) {
   }
 
   const qs = params.toString();
-  return `${TOOLS_API_URL}${path}${qs ? `?${qs}` : ""}`;
+  return `${TOOLS_SERVICE_URL}${path}${qs ? `?${qs}` : ""}`;
 }
 
 const ARG_REMAPS = {
@@ -194,7 +194,7 @@ async function executeToolGeneric(name, args = {}, ctx = {}) {
 
   // POST-method tools send args as JSON body
   if (schema.endpoint.method === "POST") {
-    const url = `${TOOLS_API_URL}${schema.endpoint.path}`;
+    const url = `${TOOLS_SERVICE_URL}${schema.endpoint.path}`;
     // Inject trusted session context into body — the model's args never
     // include these fields (they're stripped from schemas), so they can
     // only come from the orchestrator's session context.
@@ -441,7 +441,7 @@ export default class ToolOrchestratorService {
   /** Re-fetch workspace roots from tools-api config */
   static async refreshWorkspaceRoots() {
     try {
-      const configRes = await fetch(`${TOOLS_API_URL}/admin/config`, {
+      const configRes = await fetch(`${TOOLS_SERVICE_URL}/admin/config`, {
         signal: AbortSignal.timeout(3000),
       });
       if (configRes.ok) {
@@ -464,7 +464,7 @@ export default class ToolOrchestratorService {
    * @returns {Promise<object>}
    */
   static async updateWorkspaceRoots(roots) {
-    const res = await fetch(`${TOOLS_API_URL}/admin/config/workspaces`, {
+    const res = await fetch(`${TOOLS_SERVICE_URL}/admin/config/workspaces`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ roots }),
@@ -489,7 +489,7 @@ export default class ToolOrchestratorService {
    * @returns {Promise<object>}
    */
   static async validateWorkspacePath(path) {
-    const res = await fetch(`${TOOLS_API_URL}/admin/config/workspaces/validate`, {
+    const res = await fetch(`${TOOLS_SERVICE_URL}/admin/config/workspaces/validate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ path }),
@@ -534,7 +534,7 @@ export default class ToolOrchestratorService {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 3000);
-      const res = await fetch(`${TOOLS_API_URL}/health`, {
+      const res = await fetch(`${TOOLS_SERVICE_URL}/health`, {
         signal: controller.signal,
       });
       clearTimeout(timeout);
@@ -543,7 +543,7 @@ export default class ToolOrchestratorService {
       online = false;
     }
 
-    const apiStatus = { [TOOLS_API_URL]: online };
+    const apiStatus = { [TOOLS_SERVICE_URL]: online };
 
     const offline = new Set();
     if (!online) {
@@ -768,7 +768,7 @@ export default class ToolOrchestratorService {
       }
     }
 
-    const url = `${TOOLS_API_URL}${streamPath}`;
+    const url = `${TOOLS_SERVICE_URL}${streamPath}`;
     const contextHeaders = buildContextHeaders(ctx);
 
     try {
@@ -899,6 +899,6 @@ export default class ToolOrchestratorService {
   /** @internal */ static _setWorktree(sessionId, state) { activeWorktrees.set(sessionId, state); }
   /** @internal */ static _clearWorktree(sessionId) { activeWorktrees.delete(sessionId); }
   /** @internal */ static async _proxyPost(path, body, ctx) {
-    return fetchJsonPost(`${TOOLS_API_URL}${path}`, body, buildContextHeaders(ctx), ctx.signal);
+    return fetchJsonPost(`${TOOLS_SERVICE_URL}${path}`, body, buildContextHeaders(ctx), ctx.signal);
   }
 }
