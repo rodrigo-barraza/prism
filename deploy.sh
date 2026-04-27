@@ -12,7 +12,7 @@
 # ============================================================
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-IMAGE_NAME="prism"
+IMAGE_NAME="prism-service"
 DISPLAY_NAME="🔷 Prism"
 
 source "${SCRIPT_DIR}/../deploy/lib.sh"

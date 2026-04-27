@@ -1,6 +1,6 @@
 services:
-  prism:
-    image: prism:latest
+  prism-service:
+    image: prism-service:latest
     container_name: prism
     restart: unless-stopped
     ports:
