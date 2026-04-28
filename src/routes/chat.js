@@ -408,16 +408,29 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
 
   if (localModelQueue.isLocal(providerName)) {
     let siblings = getInstancesByType(providerName);
-    if (siblings.length > 1) {
-      // Verify model availability across instances (with quant fallback)
-      const { usable, modelOverrides } = await resolveModelForInstances(resolvedModel, siblings);
 
-      if (usable.length > 0) {
-        siblings = usable;
-      } else {
-        logger.warn(`[chat] Model "${resolvedModel}" not available on any ${providerName} instance — falling back to first`);
+    // ── Model resolution (always) ──────────────────────────────
+    // Resolve model availability across instances with quant-level
+    // fallback. Also handles @quant syntax (e.g. "qwen3-32b@q4_k_m")
+    // by mapping it to the actual LM Studio model key.
+    const { usable, modelOverrides } = await resolveModelForInstances(resolvedModel, siblings);
+
+    if (usable.length > 0) {
+      siblings = usable;
+      // For single instance, apply model override directly
+      if (siblings.length === 1) {
+        const override = modelOverrides.get(siblings[0].id);
+        if (override) {
+          resolvedModel = override;
+          logger.info(`[chat] Model resolved: "${requestedModel}" → "${resolvedModel}" (single instance)`);
+        }
       }
+    } else {
+      logger.warn(`[chat] Model "${resolvedModel}" not available on any ${providerName} instance — falling back to first`);
+    }
 
+    // ── Multi-instance load balancing ──────────────────────────
+    if (siblings.length > 1) {
       // Least-busy: pick the instance with the most available slots
       let bestId = providerName;
       let bestAvailable = -Infinity;
