@@ -14,6 +14,7 @@ import SettingsService from "./SettingsService.js";
 import { createAbortController } from "../utils/AbortController.js";
 import { registerCleanup } from "../utils/CleanupRegistry.js";
 import SessionGenerationTracker from "./SessionGenerationTracker.js";
+import { resolveModelForInstances } from "../utils/ModelResolution.js";
 
 // ────────────────────────────────────────────────────────────
 // CoordinatorService — Multi-Agent Orchestration
@@ -138,99 +139,12 @@ registerCleanup(async () => {
 });
 
 // ────────────────────────────────────────────────────────────
-// Quantization-Level Fallback for Multi-Device Workers
+// Model Resolution (shared with /chat route load balancer)
 // ────────────────────────────────────────────────────────────
-// When the orchestrator's exact model isn't available on a worker
-// instance (e.g. the Desktop has Q8_0 but the Laptop only has Q4_K_M),
-// find the best available variant of the same base model.
-//
-// Instead of maintaining a hardcoded quant ranking list, we use the
-// model's `size_bytes` from the LM Studio API — file size on disk is
-// the canonical proxy for quantization quality (more bits = larger file
-// = higher fidelity). This automatically handles any quant scheme
-// (standard Q/IQ, K-quants, future formats) without updates.
-
-/**
- * Regex matching known GGUF quantization suffixes.
- * Captures the quant tag (e.g. "Q8_0", "IQ4_XS", "F16", "BF16").
- * Used to strip the suffix and extract the base model name.
- */
-const GGUF_QUANT_SUFFIX_RE = /[-_]((?:I?Q[0-9]+(?:_[A-Z0-9]+)*|[BF](?:16|32)))(?:\.gguf)?$/i;
-
-/**
- * Extract the base model name from a GGUF model key by stripping the
- * quantization suffix. Handles both path-style and flat-style keys.
- *
- * Examples:
- *   "lmstudio-community/qwen3-32b-GGUF/qwen3-32b-Q8_0.gguf"
- *     → base: "lmstudio-community/qwen3-32b-GGUF/qwen3-32b"
- *     → quant: "Q8_0"
- *
- *   "qwen3-32b@q4_k_m"
- *     → base: "qwen3-32b"
- *     → quant: "Q4_K_M"
- *
- * @param {string} modelKey
- * @returns {{ base: string, quant: string|null }}
- */
-function parseModelQuant(modelKey) {
-  // Handle @quant suffix (e.g. "qwen3-32b@q4_k_m")
-  if (modelKey.includes("@")) {
-    const [base, quant] = modelKey.split("@");
-    return { base, quant: quant.toUpperCase() };
-  }
-
-  // Handle GGUF path-style keys — strip .gguf, then match the quant suffix via regex
-  const stripped = modelKey.replace(/\.gguf$/i, "");
-  const match = stripped.match(GGUF_QUANT_SUFFIX_RE);
-  if (match) {
-    const quant = match[1].toUpperCase();
-    const base = stripped.slice(0, match.index);
-    return { base, quant };
-  }
-
-  return { base: modelKey, quant: null };
-}
-
-/**
- * Find the best available variant of a model among the available models
- * on a specific instance. Ranks by `size_bytes` (file size on disk) —
- * the largest file is the highest-quality quantization.
- *
- * Unlike the old approach that only considered lower quants, this picks
- * the best available variant period — so a Laptop with Q8_0 can serve
- * workers even when the coordinator loaded Q4_K_M on the Desktop.
- *
- * @param {string} targetModel - The model key to find a fallback for
- * @param {Array<{key?: string, id?: string, size_bytes?: number}>} availableModels - Models on the instance
- * @returns {string|null} The best available model key (by file size), or null
- */
-function findBestQuantFallback(targetModel, availableModels) {
-  const { base: targetBase, quant: targetQuant } = parseModelQuant(targetModel);
-
-  // Find all available models that share the same base name (any quant variant)
-  const candidates = [];
-  for (const m of availableModels) {
-    const mKey = m.key || m.id;
-    const { base, quant } = parseModelQuant(mKey);
-
-    // Compare bases case-insensitively
-    if (base.toLowerCase() !== targetBase.toLowerCase()) continue;
-
-    // Skip exact same key (already checked before calling this)
-    if (mKey === targetModel) continue;
-    // Skip identical quant (both could be null for no-quant keys)
-    if (quant === targetQuant) continue;
-
-    candidates.push({ key: mKey, quant, sizeBytes: m.size_bytes || 0 });
-  }
-
-  if (candidates.length === 0) return null;
-
-  // Sort by file size descending — largest file = highest quality quant
-  candidates.sort((a, b) => b.sizeBytes - a.sizeBytes);
-  return candidates[0].key;
-}
+// resolveModelForInstances (from ../utils/ModelResolution.js) handles
+// quant-level fallback for heterogeneous GPU setups: if an instance
+// doesn't have the exact model, it finds the best variant of the
+// same base model (ranked by file size on disk).
 
 // ────────────────────────────────────────────────────────────
 // Instance Selection & Reservation
@@ -542,65 +456,19 @@ export default class CoordinatorService {
       let siblings = getInstancesByType(providerType);
 
       // ── Model availability filter ─────────────────────────────
-      // When multiple instances exist, verify the worker model is
-      // downloaded on each before routing there. Prevents 404 errors
-      // from instances that don't have the model on disk.
-      //
-      // If the exact model isn't found, attempt quantization-level
-      // fallback: search for the same base model at a different quant.
-      // This enables heterogeneous GPU setups where different machines
-      // have different quant levels.
-      /** @type {Map<string, string>} Per-instance model override (when quant fallback is used) */
-      const instanceModelOverrides = new Map();
+      // Shared logic with /chat route: verify model availability per
+      // instance with quant-level fallback for heterogeneous GPU setups.
+      let instanceModelOverrides = new Map();
 
       if (siblings.length > 1) {
-        try {
-          const checks = await Promise.allSettled(
-            siblings.map(async (inst) => {
-              const provider = getProvider(inst.id);
-              if (!provider?.listModels) return { exact: false, fallback: null };
-              const result = await Promise.race([
-                provider.listModels(),
-                new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000)),
-              ]);
-              const models = result?.models || result?.data || [];
-              const exactMatch = models.some((m) => (m.key || m.id) === workerModel);
-              if (exactMatch) return { exact: true, fallback: null };
+        const { usable, modelOverrides } = await resolveModelForInstances(workerModel, siblings);
+        instanceModelOverrides = modelOverrides;
 
-              // No exact key match — find the best variant with the same base name
-              const fallback = findBestQuantFallback(workerModel, models);
-              return { exact: false, fallback };
-            }),
-          );
-
-          // Build per-instance model map — keep all usable instances
-          const usable = [];
-          for (let i = 0; i < siblings.length; i++) {
-            if (checks[i].status !== "fulfilled") continue;
-            const { exact, fallback } = checks[i].value;
-
-            if (exact) {
-              usable.push(siblings[i]);
-            } else if (fallback) {
-              instanceModelOverrides.set(siblings[i].id, fallback);
-              usable.push(siblings[i]);
-            }
-          }
-
-          const summary = usable.map((s) => {
-            const override = instanceModelOverrides.get(s.id);
-            return override ? `${s.id}→"${override}"` : `${s.id} (exact)`;
-          }).join(", ");
-          logger.info(`[Coordinator] Model resolution for "${workerModel}": ${usable.length}/${siblings.length} instances usable [${summary}]`);
-
-          if (usable.length > 0) {
-            siblings = usable;
-          } else {
-            logger.warn(`[Coordinator] Model "${workerModel}" not available on any ${getInstanceType(providerName) || providerName} instance`);
-            siblings = [];
-          }
-        } catch (err) {
-          logger.warn(`[Coordinator] Model availability check failed: ${err.message}`);
+        if (usable.length > 0) {
+          siblings = usable;
+        } else {
+          logger.warn(`[Coordinator] Model "${workerModel}" not available on any ${getInstanceType(providerName) || providerName} instance`);
+          siblings = [];
         }
       }
 
@@ -992,62 +860,17 @@ export default class CoordinatorService {
 
       // Run model availability checks once for the entire team
       const defaultModel = resolvedModel;
-      /** @type {Map<string, string>} */
-      const instanceModelOverrides = new Map();
+      let instanceModelOverrides = new Map();
 
       if (siblings.length > 1) {
-        try {
-          const checks = await Promise.allSettled(
-            siblings.map(async (inst) => {
-              const provider = getProvider(inst.id);
-              if (!provider?.listModels) return { exact: false, fallback: null };
-              const result = await Promise.race([
-                provider.listModels(),
-                new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000)),
-              ]);
-              const models = result?.models || result?.data || [];
-              const exactMatch = models.some((m) => (m.key || m.id) === defaultModel);
-              if (exactMatch) return { exact: true, fallback: null };
+        const { usable, modelOverrides } = await resolveModelForInstances(defaultModel, siblings);
+        instanceModelOverrides = modelOverrides;
 
-              // No exact key match — find the best variant with the same base name
-              const fallback = findBestQuantFallback(defaultModel, models);
-              return { exact: false, fallback };
-            }),
-          );
-
-          // Build per-instance model map — never filter siblings, just set overrides.
-          // Instances with exact match: no override needed (uses defaultModel).
-          // Instances with variant match: override to the variant key.
-          // Instances with neither: excluded from pool.
-          const usable = [];
-          for (let i = 0; i < siblings.length; i++) {
-            if (checks[i].status !== "fulfilled") continue;
-            const { exact, fallback } = checks[i].value;
-
-            if (exact) {
-              usable.push(siblings[i]);
-            } else if (fallback) {
-              instanceModelOverrides.set(siblings[i].id, fallback);
-              usable.push(siblings[i]);
-            }
-            // else: instance has no matching model — skip it
-          }
-
-          // Log the resolution summary
-          const summary = usable.map((s) => {
-            const override = instanceModelOverrides.get(s.id);
-            return override ? `${s.id}→"${override}"` : `${s.id} (exact)`;
-          }).join(", ");
-          logger.info(`[Coordinator] Model resolution for "${defaultModel}": ${usable.length}/${siblings.length} instances usable [${summary}]`);
-
-          if (usable.length > 0) {
-            siblings = usable;
-          } else {
-            logger.warn(`[Coordinator] Model "${defaultModel}" not available on any ${providerType} instance`);
-            siblings = [];
-          }
-        } catch (err) {
-          logger.warn(`[Coordinator] Model availability check failed: ${err.message}`);
+        if (usable.length > 0) {
+          siblings = usable;
+        } else {
+          logger.warn(`[Coordinator] Model "${defaultModel}" not available on any ${providerType} instance`);
+          siblings = [];
         }
       }
 

@@ -4,12 +4,12 @@
 // Prism resolves secrets from (in priority order):
 //   1. process.env (manual env vars, Docker --env)
 //   2. Vault service (via src/boot.js → VAULT_SERVICE_URL + VAULT_SERVICE_TOKEN)
-//   3. Fallback .env file (../vault/.env)
+//   3. Fallback .env file (../vault-service/.env)
 //
 // All secrets are read from process.env — configure them via
 // your Vault master .env, or set them as environment variables.
 //
-// See vault/.env.example for the full list of variables.
+// See vault-service/.env.example for the full list of variables.
 // ============================================================
 // This file (secrets.js) is a process.env shim and does NOT
 // need to be edited for normal operation. The values below are

@@ -28,6 +28,7 @@ import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
 import localModelQueue from "../services/LocalModelQueue.js";
 import LocalProviderGateway from "../services/LocalProviderGateway.js";
 import { getInstancesByType } from "../providers/instance-registry.js";
+import { resolveModelForInstances } from "../utils/ModelResolution.js";
 
 import {
   markGenerating,
@@ -399,13 +400,24 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
 
   // ── Multi-instance load balancing ─────────────────────────
   // When the caller sends a base provider type (e.g. "lm-studio") and
-  // multiple instances are registered, pick the least-busy instance.
-  // This gives every /chat caller automatic round-robin distribution
-  // without needing to know about instance IDs — same strategy the
-  // coordinator uses for worker agents.
+  // multiple instances are registered, verify the model is available on
+  // each instance (with quant-level fallback) and pick the least-busy
+  // usable instance. Same model resolution logic as CoordinatorService.
+  let resolvedModel =
+    requestedModel || getDefaultModels(TYPES.TEXT, TYPES.TEXT)[providerName];
+
   if (localModelQueue.isLocal(providerName)) {
-    const siblings = getInstancesByType(providerName);
+    let siblings = getInstancesByType(providerName);
     if (siblings.length > 1) {
+      // Verify model availability across instances (with quant fallback)
+      const { usable, modelOverrides } = await resolveModelForInstances(resolvedModel, siblings);
+
+      if (usable.length > 0) {
+        siblings = usable;
+      } else {
+        logger.warn(`[chat] Model "${resolvedModel}" not available on any ${providerName} instance — falling back to first`);
+      }
+
       // Least-busy: pick the instance with the most available slots
       let bestId = providerName;
       let bestAvailable = -Infinity;
@@ -418,9 +430,14 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
         }
       }
       if (bestId !== providerName) {
+        // Apply model override if this instance uses a different quant
+        const modelOverride = modelOverrides.get(bestId);
+        if (modelOverride) {
+          resolvedModel = modelOverride;
+        }
         logger.info(
           `[chat] ⚖️ Load balance: ${providerName} → ${bestId} ` +
-          `(${siblings.map(s => `${s.id}:${s.concurrency - localModelQueue._getQueue(s.id).activeCount}free`).join(", ")})`,
+          `(model="${resolvedModel}", ${siblings.map(s => `${s.id}:${s.concurrency - localModelQueue._getQueue(s.id).activeCount}free`).join(", ")})`,
         );
         providerName = bestId;
       }
@@ -430,8 +447,8 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
   const provider = getProvider(providerName);
 
   // ── Resolve model ─────────────────────────────────────────
-  const resolvedModel =
-    requestedModel || getDefaultModels(TYPES.TEXT, TYPES.TEXT)[providerName];
+  // resolvedModel is set earlier (before load balancing) and may have
+  // been updated to a quant variant by the model availability check.
   const modelDef = getModelByName(resolvedModel);
   const isImageAPIModel = modelDef?.imageAPI && provider.generateImage;
 
