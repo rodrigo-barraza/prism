@@ -62,8 +62,17 @@ export function findBestQuantFallback(targetModel, availableModels) {
     const mKey = m.key || m.id;
     const { base, quant } = parseModelQuant(mKey);
 
-    // Compare bases case-insensitively
-    if (base.toLowerCase() !== targetBase.toLowerCase()) continue;
+    // Compare bases case-insensitively.
+    // GGUF paths have long bases like "lmstudio-community/Qwen3.6-27B-GGUF/Qwen3.6-27B"
+    // while @quant syntax produces short bases like "qwen3.6-27b". When a direct
+    // comparison fails, try matching just the last path segment (actual model name).
+    const baseLower = base.toLowerCase();
+    const targetBaseLower = targetBase.toLowerCase();
+    if (baseLower !== targetBaseLower) {
+      const baseLeaf = baseLower.split("/").pop();
+      const targetLeaf = targetBaseLower.split("/").pop();
+      if (baseLeaf !== targetLeaf) continue;
+    }
 
     // Skip exact same key (already checked before calling this)
     if (mKey === targetModel) continue;
@@ -105,10 +114,12 @@ export async function resolveModelForInstances(modelKey, siblings) {
           new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000)),
         ]);
         const models = result?.models || result?.data || [];
-        const exactMatch = models.some((m) => (m.key || m.id) === modelKey);
+        const modelKeys = models.map((m) => m.key || m.id);
+        const exactMatch = modelKeys.includes(modelKey);
         if (exactMatch) return { exact: true, fallback: null };
 
         // No exact key match — find the best variant with the same base name
+        logger.info(`[ModelResolution] ${inst.id}: no exact match for "${modelKey}" — available: [${modelKeys.join(", ")}]`);
         const fallback = findBestQuantFallback(modelKey, models);
         return { exact: false, fallback };
       }),
