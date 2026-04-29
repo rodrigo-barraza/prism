@@ -15,4 +15,4 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 IMAGE_NAME="prism-service"
 DISPLAY_NAME="🔷 Prism Service"
 
-source "${SCRIPT_DIR}/../deploy/lib.sh"
+source "${SCRIPT_DIR}/../deploy-kit/lib.sh"
