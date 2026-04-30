@@ -68,5 +68,5 @@
 // TOOLS_SERVICE_URL=http://localhost:5590
 
 // Vault
-// VAULT_SERVICE_URL=http://192.168.86.2:5599
+// VAULT_SERVICE_URL=http://<host>:5599
 // VAULT_SERVICE_TOKEN=

@@ -8,7 +8,7 @@ let endpointUrl = null;
 const MinioWrapper = {
   /**
    * Initialize the MinIO client and ensure the bucket exists.
-   * @param {string} endpoint - e.g. "http://192.168.86.2:9000"
+   * @param {string} endpoint - e.g. "http://<host>:9000"
    * @param {string} accessKey
    * @param {string} secretKey
    * @param {string} bucket
@@ -64,7 +64,7 @@ const MinioWrapper = {
 
   /**
    * Get the base URL for direct public access to objects in the bucket.
-   * e.g. "http://192.168.86.2:9000/prism"
+   * e.g. "http://<host>:9000/prism"
    * @returns {string|null}
    */
   getBucketUrl() {
@@ -74,7 +74,7 @@ const MinioWrapper = {
 
   /**
    * Build a direct public URL for an object key.
-   * e.g. "http://192.168.86.2:9000/prism/projects/retina/127.0.0.1/uploads/uuid.png"
+   * e.g. "http://<host>:9000/prism/projects/retina/127.0.0.1/uploads/uuid.png"
    * @param {string} key - Object key within the bucket
    * @returns {string|null}
    */

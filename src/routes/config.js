@@ -255,7 +255,7 @@ Guidelines:
 
   res.json({
     // Direct MinIO URL for resolving minio:// file refs on the client
-    // e.g. "http://192.168.86.2:9000/prism"
+    // e.g. "http://<host>:9000/prism"
     fileBaseUrl: MinioWrapper.getBucketUrl() || null,
     fcSystemPrompt,
     providers: availableProviderMap,
