@@ -27,7 +27,7 @@ const PRISM_SERVICE_URL = "http://localhost:7777";
 const TEXT_PRICING = getPricing(TYPES.TEXT, TYPES.TEXT);
 const SIMPLE_PROMPT = "Reply with exactly one word: hello.";
 
-// ── 10 real tool definitions from tools.clankerbox.com ────────
+// ── 10 real tool definitions from tools.rod.dev ────────
 // Sourced from GET /admin/tool-schemas — covers Weather,
 // Events, Markets, Finance, Knowledge, Health, Transit, Utilities.
 const SAMPLE_TOOLS = [

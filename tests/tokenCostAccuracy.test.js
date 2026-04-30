@@ -22,7 +22,7 @@ import { TYPES, getPricing } from "../src/config.js";
 
 const TEXT_PRICING = getPricing(TYPES.TEXT, TYPES.TEXT);
 
-// ── 10 real tool definitions from tools.clankerbox.com ────────
+// ── 10 real tool definitions from tools.rod.dev ────────
 // Sourced from GET /admin/tool-schemas — covers Weather,
 // Events, Markets, Finance, Knowledge, Health, Transit, Utilities.
 const SAMPLE_TOOLS = [

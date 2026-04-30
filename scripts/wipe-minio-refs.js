@@ -5,7 +5,7 @@
  *
  * Matches both patterns:
  *   - minio://...                              (internal protocol refs)
- *   - https://prism.clankerbox.com/files/...   (resolved HTTP URLs)
+ *   - https://prism.rod.dev/files/...   (resolved HTTP URLs)
  *
  * Collections cleaned:
  *   - conversations   (messages[].images[], messages[].audio, messages[].toolCalls[].result.screenshotRef)
@@ -27,11 +27,11 @@ const DRY_RUN = process.argv.includes("--dry-run");
 /** Matches both minio:// protocol refs and resolved HTTP MinIO file URLs. */
 const MINIO_PATTERNS = [
   /^minio:\/\//,
-  /^https?:\/\/prism\.clankerbox\.com\/files\//,
+  /^https?:\/\/prism\.rod\.dev\/files\//,
 ];
 
 /** MongoDB $regex string matching either pattern. */
-const MONGO_MINIO_RE = "^(minio://|https?://prism\\.clankerbox\\.com/files/)";
+const MONGO_MINIO_RE = "^(minio://|https?://prism\\.rod\\.dev/files/)";
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -183,7 +183,7 @@ async function cleanWorkflows(db) {
   for (const wf of allWorkflows) {
     if (extraIds.has(wf._id.toString())) continue;
     const json = JSON.stringify(wf);
-    if (json.includes("minio://") || json.includes("prism.clankerbox.com/files/")) {
+    if (json.includes("minio://") || json.includes("prism.rod.dev/files/")) {
       docs.push(wf);
       extraIds.add(wf._id.toString());
     }
