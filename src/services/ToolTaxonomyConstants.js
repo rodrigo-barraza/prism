@@ -58,6 +58,7 @@ export const DOMAINS = {
   ENERGY: "Energy",
   COMMUNICATION: "Communication",
   CREATIVE: "Creative",
+  GAMING: "Gaming",
   DISCORD: "Discord",
   SMART_HOME: "Smart Home",
   // Agentic sub-domains
