@@ -319,7 +319,7 @@ export default class SystemPromptAssembler {
       const ac = ctx.agentContext;
 
       // Structured context blocks — each is a pre-formatted text block
-      // assembled by the caller (Lupos/Retina/etc.)
+      // assembled by the caller (Lupos/Prism Client/etc.)
       if (ac.discordContext) {
         sections.push(ac.discordContext);
       }

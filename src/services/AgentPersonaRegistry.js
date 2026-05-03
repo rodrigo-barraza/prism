@@ -287,7 +287,7 @@ const CODING_ENABLED_TOOLS = [
   L.CODING,
 ];
 
-// ── CODING Agent (Retina) ────────────────────────────────────────
+// ── CODING Agent (Prism Client) ────────────────────────────────────────
 // This is the existing behavior — SystemPromptAssembler's default.
 // We define it explicitly so the registry is the single source of truth.
 PERSONAS.set("CODING", {

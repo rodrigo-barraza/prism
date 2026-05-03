@@ -1186,7 +1186,7 @@ export async function finalizeTextGeneration(
         totalTime: roundMs(totalSec),
         tokensPerSec,
         estimatedCost,
-        // Display segment metadata — preserves interleaving order for Retina
+        // Display segment metadata — preserves interleaving order for Prism Client
         ...(contentSegments?.length > 0 && { contentSegments }),
         ...(textFragments?.length > 0 && { textFragments }),
         ...(thinkingFragments?.length > 0 && { thinkingFragments }),

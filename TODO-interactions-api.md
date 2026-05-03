@@ -124,7 +124,7 @@ Gemini 3 Flash/Pro are our primary Google models. This is the most interesting f
 
 **Keep using `generateContent` / `generateContentStream` for all Google provider operations.**
 
-Prism is already the orchestration layer that the Interactions API provides — with full control over state, observability (Retina), and multi-provider abstraction. Adopting it would mean ceding control to Google for features we already have, while gaining access to a few new ones that aren't stable yet.
+Prism is already the orchestration layer that the Interactions API provides — with full control over state, observability (Prism Client), and multi-provider abstraction. Adopting it would mean ceding control to Google for features we already have, while gaining access to a few new ones that aren't stable yet.
 
 **Revisit when:**
 1. Interactions API exits Beta (GA release)

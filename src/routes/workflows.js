@@ -299,7 +299,7 @@ router.get("/", async (req, res, next) => {
   try {
     const { db } = req;
 
-    const source = req.query.source || "retina";
+    const source = req.query.source || "prism-client";
     const query = source === "all" ? {} : { source };
 
     const workflows = await db
@@ -351,7 +351,7 @@ router.get("/:id", async (req, res, next) => {
  * Accepts two payload formats:
  * 1. Raw steps (from Lupos/bots): { steps, messageId, ... }
  *    → Prism assembles the visual graph using WorkflowAssembler
- * 2. Pre-built graph (from Retina editor): { nodes, edges, ... }
+ * 2. Pre-built graph (from Prism Client editor): { nodes, edges, ... }
  *    → Passes through unchanged
  */
 router.post("/", async (req, res, next) => {
@@ -404,7 +404,7 @@ router.post("/", async (req, res, next) => {
       nodes: finalNodes,
       edges: edges || req.body.edges,
       nodeResults: processedResults || nodeResults,
-      source: req.body.source || "retina",
+      source: req.body.source || "prism-client",
       nodeCount: Array.isArray(finalNodes) ? finalNodes.length : 0,
       edgeCount: Array.isArray(edges) ? edges.length : 0,
       ...meta,

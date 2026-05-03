@@ -1,6 +1,6 @@
-# Agentic Flow & Architecture: Retina & Prism Design
+# Agentic Flow & Architecture: Prism Client & Prism Design
 
-Based on analysis of state-of-the-art agent architectures (including open-source terminal agents like `pi-mono`, Anthropic's `claude-code` snapshot, and industry-standard patterns), here is a comprehensive breakdown of the agentic loop, architecture, and strategic roadmap for **Prism** (the local AI gateway) and **Retina** (the web UI).
+Based on analysis of state-of-the-art agent architectures (including open-source terminal agents like `pi-mono`, Anthropic's `claude-code` snapshot, and industry-standard patterns), here is a comprehensive breakdown of the agentic loop, architecture, and strategic roadmap for **Prism** (the local AI gateway) and **Prism Client** (the web UI).
 
 > **Legend**: ✅ = Already implemented | ⚠️ = Partially implemented | 🔲 = Not started
 
@@ -8,10 +8,10 @@ Based on analysis of state-of-the-art agent architectures (including open-source
 
 ## 1. The Core Agent Loop (The "11-Step Engine")
 
-The Retina Agent executes a robust 11-step loop for every user interaction, built around streaming, context management, and recursive tool usage.
+The Prism Client Agent executes a robust 11-step loop for every user interaction, built around streaming, context management, and recursive tool usage.
 
-1. ✅ **User Input**: Captures input from the Retina UI. Two transports:
-   - **WebSocket** (`/ws/chat`) — persistent bidirectional connection, used by Retina's real-time chat
+1. ✅ **User Input**: Captures input from the Prism Client UI. Two transports:
+   - **WebSocket** (`/ws/chat`) — persistent bidirectional connection, used by Prism Client's real-time chat
    - **REST SSE** (`POST /agent`) — dedicated agentic endpoint with SSE streaming (default) or JSON response (`?stream=false`), used by server-to-server callers (Lupos, external integrations). Always enables `agenticLoopEnabled` + `functionCallingEnabled`.
 2. ✅ **Message Creation**: Wraps text into standard LLM message formats via `expandMessagesForFC()`, normalizing across providers (OpenAI, Anthropic, Google, local).
 3. ✅ **History Append**: Appends to a fast, in-memory `currentMessages` array within `AgenticLoopService`, backed by MongoDB persistence via `finalizeTextGeneration()` at loop end.
@@ -60,7 +60,7 @@ The agentic loop is gated on a dedicated REST endpoint:
 | ------------- | ----------------- | ---------------- | -------------------------------------------- |
 | `POST /chat`  | ❌ Off by default | Optional         | Simple LLM calls, Chat tab                   |
 | `POST /agent` | ✅ Always on      | ✅ Always on     | Autonomous agent workflows, Agent tab, Lupos |
-| `WS /ws/chat` | Flag-gated        | Flag-gated       | Retina real-time chat                        |
+| `WS /ws/chat` | Flag-gated        | Flag-gated       | Prism Client real-time chat                        |
 
 `/agent` forces `agenticLoopEnabled: true` and `functionCallingEnabled: true` on every request. Supports SSE streaming (default) and JSON response (`?stream=false` for server-to-server callers like Lupos). Approval endpoint at `POST /agent/approve` resolves pending plan/tool approvals by conversationId.
 
@@ -83,15 +83,15 @@ All use POST + SSE streaming with 65s timeout, stdout/stderr separation, and exi
 
 ### ✅ Skills System
 
-Database-backed per-project skills stored in `agent_skills` MongoDB collection. Full CRUD via REST API (`/skills`), managed through the **SkillsPanel** tab in Retina's Agent page. `SystemPromptAssembler.fetchSkills()` queries enabled skills and injects them as `## Project Skills` context blocks into the system prompt, filtered by embedding-based relevance (cosine similarity ≥ 0.3 threshold). `AgenticLoopService` emits a `skills_injected` status event listing loaded skill names for the UI. **Files**: `prism/src/routes/skills.js`, `SystemPromptAssembler.js`, `retina/src/components/SkillsPanel.js`.
+Database-backed per-project skills stored in `agent_skills` MongoDB collection. Full CRUD via REST API (`/skills`), managed through the **SkillsPanel** tab in Prism Client's Agent page. `SystemPromptAssembler.fetchSkills()` queries enabled skills and injects them as `## Project Skills` context blocks into the system prompt, filtered by embedding-based relevance (cosine similarity ≥ 0.3 threshold). `AgenticLoopService` emits a `skills_injected` status event listing loaded skill names for the UI. **Files**: `prism/src/routes/skills.js`, `SystemPromptAssembler.js`, `prism-client/src/components/SkillsPanel.js`.
 
 ### 🔲 Prompt Templates & Slash Commands
 
-Parameterized slash commands using bash-style argument substitution (`$1`, `$@`, `${@:start}`). Implementation lives in Retina's `ChatArea` component, expanding templates before sending to Prism.
+Parameterized slash commands using bash-style argument substitution (`$1`, `$@`, `${@:start}`). Implementation lives in Prism Client's `ChatArea` component, expanding templates before sending to Prism.
 
 ### ✅ Tool Rendering Registry
 
-Retina has `ToolResultRenderers.js` (733 lines) — a registry-based architecture where each tool type registers its own specialized renderer. Integrated into `MessageList.js` via `ToolResultView`. Includes:
+Prism Client has `ToolResultRenderers.js` (733 lines) — a registry-based architecture where each tool type registers its own specialized renderer. Integrated into `MessageList.js` via `ToolResultView`. Includes:
 
 - File tools → diff viewer with syntax highlighting
 - Shell tools → terminal output panel with ANSI color support
@@ -101,7 +101,7 @@ Retina has `ToolResultRenderers.js` (733 lines) — a registry-based architectur
 
 ---
 
-## 3. Prism / Retina Tool System
+## 3. Prism / Prism Client Tool System
 
 ### Current Tool Inventory
 
@@ -123,14 +123,14 @@ Additionally, custom tools can be defined per-project in MongoDB (`custom_tools`
 
 1. ✅ **MCP Client (Model Context Protocol)**:
    - **What**: Prism acts as an **MCP client**, connecting to external MCP servers and exposing their tools to the LLM.
-   - **Implementation**: `MCPClientService` manages connections via `@modelcontextprotocol/sdk` (stdio + Streamable HTTP transports). Tools namespaced as `mcp__{server}__{tool}` and merged into `ToolOrchestratorService`. Managed via `/mcp-servers` REST API with CRUD + connect/disconnect endpoints. Retina MCPServersPanel in Agent sidebar. Auto-connect on startup.
+   - **Implementation**: `MCPClientService` manages connections via `@modelcontextprotocol/sdk` (stdio + Streamable HTTP transports). Tools namespaced as `mcp__{server}__{tool}` and merged into `ToolOrchestratorService`. Managed via `/mcp-servers` REST API with CRUD + connect/disconnect endpoints. Prism Client MCPServersPanel in Agent sidebar. Auto-connect on startup.
    - **Files**: `MCPClientService.js`, `mcp-servers.js`, `ToolOrchestratorService.js`, `MCPServersPanel.js`
 
 2. ✅ **Browser Automation ("Computer Use")**:
    - **What**: Headless Playwright-based browser tool for SPA navigation, E2E testing, and visual QA.
    - **Why**: `fetch_url` can't handle JavaScript-rendered pages, authentication flows, or visual regression testing.
    - **Implementation**: `AgenticBrowserService` in `tools-api` manages a Playwright browser instance via `browser_action` tool. Supports `navigate`, `click`, `type`, `screenshot`, `scroll`, `evaluate`, `get_elements` (DOM inspection with CSS selectors). Screenshots uploaded to MinIO as `screenshotRef` values and promoted into conversation `images` arrays.
-   - **Files**: `tools-api/services/AgenticBrowserService.js`, `AgenticRoutes.js` (`/agentic/browser/action`), `retina/src/components/ToolResultRenderers.js`
+   - **Files**: `tools-api/services/AgenticBrowserService.js`, `AgenticRoutes.js` (`/agentic/browser/action`), `prism-client/src/components/ToolResultRenderers.js`
 
 3. ✅ **Semantic Code Navigation (LSP)**:
    - **What**: Exposing Language Server Protocol (LSP) capabilities to the agent for compiler-grade code intelligence instead of relying purely on regex `grep_search`.
@@ -209,7 +209,7 @@ Complete tool-by-tool mapping between Claude Code (from [razakiau/claude-code `s
 | — | `git_log` | ✅ **Extra** | Structured git log — CC uses `BashTool` |
 | — | `enter_worktree`, `exit_worktree` | ✅ **Extra** | Self-isolate into a git worktree for safe experimentation. CC workers use worktrees but the main agent cannot self-isolate |
 
-**Architectural note:** CC exposes only `GitDiffTool` as a dedicated tool — all other git operations go through `BashTool`. Our dedicated git tools (`git_status`, `git_diff`, `git_log`) return structured JSON that renders via specialized `ToolResultRenderers` in Retina, providing much richer UI than raw terminal output.
+**Architectural note:** CC exposes only `GitDiffTool` as a dedicated tool — all other git operations go through `BashTool`. Our dedicated git tools (`git_status`, `git_diff`, `git_log`) return structured JSON that renders via specialized `ToolResultRenderers` in Prism Client, providing much richer UI than raw terminal output.
 
 #### MCP (Model Context Protocol)
 
@@ -239,7 +239,7 @@ Complete tool-by-tool mapping between Claude Code (from [razakiau/claude-code `s
 | Claude Code Tool | Prism Equivalent | Parity | Notes |
 |---|---|---|---|
 | `ThinkTool` | `think` | ✅ Match | Extended reasoning scratchpad — contents not shown to user, used for complex multi-step planning |
-| `TodoWriteTool` | `todo_write` | ✅ Match | Persistent session-based checklist with `pending`/`in_progress`/`completed` status. Emits `todo_update` SSE event to Retina for live UI rendering |
+| `TodoWriteTool` | `todo_write` | ✅ Match | Persistent session-based checklist with `pending`/`in_progress`/`completed` status. Emits `todo_update` SSE event to Prism Client for live UI rendering |
 | `BriefTool` | `brief` | ✅ Match | Context summarization — private working memory for long sessions. Agent writes compressed summaries with key files, open questions, and progress. Emits `brief_update` SSE event |
 | `AskUserQuestionTool` | `ask_user_question` | ✅ Match | Pauses the agentic loop to present a question to the user. Supports freeform text or multiple-choice via `choices` array. Uses the same Promise-based pause/resume pattern as tool approvals. 5-minute timeout with graceful fallback |
 | `MemoryTool` (read/write) | `upsert_memory`, `search_memories`, `delete_memory` | ✅ **Superior** | CC has a single `MemoryTool` with read/write. We have 3 dedicated memory tools + a 5-store cognitive memory architecture (episodic, semantic, procedural, prospective, working). See Section 7.7 for deep comparison |
@@ -248,7 +248,7 @@ Complete tool-by-tool mapping between Claude Code (from [razakiau/claude-code `s
 | — | `synthetic_output` | ✅ **Extra** | Emit structured JSON output for programmatic consumption — no CC equivalent |
 | — | `skill_create`, `skill_execute`, `skill_list`, `skill_delete` | ✅ **Extra** | Full CRUD for project-scoped skills — no CC equivalent (CC skills are file-based, read-only) |
 
-**Architectural note for `ask_user_question`:** This implements a **pause/resume loop** using the `pendingQuestions` registry in `AgenticLoopService` (same pattern as `pendingApprovals`). The agent calls the tool → handler emits `user_question` SSE event → Retina renders UI → user submits → `POST /agent/answer` resolves the pending promise → loop continues. This is architecturally identical to CC's implementation but adapted for our HTTP request lifecycle (CC's REPL loop is always alive).
+**Architectural note for `ask_user_question`:** This implements a **pause/resume loop** using the `pendingQuestions` registry in `AgenticLoopService` (same pattern as `pendingApprovals`). The agent calls the tool → handler emits `user_question` SSE event → Prism Client renders UI → user submits → `POST /agent/answer` resolves the pending promise → loop continues. This is architecturally identical to CC's implementation but adapted for our HTTP request lifecycle (CC's REPL loop is always alive).
 
 #### Task Management (Persistent Working Memory)
 
@@ -281,20 +281,20 @@ Complete tool-by-tool mapping between Claude Code (from [razakiau/claude-code `s
 
 ### ✅ Bridge Mode (Already Implemented)
 
-Retina (Web UI) connects to Prism (local gateway) over WebSocket. This is the existing architecture — Retina issues requests, Prism executes tools locally, streams results back. REST SSE via `/agent` provides an alternative for server-to-server callers.
+Prism Client (Web UI) connects to Prism (local gateway) over WebSocket. This is the existing architecture — Prism Client issues requests, Prism executes tools locally, streams results back. REST SSE via `/agent` provides an alternative for server-to-server callers.
 
 ### ✅ UltraPlan (Planning Mode)
 
 For tasks requiring extensive reasoning, the agent enters a dedicated planning loop:
 
-1. ✅ Retina UI toggle activates "Plan First" mode (`planFirst` state in `AgentComponent`)
+1. ✅ Prism Client UI toggle activates "Plan First" mode (`planFirst` state in `AgentComponent`)
 2. ✅ Prism injects a planning-specific system prompt via `PlanningModeService.preparePlanningPass()` — tools stripped
 3. ✅ System prompt assembly runs on planning pass too (via `beforePrompt` hook)
-4. ✅ Plan is presented to the user in Retina via `PlanCardComponent` for review/approval
+4. ✅ Plan is presented to the user in Prism Client via `PlanCardComponent` for review/approval
 5. ✅ Only after explicit approval does execution begin (120s timeout, registry-based approval via `resolveApproval`)
 6. ✅ Approved plan injected as context via `PlanningModeService.buildExecutionMessages()`
 
-**Implementation**: Retina UI flag → Prism wraps the first LLM call with a planning system prompt → response rendered via `PlanCardComponent` → approved plan injected as context for execution calls.
+**Implementation**: Prism Client UI flag → Prism wraps the first LLM call with a planning system prompt → response rendered via `PlanCardComponent` → approved plan injected as context for execution calls.
 
 ### ✅ Coordinator Mode (Multi-Agent Orchestration)
 
@@ -315,7 +315,7 @@ Chat Message → Coordinator System Prompt Injection → LLM calls `team_create`
 | **Task Notification Pipeline** | `<task-notification>` XML generation via `buildTaskNotification()` + injection into coordinator's active conversation as user-role messages via `injectMessage()` + `_notifyWake()`                                 | `AgenticLoopService.js`, `CoordinatorService.js`                     |
 | **Worker Isolation**           | Git worktree-based isolation — each worker runs in its own branch/directory, preventing file conflicts                                                                                                              | `AgenticGitService.js`, `CoordinatorService.js`                      |
 | **Instance Pooling**           | Workers distributed across all available local provider instances (e.g. multiple LM Studio), with least-busy routing and fallback to cloud models                                                                   | `CoordinatorService.js`, `instance-registry.js`                      |
-| **Retina UI**                  | Live worker status cards, tool result renderers for spawn/send/stop, `worker_notification` SSE events                                                                                                               | `AgentComponent.js`, `ToolResultRenderers.js`                        |
+| **Prism Client UI**                  | Live worker status cards, tool result renderers for spawn/send/stop, `worker_notification` SSE events                                                                                                               | `AgentComponent.js`, `ToolResultRenderers.js`                        |
 | **Worker Persistence**         | Worker snapshots persisted to parent session in MongoDB for page refresh survival                                                                                                                                   | `AgenticLoopService.js`                                              |
 
 **Coordinator System Prompt Coverage** (all ✅, adapted from Claude Code):
@@ -343,7 +343,7 @@ Worker completes → buildTaskNotification(worker) generates XML
                  → pushes to injectedMessages[] queue with _taskNotification: true
                  → _notifyWake() fires to wake coordinator's wait loop
                  → coordinator drains queue after tool batch or wait loop
-                 → emits worker_notification SSE event to Retina
+                 → emits worker_notification SSE event to Prism Client
                  → re-prompts model with notifications as user-role messages
 ```
 
@@ -441,7 +441,7 @@ Autonomous background process that clusters, merges, and prunes accumulated **le
 - **Scheduled loop**: `setInterval` in `index.js` runs every 6 hours, processes all projects with 10+ memories (trigger: `scheduled`)
 - **Cost guard**: `DAILY_MAX_CONSOLIDATIONS = 3` per project per day to prevent API credit burn
 - **Audit trail**: Every run recorded with trigger type, memory counts (before/after), actions applied, duration, summary
-- **Real-time feedback**: `broadcast` callback wired through `MemoryExtractor` → `ctx.emit` pushes `memory_consolidation_complete` events to Retina via WebSocket
+- **Real-time feedback**: `broadcast` callback wired through `MemoryExtractor` → `ctx.emit` pushes `memory_consolidation_complete` events to Prism Client via WebSocket
 - **API**: `GET /agent-memories/consolidation-history?project=X&limit=5`
 - **UI**: `MemoriesPanel.js` has collapsible Consolidation History section with trigger badges (Manual / Scheduled / Session), timeline entries, and auto-refresh on consolidation events via `consolidationEvent` prop
 - **Triggers**: Manual (POST endpoint), scheduled (6h interval), session-threshold (after N sessions via MemoryExtractor)
@@ -471,21 +471,21 @@ Custom LLM accuracy benchmarking for evaluating model performance across provide
 - **Cost tracking**: Per-model estimated cost, GPU mutex via `LocalModelQueue` to prevent benchmark/chat collisions
 - **Abort support**: `AbortController` signal propagates across all provider buckets for clean cancellation
 - **REST API**: Full CRUD benchmarks + runs via `/benchmark` endpoints
-- **UI**: Full benchmark dashboard in Retina (`BenchmarkDashboardComponent`, `BenchmarkPageComponent`, `BenchmarkFormComponent`, etc.)
+- **UI**: Full benchmark dashboard in Prism Client (`BenchmarkDashboardComponent`, `BenchmarkPageComponent`, `BenchmarkFormComponent`, etc.)
 - **Collections**: `benchmarks`, `benchmark_runs`
 
-**Files**: `prism/src/services/BenchmarkService.js`, `prism/src/routes/benchmark.js`, `retina/src/components/Benchmark*.js`
+**Files**: `prism/src/services/BenchmarkService.js`, `prism/src/routes/benchmark.js`, `prism-client/src/components/Benchmark*.js`
 
 ### ✅ Visual Workflow System
 
 Node-based visual workflow engine for multi-step AI pipelines:
 
 - `WorkflowAssembler.js`: Assembles visual graph from raw step data. Each step produces text input nodes, conversation nodes (with compound ports), model nodes (with config-derived modality ports), output viewer nodes, and chain edges between non-utility steps.
-- `workflows.js` route: Full CRUD (`GET`, `POST`, `PUT`, `DELETE`) + conversation linking (`PATCH`). Supports two payload formats: raw steps (assembled server-side) and pre-built graphs (passthrough from Retina editor). MinIO file extraction for base64 data URLs in nodes/results.
-- **UI**: Full visual editor in Retina — `WorkflowCanvas`, `WorkflowNode`, `WorkflowInspector`, `WorkflowSidebar`, `WorkflowHeaderStatsComponent`. Separate pages for list, detail, and editor views.
+- `workflows.js` route: Full CRUD (`GET`, `POST`, `PUT`, `DELETE`) + conversation linking (`PATCH`). Supports two payload formats: raw steps (assembled server-side) and pre-built graphs (passthrough from Prism Client editor). MinIO file extraction for base64 data URLs in nodes/results.
+- **UI**: Full visual editor in Prism Client — `WorkflowCanvas`, `WorkflowNode`, `WorkflowInspector`, `WorkflowSidebar`, `WorkflowHeaderStatsComponent`. Separate pages for list, detail, and editor views.
 - **Cost tracking**: Derived from linked conversation `totalCost` values
 
-**Files**: `prism/src/services/WorkflowAssembler.js`, `prism/src/routes/workflows.js`, `retina/src/components/Workflow*.js`
+**Files**: `prism/src/services/WorkflowAssembler.js`, `prism/src/routes/workflows.js`, `prism-client/src/components/Workflow*.js`
 
 ---
 
@@ -501,9 +501,9 @@ A **rule-based** permission system for tool execution, replacing the need for ex
 | **Tier 2: Configurable**  | Write                   | `write_file`, `str_replace_file`, `patch_file`, `move_file`, `delete_file`, `browser_action`                                                                                                                                                      | Auto-approve when user enables "Auto Mode" toggle; otherwise prompt |
 | **Tier 3: Always Prompt** | Destructive / Arbitrary | `execute_shell`, `execute_python`, `execute_javascript`, `run_command`                                                                                                                                                                            | Always require explicit user approval                               |
 
-**Implementation**: ✅ Integrated via the `beforeToolCall` hook in `AgentHooks`. Default tier assignments in `AutoApprovalEngine.js`. Unknown tools default to Tier 2. `ApprovalCardComponent` renders approval UI in Retina. "Approve All" option (`approveAll`) promotes all remaining tools to auto-approve for the rest of the session. 🔲 Per-tool tier overrides in Retina settings UI not yet built (constructor accepts `tierOverrides` but no UI exposes it).
+**Implementation**: ✅ Integrated via the `beforeToolCall` hook in `AgentHooks`. Default tier assignments in `AutoApprovalEngine.js`. Unknown tools default to Tier 2. `ApprovalCardComponent` renders approval UI in Prism Client. "Approve All" option (`approveAll`) promotes all remaining tools to auto-approve for the rest of the session. 🔲 Per-tool tier overrides in Prism Client settings UI not yet built (constructor accepts `tierOverrides` but no UI exposes it).
 
-**Escape hatch**: ✅ `fullAuto` mode (via `options.autoApprove`) promotes all tools to Tier 1. 🔲 Retina confirmation dialog for activating Full Auto not yet implemented.
+**Escape hatch**: ✅ `fullAuto` mode (via `options.autoApprove`) promotes all tools to Tier 1. 🔲 Prism Client confirmation dialog for activating Full Auto not yet implemented.
 
 ---
 
@@ -523,7 +523,7 @@ Planning mode adds a pre-loop state: `PLANNING → PLAN_APPROVAL → EXECUTING`.
 
 ### ✅ Raw Token Integrity
 
-Prism streams raw chunks (`emit({ type: "chunk", content })`) without transformation. All rendering (markdown, syntax highlighting, ANSI colors) happens client-side in Retina. This separation must be maintained — Prism should never mutate token content. The `/agent` SSE endpoint strips heavy base64 image data when `minioRef` is available, sending lightweight references instead.
+Prism streams raw chunks (`emit({ type: "chunk", content })`) without transformation. All rendering (markdown, syntax highlighting, ANSI colors) happens client-side in Prism Client. This separation must be maintained — Prism should never mutate token content. The `/agent` SSE endpoint strips heavy base64 image data when `minioRef` is available, sending lightweight references instead.
 
 ### ✅ Memory as a First-Class Citizen
 
@@ -539,7 +539,7 @@ Every agentic iteration is individually logged via `RequestLogger.logChatGenerat
 
 ---
 
-## Strategic Roadmap for Prism & Retina
+## Strategic Roadmap for Prism & Prism Client
 
 ### Phase 1: Foundation & Planning ✅ COMPLETE
 
@@ -560,7 +560,7 @@ Every agentic iteration is individually logged via `RequestLogger.logChatGenerat
 
 ### Phase 3: Multi-Agent & Autonomy ✅ COMPLETE
 
-1. ✅ **Coordinator Mode** — Full implementation: `CoordinatorService`, `CoordinatorPrompt`, worker execution engine, task notification pipeline, instance pooling, git worktree isolation, Retina UI
+1. ✅ **Coordinator Mode** — Full implementation: `CoordinatorService`, `CoordinatorPrompt`, worker execution engine, task notification pipeline, instance pooling, git worktree isolation, Prism Client UI
 2. ✅ **Mutation Queue** — `MutationQueue.js`: per-path FIFO mutex singleton for concurrent write safety
 3. ✅ **Memory Consolidation** — `MemoryConsolidationService`: scheduled 6h loop, audit trail, cost guard, real-time broadcast, UI history panel
 4. ✅ **Browser Automation** — `AgenticBrowserService`: Playwright integration with `browser_action` tool, DOM inspection, screenshot persistence
@@ -576,9 +576,9 @@ Every agentic iteration is individually logged via `RequestLogger.logChatGenerat
 7. ✅ **Visual Workflow System** — `WorkflowAssembler` + `workflows.js`: node-based visual graph engine
 8. ✅ **Task & State Management** — `AgenticTaskService`: MongoDB-backed persistent task list with 4 tools
 9. 🔲 **Slash Commands** — Parameterized prompt templates with `$1`, `$@` argument substitution
-10. 🔲 **Per-Tool Tier Overrides UI** — Retina settings panel to customize Auto-Approval tiers per tool
+10. 🔲 **Per-Tool Tier Overrides UI** — Prism Client settings panel to customize Auto-Approval tiers per tool
 11. 🔲 **Coordinator Conflict Resolution** — Interactive diff merge UI for worktree conflicts
-12. 🔲 **Full Auto Confirmation Dialog** — Retina modal confirming the user wants to activate `autoApprove` mode
+12. 🔲 **Full Auto Confirmation Dialog** — Prism Client modal confirming the user wants to activate `autoApprove` mode
 13. 🔲 **Background Execution Monitoring** — `capture_terminal` tool for inspecting daemon process output
 
 ### Phase 5: Process Reliability & Lifecycle (from Claude Code Analysis)
@@ -600,10 +600,10 @@ Deep comparative analysis against [razakiau/claude-code](https://github.com/raza
 
 ### 7.1 Architecture Overview
 
-| Aspect        | Claude Code                                                                                                               | Prism/Retina                                                    |
+| Aspect        | Claude Code                                                                                                               | Prism/Prism Client                                                    |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
 | **Runtime**   | Bun (single binary, TypeScript-native)                                                                                    | Node.js + Express + MongoDB                                     |
-| **UI**        | React Ink (terminal TUI via `src/screens/`)                                                                               | React web UI (Retina, Next.js)                                  |
+| **UI**        | React Ink (terminal TUI via `src/screens/`)                                                                               | React web UI (Prism Client, Next.js)                                  |
 | **Transport** | CLI REPL with background UDS daemon                                                                                       | HTTP REST + WebSocket + SSE                                     |
 | **State**     | File-based (JSONL transcripts, `~/.claude/`)                                                                              | MongoDB collections + MinIO                                     |
 | **Memory**    | `src/memdir/` — file-based with `MEMORY.md` index, Sonnet side-query relevance selection, forked-agent extraction (prompt cache sharing), `autoDream` consolidation, 4-type taxonomy (`user`/`feedback`/`project`/`reference`), team memory scoping | 5-store cognitive architecture — MongoDB + embeddings, Ebbinghaus decay, `WorkingMemoryService` central executive, `MemoryExtractor` + `MemoryConsolidationService` |
@@ -916,7 +916,7 @@ Claude Code's `src/utils/` is massive (~100+ files). Notable subdirectories and 
 | `mcp/`                              | MCP client utilities                    | `MCPClientService`                   | ✅ Equivalent         |
 | `memory/`                           | Memory helpers                          | CC-style single `memories` store     | ✅ Equivalent (see 7.7)  |
 | `model/`                            | Model configuration/selection           | `config.js` model definitions        | ✅ Equivalent         |
-| `settings/`                         | User settings management                | Retina settings + Prism config       | ✅ Equivalent         |
+| `settings/`                         | User settings management                | Prism Client settings + Prism config       | ✅ Equivalent         |
 | `computerUse/`                      | Computer use (screen interaction)       | `AgenticBrowserService`              | ✅ Equivalent         |
 | `todo/`                             | TODO/task list utilities                | `AgenticTaskService`                 | ✅ Equivalent         |
 | `ultraplan/`                        | Planning mode utilities                 | `PlanningModeService`                | ✅ Equivalent         |
@@ -1014,7 +1014,7 @@ Cleanup targets:
 **Possible future hardening** (if needed):
 
 - Command allowlist/denylist patterns in `AutoApprovalEngine` (e.g. block `rm -rf /`, `sudo`, `curl | sh`)
-- Per-session command audit panel in Retina
+- Per-session command audit panel in Prism Client
 - Docker/container-based execution for untrusted tool calls
 
 ### 🔲 Session Resume & Interrupted Turn Recovery
@@ -1126,7 +1126,7 @@ Features studied from Claude Code's architecture that we explicitly chose NOT to
 
 > _Claude Code_: `src/utils/suggestions/` (context-aware next-action suggestions), `src/utils/deepLink/` (URI scheme handling), `src/utils/claudeInChrome/` (browser extension integration), `src/utils/nativeInstaller/` (native binary installer).
 
-**Why not**: These are CLI-specific UX patterns. Retina's web UI has its own interaction paradigms — suggestions would be implemented as UI autocomplete (not terminal inline hints), deep links would be URL routes (not URI schemes), and browser integration is native to a web app. These patterns don't translate to our architecture.
+**Why not**: These are CLI-specific UX patterns. Prism Client's web UI has its own interaction paradigms — suggestions would be implemented as UI autocomplete (not terminal inline hints), deep links would be URL routes (not URI schemes), and browser integration is native to a web app. These patterns don't translate to our architecture.
 
 ### ❌ NPM Cache / Version Cleanup Housekeeping
 

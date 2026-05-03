@@ -356,7 +356,7 @@ setupWebSocket(wss);
   server.listen(PORT, () => {
     logger.success(`Prism the AI Gateway is running on port ${PORT}`);
     logger.info("Available providers:", listProviders().join(", "));
-    // Modality colors matching Retina's MODALITY_COLORS
+    // Modality colors matching Prism Client's MODALITY_COLORS
     const MODALITY_COLORS = {
       text: [99, 102, 241], // #6366f1 — indigo
       image: [16, 185, 129], // #10b981 — emerald

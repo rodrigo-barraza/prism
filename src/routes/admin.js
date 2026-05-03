@@ -139,7 +139,7 @@ router.get("/requests/:id/associations", async (req, res, next) => {
         name: w.name || "Untitled Workflow",
         nodeCount: w.nodeCount || 0,
         edgeCount: w.edgeCount || 0,
-        source: w.source || "retina",
+        source: w.source || "prism-client",
       }));
 
       // Derive traces from requests — traces are no longer a collection

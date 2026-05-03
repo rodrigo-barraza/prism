@@ -412,7 +412,7 @@ export default class ToolOrchestratorService {
     return [...cachedAISchemas, ...InternalToolRegistry.getSchemas(), ...COORDINATOR_TOOL_SCHEMAS];
   }
 
-  /** Client-facing schemas (with domain/dataSource/labels, no endpoint) — for Retina UI */
+  /** Client-facing schemas (with domain/dataSource/labels, no endpoint) — for Prism Client UI */
   static getClientToolSchemas() {
     // Coordinator tools are Prism-local — add domain metadata for UI grouping
     const coordinatorClient = COORDINATOR_TOOL_SCHEMAS.map((t) => ({

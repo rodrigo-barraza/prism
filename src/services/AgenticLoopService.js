@@ -1305,7 +1305,7 @@ export default class AgenticLoopService {
           generationSec: overallFirstTokenTime && overallGenerationEnd ? (overallGenerationEnd - overallFirstTokenTime) / 1000 : null,
           totalSec: (now - requestStart) / 1000,
           rateLimits: lastRateLimits,
-          // Display segment metadata for Retina rendering
+          // Display segment metadata for Prism Client rendering
           contentSegments: cleanSegments,
           textFragments: cleanTextFragments,
           thinkingFragments: cleanThinkingFragments,

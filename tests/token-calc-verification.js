@@ -14,12 +14,12 @@
 // ============================================================
 
 const PRISM_SERVICE_URL = "http://localhost:7777";
-const PROJECT = "retina";
+const PROJECT = "retina"; // matches prism-client's PROJECT_NAME (kept for MongoDB compat)
 const PROVIDER = "lm-studio";
 const MODEL = "qwen3.6-35b-a3b";
 
 // ── Import the functions we're testing ────────────────────────
-// Mirror of retina/src/utils/utilities.js logic
+// Mirror of prism-client/src/utils/utilities.js logic
 
 function getTotalInputTokens(usage) {
   if (!usage) return 0;
