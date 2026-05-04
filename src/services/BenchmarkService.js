@@ -1,9 +1,9 @@
+import { sleep, roundMs } from "@rodrigo-barraza/utilities";
 // ============================================================
 // BenchmarkService — Custom LLM Accuracy Benchmarking
 // ============================================================
 // Orchestrates benchmark test execution against multiple models,
 // evaluates responses against expected values, and persists results.
-
 import crypto from "crypto";
 import { handleConversation, handleAgent } from "../routes/chat.js";
 import {
@@ -16,28 +16,21 @@ import { isInstance } from "../providers/instance-registry.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
-import { sleep, roundMs } from "../utils/utilities.js";
+import {  } from "../utils/utilities.js";
 import { COLLECTIONS } from "../constants.js";
-
-
 const BENCHMARKS_COL = COLLECTIONS.BENCHMARKS;
 const RUNS_COL = COLLECTIONS.BENCHMARK_RUNS;
-
 // In-memory counter: how many benchmark model calls are actively generating
 let activeGenerationCount = 0;
-
-
 // ============================================================
 // Match Modes — evaluate model response against expected value
 // ============================================================
-
 const MATCH_MODES = {
   CONTAINS: "contains",
   EXACT: "exact",
   STARTS_WITH: "startsWith",
   REGEX: "regex",
 };
-
 /**
  * Evaluate whether a model response matches the expected value.
  * @param {string} response   The raw model output
@@ -47,16 +40,12 @@ const MATCH_MODES = {
  */
 function evaluate(response, expected, matchMode = MATCH_MODES.CONTAINS) {
   if (!response || !expected) return false;
-
   const norm = (s) => s.trim().toLowerCase();
-
   switch (matchMode) {
     case MATCH_MODES.EXACT:
       return norm(response) === norm(expected);
-
     case MATCH_MODES.STARTS_WITH:
       return norm(response).startsWith(norm(expected));
-
     case MATCH_MODES.REGEX: {
       try {
         const re = new RegExp(expected, "i");
@@ -66,13 +55,11 @@ function evaluate(response, expected, matchMode = MATCH_MODES.CONTAINS) {
         return false;
       }
     }
-
     case MATCH_MODES.CONTAINS:
     default:
       return norm(response).includes(norm(expected));
   }
 }
-
 /**
  * Evaluate a response against multiple assertions using AND/OR logic.
  *
@@ -87,26 +74,21 @@ function evaluateAssertions(response, benchmark) {
   if (!assertions || assertions.length === 0) {
     return false;
   }
-
   const operator = benchmark.assertionOperator || "AND";
-
   if (operator === "OR") {
     // Disjunction: ANY assertion must pass
     return assertions.some((a) =>
       evaluate(response, a.expectedValue, a.matchMode || MATCH_MODES.CONTAINS),
     );
   }
-
   // Conjunction (AND): ALL assertions must pass
   return assertions.every((a) =>
     evaluate(response, a.expectedValue, a.matchMode || MATCH_MODES.CONTAINS),
   );
 }
-
 // ============================================================
 // Agent Assertion Evaluation — behavioral assertions
 // ============================================================
-
 /**
  * Comparison operators for numeric agent assertions.
  */
@@ -117,7 +99,6 @@ const COMPARATORS = {
   lt:  (a, b) => a < b,
   eq:  (a, b) => a === b,
 };
-
 /**
  * Evaluate a single agent assertion against execution result data.
  *
@@ -127,11 +108,9 @@ const COMPARATORS = {
  */
 function evaluateSingleAgentAssertion(assertion, executionData) {
   const { type, operator, operand } = assertion;
-
   switch (type) {
     case "replied":
       return !!executionData.response && executionData.response.trim().length > 0;
-
     case "used_tool_calls": {
       const count = executionData.toolCalls?.length || 0;
       const target = parseInt(operand, 10);
@@ -139,10 +118,8 @@ function evaluateSingleAgentAssertion(assertion, executionData) {
       const compareFn = COMPARATORS[operator || "gte"];
       return compareFn ? compareFn(count, target) : count >= target;
     }
-
     case "thought":
       return !!executionData.thinking && executionData.thinking.trim().length > 0;
-
     case "max_turns": {
       const turns = executionData.turnCount || 1;
       const limit = parseInt(operand, 10);
@@ -150,13 +127,11 @@ function evaluateSingleAgentAssertion(assertion, executionData) {
       const compareFn = COMPARATORS[operator || "lte"];
       return compareFn ? compareFn(turns, limit) : turns <= limit;
     }
-
     default:
       logger.warn(`[benchmark] Unknown agent assertion type: ${type}`);
       return false;
   }
 }
-
 /**
  * Evaluate all agent assertions against execution result data.
  *
@@ -169,20 +144,15 @@ function evaluateAgentAssertions(benchmark, executionData) {
   if (!assertions || assertions.length === 0) {
     return true; // No agent assertions = pass by default
   }
-
   const operator = benchmark.agentAssertionOperator || "AND";
-
   if (operator === "OR") {
     return assertions.some((a) => evaluateSingleAgentAssertion(a, executionData));
   }
-
   return assertions.every((a) => evaluateSingleAgentAssertion(a, executionData));
 }
-
 // ============================================================
 // Model Discovery — list available conversation models
 // ============================================================
-
 /**
  * Get all listed conversation-type models grouped by provider.
  * Returns flat array of { provider, model, label }.
@@ -196,7 +166,6 @@ function getConversationModels() {
     if (!m.outputTypes?.includes("text")) continue;
     // Skip image API models (generate images, not text completions)
     if (m.imageAPI) continue;
-
     results.push({
       provider: m.provider,
       model: m.name,
@@ -205,7 +174,6 @@ function getConversationModels() {
   }
   return results;
 }
-
 /**
  * Filter a model list to only those whose providers are actually
  * reachable (have API keys configured / servers running).
@@ -226,14 +194,9 @@ function filterAvailableModels(models) {
     }
   });
 }
-
-
-
-
 // ============================================================
 // Run a single model against a benchmark prompt
 // ============================================================
-
 async function runSingleModel(benchmark, model, project, username, { signal, onEvent } = {}) {
   // Config flags carried on every result for stats differentiation
   const configFlags = {
@@ -260,22 +223,16 @@ async function runSingleModel(benchmark, model, project, username, { signal, onE
       completedAt: new Date().toISOString(),
     };
   }
-
   const start = performance.now();
-
   const messages = [];
-
   // Optional system prompt
   if (benchmark.systemPrompt) {
     messages.push({ role: "system", content: benchmark.systemPrompt });
   }
-
   messages.push({ role: "user", content: benchmark.prompt });
-
   logger.info(
     `[benchmark] ▶ Running ${model.provider}/${model.model}`,
   );
-
   try {
     const events = [];
     const handler = model.agent ? handleAgent : handleConversation;
@@ -330,15 +287,12 @@ async function runSingleModel(benchmark, model, project, username, { signal, onE
       },
       { signal },
     );
-
     const latency = (performance.now() - start) / 1000;
-
     // Log all event types received
     const eventTypes = events.map((e) => e.type);
     logger.info(
       `[benchmark] ◀ ${model.model} finished in ${latency.toFixed(2)}s — events: [${eventTypes.join(", ")}]`,
     );
-
     // Check for errors
     const errorEvent = events.find((e) => e.type === "error");
     if (errorEvent) {
@@ -361,28 +315,23 @@ async function runSingleModel(benchmark, model, project, username, { signal, onE
         completedAt: new Date().toISOString(),
       };
     }
-
     // Extract text response
     const text = events
       .filter((e) => e.type === "chunk")
       .map((e) => e.content)
       .join("");
-
     if (!text) {
       logger.warn(
         `[benchmark]   ⚠ ${model.model} produced NO text — chunk count: ${events.filter((e) => e.type === "chunk").length}, all events: ${JSON.stringify(eventTypes)}`,
       );
     }
-
     const doneEvent = events.find((e) => e.type === "done") || {};
     const matchMode = benchmark.matchMode || MATCH_MODES.CONTAINS;
-
     // Extract thinking content (emitted as type: "thinking")
     const thinkingText = events
       .filter((e) => e.type === "thinking")
       .map((e) => e.content)
       .join("");
-
     // Extract tool calls from both event paths:
     // - "toolCall" with status "done" — native MCP path (e.g. LM Studio)
     // - "tool_execution" with status "done" — standard agentic path (cloud providers)
@@ -394,15 +343,12 @@ async function runSingleModel(benchmark, model, project, username, { signal, onE
       .map((e) => ({ id: e.tool?.id, name: e.tool?.name, args: e.tool?.args, result: e.tool?.result, status: e.status }));
     const toolCalls = [...nativeToolCalls, ...agenticToolCalls];
     const toolCallsResult = toolCalls.length > 0 ? toolCalls : null;
-
     // Count agentic loop turns (each chunk of tool calls + response = 1 turn)
     // A turn is roughly: user→model→(tools)→model. Count "done" events as turn markers.
     const turnCount = events.filter((e) => e.type === "done").length || 1;
-
     // ── Mode-aware pass/fail evaluation ──────────────────────
     const mode = benchmark.benchmarkMode || "model";
     let passed;
-
     if (mode === "agent") {
       // Agent mode: only behavioral assertions
       passed = evaluateAgentAssertions(benchmark, {
@@ -419,7 +365,6 @@ async function runSingleModel(benchmark, model, project, username, { signal, onE
       // Model mode (default): text assertions only
       passed = evaluateAssertions(text, benchmark);
     }
-
     return {
       provider: model.provider,
       model: model.model,
@@ -459,23 +404,17 @@ async function runSingleModel(benchmark, model, project, username, { signal, onE
     };
   }
 }
-
 // ============================================================
 // BenchmarkService — public API
 // ============================================================
-
 const BenchmarkService = {
   MATCH_MODES,
-
   evaluate,
-
   getConversationModels,
-
   /** Number of benchmark model calls currently in-flight. */
   get activeGenerationCount() {
     return activeGenerationCount;
   },
-
   /**
    * Run a benchmark test against the specified models (or all available).
    * @param {Object}   benchmark   The benchmark definition document
@@ -509,32 +448,25 @@ const BenchmarkService = {
     } else {
       models = filterAvailableModels(getConversationModels());
     }
-
     if (models.length === 0) {
       throw new Error("No models available for benchmarking");
     }
-
     // Notify caller of total model count (used for live reconnection state)
     if (onRunStart) {
       try { onRunStart({ totalModels: models.length }); } catch { /* noop */ }
     }
-
     const runId = crypto.randomUUID();
     const startedAt = new Date().toISOString();
-
     logger.info(
       `[benchmark] Starting run ${runId} — "${benchmark.name}" against ${models.length} model(s)`,
     );
-
     // ── Instance-aware concurrent execution ─────────────────────
     // Cloud providers: all models under the same provider run sequentially
     // within a bucket, but different providers run concurrently.
     // Local providers: models are bucketed per instance (e.g. lm-studio,
     // lm-studio-2), and each instance runs up to its concurrency limit.
     // Two instances means two concurrent local inference streams.
-
     const INTRA_PROVIDER_DELAY_MS = 100;
-
     // Group models by provider; local providers use their instance ID as key
     const buckets = new Map();
     for (const m of models) {
@@ -542,11 +474,9 @@ const BenchmarkService = {
       if (!buckets.has(key)) buckets.set(key, []);
       buckets.get(key).push(m);
     }
-
     logger.info(
       `[benchmark] Executing across ${buckets.size} provider bucket(s): ${[...buckets.keys()].join(", ")}`,
     );
-
     // Each bucket runs its models sequentially; all buckets run concurrently.
     // The process-level GPU mutex (LocalModelQueue) still serializes at the
     // instance level, so concurrent benchmark runs and chat requests are safe.
@@ -566,13 +496,11 @@ const BenchmarkService = {
             try { onModelStart({ ...model, isLocal: isInstance(model.provider) }); } catch { /* noop */ }
           }
           activeGenerationCount++;
-
           // Wrap onEvent to tag each event with the source model (enables
           // correct attribution when multiple provider buckets stream concurrently).
           const modelOnEvent = onEvent
             ? (event) => onEvent({ ...event, _sourceModel: { provider: model.provider, model: model.model } })
             : undefined;
-
           let result;
           try {
             result = await runSingleModel(benchmark, model, project, username, { signal, onEvent: modelOnEvent });
@@ -596,15 +524,12 @@ const BenchmarkService = {
         return bucketResults;
       },
     );
-
     // Listen for abort signal to propagate to all buckets
     if (signal) {
       signal.addEventListener("abort", () => { aborted = true; }, { once: true });
     }
-
     const bucketOutputs = await Promise.all(bucketPromises);
     const results = bucketOutputs.flat();
-
     const completedAt = new Date().toISOString();
     const wasAborted = signal?.aborted || aborted;
     const passed = results.filter((r) => r.passed).length;
@@ -614,7 +539,6 @@ const BenchmarkService = {
       (sum, r) => sum + (r.estimatedCost || 0),
       0,
     );
-
     const run = {
       id: runId,
       benchmarkId: benchmark.id,
@@ -631,7 +555,6 @@ const BenchmarkService = {
       startedAt,
       completedAt,
     };
-
     // Persist run (even partial / aborted runs)
     if (results.length > 0) {
       const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -639,21 +562,16 @@ const BenchmarkService = {
         await db.collection(RUNS_COL).insertOne(run);
       }
     }
-
     logger.success(
       `[benchmark] Run ${runId} ${wasAborted ? "ABORTED" : "complete"} — ${passed}/${results.length} passed` +
         (errored > 0 ? `, ${errored} error(s)` : ""),
     );
-
     return run;
   },
-
   // ── CRUD Helpers ────────────────────────────────────────────
-
   async create(data, project, username) {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) throw new Error("Database not available");
-
     const now = new Date().toISOString();
     const doc = {
       id: crypto.randomUUID(),
@@ -675,64 +593,49 @@ const BenchmarkService = {
       createdAt: now,
       updatedAt: now,
     };
-
     await db.collection(BENCHMARKS_COL).insertOne(doc);
     return doc;
   },
-
   async list(project) {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) throw new Error("Database not available");
-
     return db
       .collection(BENCHMARKS_COL)
       .find({ project })
       .sort({ updatedAt: -1 })
       .toArray();
   },
-
   async getById(id, project) {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) throw new Error("Database not available");
-
     return db.collection(BENCHMARKS_COL).findOne({ id, project });
   },
-
-
   async remove(id, project) {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) throw new Error("Database not available");
-
     await db.collection(BENCHMARKS_COL).deleteOne({ id, project });
     await db.collection(RUNS_COL).deleteMany({ benchmarkId: id, project });
   },
-
   async getRuns(benchmarkId, project) {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) throw new Error("Database not available");
-
     return db
       .collection(RUNS_COL)
       .find({ benchmarkId, project })
       .sort({ startedAt: -1 })
       .toArray();
   },
-
   async getRunById(runId, project) {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) throw new Error("Database not available");
-
     return db.collection(RUNS_COL).findOne({ id: runId, project });
   },
-
   async getLatestRun(benchmarkId, project) {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) throw new Error("Database not available");
-
     return db
       .collection(RUNS_COL)
       .findOne({ benchmarkId, project }, { sort: { startedAt: -1 } });
   },
 };
-
 export default BenchmarkService;

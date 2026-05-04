@@ -1,15 +1,14 @@
+import { roundMs } from "@rodrigo-barraza/utilities";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 import { getTotalInputTokens, estimateTokens, calculateTextCost } from "../utils/CostCalculator.js";
 import { computeModalities } from "./ConversationService.js";
-import { roundMs } from "../utils/utilities.js";
+import {  } from "../utils/utilities.js";
 import { COLLECTIONS } from "../constants.js";
 import { TYPES, getPricing } from "../config.js";
 import { calculateTokensPerSec } from "../utils/math.js";
-
 const COLLECTION = COLLECTIONS.REQUESTS;
-
 const API_TO_CANONICAL = {
   googleSearch: "Google Search",
   googleSearchRetrieval: "Google Search",
@@ -28,7 +27,6 @@ const API_TO_CANONICAL = {
   imageGeneration: "Image Generation",
   image_generation: "Image Generation",
 };
-
 function sanitizeMsg(m) {
   const sanitizeStr = (s) => (typeof s === "string" && s.startsWith("data:") ? `[base64 data]` : s);
   const sanitizeMedia = (val) => {
@@ -36,7 +34,6 @@ function sanitizeMsg(m) {
     if (typeof val === "string") return sanitizeStr(val);
     return val;
   };
-
   return {
     role: m.role,
     content: typeof m.content === "string" ? m.content : m.content,
@@ -46,7 +43,6 @@ function sanitizeMsg(m) {
     ...(m.pdf?.length ? { pdf: sanitizeMedia(m.pdf) } : {}),
   };
 }
-
 const RequestLogger = {
   /**
    * Log a text-to-text request to MongoDB (fire-and-forget).
@@ -98,7 +94,6 @@ const RequestLogger = {
         logger.error("RequestLogger: MongoDB client not available");
         return;
       }
-
       const doc = {
         requestId,
         timestamp: new Date().toISOString(),
@@ -141,13 +136,11 @@ const RequestLogger = {
         modalities,
         rateLimits,
       };
-
       await db.collection(COLLECTION).insertOne(doc);
     } catch (error) {
       logger.error("RequestLogger: failed to save request", error.message);
     }
   },
-
   /**
    * High-level utility to format and log a chat-like generation.
    * Centralizes the formatting of request payloads, telemetry, and tokens.
@@ -168,7 +161,6 @@ const RequestLogger = {
     parentAgentSessionId = null,
     success = true,
     errorMessage = null,
-    
     // Telemetry
     usage,
     estimatedCost = null,
@@ -176,11 +168,9 @@ const RequestLogger = {
     timeToGenerationSec = null,
     generationSec = null,
     totalSec = null,
-    
     // Inputs
     options = {},
     messages = [],
-    
     // Outputs
     text = null,
     thinking = null,
@@ -197,7 +187,6 @@ const RequestLogger = {
     const cacheReadInputTokens = usage?.cacheReadInputTokens || 0;
     const cacheCreationInputTokens = usage?.cacheCreationInputTokens || 0;
     const reasoningOutputTokens = usage?.reasoningOutputTokens || 0;
-
     // Build synthetic message array for computeModalities (same function used by conversations)
     const syntheticMessages = [
       ...messages,
@@ -211,7 +200,6 @@ const RequestLogger = {
       },
     ];
     const modalities = computeModalities(syntheticMessages);
-
     return this.log({
       requestId,
       endpoint,
@@ -311,7 +299,6 @@ const RequestLogger = {
         pricing,
       );
     }
-
     return this.log({
       requestId,
       endpoint: endpoint || null,
@@ -343,5 +330,4 @@ const RequestLogger = {
     });
   },
 };
-
 export default RequestLogger;

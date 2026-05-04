@@ -1,3 +1,4 @@
+import { formatCostTag, roundMs } from "@rodrigo-barraza/utilities";
 import express from "express";
 import crypto from "crypto";
 import { getProvider } from "../providers/index.js";
@@ -21,15 +22,13 @@ import FileService from "../services/FileService.js";
 import { createStreamState, dispatchChunk } from "../utils/StreamChunkDispatcher.js";
 import { calculateTokensPerSec } from "../utils/math.js";
 import { compressImageForSizeLimit, constrainImageDimensions } from "../utils/media.js";
-import { formatCostTag, roundMs } from "../utils/utilities.js";
+import {  } from "../utils/utilities.js";
 import SessionGenerationTracker from "../services/SessionGenerationTracker.js";
-
 import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
 import localModelQueue from "../services/LocalModelQueue.js";
 import LocalProviderGateway from "../services/LocalProviderGateway.js";
 import { getInstancesByType } from "../providers/instance-registry.js";
 import { resolveModelForInstances } from "../utils/ModelResolution.js";
-
 import {
   markGenerating,
   appendAndFinalize,
@@ -40,9 +39,7 @@ import {
 } from "../utils/SseUtilities.js";
 import { COLLECTIONS } from "../constants.js";
 import AgentPersonaRegistry from "../services/AgentPersonaRegistry.js";
-
 const router = express.Router();
-
 /**
  * Resolve the MongoDB collection for conversation persistence.
  * Agent projects go to agent_sessions; everything else to conversations.
@@ -53,11 +50,9 @@ function getCollectionOpts(project) {
   }
   return undefined;
 }
-
 // ============================================================
 // Image reference resolution — converts refs for providers & storage
 // ============================================================
-
 /**
  * Resolve image references in messages for both provider use and storage.
  *
@@ -73,17 +68,14 @@ function getCollectionOpts(project) {
 async function resolveImageRefs(messages, project, username) {
   // Deep copy for the provider — images will be data URLs
   const providerMessages = messages.map((m) => ({ ...m }));
-
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
-
     // ── Resolve media array fields: images, audio, video, pdf ──
     for (const field of ["images", "audio", "video", "pdf"]) {
       const arr = msg[field];
       if (arr && Array.isArray(arr) && arr.length > 0) {
         const providerArr = [];
         const storageArr = [];
-
         await Promise.all(
           arr.map(async (ref, j) => {
             const resolved = await resolveMediaRef(ref, project, username);
@@ -91,16 +83,13 @@ async function resolveImageRefs(messages, project, username) {
             storageArr[j] = resolved.storageRef;
           }),
         );
-
         providerMessages[i][field] = providerArr;
         messages[i][field] = storageArr;
       }
     }
   }
-
   return providerMessages;
 }
-
 /**
  * Compress an oversized image data URL in-place.
  * Parses the data URL, checks decoded size, runs through compressImageForSizeLimit,
@@ -111,12 +100,9 @@ async function resolveImageRefs(messages, project, username) {
 async function compressDataUrlIfOversized(dataUrl) {
   const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
   if (!match) return dataUrl;
-
   let mimeType = match[1];
   if (!mimeType.startsWith("image/")) return dataUrl;
-
   let base64Data = match[2];
-
   // Step 1: enforce pixel dimension limits (Anthropic rejects >8000px)
   try {
     const dimResult = await constrainImageDimensions(base64Data, mimeType);
@@ -130,20 +116,16 @@ async function compressDataUrlIfOversized(dataUrl) {
   } catch (err) {
     logger.warn(`[chat] Dimension constraint failed: ${err.message}`);
   }
-
   // Step 2: enforce byte-size limit
   const b64Len = base64Data.length; // Anthropic checks base64 STRING length
   const MAX = 5 * 1024 * 1024;
-
   if (b64Len <= MAX) {
     // Dimensions may have changed even if size is fine — rebuild URL
     return `data:${mimeType};base64,${base64Data}`;
   }
-
   logger.info(
     `[chat] Oversized image detected: ${(b64Len / 1024 / 1024).toFixed(2)} MB b64 (${mimeType}). Compressing...`,
   );
-
   try {
     const result = await compressImageForSizeLimit(base64Data, mimeType);
     const newUrl = `data:${result.mediaType};base64,${result.data}`;
@@ -157,7 +139,6 @@ async function compressDataUrlIfOversized(dataUrl) {
     return `data:${mimeType};base64,${base64Data}`;
   }
 }
-
 /**
  * Resolve a single media reference for both provider and storage use.
  * @returns {{ providerRef: string, storageRef: string }}
@@ -182,7 +163,6 @@ async function resolveMediaRef(ref, project, username) {
     }
     return { providerRef, storageRef };
   }
-
   // MinIO reference — download for provider, keep ref for storage
   if (FileService.isMinioRef(ref)) {
     try {
@@ -210,7 +190,6 @@ async function resolveMediaRef(ref, project, username) {
       return { providerRef: ref, storageRef: ref };
     }
   }
-
   // HTTP(S) URL — fetch for provider, keep URL for storage
   if (ref.startsWith("http://") || ref.startsWith("https://")) {
     try {
@@ -237,15 +216,12 @@ async function resolveMediaRef(ref, project, username) {
       return { providerRef: ref, storageRef: ref };
     }
   }
-
   // Unknown — pass through
   return { providerRef: ref, storageRef: ref };
 }
-
 // ============================================================
 // Shared setup — parameter parsing, validation, model resolution
 // ============================================================
-
 /**
  * Parse and validate incoming request parameters, resolve images,
  * model, and acquire GPU lock if needed.
@@ -317,7 +293,6 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
     ...extraParams
   } = params;
   let providerName = _providerName;
-
   // Build the internal options object that providers expect
   const options = {
     ...(tools && { tools }),
@@ -357,7 +332,6 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
     ...(agentContext && { agentContext }),
     ...(extraParams.systemPrompt && { systemPrompt: extraParams.systemPrompt }),
   };
-
   // When thinking is explicitly disabled, strip all thinking sub-params
   // so providers don't inadvertently enable thinking by detecting them.
   if (thinkingEnabled === false) {
@@ -365,13 +339,11 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
     delete options.thinkingLevel;
     delete options.thinkingBudget;
   }
-
   // Local models emit thinking tokens (<think> tags) by default. Default
   // thinkingEnabled ON only when the client didn't send a value (undefined).
   // When the client explicitly sends false (thinking toggle off), respect it
   // — models can use tools without thinking.
   LocalProviderGateway.applyLocalDefaults(providerName, options, { thinkingEnabled });
-
   // ── Validation ──────────────────────────────────────────────
   if (!providerName) {
     throw new ProviderError(
@@ -387,17 +359,14 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
       400,
     );
   }
-
   // ── Strip soft-deleted messages ──────────────────────────────
   const activeMessages = messages.filter((m) => !m.deleted);
-
   // ── Resolve image refs ─────────────────────────────────────
   const providerMessages = await resolveImageRefs(
     activeMessages,
     project,
     username,
   );
-
   // ── Multi-instance load balancing ─────────────────────────
   // When the caller sends a base provider type (e.g. "lm-studio") and
   // multiple instances are registered, verify the model is available on
@@ -405,16 +374,13 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
   // usable instance. Same model resolution logic as CoordinatorService.
   let resolvedModel =
     requestedModel || getDefaultModels(TYPES.TEXT, TYPES.TEXT)[providerName];
-
   if (localModelQueue.isLocal(providerName)) {
     let siblings = getInstancesByType(providerName);
-
     // ── Model resolution (always) ──────────────────────────────
     // Resolve model availability across instances with quant-level
     // fallback. Also handles @quant syntax (e.g. "qwen3-32b@q4_k_m")
     // by mapping it to the actual LM Studio model key.
     const { usable, modelOverrides } = await resolveModelForInstances(resolvedModel, siblings);
-
     if (usable.length > 0) {
       siblings = usable;
       // For single instance, apply model override directly
@@ -428,7 +394,6 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
     } else {
       logger.warn(`[chat] Model "${resolvedModel}" not available on any ${providerName} instance — falling back to first`);
     }
-
     // ── Multi-instance load balancing ──────────────────────────
     if (siblings.length > 1) {
       // Least-busy: pick the instance with the most available slots
@@ -456,15 +421,12 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
       }
     }
   }
-
   const provider = getProvider(providerName);
-
   // ── Resolve model ─────────────────────────────────────────
   // resolvedModel is set earlier (before load balancing) and may have
   // been updated to a quant variant by the model availability check.
   const modelDef = getModelByName(resolvedModel);
   const isImageAPIModel = modelDef?.imageAPI && provider.generateImage;
-
   // ── Local GPU mutex ──────────────────────────────────────
   let localRelease;
   if (localModelQueue.isLocal(providerName)) {
@@ -476,10 +438,8 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
       (q.pending > 0 ? `, ${q.pending} queued)` : ")"),
     );
   }
-
   // Derive userMessage from the last user message
   const userMessage = messages?.filter((m) => m.role === "user").pop() || null;
-
   return {
     provider,
     providerName,
@@ -513,11 +473,9 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
     localRelease,
   };
 }
-
 // ============================================================
 // handleConversation — Chat / Conversation persistence path
 // ============================================================
-
 /**
  * Handle a conversation request: text generation, image generation,
  * vision/captioning — with conversationId-based persistence.
@@ -532,14 +490,12 @@ export async function handleConversation(params, emit, { signal } = {}) {
     emit({ type: "error", message: error.message });
     return;
   }
-
   const {
     providerName, resolvedModel, requestedModel, options,
     incomingConversationId, incomingConversationMeta, incomingTraceId,
     skipConversation, project, username, clientIp,
     requestStart, requestId, localRelease,
   } = ctx;
-
   // ── Conversation identity ──────────────────────────────────
   let conversationId = skipConversation ? null : incomingConversationId;
   let conversationMeta = skipConversation ? null : incomingConversationMeta;
@@ -550,24 +506,20 @@ export async function handleConversation(params, emit, { signal } = {}) {
       (firstUserMsg?.content || "").slice(0, 100).trim() || "New Conversation";
     conversationMeta = conversationMeta || { title: titleSnippet };
   }
-
   const traceId = incomingTraceId || null;
   if (traceId && conversationMeta) {
     conversationMeta.traceId = traceId;
   } else if (traceId) {
     conversationMeta = { traceId };
   }
-
   // Merge conversation identity into ctx for sub-handlers
   const fullCtx = { ...ctx, conversationId, conversationMeta, traceId };
-
   try {
     try {
       if (ctx.isImageAPIModel) {
         await handleImageAPIModel(fullCtx);
         return;
       }
-
       if (!ctx.provider.generateTextStream && !ctx.provider.generateText) {
         throw new ProviderError(
           providerName,
@@ -575,15 +527,12 @@ export async function handleConversation(params, emit, { signal } = {}) {
           400,
         );
       }
-
       const useStreaming =
         ctx.provider.generateTextStream &&
         ctx.modelDef?.streaming !== false;
-
       if (useStreaming) {
         // Native MCP tool execution — provider handles tool calling internally
         const useNativeMcp = LocalProviderGateway.isNativeMCP(providerName) && !options.agenticLoopEnabled;
-
         if (useNativeMcp && options.functionCallingEnabled) {
           const builtInTools = ToolOrchestratorService.getToolSchemas();
           let tools = builtInTools;
@@ -602,7 +551,6 @@ export async function handleConversation(params, emit, { signal } = {}) {
         } else if (useNativeMcp) {
           logger.warn(`[chat] Native MCP SKIPPED (${providerName}): functionCallingEnabled=${options.functionCallingEnabled}, useNativeMcp=${useNativeMcp}`);
         }
-
         // Non-LM-Studio FC on /chat path
         if (!useNativeMcp && !options.agenticLoopEnabled && options.functionCallingEnabled) {
           const builtInTools = ToolOrchestratorService.getToolSchemas();
@@ -617,7 +565,6 @@ export async function handleConversation(params, emit, { signal } = {}) {
           options.tools = tools;
           logger.info(`[chat] FC tools injected: ${tools.length} tools enabled for ${providerName} ${resolvedModel}`);
         }
-
         await handleStreamingText(fullCtx);
       } else {
         await handleNonStreamingText(fullCtx);
@@ -651,11 +598,9 @@ export async function handleConversation(params, emit, { signal } = {}) {
     emit({ type: "error", message: error.message });
   }
 }
-
 // ============================================================
 // handleAgent — Agent session path (agentSessionId, no conversationId)
 // ============================================================
-
 /**
  * Handle an agent request: always dispatches to AgenticLoopService.
  * Persistence uses agentSessionId (not conversationId).
@@ -670,25 +615,21 @@ export async function handleAgent(params, emit, { signal } = {}) {
     emit({ type: "error", message: error.message });
     return;
   }
-
   const {
     providerName, resolvedModel, requestedModel, options,
     incomingConversationId, incomingAgentSessionId, incomingConversationMeta, incomingTraceId,
     project, username, clientIp, agent,
     requestStart, requestId, localRelease,
   } = ctx;
-
   // ── Agent session identity ─────────────────────────────────
   const agentSessionId = incomingAgentSessionId || incomingConversationId || crypto.randomUUID();
   const traceId = incomingTraceId || null;
   const conversationMeta = incomingConversationMeta || null;
-
   // ── Eager session stub ───────────────────────────────────────
   // Create the session document immediately via upsert so that
   // GET /agent-sessions/:id never 404s while the loop is running
   // (e.g. when the user switches away and back during generation).
   markGenerating(agentSessionId, project, username, true, getCollectionOpts(project));
-
   try {
     try {
       if (!ctx.provider.generateTextStream && !ctx.provider.generateText) {
@@ -698,7 +639,6 @@ export async function handleAgent(params, emit, { signal } = {}) {
           400,
         );
       }
-
       const { default: AgenticLoopService } = await import("../services/AgenticLoopService.js");
       await AgenticLoopService.runAgenticLoop({
         provider: ctx.provider,
@@ -727,7 +667,6 @@ export async function handleAgent(params, emit, { signal } = {}) {
         localRelease();
         logger.info(`[agent] 🔓 Released local GPU lock for ${resolvedModel}`);
       }
-
       // When the SSE connection is severed (user pressed stop), abort any
       // spawned workers that are still running under this coordinator session.
       if (signal?.aborted) {
@@ -762,12 +701,9 @@ export async function handleAgent(params, emit, { signal } = {}) {
     emit({ type: "error", message: error.message });
   }
 }
-
-
 // ============================================================
 // Dispatch: Image API models (e.g. GPT Image 1.5, OpenAI images)
 // ============================================================
-
 async function handleImageAPIModel(ctx) {
   const {
     provider,
@@ -787,12 +723,10 @@ async function handleImageAPIModel(ctx) {
     requestStart,
     emit,
   } = ctx;
-
   // Mark conversation as generating
   markGenerating(conversationId, project, username, true, getCollectionOpts(project));
   const lastUserMsg = messages.filter((m) => m.role === "user").pop();
   const prompt = lastUserMsg?.content || "";
-
   // Collect all images from the conversation
   const allImages = [];
   for (const msg of messages) {
@@ -800,7 +734,6 @@ async function handleImageAPIModel(ctx) {
       allImages.push(...msg.images);
     }
   }
-
   const result = await provider.generateImage(
     prompt,
     allImages,
@@ -808,7 +741,6 @@ async function handleImageAPIModel(ctx) {
     options?.systemPrompt,
   );
   const totalSec = (performance.now() - requestStart) / 1000;
-
   // Cost calculation
   const imgPricing =
     getPricing(TYPES.TEXT, TYPES.IMAGE)[resolvedModel] || modelDef?.pricing;
@@ -819,7 +751,6 @@ async function handleImageAPIModel(ctx) {
     allImages.length,
     outputImgTokens,
   );
-
   logger.request(
     project,
     username,
@@ -828,7 +759,6 @@ async function handleImageAPIModel(ctx) {
       `total: ${totalSec.toFixed(2)}s` +
       formatCostTag(estimatedCost),
   );
-
   // Upload generated image to MinIO
   let minioRef = null;
   if (result.imageData) {
@@ -848,11 +778,9 @@ async function handleImageAPIModel(ctx) {
       );
     }
   }
-
   // Estimate token counts for tracking
   const estimatedInputTokens =
     estimateTokens(prompt) + allImages.length * (modelDef?.imageTokensPerImage || 1120);
-
   RequestLogger.log({
     requestId,
     endpoint: "/chat",
@@ -872,7 +800,6 @@ async function handleImageAPIModel(ctx) {
     estimatedCost,
     totalTime: roundMs(totalSec),
   });
-
   // Emit events
   if (result.text) {
     emit({ type: "chunk", content: result.text });
@@ -891,10 +818,7 @@ async function handleImageAPIModel(ctx) {
     ...(traceId && { traceId }),
     ...(conversationId && { conversationId }),
   });
-
   // Link conversation to session
-
-
   // Auto-append to conversation
   if (conversationId) {
     const messagesToAppend = [];
@@ -909,7 +833,6 @@ async function handleImageAPIModel(ctx) {
         timestamp: userMessage.timestamp || new Date().toISOString(),
       });
     }
-
     const assistantImages = minioRef ? [minioRef] : [];
     messagesToAppend.push({
       role: "assistant",
@@ -921,23 +844,19 @@ async function handleImageAPIModel(ctx) {
       totalTime: roundMs(totalSec),
       estimatedCost,
     });
-
     const meta = conversationMeta
       ? {
           ...conversationMeta,
           settings: { provider: providerName, model: resolvedModel },
         }
       : undefined;
-
     appendAndFinalize(conversationId, project, username, messagesToAppend, meta, getCollectionOpts(project));
   }
 }
-
 // ============================================================
 // Shared: Post-generation finalization
 // ── cost, logging, payloads, WAV, done event, persistence ──
 // ============================================================
-
 export async function finalizeTextGeneration(
   ctx,
   {
@@ -982,14 +901,11 @@ export async function finalizeTextGeneration(
     emit,
     signal,
   } = ctx;
-
   // Agent sessions use agentSessionId as the persistence key
   const conversationId = rawConversationId ?? agentSessionId;
-
   // ── Cost calculation ──────────────────────────────────────────
   let estimatedCost = null;
   let tokensPerSec = null;
-
   if (usage) {
     const imageCount = images.length;
     if (imageCount > 0) {
@@ -1021,13 +937,11 @@ export async function finalizeTextGeneration(
       const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[resolvedModel];
       estimatedCost = calculateTextCost(usage, pricing);
     }
-
     tokensPerSec = calculateTokensPerSec(usage.outputTokens, generationSec, {
       providerReported: usage.tokensPerSec,
       fallbackSec: totalSec,
     });
   }
-
   // ── Console logging ───────────────────────────────────────────
   const inputTokens = getTotalInputTokens(usage);
   const outputTokens = usage?.outputTokens || 0;
@@ -1037,7 +951,6 @@ export async function finalizeTextGeneration(
     usage?.cacheReadInputTokens || usage?.cacheCreationInputTokens
       ? `, cache_read: ${usage.cacheReadInputTokens || 0}, cache_write: ${usage.cacheCreationInputTokens || 0}`
       : "";
-
   logger.request(
     project,
     username,
@@ -1050,7 +963,6 @@ export async function finalizeTextGeneration(
       `total: ${totalSec.toFixed(2)}s` +
       formatCostTag(estimatedCost),
   );
-
   // ── Build WAV from accumulated PCM audio chunks ───────────────
   let audioRef = null;
   if (audioChunks.length > 0) {
@@ -1059,7 +971,6 @@ export async function finalizeTextGeneration(
         Buffer.from(b64, "base64"),
       );
       const pcmData = Buffer.concat(pcmBuffers);
-
       const numChannels = 1;
       const bitsPerSample = 16;
       const byteRate = audioSampleRate * numChannels * (bitsPerSample / 8);
@@ -1078,7 +989,6 @@ export async function finalizeTextGeneration(
       wavHeader.writeUInt16LE(bitsPerSample, 34);
       wavHeader.write("data", 36);
       wavHeader.writeUInt32LE(pcmData.length, 40);
-
       const wavBuffer = Buffer.concat([wavHeader, pcmData]);
       const dataUrl = `data:audio/wav;base64,${wavBuffer.toString("base64")}`;
       const { ref } = await FileService.uploadFile(
@@ -1094,7 +1004,6 @@ export async function finalizeTextGeneration(
       );
     }
   }
-
   // ── Request logging with sanitized payloads ────────────────────
   // Placed after audio build so audioRef is available for modality detection.
   // Agentic requests are logged granularly per-iteration by AgenticLoopService,
@@ -1133,7 +1042,6 @@ export async function finalizeTextGeneration(
       rateLimits,
     });
   }
-
   // ── Emit done event ───────────────────────────────────────────
   if (!signal?.aborted) {
     emit({
@@ -1155,10 +1063,7 @@ export async function finalizeTextGeneration(
       ...(conversationId && { conversationId }),
     });
   }
-
   // ── Link conversation to trace ──────────────────────────────
-
-
   // ── Conversation persistence ──────────────────────────────────
   if (conversationId) {
     let messagesToAppend = [];
@@ -1236,27 +1141,22 @@ export async function finalizeTextGeneration(
         },
       });
     }
-
     const meta = conversationMeta
       ? {
           ...conversationMeta,
           settings: { provider: providerName, model: resolvedModel },
         }
       : undefined;
-
     // Merge parentAgentSessionId into meta for worker sub-agent sessions
     const finalMeta = parentAgentSessionId
       ? { ...(meta || {}), parentAgentSessionId }
       : meta;
-
     appendAndFinalize(conversationId, project, username, messagesToAppend, finalMeta, getCollectionOpts(project));
   }
 }
-
 // ============================================================
 // Dispatch: Streaming text/multimodal generation
 // ============================================================
-
 async function handleStreamingText(ctx) {
   const {
     provider,
@@ -1272,10 +1172,8 @@ async function handleStreamingText(ctx) {
     emit,
     signal,
   } = ctx;
-
   // Mark conversation as generating
   markGenerating(conversationId, project, username, true, getCollectionOpts(project));
-
   const stream =
     modelDef?.liveAPI && provider.generateTextStreamLive
       ? provider.generateTextStreamLive(messages, resolvedModel, {
@@ -1286,10 +1184,8 @@ async function handleStreamingText(ctx) {
           ...options,
           signal,
         });
-
   const ss = createStreamState();
   ss.requestStart = requestStart;
-
   for await (const chunk of stream) {
     // Client disconnected — abort the upstream provider stream
     if (signal?.aborted) {
@@ -1301,7 +1197,6 @@ async function handleStreamingText(ctx) {
     }
     await dispatchChunk(chunk, ss, { emit, project, username }, { logPrefix: "chat/stream" });
   }
-
   // ── FC tool execution loop ─────────────────────────────────
   // When functionCallingEnabled is set on /chat (not the agentic loop),
   // execute returned tool calls via ToolOrchestratorService and re-call
@@ -1309,7 +1204,6 @@ async function handleStreamingText(ctx) {
   // engine, no context manager, just direct execution.
   const MAX_FC_ITERATIONS = 10;
   let fcIteration = 0;
-
   while (
     options.functionCallingEnabled &&
     ss.toolCalls.length > 0 &&
@@ -1321,11 +1215,8 @@ async function handleStreamingText(ctx) {
     const pendingCalls = ss.toolCalls.filter(
       (tc) => !tc.result && tc.status !== "done" && tc.status !== "error",
     );
-
     if (pendingCalls.length === 0) break;
-
     logger.info(`[chat/FC] Iteration ${fcIteration}: executing ${pendingCalls.length} tool call(s)`);
-
     // Execute all pending tool calls
     for (const tc of pendingCalls) {
       emit({ type: "toolCall", id: tc.id, name: tc.name, args: tc.args, status: "calling" });
@@ -1340,7 +1231,6 @@ async function handleStreamingText(ctx) {
         emit({ type: "toolCall", id: tc.id, name: tc.name, args: tc.args, result: tc.result, status: "error" });
       }
     }
-
     // Build tool result messages for the provider
     const assistantToolMsg = {
       role: "assistant",
@@ -1353,7 +1243,6 @@ async function handleStreamingText(ctx) {
       ...(ss.thinking ? { thinking: ss.thinking } : {}),
       ...(ss.thinkingSignature ? { thinkingSignature: ss.thinkingSignature } : {}),
     };
-
     const toolResultMsgs = ss.toolCalls
       .filter((tc) => tc.result)
       .map((tc) => ({
@@ -1362,21 +1251,17 @@ async function handleStreamingText(ctx) {
         name: tc.name,
         content: typeof tc.result === "string" ? tc.result : JSON.stringify(tc.result),
       }));
-
     // Re-call provider with tool results appended
     const updatedMessages = [...messages, assistantToolMsg, ...toolResultMsgs];
-
     // Reset accumulators for the follow-up stream
     ss.text = "";
     ss.thinking = "";
     ss.thinkingSignature = "";
     ss.toolCalls.length = 0;
-
     const followUpStream = provider.generateTextStream(updatedMessages, resolvedModel, {
       ...options,
       signal,
     });
-
     // Use dispatchChunk with a custom usage merger for follow-up iteration
     const usageMerger = (followUpUsage) => {
       if (ss.usage) {
@@ -1385,7 +1270,6 @@ async function handleStreamingText(ctx) {
         ss.usage = followUpUsage;
       }
     };
-
     for await (const chunk of followUpStream) {
       if (signal?.aborted) {
         if (typeof followUpStream.return === "function") followUpStream.return();
@@ -1393,7 +1277,6 @@ async function handleStreamingText(ctx) {
       }
       await dispatchChunk(chunk, ss, { emit, project, username }, { onUsage: usageMerger, logPrefix: "chat/FC" });
     }
-
     // Emit intermediate usage update so the frontend has authoritative
     // per-iteration token counts instead of relying on chunk heuristics
     if (ss.usage) {
@@ -1402,11 +1285,9 @@ async function handleStreamingText(ctx) {
         usage: { ...ss.usage, requests: fcIteration + 1 },
       });
     }
-
     // Update messages ref for potential next iteration
     messages.push(assistantToolMsg, ...toolResultMsgs);
   }
-
   // Build normalized result for shared finalization
   const now = performance.now();
   await finalizeTextGeneration(ctx, {
@@ -1430,11 +1311,9 @@ async function handleStreamingText(ctx) {
     rateLimits: ss.rateLimits,
   });
 }
-
 // ============================================================
 // Dispatch: Non-streaming text generation (fallback)
 // ============================================================
-
 async function handleNonStreamingText(ctx) {
   const {
     provider,
@@ -1447,10 +1326,8 @@ async function handleNonStreamingText(ctx) {
     requestStart,
     emit,
   } = ctx;
-
   // Mark conversation as generating
   markGenerating(conversationId, project, username, true, getCollectionOpts(project));
-
   // Track this sub-request in SessionGenerationTracker if it belongs
   // to an active agent session (e.g., tools-api calling /chat?stream=false
   // for generate_image prompt-softening or describe_image).
@@ -1464,7 +1341,6 @@ async function handleNonStreamingText(ctx) {
       source: "tool-sub-request",
     });
   }
-
   const generationStart = performance.now();
   const genResult = await provider.generateText(
     messages,
@@ -1472,7 +1348,6 @@ async function handleNonStreamingText(ctx) {
     options,
   );
   const now = performance.now();
-
   // Complete sub-request tracking with actual token data
   if (subRequestId && ctx.agentSessionId) {
     const outTokens = genResult.usage?.outputTokens || 0;
@@ -1481,7 +1356,6 @@ async function handleNonStreamingText(ctx) {
     }
     SessionGenerationTracker.complete(subRequestId);
   }
-
   // Emit chunk/thinking/toolCall events before finalization
   if (genResult.text) {
     emit({ type: "chunk", content: genResult.text });
@@ -1500,7 +1374,6 @@ async function handleNonStreamingText(ctx) {
       });
     }
   }
-
   // Handle images from the generation result (e.g. Gemini image models)
   const images = [];
   if (genResult.images && genResult.images.length > 0) {
@@ -1535,7 +1408,6 @@ async function handleNonStreamingText(ctx) {
       });
     }
   }
-
   // Build normalized result for shared finalization
   await finalizeTextGeneration(ctx, {
     text: genResult.text || "",
@@ -1558,13 +1430,9 @@ async function handleNonStreamingText(ctx) {
     rateLimits: genResult.rateLimits || null,
   });
 }
-
-
-
 // ============================================================
 // REST endpoint — SSE streaming or JSON fallback
 // ============================================================
-
 /**
  * POST /chat
  *
@@ -1581,12 +1449,10 @@ router.post("/", async (req, res, next) => {
     username: req.username,
     clientIp: req.clientIp,
   };
-
   if (req.query.stream !== "false") {
     await handleSseRequest(req, res, params);
   } else {
     await handleJsonRequest(req, res, next, params);
   }
 });
-
 export default router;

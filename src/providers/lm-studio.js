@@ -1,3 +1,4 @@
+import { sleep } from "@rodrigo-barraza/utilities";
 // ─────────────────────────────────────────────────────────────
 // LM Studio provider — Fully native /api/v1/chat
 // Uses the native REST API for all streaming, with:
@@ -5,14 +6,12 @@
 //   - `integrations[]` for MCP-based function calling via tools-api
 // Non-streaming + captionImage still use OpenAI-compat.
 // ─────────────────────────────────────────────────────────────
-
 import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
 import { resolveArchParams } from "../utils/gguf-arch.js";
 import { TOOLS_SERVICE_URL } from "../../secrets.js";
 import { TYPES, getDefaultModels } from "../config.js";
-import { sleep } from "../utils/utilities.js";
-
+import {  } from "../utils/utilities.js";
 // Default MCP server URL for ephemeral tool integrations
 const DEFAULT_MCP_SERVER_URL = TOOLS_SERVICE_URL || "http://localhost:5590";
 import {
@@ -26,9 +25,6 @@ import {
   MEDIA_STRATEGIES,
 } from "../utils/openai-compat.js";
 import { COORDINATOR_ONLY_TOOLS } from "../services/CoordinatorPrompt.js";
-
-
-
 // ── Native /api/v1/chat SSE stream parser ────────────────────
 // The native endpoint emits named SSE events: reasoning.start/delta/end,
 // message.start/delta/end, content.start/delta/end, chat.end.
@@ -40,7 +36,6 @@ async function* parseNativeSSEStream(reader, options = {}) {
   let usage = null;
   // Accumulate tool call arguments for streaming tool events
   let currentToolCall = null;
-
   try {
     while (true) {
       if (options.signal?.aborted) {
@@ -49,20 +44,16 @@ async function* parseNativeSSEStream(reader, options = {}) {
       }
       const { done, value } = await reader.read();
       if (done) break;
-
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split("\n");
       buffer = lines.pop();
-
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed || trimmed.startsWith(":")) continue;
         if (!trimmed.startsWith("data: ")) continue;
-
         try {
           const json = JSON.parse(trimmed.slice(6));
           const type = json.type;
-
           // ── Chat lifecycle events ──
           if (type === "chat.start") {
             yield { type: "status", message: "Starting…", phase: "starting" };
@@ -178,7 +169,6 @@ async function* parseNativeSSEStream(reader, options = {}) {
         }
       }
     }
-
     if (usage) {
       yield { type: "usage", usage };
     } else {
@@ -188,7 +178,6 @@ async function* parseNativeSSEStream(reader, options = {}) {
     // reader released
   }
 }
-
 function safeParseJSON(str) {
   try {
     return JSON.parse(str);
@@ -196,7 +185,6 @@ function safeParseJSON(str) {
     return str;
   }
 }
-
 // Build the native /api/v1/chat input from OpenAI-style messages.
 // The native API only accepts `input` (current turn) + `system_prompt` — it has
 // no built-in multi-turn message array. We serialize prior conversation turns
@@ -206,14 +194,11 @@ function buildNativeInput(messages) {
   // Separate system, conversation history, and the last user message
   const nonSystemMessages = messages.filter((m) => m.role !== "system");
   if (nonSystemMessages.length === 0) return "";
-
   const lastUser = [...nonSystemMessages].reverse().find((m) => m.role === "user");
   if (!lastUser) return "";
-
   // Find the index of the last user message to separate history from current turn
   const lastUserIdx = nonSystemMessages.lastIndexOf(lastUser);
   const historyMessages = nonSystemMessages.slice(0, lastUserIdx);
-
   // Build conversation history prefix (prior turns only)
   let historyPrefix = "";
   if (historyMessages.length > 0) {
@@ -231,7 +216,6 @@ function buildNativeInput(messages) {
       historyPrefix = "[Conversation History]\n" + lines.join("\n") + "\n\n[Current Message]\n";
     }
   }
-
   // Check if the last user message has images (multi-part)
   if (Array.isArray(lastUser.content)) {
     const parts = [];
@@ -247,12 +231,10 @@ function buildNativeInput(messages) {
     }
     return parts;
   }
-
   // Simple text-only message → use string input (enables reasoning)
   const currentText = typeof lastUser.content === "string" ? lastUser.content : "";
   return historyPrefix ? historyPrefix + currentText : currentText;
 }
-
 /**
  * Factory: create an LM Studio provider instance targeting a specific baseUrl.
  * @param {string} baseUrl - The base URL for the LM Studio server
@@ -262,17 +244,14 @@ function buildNativeInput(messages) {
 export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
   const getBaseUrl = () => baseUrl;
   const MCP_SERVER_URL = DEFAULT_MCP_SERVER_URL;
-
   // ── Per-instance model load mutex (singleflight) ──────────
   // Prevents duplicate model loads when multiple concurrent requests
   // (e.g. worker agents) hit the same instance before the first load finishes.
   // Key: model name → Promise that resolves when the load completes.
   /** @type {Map<string, Promise<void>>} */
   const _loadInflight = new Map();
-
   return {
   name: instanceId,
-
   async generateText(
     messages,
     model = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["lm-studio"],
@@ -286,11 +265,9 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
     try {
       // Expand video attachments to image frames (ffmpeg) before message prep
       await expandVideoToFrames(messages);
-
       const prepared = prepareOpenAICompatMessages(messages, {
         mediaStrategy: MEDIA_STRATEGIES.IMAGES_ONLY,
       });
-
       const payload = {
         messages: prepared,
         model,
@@ -301,11 +278,9 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
         ...(options.repeatPenalty !== undefined && options.repeatPenalty !== 1 && { repeat_penalty: options.repeatPenalty }),
         stream: false,
       };
-
       // Function calling tools
       const tools = convertToolsToOpenAI(options.tools);
       if (tools) payload.tools = tools;
-
       const response = await fetchOpenAICompat(
         `${baseUrl}/v1/chat/completions`,
         payload,
@@ -313,7 +288,6 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
       const data = await response.json();
       const { text, thinking, usage, toolCalls } =
         processNonStreamingResponse(data);
-
       const result = { text, thinking, usage };
       if (toolCalls) result.toolCalls = toolCalls;
       return result;
@@ -322,9 +296,7 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
       throw new ProviderError("lm-studio", error.message, 500, error);
     }
   },
-
   // ── Streaming Text Generation (SSE) ──────────────────────
-
   async *generateTextStream(
     messages,
     model = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["lm-studio"],
@@ -348,7 +320,6 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
           const loadedCtx = modelEntry.loaded_instances[0]?.config?.context_length;
           if (loadedCtx) options._loadedContextLength = loadedCtx;
         }
-
         // If minContextLength is requested (e.g. agentic mode) and model is loaded
         // with insufficient context, force a reload with the required minimum.
         // BUT: skip reload if the model is already at its maximum context — reloading
@@ -361,11 +332,9 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
           options._loadedContextLength &&
           options._loadedContextLength < options.minContextLength &&
           !alreadyAtMax;
-
         if (alreadyAtMax && options.minContextLength && options._loadedContextLength < options.minContextLength) {
           logger.info(`[LM-Studio] Model ${model} already at max context (${options._loadedContextLength}/${modelMaxCtx}) — skipping reload (requested ${options.minContextLength})`);
         }
-
         if (needsReload) {
           const target = Math.min(options.minContextLength, modelEntry.max_context_length || options.minContextLength);
           logger.info(`[LM-Studio] Reloading ${model}: loaded ctx ${options._loadedContextLength} < required ${options.minContextLength}, target=${target}`);
@@ -376,7 +345,6 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
           }
           // Fall through to load below
         }
-
         if (!isLoaded || needsReload) {
           // ── Singleflight: coalesce concurrent loads of the same model ──
           // When multiple workers hit this instance simultaneously (e.g.
@@ -388,7 +356,6 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
           // awaits between the check and the set). This closes the race
           // window where concurrent workers could all pass the check
           // before any of them registers the inflight.
-
           if (_loadInflight.has(model) && !needsReload) {
             // ── Another caller is already loading this model — wait ──
             logger.info(`[LM-Studio:${instanceId}] Model "${model}" already loading (singleflight) — waiting…`);
@@ -399,7 +366,6 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
               // If the original load failed, we'll re-detect below
             }
             if (options.signal?.aborted) return;
-
             // Model should now be loaded — capture its context length
             const refreshed = await this.listModels();
             const entry = (refreshed.models || []).find((m) => m.key === model);
@@ -415,7 +381,6 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
               // so this worker becomes the new loader.
             }
           }
-
           // ── Synchronous gate: check + register with NO async gap ──
           // If no inflight exists, register one IMMEDIATELY (synchronous)
           // before doing any async work. This guarantees only one caller
@@ -425,9 +390,7 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
             const recheck = await this.listModels().then(({ models: ms }) =>
               (ms || []).find((m) => m.key === model),
             ).catch(() => null);
-
             const isNowLoaded = recheck?.loaded_instances?.length > 0;
-
             if (isNowLoaded && !needsReload) {
               // Model is loaded — capture context and skip to inference
               const ctx = recheck?.loaded_instances?.[0]?.config?.context_length;
@@ -443,7 +406,6 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
               });
               inflightPromise.catch(() => {}); // prevent unhandled rejection
               _loadInflight.set(model, inflightPromise);
-
               try {
                 // Unload any other loaded models first (single-model enforcement)
                 if (!needsReload) {
@@ -456,11 +418,9 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
                     }
                   }
                 }
-
                 if (options.signal?.aborted) return;
                 logger.info(`Auto-loading model ${model} for streaming`);
                 yield { type: "status", message: "Loading model… 0%", phase: "loading" };
-
                 // Build load options — enforce minContextLength if set
                 // Apply default hardware params for consistent auto-load behavior
                 const loadOpts = {
@@ -471,7 +431,6 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
                   loadOpts.context_length = Math.min(options.minContextLength, maxCtx);
                   logger.info(`[LM-Studio] Loading with context_length=${loadOpts.context_length} (min=${options.minContextLength}, max=${maxCtx})`);
                 }
-
                 // Start load (non-blocking) and poll for progress
                 let loadDone = false;
                 let loadError = null;
@@ -483,11 +442,9 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
                     loadDone = true;
                     if (err.name !== "AbortError") loadError = err;
                   });
-
                 const startTime = Date.now();
                 const EXPECTED_LOAD_MS = 15_000;
                 let lastPct = 0;
-
                 while (!loadDone) {
                   await sleep(500);
                   if (options.signal?.aborted) {
@@ -498,7 +455,6 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
                     return;
                   }
                   if (loadDone) break;
-
                   const elapsed = Date.now() - startTime;
                   const pct = Math.min(
                     95,
@@ -509,7 +465,6 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
                     yield { type: "status", message: `Loading model… ${pct}%`, phase: "loading" };
                   }
                 }
-
                 await loadPromise;
                 if (options.signal?.aborted) {
                   logger.info(`[LM-Studio] Model ${model} loaded but benchmark aborted — unloading`);
@@ -522,9 +477,7 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
                   rejectInflight(loadError);
                   throw loadError;
                 }
-
                 yield { type: "status", message: "Loading model… 100%", phase: "loading" };
-
                 // Re-fetch to get the loaded context length
                 try {
                   const refreshed = await this.listModels();
@@ -532,7 +485,6 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
                   const ctx = entry?.loaded_instances?.[0]?.config?.context_length;
                   if (ctx) options._loadedContextLength = ctx;
                 } catch { /* ignore */ }
-
                 resolveInflight();
               } finally {
                 _loadInflight.delete(model);
@@ -565,9 +517,7 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
           `Could not check/load model before streaming: ${loadCheckErr.message}`,
         );
       }
-
       if (options.signal?.aborted) return;
-
       // Expand video attachments to image frames (ffmpeg) before message prep.
       // This lets the model analyze video content as a sequence of frames,
       // which is the standard approach for Gemma 4 and other VLMs.
@@ -576,11 +526,9 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
         yield { type: "status", message: "Extracting video frames…" };
         await expandVideoToFrames(messages);
       }
-
       const prepared = prepareOpenAICompatMessages(messages, {
         mediaStrategy: MEDIA_STRATEGIES.IMAGES_ONLY,
       });
-
       // ── Determine tool-calling strategy ──────────────────────
       // When called from Prism's agentic loop (options.agent is set),
       // ALWAYS use the OpenAI-compat /v1/chat/completions endpoint.
@@ -594,13 +542,11 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
       // also require this path since they can't route via MCP.
       const coordinatorSet = new Set(COORDINATOR_ONLY_TOOLS);
       const hasCoordinatorTools = options.tools?.some((t) => coordinatorSet.has(t.name));
-
       if (options.agent || hasCoordinatorTools) {
         // ── OpenAI-compat path (agentic + coordinator) ─────────
         yield* this._streamOpenAICompat(prepared, model, options, baseUrl);
         return;
       }
-
       // ── Native /api/v1/chat path (MCP-based tools) ──────────
       // The native API supports reasoning toggle, MCP tool calling,
       // model load events, and structured stats — all in one path.
@@ -610,13 +556,11 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
         stream: true,
         store: false,
       };
-
       // Extract system prompt from messages
       const systemMsg = prepared.find((m) => m.role === "system");
       if (systemMsg?.content) {
         nativePayload.system_prompt = systemMsg.content;
       }
-
       // Temperature & max tokens from options
       const params = buildPayloadParams(options);
       if (params.temperature != null) nativePayload.temperature = params.temperature;
@@ -626,7 +570,6 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
       if (options.topK > 0) nativePayload.top_k = options.topK;
       if (options.minP !== undefined) nativePayload.min_p = options.minP;
       if (options.repeatPenalty !== undefined && options.repeatPenalty !== 1) nativePayload.repeat_penalty = options.repeatPenalty;
-
       // Reasoning toggle — may be rejected by models that don't support it.
       // We'll try first, and retry without reasoning if it fails.
       let useReasoning = null;
@@ -638,7 +581,6 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
       if (useReasoning) {
         nativePayload.reasoning = useReasoning;
       }
-
       // ── MCP integrations for function calling ──
       // When tools are requested, attach tools-api as an ephemeral MCP server.
       // LM Studio handles the agentic loop — calls tools, re-prompts, streams.
@@ -646,13 +588,11 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
       // to prevent context overflow. The model's loaded context determines the cap.
       if (options.tools && options.tools.length > 0) {
         let toolNames = options.tools.map((t) => t.name);
-
         // Cap tool count based on loaded model context
         // ~500 tokens/tool; reserve 50% of context for conversation
         const contextLength = options._loadedContextLength || options.contextLength || 8192;
         const maxTools = Math.max(1, Math.floor((contextLength * 0.5) / 500));
         let skipMcp = false;
-
         // If context is too small for even 1 tool, skip MCP entirely
         if (contextLength < 4096) {
           logger.warn(
@@ -667,7 +607,6 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
           toolNames = toolNames.slice(0, maxTools);
           yield { type: "status", message: `Context limit (${contextLength}) — using ${maxTools} of ${options.tools.length} tools` };
         }
-
         if (!skipMcp) {
           nativePayload.integrations = [
             {
@@ -682,7 +621,6 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
           );
         }
       }
-
       // ── Send request (with reasoning fallback) ──
       // Some models (e.g. DeepSeek R1 Distill) don't expose reasoning config.
       // If the request fails with a reasoning-related error, retry without it.
@@ -694,7 +632,6 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
         logger.info(
           `[LM-Studio] Native API: reasoning=${payload.reasoning || "default"}, tools=${payload.integrations ? "mcp" : "none"}, input=${inputShape}, ${payloadStr.length} chars`,
         );
-
         const response = await fetch(`${baseUrl}/api/v1/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -703,9 +640,7 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
         });
         return response;
       };
-
       let nativeResponse = await makeRequest(nativePayload);
-
       // If reasoning param was rejected, retry without it
       if (!nativeResponse.ok && useReasoning) {
         const errorText = await nativeResponse.text();
@@ -722,12 +657,10 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
           throw new Error(`API error: ${nativeResponse.status} ${errorText}`);
         }
       }
-
       if (!nativeResponse.ok) {
         const errorText = await nativeResponse.text();
         throw new Error(`API error: ${nativeResponse.status} ${errorText}`);
       }
-
       const nativeReader = nativeResponse.body.getReader();
       yield* parseNativeSSEStream(nativeReader, { signal: options.signal });
     } catch (error) {
@@ -736,7 +669,6 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
       throw new ProviderError("lm-studio", error.message, 500, error);
     }
   },
-
   /**
    * OpenAI-compat streaming path — used when coordinator tools are enabled.
    * Sends a standard /v1/chat/completions request with `tools` array.
@@ -757,7 +689,6 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
       // Request usage in the final streamed chunk
       stream_options: { include_usage: true },
     };
-
     // Convert tool schemas to OpenAI format
     const tools = convertToolsToOpenAI(options.tools);
     if (tools) {
@@ -776,27 +707,21 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
         payload.tools = tools;
       }
     }
-
     logger.info(
       `[LM-Studio] OpenAI-compat streaming (agentic): model=${model}, tools=${payload.tools?.length || 0}/${options.tools?.length || 0}, ctx=${options._loadedContextLength || 'unset'}`,
     );
-
     yield { type: "status", message: "Starting…", phase: "starting" };
-
     const response = await fetch(`${baseUrl}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
       ...(options.signal && { signal: options.signal }),
     });
-
     if (!response.ok) {
       const errorText = await response.text();
       throw new ProviderError("lm-studio", `API error: ${response.status} ${errorText}`, response.status);
     }
-
     yield { type: "status", message: "Processing prompt…", phase: "processing", progress: 0 };
-
     const reader = response.body.getReader();
     let emittedPhaseTransition = false;
     for await (const chunk of parseSSEStream(reader, {
@@ -814,9 +739,7 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
       yield chunk;
     }
   },
-
   // ── Embedding Generation ─────────────────────────────────
-
   /**
    * Generate an embedding via the OpenAI-compatible /v1/embeddings endpoint.
    * LM Studio exposes this for any loaded embedding model (e.g. Granite,
@@ -833,25 +756,21 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
     try {
       const payload = { model, input: content };
       if (options.dimensions) payload.dimensions = options.dimensions;
-
       const response = await fetchOpenAICompat(
         `${baseUrl}/v1/embeddings`,
         payload,
       );
       const data = await response.json();
-
       const embedding = data.data?.[0]?.embedding;
       if (!embedding) {
         throw new Error("No embedding data in LM Studio response");
       }
-
       return { embedding, dimensions: embedding.length };
     } catch (error) {
       if (error instanceof ProviderError) throw error;
       throw new ProviderError("lm-studio", error.message, 500, error);
     }
   },
-
   async captionImage(
     images,
     prompt = "Describe this image.",
@@ -876,7 +795,6 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
         messages.push({ role: "system", content: systemPrompt });
       }
       messages.push({ role: "user", content });
-
       const response = await fetchOpenAICompat(
         `${baseUrl}/v1/chat/completions`,
         {
@@ -887,7 +805,6 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
           stream: false,
         },
       );
-
       const data = await response.json();
       const text = data.choices?.[0]?.message?.content || "";
       const usage = {
@@ -900,9 +817,7 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
       throw new ProviderError("lm-studio", error.message, 500, error);
     }
   },
-
   // ── Model Management ─────────────────────────────────────
-
   /**
    * Ensure exactly one model is loaded in LM Studio.
    * - If the requested model is already loaded, returns immediately with its context info.
@@ -917,20 +832,16 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
    */
   async ensureModelLoaded(modelKey, loadOptions = {}, signal, onStatus) {
     if (signal?.aborted) return { alreadyLoaded: false, contextLength: null };
-
     const { models } = await this.listModels();
     if (signal?.aborted) return { alreadyLoaded: false, contextLength: null };
-
     // Check if the requested model is already loaded
     const modelEntry = (models || []).find((m) => m.key === modelKey);
     const isLoaded = modelEntry?.loaded_instances?.length > 0;
-
     if (isLoaded) {
       const loadedCtx = modelEntry.loaded_instances[0]?.config?.context_length || null;
       logger.info(`[LM-Studio] Model ${modelKey} already loaded (ctx=${loadedCtx})`);
       return { alreadyLoaded: true, contextLength: loadedCtx };
     }
-
     // Unload any other loaded models first (single-model enforcement)
     for (const m of models || []) {
       if (signal?.aborted) return { alreadyLoaded: false, contextLength: null };
@@ -940,15 +851,12 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
         await this.unloadModel(inst.id);
       }
     }
-
     if (signal?.aborted) return { alreadyLoaded: false, contextLength: null };
-
     // Load the requested model
     logger.info(`[LM-Studio] Loading model ${modelKey}`);
     onStatus?.("Loading model… 0%");
     await this.loadModel(modelKey, loadOptions, signal);
     onStatus?.("Loading model… 100%");
-
     // Re-fetch to get the loaded context length
     try {
       const refreshed = await this.listModels();
@@ -959,7 +867,6 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
       return { alreadyLoaded: false, contextLength: null };
     }
   },
-
   /**
    * List all models available in LM Studio.
    * Uses the proprietary GET /api/v1/models endpoint.
@@ -972,14 +879,11 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
         method: "GET",
         headers: { "Content-Type": "application/json" },
       });
-
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`API error: ${response.status} ${errorText}`);
       }
-
       const data = await response.json();
-
       // Enrich each model with resolved architecture params for VRAM estimation
       if (data?.data) {
         for (const model of data.data) {
@@ -990,14 +894,12 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
           model.archParams = resolveArchParams(arch, params, sizeBytes, bpw);
         }
       }
-
       return data;
     } catch (error) {
       if (error instanceof ProviderError) throw error;
       throw new ProviderError("lm-studio", error.message, 500, error);
     }
   },
-
   /**
    * Load a model into LM Studio memory.
    */
@@ -1010,19 +912,16 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
       if (options.flash_attention != null) payload.flash_attention = options.flash_attention;
       if (options.offload_kv_cache_to_gpu != null) payload.offload_kv_cache_to_gpu = options.offload_kv_cache_to_gpu;
       if (options.eval_batch_size != null) payload.eval_batch_size = options.eval_batch_size;
-
       const response = await fetch(`${baseUrl}/api/v1/models/load`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
         ...(signal && { signal }),
       });
-
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`API error: ${response.status} ${errorText}`);
       }
-
       return response.json();
     } catch (error) {
       if (error.name === "AbortError") throw error; // Let AbortError propagate
@@ -1030,7 +929,6 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
       throw new ProviderError("lm-studio", error.message, 500, error);
     }
   },
-
   /**
    * Unload a model from LM Studio by its model key.
    * Looks up the loaded instance ID and unloads it.
@@ -1049,7 +947,6 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
       logger.warn(`[LM-Studio] unloadModelByKey(${modelKey}) failed: ${err.message}`);
     }
   },
-
   /**
    * Unload a model from LM Studio memory.
    */
@@ -1062,12 +959,10 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ instance_id: instanceId }),
       });
-
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`API error: ${response.status} ${errorText}`);
       }
-
       return response.json();
     } catch (error) {
       if (error instanceof ProviderError) throw error;

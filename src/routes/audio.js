@@ -1,3 +1,4 @@
+import { formatCostTag, roundMs } from "@rodrigo-barraza/utilities";
 import express from "express";
 import crypto from "crypto";
 import { getProvider } from "../providers/index.js";
@@ -8,14 +9,11 @@ import ConversationService from "../services/ConversationService.js";
 import FileService from "../services/FileService.js";
 import logger from "../utils/logger.js";
 import RequestLogger from "../services/RequestLogger.js";
-import { formatCostTag, roundMs } from "../utils/utilities.js";
-
+import {  } from "../utils/utilities.js";
 const router = express.Router();
-
 // ============================================================
 // Shared core logic — used by both REST and WebSocket
 // ============================================================
-
 /**
  * Handle an audio (TTS) request.
  *
@@ -52,7 +50,6 @@ export async function handleVoice(params, emitBinary, emitJSON) {
     username = "unknown",
     clientIp = null,
   } = params;
-
   // ── Auto-conversation: every AI request gets tracked ────────────
   let conversationId = skipConversation ? null : incomingConversationId;
   let conversationMeta = skipConversation ? null : incomingConversationMeta;
@@ -61,18 +58,15 @@ export async function handleVoice(params, emitBinary, emitJSON) {
     const titleSnippet = (text || "").slice(0, 100).trim() || "TTS Request";
     conversationMeta = conversationMeta || { title: titleSnippet };
   }
-
   // ── Trace: passthrough ────────────────────────────────────
   // TraceId is generated client-side and passed on every request.
   const traceId = incomingTraceId || null;
-
   // Inject traceId into conversationMeta for storage
   if (traceId && conversationMeta) {
     conversationMeta.traceId = traceId;
   } else if (traceId) {
     conversationMeta = { traceId };
   }
-
   try {
     if (!providerName) {
       throw new ProviderError(
@@ -84,7 +78,6 @@ export async function handleVoice(params, emitBinary, emitJSON) {
     if (!text) {
       throw new ProviderError("server", "Missing required field: text", 400);
     }
-
     const provider = getProvider(providerName);
     if (!provider.generateSpeech) {
       throw new ProviderError(
@@ -93,7 +86,6 @@ export async function handleVoice(params, emitBinary, emitJSON) {
         400,
       );
     }
-
     // Mark conversation as generating (creates a stub doc via upsert)
     if (conversationId) {
       ConversationService.setGenerating(
@@ -105,15 +97,12 @@ export async function handleVoice(params, emitBinary, emitJSON) {
         logger.error(`Failed to set isGenerating: ${err.message}`),
       );
     }
-
     const options = { instructions, model, ...extraOptions };
     const result = await provider.generateSpeech(text, voice, options);
     const totalSec = (performance.now() - requestStart) / 1000;
     const contentType = result.contentType || "audio/mpeg";
-
     // Collect audio chunks for MinIO upload when conversationId is provided
     const audioChunks = conversationId ? [] : null;
-
     if (result.stream.pipe) {
       // Node.js readable stream
       if (audioChunks) {
@@ -132,7 +121,6 @@ export async function handleVoice(params, emitBinary, emitJSON) {
         emitBinary(value);
       }
     }
-
     logger.request(
       project,
       username,
@@ -140,7 +128,6 @@ export async function handleVoice(params, emitBinary, emitJSON) {
       `[audio] ${providerName} model=${model || "default"} — ` +
         `total: ${totalSec.toFixed(2)}s`,
     );
-
     RequestLogger.log({
       requestId,
       endpoint: "text-to-audio",
@@ -155,9 +142,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
       inputCharacters: text.length,
       totalTime: roundMs(totalSec),
     });
-
     emitJSON({ type: "done" });
-
     // Auto-append to conversation
     if (conversationId && audioChunks) {
       let audioRef = null;
@@ -174,7 +159,6 @@ export async function handleVoice(params, emitBinary, emitJSON) {
       } catch (err) {
         logger.error(`Failed to upload TTS audio: ${err.message}`);
       }
-
       const messagesToAppend = [];
       // Derive user message from text
       messagesToAppend.push({
@@ -182,7 +166,6 @@ export async function handleVoice(params, emitBinary, emitJSON) {
         content: text,
         timestamp: new Date().toISOString(),
       });
-
       messagesToAppend.push({
         role: "assistant",
         content: "",
@@ -193,11 +176,9 @@ export async function handleVoice(params, emitBinary, emitJSON) {
         timestamp: new Date().toISOString(),
         totalTime: roundMs(totalSec),
       });
-
       const meta = conversationMeta
         ? { ...conversationMeta, settings: { provider: providerName, model } }
         : undefined;
-
       ConversationService.appendMessages(
         conversationId,
         project,
@@ -219,9 +200,6 @@ export async function handleVoice(params, emitBinary, emitJSON) {
           ),
         );
     }
-
-
-
     return contentType;
   } catch (error) {
     // Clear isGenerating flag on error
@@ -253,11 +231,9 @@ export async function handleVoice(params, emitBinary, emitJSON) {
     throw error;
   }
 }
-
 // ============================================================
 // REST endpoint — chunked binary audio
 // ============================================================
-
 /**
  * POST /text-to-audio
  * Body: { provider, text, voice?, instructions?, model?, options?, conversationId?, conversationMeta? }
@@ -286,10 +262,8 @@ router.post("/", async (req, res, next) => {
       const audioDataUrl = `data:${ct};base64,${Buffer.concat(audioChunks).toString("base64")}`;
       return res.json({ audioDataUrl, contentType: ct });
     }
-
     // ── Default: stream binary audio chunks ──
     let contentType = "audio/mpeg";
-
     const resultContentType = await handleVoice(
       {
         ...req.body,
@@ -309,11 +283,9 @@ router.post("/", async (req, res, next) => {
         /* REST doesn't send JSON events to client */
       },
     );
-
     if (resultContentType) {
       contentType = resultContentType;
     }
-
     res.end();
   } catch (error) {
     if (!res.headersSent) {
@@ -321,11 +293,9 @@ router.post("/", async (req, res, next) => {
     }
   }
 });
-
 // ============================================================
 // REST endpoint — audio transcription (speech-to-text)
 // ============================================================
-
 /**
  * POST /audio-to-text
  * Body: { provider, audio (base64 string or data URL), model?, language?, prompt? }
@@ -345,7 +315,6 @@ router.post("/", async (req, res, next) => {
     traceId: incomingTraceId,
     skipConversation,
   } = req.body;
-
   // Auto-generate conversationId when caller omits it (mirrors chat route)
   let conversationId = skipConversation ? null : (incomingConversationId || null);
   let conversationMeta = skipConversation ? null : (incomingConversationMeta || null);
@@ -353,18 +322,15 @@ router.post("/", async (req, res, next) => {
     conversationId = crypto.randomUUID();
     conversationMeta = conversationMeta || { title: "Audio Transcription" };
   }
-
   // ── Trace: passthrough ────────────────────────────────────
   // TraceId is generated client-side and passed on every request.
   const traceId = incomingTraceId || null;
-
   // Inject traceId into conversationMeta for storage
   if (traceId && conversationMeta) {
     conversationMeta.traceId = traceId;
   } else if (traceId) {
     conversationMeta = { traceId };
   }
-
   try {
     if (!providerName) {
       throw new ProviderError(
@@ -376,7 +342,6 @@ router.post("/", async (req, res, next) => {
     if (!audio) {
       throw new ProviderError("server", "Missing required field: audio", 400);
     }
-
     // Mark conversation as generating (creates a stub doc via upsert)
     // so the frontend can fetch the conversation by ID immediately.
     if (conversationId) {
@@ -389,7 +354,6 @@ router.post("/", async (req, res, next) => {
         logger.error(`Failed to set isGenerating: ${err.message}`),
       );
     }
-
     const provider = getProvider(providerName);
     if (!provider.transcribeAudio) {
       throw new ProviderError(
@@ -398,7 +362,6 @@ router.post("/", async (req, res, next) => {
         400,
       );
     }
-
     // Parse audio — accept either data URL or raw base64
     let audioBuffer;
     let mimeType = "audio/mpeg";
@@ -409,11 +372,9 @@ router.post("/", async (req, res, next) => {
     } else {
       audioBuffer = Buffer.from(audio, "base64");
     }
-
     const options = {};
     if (language) options.language = language;
     if (transcriptionPrompt) options.prompt = transcriptionPrompt;
-
     const result = await provider.transcribeAudio(
       audioBuffer,
       mimeType,
@@ -421,7 +382,6 @@ router.post("/", async (req, res, next) => {
       options,
     );
     const totalSec = (performance.now() - requestStart) / 1000;
-
     // ── Cost estimation ─────────────────────────────────────────
     const modelDef = getModelByName(model);
     const pricing =
@@ -429,7 +389,6 @@ router.post("/", async (req, res, next) => {
       getPricing(TYPES.AUDIO, TYPES.TEXT)[model] ||
       null;
     const estimatedCost = calculateAudioCost(result.usage, pricing);
-
     // ── Logging ────────────────────────────────────────────────
     const costStr = formatCostTag(estimatedCost);
     logger.request(
@@ -439,7 +398,6 @@ router.post("/", async (req, res, next) => {
       `[audio/transcribe] ${providerName} model=${model || "default"} — ` +
         `total: ${totalSec.toFixed(2)}s${costStr}`,
     );
-
     RequestLogger.log({
       requestId,
       endpoint: "audio-to-text",
@@ -456,7 +414,6 @@ router.post("/", async (req, res, next) => {
       estimatedCost,
       totalTime: roundMs(totalSec),
     });
-
     // ── Conversation persistence ────────────────────────────────
     if (conversationId) {
       // Upload audio to MinIO for storage
@@ -472,7 +429,6 @@ router.post("/", async (req, res, next) => {
       } catch (err) {
         logger.error(`Failed to upload STT audio: ${err.message}`);
       }
-
       const messagesToAppend = [
         {
           role: "user",
@@ -491,14 +447,12 @@ router.post("/", async (req, res, next) => {
           usage: result.usage || undefined,
         },
       ];
-
       const meta = conversationMeta
         ? {
             ...conversationMeta,
             settings: { provider: providerName, model },
           }
         : undefined;
-
       ConversationService.appendMessages(
         conversationId,
         req.project,
@@ -520,9 +474,6 @@ router.post("/", async (req, res, next) => {
           ),
         );
     }
-
-
-
     res.json({
       text: result.text,
       usage: result.usage || {},
@@ -560,5 +511,4 @@ router.post("/", async (req, res, next) => {
     next(error);
   }
 });
-
 export default router;

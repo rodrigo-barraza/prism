@@ -1,13 +1,12 @@
+import { sleep } from "@rodrigo-barraza/utilities";
 import express from "express";
 import { getProvider } from "../providers/index.js";
 import { isInstance } from "../providers/instance-registry.js";
 import logger from "../utils/logger.js";
 import LocalProviderGateway from "../services/LocalProviderGateway.js";
-import { sleep } from "../utils/utilities.js";
+import {  } from "../utils/utilities.js";
 import { initSseResponse } from "../utils/SseUtilities.js";
-
 const router = express.Router();
-
 /** Resolve instance ID from request — supports ?instance=lm-studio-2 */
 function resolveInstanceId(req) {
   const id = req.query.instance || req.body?.instance || "lm-studio";
@@ -15,7 +14,6 @@ function resolveInstanceId(req) {
   if (!isInstance(id)) return "lm-studio";
   return id;
 }
-
 /**
  * GET /lm-studio/models
  * List all models available from LM Studio.
@@ -31,7 +29,6 @@ router.get("/models", async (req, res, next) => {
     next(error);
   }
 });
-
 /**
  * POST /lm-studio/load
  * Load a model into LM Studio.
@@ -45,31 +42,26 @@ router.post("/load", async (req, res, next) => {
         .status(400)
         .json({ error: "Missing 'model' in request body" });
     }
-
     const instanceId = resolveInstanceId(req);
     const provider = getProvider(instanceId);
-
     // Build load options from request body
     const loadOptions = {};
     if (context_length != null) loadOptions.context_length = context_length;
     if (flash_attention != null) loadOptions.flash_attention = flash_attention;
     if (offload_kv_cache_to_gpu != null) loadOptions.offload_kv_cache_to_gpu = offload_kv_cache_to_gpu;
     if (eval_batch_size != null) loadOptions.eval_batch_size = eval_batch_size;
-
     // ensureModelLoaded handles: skip if already loaded, unload others, then load
     const { alreadyLoaded } = await provider.ensureModelLoaded(model, loadOptions);
     if (alreadyLoaded) {
       logger.info(`[/lm-studio/load] Model ${model} already loaded — skipping`);
       return res.json({ model, alreadyLoaded: true });
     }
-
     res.json({ model, alreadyLoaded: false });
   } catch (error) {
     logger.error(`POST /lm-studio/load error: ${error.message}`);
     next(error);
   }
 });
-
 /**
  * POST /lm-studio/load-stream
  * Load a model into LM Studio with SSE progress streaming.
@@ -89,34 +81,27 @@ router.post("/load-stream", async (req, res) => {
       .status(400)
       .json({ error: "Missing 'model' in request body" });
   }
-
   // Set up SSE — use setHeader pattern (not writeHead) to match /chat endpoint
   initSseResponse(res);
   res.setHeader("X-Accel-Buffering", "no");
-
   const send = (data) => {
     if (!res.writableEnded) {
       res.write(`data: ${JSON.stringify(data)}\n\n`);
     }
   };
-
   let aborted = false;
   req.on("close", () => { aborted = true; });
-
   try {
     const instanceId = resolveInstanceId(req);
     const provider = getProvider(instanceId);
     send({ type: "start", model });
-
     // Build load options
     const loadOptions = {};
     if (context_length != null) loadOptions.context_length = context_length;
     if (flash_attention != null) loadOptions.flash_attention = flash_attention;
     if (offload_kv_cache_to_gpu != null) loadOptions.offload_kv_cache_to_gpu = offload_kv_cache_to_gpu;
     if (eval_batch_size != null) loadOptions.eval_batch_size = eval_batch_size;
-
     if (aborted) return res.end();
-
     // Check if model is already loaded and unload others if needed
     // (non-streaming part — quick check + unload)
     let needsLoad = true;
@@ -124,7 +109,6 @@ router.post("/load-stream", async (req, res) => {
       const { models } = await provider.listModels();
       const modelEntry = (models || []).find((m) => m.key === model);
       const isLoaded = modelEntry?.loaded_instances?.length > 0;
-
       if (isLoaded) {
         // Already loaded — skip entirely
         logger.info(`[load-stream] Model ${model} already loaded — skipping`);
@@ -144,28 +128,22 @@ router.post("/load-stream", async (req, res) => {
     } catch (listErr) {
       logger.warn(`[load-stream] Could not check models before loading: ${listErr.message}`);
     }
-
     if (!needsLoad || aborted) {
       return res.end();
     }
-
     send({ type: "progress", progress: 0 });
-
     // Fire load in background, poll for synthetic progress
     let loadDone = false;
     let loadError = null;
     const loadPromise = provider.loadModel(model, loadOptions)
       .then(() => { loadDone = true; })
       .catch((err) => { loadDone = true; loadError = err; });
-
     const startTime = Date.now();
     const EXPECTED_LOAD_MS = 15_000;
     let lastPct = 0;
-
     while (!loadDone && !aborted) {
       await sleep(300);
       if (loadDone || aborted) break;
-
       const elapsed = Date.now() - startTime;
       const pct = Math.min(0.95, elapsed / (elapsed + EXPECTED_LOAD_MS));
       if (pct > lastPct + 0.005) {
@@ -173,11 +151,8 @@ router.post("/load-stream", async (req, res) => {
         send({ type: "progress", progress: parseFloat(pct.toFixed(3)) });
       }
     }
-
     await loadPromise;
-
     if (aborted) return res.end();
-
     if (loadError) {
       logger.error(`[load-stream] loadModel failed: ${loadError.message}`);
       send({ type: "error", message: loadError.message });
@@ -193,7 +168,6 @@ router.post("/load-stream", async (req, res) => {
     if (!res.writableEnded) res.end();
   }
 });
-
 /**
  * POST /lm-studio/unload
  * Unload a model from LM Studio memory.
@@ -207,7 +181,6 @@ router.post("/unload", async (req, res, next) => {
         error: "Missing 'instance_id' in request body",
       });
     }
-
     const instanceId = resolveInstanceId(req);
     const provider = getProvider(instanceId);
     const data = await provider.unloadModel(instance_id);
@@ -217,7 +190,6 @@ router.post("/unload", async (req, res, next) => {
     next(error);
   }
 });
-
 /**
  * POST /lm-studio/estimate
  * Estimate VRAM usage for a model with given configuration.
@@ -229,7 +201,6 @@ router.post("/estimate", async (req, res, next) => {
     if (!model) {
       return res.status(400).json({ error: "Missing 'model' in request body" });
     }
-
     // Delegate to gateway — it handles the full fetch → estimate pipeline.
     // Fall back to direct gguf-arch if we need raw model data (e.g. for
     // custom gpuLayers values from the slider).
@@ -238,27 +209,22 @@ router.post("/estimate", async (req, res, next) => {
     const result = await provider.listModels();
     const allModels = result?.data || result?.models || [];
     const modelData = allModels.find((m) => m.id === model || m.path === model || m.key === model);
-
     if (!modelData) {
       return res.status(404).json({ error: `Model '${model}' not found` });
     }
-
     const estimate = LocalProviderGateway.estimateVRAM(modelData, {
       contextLength: contextLength ?? 4096,
       gpuLayers,
       flashAttention: flashAttention ?? true,
       offloadKvCache: offloadKvCache ?? true,
     });
-
     if (!estimate) {
       return res.status(400).json({ error: "Could not estimate VRAM for this model" });
     }
-
     res.json(estimate);
   } catch (error) {
     logger.error(`POST /lm-studio/estimate error: ${error.message}`);
     next(error);
   }
 });
-
 export default router;

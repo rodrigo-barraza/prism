@@ -1,3 +1,4 @@
+import { formatCostTag, roundMs } from "@rodrigo-barraza/utilities";
 import crypto from "crypto";
 import { getProvider } from "../providers/index.js";
 import { TYPES, getDefaultModels, getPricing } from "../config.js";
@@ -5,14 +6,12 @@ import { estimateTokens } from "../utils/CostCalculator.js";
 import RequestLogger from "./RequestLogger.js";
 import logger from "../utils/logger.js";
 import { calculateTokensPerSec } from "../utils/math.js";
-import { formatCostTag, roundMs } from "../utils/utilities.js";
+import {  } from "../utils/utilities.js";
 import SettingsService from "./SettingsService.js";
-
 /** Resolve the current embedding provider + model from settings. */
 async function getEmbeddingConfig() {
   return SettingsService.getMemoryModelConfig("embedding");
 }
-
 /**
  * EmbeddingService — single entry point for all embedding generation.
  *
@@ -41,7 +40,6 @@ const EmbeddingService = {
   async generate(content, options = {}) {
     const requestId = crypto.randomUUID();
     const requestStart = performance.now();
-
     // Resolve defaults from settings when no explicit provider/model given
     const embedConfig = await getEmbeddingConfig();
     const providerName = options.provider || embedConfig.provider;
@@ -49,11 +47,9 @@ const EmbeddingService = {
       options.model ||
       getDefaultModels(TYPES.TEXT, TYPES.EMBEDDING)?.[providerName] ||
       embedConfig.model;
-
     let result;
     let success = true;
     let errorMessage = null;
-
     try {
       const provider = getProvider(providerName);
       if (!provider.generateEmbedding) {
@@ -61,11 +57,9 @@ const EmbeddingService = {
           `Provider "${providerName}" does not support embeddings`,
         );
       }
-
       const providerOptions = {};
       if (options.taskType) providerOptions.taskType = options.taskType;
       if (options.dimensions) providerOptions.dimensions = options.dimensions;
-
       result = await provider.generateEmbedding(
         content,
         resolvedModel,
@@ -77,7 +71,6 @@ const EmbeddingService = {
       throw err;
     } finally {
       const totalSec = (performance.now() - requestStart) / 1000;
-
       // Cost estimation
       const pricing = getPricing(TYPES.TEXT, TYPES.EMBEDDING)[resolvedModel];
       const approxInputTokens =
@@ -86,15 +79,12 @@ const EmbeddingService = {
       if (pricing?.inputPerMillion) {
         estimatedCost = (approxInputTokens / 1_000_000) * pricing.inputPerMillion;
       }
-
       const source = options.source || "unknown";
-
       // Determine input content type for payload logging
       const contentType = typeof content === "string" ? "text"
         : Array.isArray(content) ? "multimodal"
           : "unknown";
       const inputCharacters = typeof content === "string" ? content.length : 0;
-
       logger.request(
         options.project || null,
         options.username || "system",
@@ -105,7 +95,6 @@ const EmbeddingService = {
             : `FAILED: ${errorMessage}`) +
           formatCostTag(estimatedCost),
       );
-
       RequestLogger.log({
         requestId,
         endpoint: options.endpoint || null,
@@ -157,7 +146,6 @@ const EmbeddingService = {
           : { error: errorMessage },
       });
     }
-
     return {
       embedding: result.embedding,
       dimensions: result.dimensions,
@@ -165,7 +153,6 @@ const EmbeddingService = {
       model: resolvedModel,
     };
   },
-
   /**
    * Convenience wrapper — returns just the embedding vector.
    * Used by internal callers that only need the float array.
@@ -179,5 +166,4 @@ const EmbeddingService = {
     return result.embedding;
   },
 };
-
 export default EmbeddingService;

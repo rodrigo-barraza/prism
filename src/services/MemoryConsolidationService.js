@@ -1,3 +1,4 @@
+import { daysSinceIso } from "@rodrigo-barraza/utilities";
 import crypto from "crypto";
 import { getProvider } from "../providers/index.js";
 import MemoryService from "./MemoryService.js";
@@ -6,43 +7,31 @@ import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import logger from "../utils/logger.js";
 import { cosineSimilarity } from "../utils/math.js";
-import { parseJsonFromLlmResponse, daysSinceIso } from "../utils/utilities.js";
+import { parseJsonFromLlmResponse } from "../utils/utilities.js";
 import { COLLECTIONS } from "../constants.js";
 import SettingsService from "./SettingsService.js";
 import { estimateTokens } from "../utils/CostCalculator.js";
-
 // ─── Constants ────────────────────────────────────────────────────────────────
-
 /** Resolve the current consolidation provider + model from settings. */
 async function getConsolidationConfig() {
   return SettingsService.getMemoryModelConfig("consolidation");
 }
-
 /** Cosine similarity above which two memories are clustered together */
 const CLUSTER_THRESHOLD = 0.75;
-
 /** Max memories per cluster sent to the LLM (avoid token blowup) */
 const MAX_CLUSTER_SIZE = 8;
-
 /** Memories older than this (days) with ephemeral types get flagged for staleness review */
 const STALENESS_DAYS = 30;
-
 /** Min sessions between consolidation runs */
 const SESSIONS_BETWEEN_RUNS = 5;
-
 /** Max consolidation runs per project per day (cost guard) */
 const DAILY_MAX_CONSOLIDATIONS = 3;
-
 const RUNS_COLLECTION = COLLECTIONS.MEMORY_CONSOLIDATION_RUNS;
 const HISTORY_COLLECTION = COLLECTIONS.MEMORY_CONSOLIDATION_HISTORY;
-
-
 function daysSince(isoDate) {
   return daysSinceIso(isoDate);
 }
-
 // ─── Cluster Detection ───────────────────────────────────────────────────────
-
 /**
  * Find clusters of semantically similar memories using Union-Find.
  * Returns arrays of memory groups (each group has 2+ memories).
@@ -50,11 +39,9 @@ function daysSince(isoDate) {
 function findClusters(memories) {
   const n = memories.length;
   if (n < 2) return [];
-
   // Union-Find
   const parent = Array.from({ length: n }, (_, i) => i);
   const rank = new Array(n).fill(0);
-
   function find(x) {
     if (parent[x] !== x) parent[x] = find(parent[x]);
     return parent[x];
@@ -66,7 +53,6 @@ function findClusters(memories) {
     else if (rank[px] > rank[py]) parent[py] = px;
     else { parent[py] = px; rank[px]++; }
   }
-
   // Pairwise comparison — O(n²) but fine for <500 memories
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
@@ -77,7 +63,6 @@ function findClusters(memories) {
       }
     }
   }
-
   // Group by root
   const groups = new Map();
   for (let i = 0; i < n; i++) {
@@ -85,30 +70,24 @@ function findClusters(memories) {
     if (!groups.has(root)) groups.set(root, []);
     groups.get(root).push(memories[i]);
   }
-
   // Only return clusters with 2+ members, capped at MAX_CLUSTER_SIZE
   return [...groups.values()]
     .filter((g) => g.length >= 2)
     .map((g) => g.slice(0, MAX_CLUSTER_SIZE));
 }
-
 // ─── LLM Prompt ──────────────────────────────────────────────────────────────
-
 const CONSOLIDATION_PROMPT = `You are a memory consolidation agent. You review a set of stored memories and determine how to optimize them.
-
 ## Your Goals
 1. **Merge** redundant or overlapping memories into a single, more comprehensive memory
 2. **Resolve contradictions** — if two memories disagree, the NEWER one is more authoritative
 3. **Promote patterns** — if multiple memories point to the same insight, synthesize into one clear rule
 4. **Flag stale** — memories about ephemeral state (bugs, deadlines, in-progress work) that are >30 days old should be deleted
-
 ## Rules
 - Preserve the original TYPE (user, feedback, project, reference) when merging
 - If merging memories of different types, pick the most appropriate type
 - Each merged memory should be self-contained — don't reference "the original memories"
 - Be conservative: only merge when there's clear overlap. Leave distinct memories alone
 - Never invent new information — only combine what exists
-
 ## Output Format
 Respond with ONLY a JSON object:
 \`\`\`json
@@ -133,12 +112,9 @@ Respond with ONLY a JSON object:
   "summary": "Brief description of what was consolidated"
 }
 \`\`\`
-
 If no consolidation is needed, return: { "actions": [], "summary": "No consolidation needed" }`;
-
 function buildConsolidationInput(clusters, allMemories) {
   const sections = [];
-
   // Clusters for merge consideration
   if (clusters.length > 0) {
     sections.push("## Clusters of Similar Memories\n");
@@ -151,13 +127,11 @@ function buildConsolidationInput(clusters, allMemories) {
       sections.push("");
     });
   }
-
   // Stale memories for deletion consideration
   const staleMemories = allMemories.filter((m) => {
     const age = daysSince(m.createdAt);
     return age > STALENESS_DAYS && (m.type === "project" || m.type === "reference");
   });
-
   if (staleMemories.length > 0) {
     sections.push("## Potentially Stale Memories (>30 days old, ephemeral types)\n");
     staleMemories.forEach((m) => {
@@ -165,19 +139,14 @@ function buildConsolidationInput(clusters, allMemories) {
       sections.push(`- **ID**: ${m.id}\n  **Type**: ${m.type}\n  **Title**: ${m.title || (m.content ? m.content.substring(0, 60) : "untitled")}\n  **Content**: ${m.content}\n  **Age**: ${age} days`);
     });
   }
-
   if (sections.length === 0) {
     return null; // Nothing to consolidate
   }
-
   return sections.join("\n");
 }
-
 // ─── Action Execution ────────────────────────────────────────────────────────
-
 async function applyActions(actions, agent, project, username, { traceId, endpoint } = {}) {
   const results = { merged: 0, deleted: 0, errors: 0 };
-
   for (const action of actions) {
     try {
       if (action.type === "merge" && action.sourceIds?.length >= 2 && action.merged) {
@@ -185,7 +154,6 @@ async function applyActions(actions, agent, project, username, { traceId, endpoi
         for (const id of action.sourceIds) {
           await MemoryService.remove(id);
         }
-
         // Store consolidated memory
         await MemoryService.store({
           agent,
@@ -198,7 +166,6 @@ async function applyActions(actions, agent, project, username, { traceId, endpoi
           traceId: traceId || null,
           endpoint: endpoint || null,
         });
-
         results.merged += action.sourceIds.length;
         logger.info(
           `[MemoryConsolidation] Merged ${action.sourceIds.length} → "${action.merged.title}" (${action.reason || ""})`,
@@ -215,19 +182,15 @@ async function applyActions(actions, agent, project, username, { traceId, endpoi
       logger.error(`[MemoryConsolidation] Failed to apply action: ${err.message}`);
     }
   }
-
   return results;
 }
-
 // ─── Run Tracking ────────────────────────────────────────────────────────────
-
 async function getRunCount(project) {
   const db = MongoWrapper.getDb(MONGO_DB_NAME);
   if (!db) return 0;
   const doc = await db.collection(RUNS_COLLECTION).findOne({ project });
   return doc?.sessionsSinceLastRun || 0;
 }
-
 async function incrementRunCount(project) {
   const db = MongoWrapper.getDb(MONGO_DB_NAME);
   if (!db) return;
@@ -237,7 +200,6 @@ async function incrementRunCount(project) {
     { upsert: true },
   );
 }
-
 async function resetRunCount(project) {
   const db = MongoWrapper.getDb(MONGO_DB_NAME);
   if (!db) return;
@@ -252,21 +214,17 @@ async function resetRunCount(project) {
     { upsert: true },
   );
 }
-
 // ─── History & Cost Guard ────────────────────────────────────────────────────
-
 /**
  * Record a consolidation run for audit trail.
  */
 async function recordHistory(project, trigger, memoriesBefore, actions, summary, durationMs) {
   const db = MongoWrapper.getDb(MONGO_DB_NAME);
   if (!db) return;
-
   const mergeCount = actions.filter((a) => a.type === "merge").reduce(
     (sum, a) => sum + (a.sourceIds?.length || 0), 0,
   );
   const deleteCount = actions.filter((a) => a.type === "delete").length;
-
   await db.collection(HISTORY_COLLECTION).insertOne({
     project,
     runAt: new Date().toISOString(),
@@ -285,7 +243,6 @@ async function recordHistory(project, trigger, memoriesBefore, actions, summary,
     durationMs,
   });
 }
-
 /**
  * Check if the daily consolidation budget is exhausted.
  * Returns true if more runs are allowed.
@@ -293,15 +250,12 @@ async function recordHistory(project, trigger, memoriesBefore, actions, summary,
 async function canRunToday(project) {
   const db = MongoWrapper.getDb(MONGO_DB_NAME);
   if (!db) return true;
-
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
-
   const todayCount = await db.collection(HISTORY_COLLECTION).countDocuments({
     project,
     runAt: { $gte: startOfDay.toISOString() },
   });
-
   if (todayCount >= DAILY_MAX_CONSOLIDATIONS) {
     logger.warn(
       `[MemoryConsolidation] Daily limit reached for "${project}" (${todayCount}/${DAILY_MAX_CONSOLIDATIONS})`,
@@ -310,9 +264,7 @@ async function canRunToday(project) {
   }
   return true;
 }
-
 // ─── Public API ──────────────────────────────────────────────────────────────
-
 const MemoryConsolidationService = {
   /**
    * Run memory consolidation for a specific agent within a project.
@@ -328,35 +280,29 @@ const MemoryConsolidationService = {
   async consolidate({ agent = "CODING", project, username, trigger = "manual", broadcast, endpoint, traceId, agentSessionId }) {
     const startTime = performance.now();
     logger.info(`[MemoryConsolidation] Starting consolidation for project "${project}" (trigger: ${trigger})`);
-
     // Cost guard — check daily budget
     if (!(await canRunToday(project))) {
       return { skipped: true, reason: "daily_limit_reached", total: 0 };
     }
-
     // Load all memories with embeddings
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) throw new Error("Database not available");
-
     const agentId = agent || "CODING";
     const allMemories = await db
       .collection(COLLECTIONS.MEMORIES)
       .find({ agent: agentId, project })
       .project({ embedding: 1, id: 1, type: 1, title: 1, content: 1, createdAt: 1 })
       .toArray();
-
     if (allMemories.length < 2) {
       logger.info(`[MemoryConsolidation] Only ${allMemories.length} memories — skipping`);
       await resetRunCount(project);
       return { skipped: true, reason: "insufficient memories", total: allMemories.length };
     }
-
     // Phase 1: Cluster detection
     const clusters = findClusters(allMemories);
     logger.info(
       `[MemoryConsolidation] Found ${clusters.length} clusters from ${allMemories.length} memories`,
     );
-
     // Phase 2: Build LLM input
     const input = buildConsolidationInput(clusters, allMemories);
     if (!input) {
@@ -364,7 +310,6 @@ const MemoryConsolidationService = {
       await resetRunCount(project);
       return { skipped: true, reason: "no candidates", total: allMemories.length };
     }
-
     // Phase 3: LLM analysis
     const { provider: consolidationProvider, model: consolidationModel } = await getConsolidationConfig();
     const provider = getProvider(consolidationProvider);
@@ -372,12 +317,10 @@ const MemoryConsolidationService = {
       { role: "system", content: CONSOLIDATION_PROMPT },
       { role: "user", content: input },
     ];
-
     const llmRequestId = crypto.randomUUID();
     const llmStart = performance.now();
     let llmSuccess = true;
     let llmError = null;
-
     const result = await provider.generateText(aiMessages, consolidationModel, {
       maxTokens: 2000,
       temperature: 0.1,
@@ -388,12 +331,10 @@ const MemoryConsolidationService = {
     }).finally(() => {
       // intentionally empty — logging happens below after we have the result
     });
-
     // Log the consolidation LLM call
     const inputText = aiMessages.map((m) => m.content).join("\n");
     const approxInputTokens = estimateTokens(inputText);
     const approxOutputTokens = result?.text ? estimateTokens(result.text) : 0;
-
     RequestLogger.logBackgroundLlmCall({
       requestId: llmRequestId,
       endpoint: endpoint || null,
@@ -416,7 +357,6 @@ const MemoryConsolidationService = {
         memoryCount: allMemories.length,
       },
     });
-
     // Emit incremental usage so the UI token badge updates in real-time
     if (typeof broadcast === "function" && llmSuccess) {
       try {
@@ -431,7 +371,6 @@ const MemoryConsolidationService = {
         });
       } catch { /* SSE channel may be closed */ }
     }
-
     // Parse response
     const parsed = parseJsonFromLlmResponse(result.text);
     if (!parsed) {
@@ -439,25 +378,20 @@ const MemoryConsolidationService = {
       await resetRunCount(project);
       return { error: "parse_failed", total: allMemories.length };
     }
-
     const actions = parsed.actions || [];
     if (actions.length === 0) {
       logger.info(`[MemoryConsolidation] LLM found no actions needed: ${parsed.summary || ""}`);
       await resetRunCount(project);
       return { actions: 0, summary: parsed.summary, total: allMemories.length };
     }
-
     // Phase 4: Apply changes
     const results = await applyActions(actions, agentId, project, username, { traceId, endpoint });
     await resetRunCount(project);
-
     const summary = parsed.summary || `Merged ${results.merged}, deleted ${results.deleted}`;
     const durationMs = Math.round(performance.now() - startTime);
     logger.info(`[MemoryConsolidation] Complete: ${summary} (${durationMs}ms)`);
-
     // Phase 5: Record history for audit trail
     await recordHistory(project, trigger, allMemories.length, actions, summary, durationMs);
-
     const consolidationResult = {
       ...results,
       actionsApplied: actions.length,
@@ -466,7 +400,6 @@ const MemoryConsolidationService = {
       trigger,
       durationMs,
     };
-
     // Broadcast to connected clients if callback provided
     if (typeof broadcast === "function") {
       try {
@@ -479,10 +412,8 @@ const MemoryConsolidationService = {
         logger.warn(`[MemoryConsolidation] Broadcast failed: ${err.message}`);
       }
     }
-
     return consolidationResult;
   },
-
   /**
    * Check if consolidation should run and trigger if needed.
    * Called by MemoryExtractor after storing new memories.
@@ -496,7 +427,6 @@ const MemoryConsolidationService = {
     try {
       await incrementRunCount(project);
       const count = await getRunCount(project);
-
       if (count >= SESSIONS_BETWEEN_RUNS) {
         logger.info(
           `[MemoryConsolidation] Threshold reached (${count}/${SESSIONS_BETWEEN_RUNS}) — triggering`,
@@ -519,7 +449,6 @@ const MemoryConsolidationService = {
       logger.error(`[MemoryConsolidation] checkAndRun failed: ${err.message}`);
     }
   },
-
   /**
    * Get consolidation run history for a project.
    *
@@ -530,7 +459,6 @@ const MemoryConsolidationService = {
   async getHistory(project, limit = 10) {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return [];
-
     return db
       .collection(HISTORY_COLLECTION)
       .find({ project })
@@ -540,5 +468,4 @@ const MemoryConsolidationService = {
       .toArray();
   },
 };
-
 export default MemoryConsolidationService;
