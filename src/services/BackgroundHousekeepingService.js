@@ -15,6 +15,7 @@
 
 import { readdir, stat, rm } from "node:fs/promises";
 import { resolve } from "node:path";
+import { MS_PER_DAY, hours } from "@rodrigo-barraza/utilities";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import MinioWrapper from "../wrappers/MinioWrapper.js";
 import { MONGO_DB_NAME } from "../../secrets.js";
@@ -24,7 +25,7 @@ import logger from "../utils/logger.js";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /** Worktrees older than this are considered orphaned */
-const WORKTREE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
+const WORKTREE_MAX_AGE_MS = MS_PER_DAY;
 
 /** Temp worktree root directory used by CoordinatorService */
 const WORKTREE_ROOT = "/tmp/prism-worktrees";
@@ -33,7 +34,7 @@ const WORKTREE_ROOT = "/tmp/prism-worktrees";
 const REQUEST_LOG_MAX_AGE_DAYS = 90;
 
 /** Stale isGenerating flags left from crashes */
-const STALE_SESSION_CUTOFF_MS = 2 * 60 * 60 * 1000; // 2h
+const STALE_SESSION_CUTOFF_MS = hours(2);
 
 // ─── Worktree Pruning ─────────────────────────────────────────────────────────
 
@@ -120,7 +121,7 @@ async function pruneOldRequestLogs() {
   const db = MongoWrapper.getDb(MONGO_DB_NAME);
   if (!db) return 0;
 
-  const cutoff = new Date(Date.now() - REQUEST_LOG_MAX_AGE_DAYS * 86_400_000).toISOString();
+  const cutoff = new Date(Date.now() - REQUEST_LOG_MAX_AGE_DAYS * MS_PER_DAY).toISOString();
   const result = await db.collection(COLLECTIONS.REQUESTS).deleteMany({
     timestamp: { $lt: cutoff },
   });

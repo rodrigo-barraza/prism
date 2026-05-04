@@ -292,7 +292,8 @@ setupWebSocket(wss);
 
   // ── Scheduled Memory Consolidation ─────────────────
   // Runs every 6 hours, consolidates memories for all active projects.
-  const CONSOLIDATION_INTERVAL_MS = 6 * 60 * 60 * 1000;
+  const { hours } = await import("@rodrigo-barraza/utilities");
+  const CONSOLIDATION_INTERVAL_MS = hours(6);
   setInterval(async () => {
     try {
       const db = MongoWrapper.getDb(MONGO_DB_NAME);

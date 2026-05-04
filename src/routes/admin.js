@@ -10,6 +10,7 @@ import { resolveArchParams, estimateMemory } from "../utils/gguf-arch.js";
 import { COLLECTIONS, COST_SUM_EXPR, TOTAL_TOKENS_EXPR, AVG_TOKENS_PER_SEC_EXPR } from "../constants.js";
 import AgentPersonaRegistry from "../services/AgentPersonaRegistry.js";
 import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
+import { MS_PER_MINUTE, MS_PER_HOUR, hours as hoursToMs, minutes } from "@rodrigo-barraza/utilities";
 import os from "os";
 
 const router = express.Router();
@@ -1027,7 +1028,7 @@ router.get("/stats/timeline", async (req, res, next) => {
     if (from) {
       sinceDate = new Date(from);
     } else {
-      sinceDate = new Date(Date.now() - parseInt(hours, 10) * 60 * 60 * 1000);
+      sinceDate = new Date(Date.now() - hoursToMs(parseInt(hours, 10)));
     }
     if (to) {
       untilDate = new Date(to);
@@ -1418,8 +1419,8 @@ router.get("/conversations/stats", async (req, res, next) => {
 
     const project = req.query.project || null;
     const filter = project ? { project } : {};
-    const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
-    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const oneHourAgo = new Date(Date.now() - MS_PER_HOUR).toISOString();
+    const fiveMinAgo = new Date(Date.now() - minutes(5)).toISOString();
 
     const [generatingCount, recentCount] = await Promise.all([
       db
@@ -1460,8 +1461,8 @@ router.get("/conversations/stream", async (req, res) => {
   const sendStats = async () => {
     try {
       const filter = project ? { project } : {};
-      const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
-      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const oneHourAgo = new Date(Date.now() - MS_PER_HOUR).toISOString();
+      const fiveMinAgo = new Date(Date.now() - minutes(5)).toISOString();
 
       const [generatingCount, recentCount] = await Promise.all([
         db
@@ -1630,9 +1631,9 @@ router.get("/live", async (req, res, next) => {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
 
-    const { minutes = 5 } = req.query;
+    const { minutes: minParam = 5 } = req.query;
     const since = new Date(
-      Date.now() - parseInt(minutes, 10) * 60 * 1000,
+      Date.now() - parseInt(minParam, 10) * MS_PER_MINUTE,
     ).toISOString();
 
     const [rawConversations, recentRequests] = await Promise.all([
@@ -1697,7 +1698,7 @@ router.get("/live", async (req, res, next) => {
     const totalRecent = await db
       .collection(REQUESTS_COL)
       .countDocuments({ timestamp: { $gte: since } });
-    const requestsPerMinute = totalRecent / parseInt(minutes, 10);
+    const requestsPerMinute = totalRecent / parseInt(minParam, 10);
 
     res.json({
       conversations,
