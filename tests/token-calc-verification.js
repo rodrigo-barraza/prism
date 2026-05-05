@@ -14,7 +14,7 @@
 // ============================================================
 
 const PRISM_SERVICE_URL = "http://localhost:7777";
-const PROJECT = "retina"; // matches prism-client's PROJECT_NAME (kept for MongoDB compat)
+const PROJECT = "prism-client-dev"; // matches prism-client's PROJECT_NAME for local dev
 const PROVIDER = "lm-studio";
 const MODEL = "qwen3.6-35b-a3b";
 

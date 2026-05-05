@@ -74,7 +74,7 @@ const MinioWrapper = {
 
   /**
    * Build a direct public URL for an object key.
-   * e.g. "http://<host>:9000/prism/projects/retina/127.0.0.1/uploads/uuid.png"
+   * e.g. "http://<host>:9000/prism/projects/prism-client/127.0.0.1/uploads/uuid.png"
    * @param {string} key - Object key within the bucket
    * @returns {string|null}
    */

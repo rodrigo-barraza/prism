@@ -72,23 +72,15 @@ async function prepareMessages(messages) {
     systemMessage = conversation.shift().content;
   }
 
-  // Remove unsupported properties and convert media content
+  // Build clean messages with ONLY the fields Anthropic's API accepts.
+  // Whitelist approach: explicitly construct each output object instead of
+  // destructuring + ...rest, which leaks any new internal fields (e.g.
+  // _ttftSamples, _liveGenProgress, _workerTokens) into the API payload.
   const cleaned = await Promise.all(conversation
     .filter(
       (m) => m.role === "user" || m.role === "assistant" || m.role === "tool",
     )
     .map(async (m) => {
-      const {
-        name: _name, id: _id, tool_call_id: _tcId,
-        images, thinking: _thinking, thinkingSignature: _tSig, toolCalls: _toolCalls,
-        // Strip persistence-only metadata that must never reach the API
-        timestamp: _ts, model: _model, provider: _provider, usage: _usage,
-        totalTime: _tt, tokensPerSec: _tps, estimatedCost: _ec,
-        generationSettings: _gs, contentSegments: _cs,
-        textFragments: _tf, thinkingFragments: _thf, audio: _audio,
-        ...rest
-      } = m;
-
       // Convert tool role messages to tool_result user messages for Anthropic
       if (m.role === "tool") {
         return {
@@ -121,8 +113,8 @@ async function prepareMessages(messages) {
             signature: m.thinkingSignature,
           });
         }
-        if (rest.content?.trim()) {
-          contentBlocks.push({ type: "text", text: rest.content });
+        if (m.content?.trim()) {
+          contentBlocks.push({ type: "text", text: m.content });
         }
         for (const tc of m.toolCalls) {
           contentBlocks.push({
@@ -139,6 +131,7 @@ async function prepareMessages(messages) {
       }
 
       // Convert messages with media to Anthropic content block format
+      const images = m.images;
       if (images && images.length > 0) {
         const contentBlocks = [];
         for (const dataUrl of images) {
@@ -196,12 +189,12 @@ async function prepareMessages(messages) {
           }
           // Other MIME types (audio, video) are not supported by Anthropic — skip
         }
-        if (rest.content) {
-          contentBlocks.push({ type: "text", text: rest.content });
+        if (m.content) {
+          contentBlocks.push({ type: "text", text: m.content });
         }
         return {
-          role: rest.role,
-          content: contentBlocks.length > 0 ? contentBlocks : rest.content,
+          role: m.role,
+          content: contentBlocks.length > 0 ? contentBlocks : m.content,
         };
       }
 
@@ -219,25 +212,27 @@ async function prepareMessages(messages) {
             signature: m.thinkingSignature,
           });
         }
-        if (rest.content?.trim()) {
-          contentBlocks.push({ type: "text", text: rest.content });
+        if (m.content?.trim()) {
+          contentBlocks.push({ type: "text", text: m.content });
         } else {
           contentBlocks.push({ type: "text", text: " " });
         }
         return {
           role: "assistant",
-          content: contentBlocks.length > 1 ? contentBlocks : rest.content?.trim() || " ",
+          content: contentBlocks.length > 1 ? contentBlocks : m.content?.trim() || " ",
         };
       }
 
       // Ensure assistant messages never have empty content
       if (
-        rest.role === "assistant" &&
-        (!rest.content || !rest.content.trim())
+        m.role === "assistant" &&
+        (!m.content || !m.content.trim())
       ) {
-        return { ...rest, content: " " };
+        return { role: "assistant", content: " " };
       }
-      return rest;
+
+      // Default: user or assistant with plain text — whitelist only role + content
+      return { role: m.role, content: m.content || " " };
     }));
 
   // Merge consecutive same-role messages
