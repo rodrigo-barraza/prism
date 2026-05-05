@@ -335,9 +335,9 @@ describe("Token/Cost Accuracy — OpenAI gpt-5-nano", () => {
     expect(res.body.usage.outputTokens).toBe(200);
     expect(res.body.estimatedCost).toBeCloseTo(expected, 8);
 
-    // Manual verification: (500/1M)*0.025 + (200/1M)*0.2
-    // = 0.0000125 + 0.00004 = 0.0000525
-    expect(expected).toBeCloseTo(0.0000525, 8);
+    // Manual verification: (500/1M)*0.05 + (200/1M)*0.40
+    // = 0.000025 + 0.00008 = 0.000105
+    expect(expected).toBeCloseTo(0.000105, 8);
   });
 
   it("calculates correct cost WITH 10 tools (function calling)", async () => {
@@ -360,9 +360,9 @@ describe("Token/Cost Accuracy — OpenAI gpt-5-nano", () => {
     expect(res.body.usage.outputTokens).toBe(100);
     expect(res.body.estimatedCost).toBeCloseTo(expected, 8);
 
-    // Manual: (3500/1M)*0.025 + (100/1M)*0.2
-    // = 0.0000875 + 0.00002 = 0.0001075
-    expect(expected).toBeCloseTo(0.0001075, 8);
+    // Manual: (3500/1M)*0.05 + (100/1M)*0.40
+    // = 0.000175 + 0.00004 = 0.000215
+    expect(expected).toBeCloseTo(0.000215, 8);
   });
 
   it("calculates correct cost with cached input tokens", async () => {
@@ -381,8 +381,8 @@ describe("Token/Cost Accuracy — OpenAI gpt-5-nano", () => {
     const expected = expectedCost(MODEL, usage);
     expect(res.body.estimatedCost).toBeCloseTo(expected, 8);
 
-    // Manual: (100/1M)*0.025 + (50/1M)*0.2 = 0.0000025 + 0.00001 = 0.0000125
-    expect(expected).toBeCloseTo(0.0000125, 8);
+    // Manual: (100/1M)*0.05 + (50/1M)*0.40 = 0.000005 + 0.00002 = 0.000025
+    expect(expected).toBeCloseTo(0.000025, 8);
   });
 });
 
@@ -757,8 +757,8 @@ describe("Token/Cost edge cases", () => {
       messages: [{ role: "user", content: "Max context" }],
     }).expect(200);
 
-    // Manual: (1M/1M)*0.025 + (100k/1M)*0.2 = 0.025 + 0.02 = 0.045
-    expect(res.body.estimatedCost).toBeCloseTo(0.045, 6);
+    // Manual: (1M/1M)*0.05 + (100k/1M)*0.40 = 0.05 + 0.04 = 0.09
+    expect(res.body.estimatedCost).toBeCloseTo(0.09, 6);
   });
 
   it("Anthropic cache fields propagate through to usage in response", async () => {

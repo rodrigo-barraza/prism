@@ -28,6 +28,49 @@ vi.mock('../src/wrappers/MongoWrapper.js', () => ({
     default: {
         createClient: vi.fn().mockResolvedValue(undefined),
         getDb: vi.fn().mockReturnValue(null),
+        getCollection: vi.fn().mockReturnValue(null),
+    },
+}));
+
+// ── Mock SettingsService to avoid DB dependency in EmbeddingService ────
+vi.mock('../src/services/SettingsService.js', () => ({
+    default: {
+        get: vi.fn().mockResolvedValue({
+            memory: {
+                extractionProvider: 'google',
+                extractionModel: 'gemini-3-flash-preview',
+                consolidationProvider: 'google',
+                consolidationModel: 'gemini-3-flash-preview',
+                embeddingProvider: 'google',
+                embeddingModel: 'gemini-embedding-2-preview',
+            },
+            agents: { subagentProvider: 'google', subagentModel: 'gemini-3-flash-preview' },
+        }),
+        getSection: vi.fn().mockResolvedValue({
+            extractionProvider: 'google',
+            extractionModel: 'gemini-3-flash-preview',
+            consolidationProvider: 'google',
+            consolidationModel: 'gemini-3-flash-preview',
+            embeddingProvider: 'google',
+            embeddingModel: 'gemini-embedding-2-preview',
+        }),
+        getMemoryModelConfig: vi.fn().mockResolvedValue({
+            provider: 'google',
+            model: 'gemini-embedding-2-preview',
+        }),
+        invalidateCache: vi.fn(),
+        getDefaults: vi.fn(),
+    },
+}));
+
+// ── Mock ConversationService to avoid DB writes ───────────────────────
+vi.mock('../src/services/ConversationService.js', () => ({
+    default: {
+        appendMessages: vi.fn().mockResolvedValue(undefined),
+        setGenerating: vi.fn().mockResolvedValue(undefined),
+        getConversation: vi.fn().mockResolvedValue(null),
+        listConversations: vi.fn().mockResolvedValue([]),
+        deleteConversation: vi.fn().mockResolvedValue(undefined),
     },
 }));
 

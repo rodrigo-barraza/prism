@@ -292,6 +292,3 @@ npm test             # Run tests (vitest)
 npm run test:watch   # Run tests in watch mode
 ```
 
-## ☀️ Part of [Sun](https://github.com/rodrigo-barraza)
-
-Prism is one service in a collection of composable backend services and frontends by Rodrigo Barraza.

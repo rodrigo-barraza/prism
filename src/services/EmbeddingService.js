@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { getProvider } from "../providers/index.js";
 import { TYPES, getDefaultModels, getPricing } from "../config.js";
 import { estimateTokens } from "../utils/CostCalculator.js";
+import { ProviderError } from "../utils/errors.js";
 import RequestLogger from "./RequestLogger.js";
 import logger from "../utils/logger.js";
 import { calculateTokensPerSec } from "../utils/math.js";
@@ -53,8 +54,10 @@ const EmbeddingService = {
     try {
       const provider = getProvider(providerName);
       if (!provider.generateEmbedding) {
-        throw new Error(
+        throw new ProviderError(
+          providerName,
           `Provider "${providerName}" does not support embeddings`,
+          400,
         );
       }
       const providerOptions = {};

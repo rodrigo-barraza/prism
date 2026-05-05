@@ -289,10 +289,11 @@ describe("ContextWindowManager.enforce — assistant compression", () => {
 
 describe("ContextWindowManager.enforce — sliding window", () => {
   it("drops middle turns and inserts context note", () => {
-    // Build a gigantic conversation that exceeds even compression.
-    // Budget at 32k: floor((32000 - 8192 - 2000) * 0.80) ≈ 17445 tokens
-    // Each assistant response = "Response ".repeat(2000) = 16000 chars ≈ 4571 tokens
-    // 50 turns × 4571 ≈ 228k tokens → way over 17k budget
+    // Build a conversation large enough that even after assistant_compression
+    // the user messages alone exceed the budget.
+    // Budget at 16k: floor((16000 - 8192 - 2000) * 0.80) ≈ 4646 tokens
+    // Each user message = "Question context ".repeat(500) = 8000 chars ≈ 2000 tokens
+    // Even compressed, 50 user messages × 2000 tokens ≈ 100k → way over 4.6k budget
     const messages = [
       { role: "system", content: "System prompt" },
       { role: "user", content: "First question" },
@@ -300,11 +301,11 @@ describe("ContextWindowManager.enforce — sliding window", () => {
 
     for (let i = 0; i < 50; i++) {
       messages.push({ role: "assistant", content: "Response ".repeat(2000) });
-      messages.push({ role: "user", content: `Follow-up question ${i}` });
+      messages.push({ role: "user", content: "Question context ".repeat(500) + ` ${i}` });
     }
 
     const result = ContextWindowManager.enforce(messages, {
-      maxInputTokens: 32_000,
+      maxInputTokens: 16_000,
     });
 
     expect(result.truncated).toBe(true);
@@ -449,15 +450,16 @@ describe("Budget calculation", () => {
 
 describe("Strategy escalation", () => {
   it("escalates from tool_truncation → assistant_compression → sliding_window", () => {
-    // Build messages where tool truncation alone doesn't suffice.
-    // Budget at 32k ≈ 17445 tokens.
-    // 40 turns × (1900 chars content + 2600 chars result) ≈ 40 × 1286 tokens ≈ 51k tokens → way over
+    // Build messages where both tool truncation AND assistant compression
+    // don't suffice because user messages contain most of the bulk.
+    // Budget at 16k: floor((16000 - 8192 - 2000) * 0.80) ≈ 4646 tokens
+    // User messages aren't compressed, so 40 × ("Question ".repeat(500)) ≈ 40 × 1000 tokens = 40k → way over
     const messages = [
       { role: "system", content: "System" },
     ];
 
     for (let i = 0; i < 40; i++) {
-      messages.push({ role: "user", content: `Question ${i}` });
+      messages.push({ role: "user", content: "Question context ".repeat(500) + ` ${i}` });
       messages.push({
         role: "assistant",
         content: "Analysis complete. ".repeat(500),
@@ -470,7 +472,7 @@ describe("Strategy escalation", () => {
     messages.push({ role: "user", content: "Final question" });
 
     const result = ContextWindowManager.enforce(messages, {
-      maxInputTokens: 32_000,
+      maxInputTokens: 16_000,
     });
 
     expect(result.truncated).toBe(true);

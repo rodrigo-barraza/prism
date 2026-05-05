@@ -51,6 +51,7 @@ describe("POST /chat (image-to-text / vision)", () => {
       .post("/chat?stream=false")
       .send({
         provider: "google",
+        model: "gemini-3-flash-preview",
         messages: [
           {
             role: "user",
@@ -75,6 +76,7 @@ describe("POST /chat (image-to-text / vision)", () => {
       .post("/chat?stream=false")
       .send({
         provider: "google",
+        model: "gemini-3-flash-preview",
         messages: [
           {
             role: "user",
@@ -116,6 +118,7 @@ describe("POST /chat (image-to-text / vision)", () => {
       .post("/chat?stream=false")
       .send({
         provider: "google",
+        model: "gemini-3-flash-preview",
         messages: [
           {
             role: "user",
@@ -138,6 +141,7 @@ describe("POST /chat (image-to-text / vision)", () => {
       .post("/chat?stream=false")
       .send({
         provider: "google",
+        model: "gemini-3-flash-preview",
         messages: [
           {
             role: "user",
@@ -161,6 +165,7 @@ describe("POST /chat (image-to-text / vision)", () => {
       .post("/chat?stream=false")
       .send({
         provider: "google",
+        model: "gemini-3-flash-preview",
         messages: [
           {
             role: "user",
@@ -220,6 +225,7 @@ describe("POST /chat (image-to-text / vision)", () => {
 
   it("returns 500 when provider throws", async () => {
     MOCK_GENERATE_TEXT_STREAM.mockImplementationOnce(async function* () {
+      yield { type: "chunk", content: "" };
       throw new Error("Vision failed");
     });
 
@@ -227,6 +233,7 @@ describe("POST /chat (image-to-text / vision)", () => {
       .post("/chat?stream=false")
       .send({
         provider: "google",
+        model: "gemini-3-flash-preview",
         messages: [
           {
             role: "user",
