@@ -1,4 +1,5 @@
 import MongoWrapper from "../wrappers/MongoWrapper.js";
+import { deepMerge } from "@rodrigo-barraza/utilities";
 import { MONGO_DB_NAME } from "../../secrets.js";
 import { COLLECTIONS } from "../constants.js";
 import logger from "../utils/logger.js";
@@ -133,29 +134,6 @@ const SettingsService = {
   },
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/**
- * Deep merge two plain objects. Source values override target values.
- * Arrays and non-plain-objects are replaced, not merged.
- */
-function deepMerge(target, source) {
-  const result = { ...target };
-  for (const key of Object.keys(source)) {
-    if (
-      source[key] &&
-      typeof source[key] === "object" &&
-      !Array.isArray(source[key]) &&
-      target[key] &&
-      typeof target[key] === "object" &&
-      !Array.isArray(target[key])
-    ) {
-      result[key] = deepMerge(target[key], source[key]);
-    } else {
-      result[key] = source[key];
-    }
-  }
-  return result;
-}
+// deepMerge — imported from @rodrigo-barraza/utilities
 
 export default SettingsService;

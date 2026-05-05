@@ -1,15 +1,8 @@
+import { formatFileSize } from "@rodrigo-barraza/utilities";
 import logger from "../utils/logger.js";
 import { requestContext } from "../utils/RequestContext.js";
 
-/**
- * Format bytes into a human-readable string (B, KB, MB).
- */
-function formatBytes(bytes) {
-  if (bytes === 0) return "0B";
-  if (bytes < 1024) return `${bytes}B`;
-  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)}KB`;
-  return `${(bytes / 1048576).toFixed(1)}MB`;
-}
+const formatBytes = (bytes) => formatFileSize(bytes, { compact: true });
 
 /**
  * Express middleware that:

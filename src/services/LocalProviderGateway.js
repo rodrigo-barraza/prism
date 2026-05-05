@@ -26,6 +26,7 @@
 // ============================================================
 
 import logger from "../utils/logger.js";
+import { formatFileSize } from "@rodrigo-barraza/utilities";
 import { getProvider } from "../providers/index.js";
 import {
   listInstances,
@@ -188,12 +189,7 @@ function detectCapabilities(modelKey, providerMeta = {}) {
 // ============================================================
 
 /** Format a byte count into a human-readable size string. */
-function formatBytes(bytes) {
-  if (!bytes) return null;
-  if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(1)} GB`;
-  if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MB`;
-  return `${(bytes / 1024).toFixed(0)} KB`;
-}
+const formatBytes = formatFileSize;
 
 /** Format a total parameter count into a human-readable string. */
 function formatParams(totalParams) {
