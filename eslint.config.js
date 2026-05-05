@@ -33,6 +33,7 @@ export default [
       globals: {
         describe: "readonly",
         it: "readonly",
+        test: "readonly",
         expect: "readonly",
         vi: "readonly",
         beforeEach: "readonly",

@@ -123,7 +123,6 @@ describe("ContextWindowManager.enforce — fast path", () => {
     const messages = [
       { role: "user", content: "Hi" },
     ];
-    const estimated = ContextWindowManager.estimateTokens(messages);
     // Budget = floor((maxInput - outputReserve - schemaOverhead) * 0.80)
     // We need budget >= estimated, so set maxInput high enough
     const result = ContextWindowManager.enforce(messages, {

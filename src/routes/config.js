@@ -10,7 +10,6 @@ import {
 } from "../config.js";
 import { listInstances } from "../providers/instance-registry.js";
 import { ARENA_SCORES } from "../arrays.js";
-import logger from "../utils/logger.js";
 import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
 import AgentPersonaRegistry from "../services/AgentPersonaRegistry.js";
 import rateLimitStore from "../services/RateLimitStore.js";

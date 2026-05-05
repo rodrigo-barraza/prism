@@ -137,7 +137,7 @@ describe("Dynamic model merging (via /config endpoint)", () => {
   it("no duplicate model names within a single provider", async () => {
     const res = await request(app).get("/config").expect(200);
 
-    for (const [provider, models] of Object.entries(
+    for (const [_provider, models] of Object.entries(
       res.body.textToText.models,
     )) {
       const names = models.map((m) => m.name);
@@ -205,7 +205,7 @@ describe("Arena score enrichment", () => {
     const withArena = allModels.filter((m) => m.arena);
 
     for (const model of withArena) {
-      for (const [category, score] of Object.entries(model.arena)) {
+      for (const [_category, score] of Object.entries(model.arena)) {
         expect(typeof score).toBe("number");
         expect(score).toBeGreaterThan(0);
       }

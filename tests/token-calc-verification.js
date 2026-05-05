@@ -356,7 +356,7 @@ Do NOT do the work yourself. Use team_create immediately.`;
     enabledTools: ["read_file", "write_file", "list_dir", "run_command", "team_create", "send_message", "stop_agent"],
   });
 
-  const { chunkCount, thinkingChunkCount, doneEvent, usageUpdateEvents, workerCompleteEvents, workerProgressEvents, workerStatusEvents, maxOutputTokensFromChunks } = result;
+  const { chunkCount, thinkingChunkCount, doneEvent, usageUpdateEvents, workerCompleteEvents, workerProgressEvents: _workerProgressEvents, workerStatusEvents, maxOutputTokensFromChunks } = result;
 
   logSection("B1. SSE Event Summary");
   log("📊", `Total SSE events: ${result.events.length}`);
