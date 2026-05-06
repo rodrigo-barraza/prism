@@ -374,7 +374,7 @@ const MemoryConsolidationService = {
     // Parse response
     const parsed = parseJsonFromLlmResponse(result.text);
     if (!parsed) {
-      logger.warn("[MemoryConsolidation] Failed to parse LLM response");
+      logger.warn("[MemoryConsolidation] Failed to parse LLM response:", result.text?.substring(0, 500));
       await resetRunCount(project);
       return { error: "parse_failed", total: allMemories.length };
     }
