@@ -1,4 +1,4 @@
-import { formatFileSize } from "@rodrigo-barraza/utilities";
+import { formatFileSize } from "@rodrigo-barraza/utilities-library";
 import logger from "../utils/logger.js";
 import { requestContext } from "../utils/RequestContext.js";
 

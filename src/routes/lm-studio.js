@@ -1,4 +1,4 @@
-import { sleep } from "@rodrigo-barraza/utilities";
+import { sleep } from "@rodrigo-barraza/utilities-library";
 import express from "express";
 import { getProvider } from "../providers/index.js";
 import { isInstance } from "../providers/instance-registry.js";

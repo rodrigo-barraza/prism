@@ -3,7 +3,7 @@
 // Extended with Prism-specific methods (provider, request).
 // ─────────────────────────────────────────────────────────────
 
-import { createLogger } from "@rodrigo-barraza/utilities/node";
+import { createLogger } from "@rodrigo-barraza/utilities-library/node";
 import { getRequestContext } from "./RequestContext.js";
 
 const base = createLogger("prism");

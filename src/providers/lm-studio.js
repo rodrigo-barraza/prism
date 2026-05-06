@@ -1,4 +1,4 @@
-import { sleep } from "@rodrigo-barraza/utilities";
+import { sleep } from "@rodrigo-barraza/utilities-library";
 // ─────────────────────────────────────────────────────────────
 // LM Studio provider — Fully native /api/v1/chat
 // Uses the native REST API for all streaming, with:

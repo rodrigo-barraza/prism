@@ -1,4 +1,4 @@
-import { formatCostTag, roundMs } from "@rodrigo-barraza/utilities";
+import { formatCostTag, roundMs } from "@rodrigo-barraza/utilities-library";
 import crypto from "crypto";
 import { getProvider } from "../providers/index.js";
 import { TYPES, getDefaultModels, getPricing } from "../config.js";

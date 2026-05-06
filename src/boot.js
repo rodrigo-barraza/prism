@@ -16,7 +16,7 @@
 //   - Local dev with config.js defaults → still works unchanged
 // ============================================================
 
-import { createVaultClient } from "@rodrigo-barraza/utilities/vault";
+import { createVaultClient } from "@rodrigo-barraza/utilities-library/vault";
 
 const vault = createVaultClient({
   localEnvFile: "./.env",

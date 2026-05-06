@@ -292,7 +292,7 @@ setupWebSocket(wss);
 
   // ── Scheduled Memory Consolidation ─────────────────
   // Runs every 6 hours, consolidates memories for all active projects.
-  const { hours } = await import("@rodrigo-barraza/utilities");
+  const { hours } = await import("@rodrigo-barraza/utilities-library");
   const CONSOLIDATION_INTERVAL_MS = hours(6);
   setInterval(async () => {
     try {

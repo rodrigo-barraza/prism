@@ -1,4 +1,4 @@
-import { sleep, roundMs } from "@rodrigo-barraza/utilities";
+import { sleep, roundMs } from "@rodrigo-barraza/utilities-library";
 // ============================================================
 // BenchmarkService — Custom LLM Accuracy Benchmarking
 // ============================================================

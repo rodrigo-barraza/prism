@@ -15,7 +15,7 @@
 
 import { readdir, stat, rm } from "node:fs/promises";
 import { resolve } from "node:path";
-import { MS_PER_DAY, hours } from "@rodrigo-barraza/utilities";
+import { MS_PER_DAY, hours } from "@rodrigo-barraza/utilities-library";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import MinioWrapper from "../wrappers/MinioWrapper.js";
 import { MONGO_DB_NAME } from "../../config.js";

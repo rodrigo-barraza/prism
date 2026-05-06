@@ -1,4 +1,4 @@
-import { roundMs } from "@rodrigo-barraza/utilities";
+import { roundMs } from "@rodrigo-barraza/utilities-library";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../config.js";
 import logger from "../utils/logger.js";

@@ -10,7 +10,7 @@ import { resolveArchParams, estimateMemory } from "../utils/gguf-arch.js";
 import { COLLECTIONS, COST_SUM_EXPR, TOTAL_TOKENS_EXPR, AVG_TOKENS_PER_SEC_EXPR } from "../constants.js";
 import AgentPersonaRegistry from "../services/AgentPersonaRegistry.js";
 import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
-import { MS_PER_MINUTE, MS_PER_HOUR, hours as hoursToMs, minutes } from "@rodrigo-barraza/utilities";
+import { MS_PER_MINUTE, MS_PER_HOUR, hours as hoursToMs, minutes } from "@rodrigo-barraza/utilities-library";
 import os from "os";
 
 const router = express.Router();

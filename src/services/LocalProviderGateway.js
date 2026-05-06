@@ -26,7 +26,7 @@
 // ============================================================
 
 import logger from "../utils/logger.js";
-import { formatFileSize } from "@rodrigo-barraza/utilities";
+import { formatFileSize } from "@rodrigo-barraza/utilities-library";
 import { getProvider } from "../providers/index.js";
 import {
   listInstances,

@@ -1,5 +1,5 @@
 import MongoWrapper from "../wrappers/MongoWrapper.js";
-import { deepMerge } from "@rodrigo-barraza/utilities";
+import { deepMerge } from "@rodrigo-barraza/utilities-library";
 import { MONGO_DB_NAME } from "../../config.js";
 import { COLLECTIONS } from "../constants.js";
 import logger from "../utils/logger.js";
@@ -134,6 +134,6 @@ const SettingsService = {
   },
 };
 
-// deepMerge — imported from @rodrigo-barraza/utilities
+// deepMerge — imported from @rodrigo-barraza/utilities-library
 
 export default SettingsService;
