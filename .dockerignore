@@ -12,8 +12,5 @@ docker-compose.yml
 Dockerfile
 eslint.config.js
 vitest.config.js
-vitest.live.config.js
 tests
-docs
-scripts
 *.md

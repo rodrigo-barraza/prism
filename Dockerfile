@@ -6,13 +6,13 @@
 # Vault at startup.
 # ============================================================
 
-# --- Dependencies ---
+# ── Stage 1: Install dependencies ─────────────────────────────
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN apk add --no-cache git && npm ci --omit=dev
 
-# --- Production ---
+# ── Stage 2: Runtime ──────────────────────────────────────────
 FROM node:22-alpine
 WORKDIR /app
 
