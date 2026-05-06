@@ -14,6 +14,28 @@ const EFFORT_BUDGET_MAP = {
   high: 50000,
 };
 
+// Retry config for transient Anthropic errors (overloaded, rate limit)
+const RETRY_DELAY_MS = 10_000;
+const MAX_RETRIES = 3;
+
+/**
+ * Check if an Anthropic error is retryable (overloaded or 529).
+ */
+function isRetryableError(error) {
+  // SDK wraps the error body — check both the error type and HTTP status
+  const errorType = error?.error?.type || error?.type;
+  if (errorType === "overloaded_error") return true;
+  if (error.status === 529) return true;
+  return false;
+}
+
+/**
+ * Sleep helper.
+ */
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 let client = null;
 
 function getClient() {
@@ -425,74 +447,88 @@ const anthropicProvider = {
     options = {},
   ) {
     logger.provider("Anthropic", `generateText model=${model}`);
-    try {
-      const prepared = await prepareMessages(messages);
-      const payload = {
-        cache_control: { type: "ephemeral" },
-        system: prepared.systemMessage,
-        model,
-        messages: prepared.messages,
-        max_tokens: options.maxTokens || 1000,
-        temperature:
-          options.temperature !== undefined ? Math.min(options.temperature, 1) : undefined,
-        top_p:
-          options.temperature === undefined && options.topP !== undefined
-            ? options.topP
-            : undefined,
-        top_k: options.topK !== undefined ? options.topK : undefined,
-        stop_sequences:
-          options.stopSequences !== undefined
-            ? options.stopSequences
-            : undefined,
-        ...(options.serviceTier && { service_tier: options.serviceTier }),
-      };
 
-      // Server tools
-      const tools = buildTools(options);
-      if (tools) payload.tools = tools;
+    const prepared = await prepareMessages(messages);
+    const payload = {
+      cache_control: { type: "ephemeral" },
+      system: prepared.systemMessage,
+      model,
+      messages: prepared.messages,
+      max_tokens: options.maxTokens || 1000,
+      temperature:
+        options.temperature !== undefined ? Math.min(options.temperature, 1) : undefined,
+      top_p:
+        options.temperature === undefined && options.topP !== undefined
+          ? options.topP
+          : undefined,
+      top_k: options.topK !== undefined ? options.topK : undefined,
+      stop_sequences:
+        options.stopSequences !== undefined
+          ? options.stopSequences
+          : undefined,
+      ...(options.serviceTier && { service_tier: options.serviceTier }),
+    };
 
-      if (options.thinkingEnabled !== false && (options.thinkingEnabled === true || options.thinkingBudget || options.reasoningEffort)) {
-        const budget = options.thinkingBudget
-          ? parseInt(options.thinkingBudget)
-          : EFFORT_BUDGET_MAP[options.reasoningEffort] ||
-            EFFORT_BUDGET_MAP.high;
-        payload.thinking = { type: "enabled", budget_tokens: budget };
-        if (payload.max_tokens <= budget) {
-          payload.max_tokens = budget + 1024;
-        }
-        // Anthropic requires temperature=1 and top_p/top_k unset when thinking is enabled
-        payload.temperature = 1;
-        delete payload.top_p;
-        delete payload.top_k;
+    // Server tools
+    const tools = buildTools(options);
+    if (tools) payload.tools = tools;
+
+    if (options.thinkingEnabled !== false && (options.thinkingEnabled === true || options.thinkingBudget || options.reasoningEffort)) {
+      const budget = options.thinkingBudget
+        ? parseInt(options.thinkingBudget)
+        : EFFORT_BUDGET_MAP[options.reasoningEffort] ||
+          EFFORT_BUDGET_MAP.high;
+      payload.thinking = { type: "enabled", budget_tokens: budget };
+      if (payload.max_tokens <= budget) {
+        payload.max_tokens = budget + 1024;
       }
-
-      const { data: response, response: rawResponse } = await getClient().messages.create(payload).withResponse();
-      const rateLimits = extractAnthropicRateLimits(rawResponse, model);
-
-      const { text, thinking, thinkingSignature, citations, toolCalls } = extractResponseContent(
-        response.content,
-      );
-      const result = {
-        text,
-        usage: buildUsage(response.usage),
-      };
-      if (thinking) result.thinking = thinking;
-      if (thinkingSignature) result.thinkingSignature = thinkingSignature;
-      if (citations.length > 0) result.citations = citations;
-      if (toolCalls.length > 0) result.toolCalls = toolCalls;
-      if (rateLimits) result.rateLimits = rateLimits;
-      // Forward structured stop details for observability (SDK 0.82+)
-      if (response.stop_reason) result.stopReason = response.stop_reason;
-      if (response.stop_details) result.stopDetails = response.stop_details;
-      return result;
-    } catch (error) {
-      throw new ProviderError(
-        "anthropic",
-        error.message,
-        error.status || 500,
-        error,
-      );
+      // Anthropic requires temperature=1 and top_p/top_k unset when thinking is enabled
+      payload.temperature = 1;
+      delete payload.top_p;
+      delete payload.top_k;
     }
+
+    let lastError;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const { data: response, response: rawResponse } = await getClient().messages.create(payload).withResponse();
+        const rateLimits = extractAnthropicRateLimits(rawResponse, model);
+
+        const { text, thinking, thinkingSignature, citations, toolCalls } = extractResponseContent(
+          response.content,
+        );
+        const result = {
+          text,
+          usage: buildUsage(response.usage),
+        };
+        if (thinking) result.thinking = thinking;
+        if (thinkingSignature) result.thinkingSignature = thinkingSignature;
+        if (citations.length > 0) result.citations = citations;
+        if (toolCalls.length > 0) result.toolCalls = toolCalls;
+        if (rateLimits) result.rateLimits = rateLimits;
+        // Forward structured stop details for observability (SDK 0.82+)
+        if (response.stop_reason) result.stopReason = response.stop_reason;
+        if (response.stop_details) result.stopDetails = response.stop_details;
+        return result;
+      } catch (error) {
+        lastError = error;
+        if (isRetryableError(error) && attempt < MAX_RETRIES) {
+          logger.warn(
+            `[anthropic] Overloaded on attempt ${attempt}/${MAX_RETRIES} for generateText model=${model}. Retrying in ${RETRY_DELAY_MS / 1000}s...`,
+          );
+          await sleep(RETRY_DELAY_MS);
+          continue;
+        }
+        throw new ProviderError(
+          "anthropic",
+          error.message,
+          error.status || 500,
+          error,
+        );
+      }
+    }
+    // Should never reach here, but safety net
+    throw new ProviderError("anthropic", lastError?.message || "Max retries exceeded", lastError?.status || 500, lastError);
   },
 
   /**
@@ -837,6 +873,22 @@ const anthropicProvider = {
       }
     } catch (error) {
       if (error.name === "AbortError") return;
+      // For streaming, retry overloaded errors with the same delay/attempts policy
+      if (isRetryableError(error)) {
+        // Recursive retry with attempt tracking via options._retryAttempt
+        const attempt = options._retryAttempt || 1;
+        if (attempt < MAX_RETRIES) {
+          logger.warn(
+            `[anthropic] Overloaded on attempt ${attempt}/${MAX_RETRIES} for generateTextStream model=${model}. Retrying in ${RETRY_DELAY_MS / 1000}s...`,
+          );
+          await sleep(RETRY_DELAY_MS);
+          yield* this.generateTextStream(messages, model, {
+            ...options,
+            _retryAttempt: attempt + 1,
+          });
+          return;
+        }
+      }
       throw new ProviderError(
         "anthropic",
         error.message,
