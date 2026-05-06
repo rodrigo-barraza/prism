@@ -12,7 +12,7 @@ const router = express.Router();
  *   - id: the full absolute path (used as stable identifier)
  *   - name: last path segment (e.g. "sun")
  *   - path: full absolute path
- *   - isPinned: true if from secrets.js (non-removable)
+ *   - isPinned: true if from config.js (non-removable)
  */
 router.get("/", (_req, res) => {
   try {

@@ -8,12 +8,12 @@
 //   1. Already-set process.env values (manual env vars)
 //   2. Vault service (fetched over HTTP)
 //   3. Fallback .env file (../vault-service/.env)
-//   4. Static secrets.js hardcoded values (legacy)
+//   4. Static config.js defaults
 //
 // This allows flexible deployment:
 //   - Vault on the LAN → automatic
 //   - Docker with env vars → process.env already set
-//   - Local dev with secrets.js → still works unchanged
+//   - Local dev with config.js defaults → still works unchanged
 // ============================================================
 
 import { createVaultClient } from "@rodrigo-barraza/utilities/vault";
@@ -34,5 +34,5 @@ for (const [key, value] of Object.entries(secrets)) {
 }
 
 // Now import the actual app — all modules will read from process.env
-// via secrets.js, which is now a thin process.env shim.
+// via config.js, which is a typed accessor layer over process.env.
 await import("./index.js");

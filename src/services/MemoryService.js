@@ -2,7 +2,7 @@ import { daysSinceIso } from "@rodrigo-barraza/utilities";
 import crypto from "crypto";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { getProvider } from "../providers/index.js";
-import { MONGO_DB_NAME } from "../../secrets.js";
+import { MONGO_DB_NAME } from "../../config.js";
 import EmbeddingService from "./EmbeddingService.js";
 import RequestLogger from "./RequestLogger.js";
 import logger from "../utils/logger.js";

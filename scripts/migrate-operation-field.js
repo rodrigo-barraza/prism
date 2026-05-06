@@ -14,7 +14,7 @@
  * Usage: node scripts/migrate-operation-field.js
  */
 import { MongoClient } from "mongodb";
-import { MONGO_DB_NAME, MONGO_URI } from "../secrets.js";
+import { MONGO_DB_NAME, MONGO_URI } from "../config.js";
 
 const REQUESTS_COL = "requests";
 

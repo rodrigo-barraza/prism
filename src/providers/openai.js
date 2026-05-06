@@ -2,7 +2,7 @@ import OpenAI, { toFile } from "openai";
 import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
 import { extractOpenAIRateLimits } from "../utils/rateLimits.js";
-import { OPENAI_API_KEY } from "../../secrets.js";
+import { OPENAI_API_KEY } from "../../config.js";
 import {
   TYPES,
   DEFAULT_VOICES,

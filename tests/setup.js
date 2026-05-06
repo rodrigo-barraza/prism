@@ -5,7 +5,7 @@
 import { vi } from 'vitest';
 
 // ── Mock secrets before anything imports them ──────────────────────────
-vi.mock('../secrets.js', () => ({
+vi.mock('../config.js', () => ({
     PRISM_SERVICE_PORT: 0,
     GATEWAY_SECRET: 'test-secret',
     OPENAI_API_KEY: 'fake',

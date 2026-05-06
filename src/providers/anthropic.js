@@ -4,7 +4,7 @@ import logger from "../utils/logger.js";
 import { extractAnthropicRateLimits } from "../utils/rateLimits.js";
 import { compressImageForSizeLimit } from "../utils/media.js";
 import { EMPTY_USAGE } from "../utils/openai-compat.js";
-import { ANTHROPIC_API_KEY } from "../../secrets.js";
+import { ANTHROPIC_API_KEY } from "../../config.js";
 import { TYPES, getDefaultModels } from "../config.js";
 
 // Default budget tokens mapped from effort level (for non-adaptive models)

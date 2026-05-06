@@ -22,7 +22,7 @@ import {
   GOOGLE_API_KEY,
   ELEVENLABS_API_KEY,
   INWORLD_BASIC,
-} from "../../secrets.js";
+} from "../../config.js";
 
 const router = express.Router();
 

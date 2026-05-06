@@ -4,7 +4,7 @@ import { getProvider } from "../providers/index.js";
 import MemoryService from "./MemoryService.js";
 import RequestLogger from "./RequestLogger.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
-import { MONGO_DB_NAME } from "../../secrets.js";
+import { MONGO_DB_NAME } from "../../config.js";
 import logger from "../utils/logger.js";
 import { cosineSimilarity } from "../utils/math.js";
 import { parseJsonFromLlmResponse } from "../utils/utilities.js";

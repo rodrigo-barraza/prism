@@ -1,4 +1,4 @@
-import { TOOLS_SERVICE_URL } from "../../secrets.js";
+import { TOOLS_SERVICE_URL } from "../../config.js";
 import { resolve, relative } from "node:path";
 import { existsSync } from "node:fs";
 import logger from "../utils/logger.js";

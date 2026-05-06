@@ -2,7 +2,7 @@
 // Instance Registry — Multi-Instance Local Provider Support
 // ============================================================
 // Creates and registers provider instances from PROVIDER_* arrays
-// in secrets.js. Each array entry is an instance:
+// in config.js. Each array entry is an instance:
 //   { url, concurrency, nickname? }
 //
 // Instances are auto-numbered per type:
@@ -24,7 +24,7 @@ import {
   PROVIDER_VLLM,
   PROVIDER_OLLAMA,
   PROVIDER_LLAMA_CPP,
-} from "../../secrets.js";
+} from "../../config.js";
 
 // Import factories
 import { createLmStudioProvider } from "./lm-studio.js";

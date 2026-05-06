@@ -1,4 +1,4 @@
-import { TOOLS_SERVICE_URL } from "../../secrets.js";
+import { TOOLS_SERVICE_URL } from "../../config.js";
 import MCPClientService from "./MCPClientService.js";
 import logger from "../utils/logger.js";
 import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
@@ -24,7 +24,7 @@ const toolMap = new Map();
 /** @type {string[]} Allowed workspace root paths (fetched from tools-api) */
 let cachedWorkspaceRoots = [];
 
-/** @type {string[]} Static roots from secrets.js (immutable, for "pinned" UI) */
+/** @type {string[]} Static roots from config.js (immutable, for "pinned" UI) */
 let cachedStaticRoots = [];
 
 /** @type {boolean} Whether initial fetch has completed */
@@ -433,7 +433,7 @@ export default class ToolOrchestratorService {
     return cachedWorkspaceRoots[0] || null;
   }
 
-  /** Static roots from secrets.js (immutable, for "pinned" UI distinction) */
+  /** Static roots from config.js (immutable, for "pinned" UI distinction) */
   static getStaticRoots() {
     return [...cachedStaticRoots];
   }

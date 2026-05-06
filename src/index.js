@@ -18,7 +18,7 @@ import {
   MINIO_ACCESS_KEY,
   MINIO_SECRET_KEY,
   MINIO_BUCKET_NAME,
-} from "../secrets.js";
+} from "../config.js";
 import MongoWrapper from "./wrappers/MongoWrapper.js";
 import MinioWrapper from "./wrappers/MinioWrapper.js";
 import ChangeStreamService from "./services/ChangeStreamService.js";

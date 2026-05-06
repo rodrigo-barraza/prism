@@ -11,7 +11,7 @@
  * The original `memories` collection is preserved as a backup.
  */
 import { MongoClient } from "mongodb";
-import { MONGO_URI, MONGO_DB_NAME } from "../secrets.js";
+import { MONGO_URI, MONGO_DB_NAME } from "../config.js";
 
 const SOURCE = "memories";
 const LUPOS_TARGET = "lupos_memories";

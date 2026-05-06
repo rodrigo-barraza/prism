@@ -14,7 +14,7 @@ import {
 import { getProvider } from "../providers/index.js";
 import { isInstance } from "../providers/instance-registry.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
-import { MONGO_DB_NAME } from "../../secrets.js";
+import { MONGO_DB_NAME } from "../../config.js";
 import logger from "../utils/logger.js";
 import {  } from "../utils/utilities.js";
 import { COLLECTIONS } from "../constants.js";

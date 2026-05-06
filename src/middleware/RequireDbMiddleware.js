@@ -1,5 +1,5 @@
 import MongoWrapper from "../wrappers/MongoWrapper.js";
-import { MONGO_DB_NAME } from "../../secrets.js";
+import { MONGO_DB_NAME } from "../../config.js";
 
 /**
  * Express middleware that attaches the MongoDB database instance to `req.db`.

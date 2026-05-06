@@ -18,7 +18,7 @@ import { resolve } from "node:path";
 import { MS_PER_DAY, hours } from "@rodrigo-barraza/utilities";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import MinioWrapper from "../wrappers/MinioWrapper.js";
-import { MONGO_DB_NAME } from "../../secrets.js";
+import { MONGO_DB_NAME } from "../../config.js";
 import { COLLECTIONS } from "../constants.js";
 import logger from "../utils/logger.js";
 

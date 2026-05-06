@@ -7,7 +7,7 @@
  * Usage: node scripts/migrate-fix-endpoint-operation.js
  */
 import { MongoClient } from "mongodb";
-import { MONGO_DB_NAME, MONGO_URI } from "../secrets.js";
+import { MONGO_DB_NAME, MONGO_URI } from "../config.js";
 
 const REQUESTS_COL = "requests";
 

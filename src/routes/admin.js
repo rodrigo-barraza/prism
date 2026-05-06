@@ -1,6 +1,6 @@
 import express from "express";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
-import { MONGO_DB_NAME } from "../../secrets.js";
+import { MONGO_DB_NAME } from "../../config.js";
 import { getProvider } from "../providers/index.js";
 import ChangeStreamService from "../services/ChangeStreamService.js";
 import BenchmarkService from "../services/BenchmarkService.js";

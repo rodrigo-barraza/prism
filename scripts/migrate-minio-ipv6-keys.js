@@ -15,7 +15,7 @@ import {
   MINIO_ACCESS_KEY,
   MINIO_SECRET_KEY,
   MINIO_BUCKET_NAME,
-} from "../secrets.js";
+} from "../config.js";
 
 const DRY_RUN = process.argv.includes("--dry-run");
 

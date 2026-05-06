@@ -1,6 +1,6 @@
 import { roundMs } from "@rodrigo-barraza/utilities";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
-import { MONGO_DB_NAME } from "../../secrets.js";
+import { MONGO_DB_NAME } from "../../config.js";
 import logger from "../utils/logger.js";
 import { getTotalInputTokens, estimateTokens, calculateTextCost } from "../utils/CostCalculator.js";
 import { computeModalities } from "./ConversationService.js";

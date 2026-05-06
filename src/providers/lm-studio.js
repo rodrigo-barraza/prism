@@ -9,7 +9,7 @@ import { sleep } from "@rodrigo-barraza/utilities";
 import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
 import { resolveArchParams } from "../utils/gguf-arch.js";
-import { TOOLS_SERVICE_URL } from "../../secrets.js";
+import { TOOLS_SERVICE_URL } from "../../config.js";
 import { TYPES, getDefaultModels } from "../config.js";
 import {  } from "../utils/utilities.js";
 // Default MCP server URL for ephemeral tool integrations

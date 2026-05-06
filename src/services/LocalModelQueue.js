@@ -7,7 +7,7 @@
 // per instance that serializes requests — instances on different
 // machines get independent queues with their own concurrency.
 //
-// Each instance's concurrency is configured in secrets.js via
+// Each instance's concurrency is configured in config.js via
 // PROVIDER_LM_STUDIO, PROVIDER_OLLAMA, etc. arrays.
 //
 // Usage:

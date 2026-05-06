@@ -20,7 +20,7 @@
  */
 
 import { MongoClient } from "mongodb";
-import { MONGO_URI, MONGO_DB_NAME } from "../secrets.js";
+import { MONGO_URI, MONGO_DB_NAME } from "../config.js";
 
 const DRY_RUN = process.argv.includes("--dry-run");
 

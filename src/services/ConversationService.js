@@ -1,6 +1,6 @@
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import FileService from "./FileService.js";
-import { MONGO_DB_NAME } from "../../secrets.js";
+import { MONGO_DB_NAME } from "../../config.js";
 import logger from "../utils/logger.js";
 import { COLLECTIONS } from "../constants.js";
 

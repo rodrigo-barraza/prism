@@ -1,6 +1,6 @@
 // Quick MongoDB query to inspect the most recent agent session's requests
 import { MongoClient } from "mongodb";
-import { MONGO_URI, MONGO_DB_NAME } from "../secrets.js";
+import { MONGO_URI, MONGO_DB_NAME } from "../config.js";
 import { COLLECTIONS } from "../src/constants.js";
 
 const client = new MongoClient(MONGO_URI);

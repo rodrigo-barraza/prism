@@ -74,7 +74,7 @@ import {
   MONGO_DB_NAME,
   PROVIDER_LM_STUDIO,
   PROVIDER_OLLAMA,
-} from "../secrets.js";
+} from "../config.js";
 
 // ── CLI Argument Parsing ─────────────────────────────────────
 

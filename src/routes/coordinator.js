@@ -134,7 +134,7 @@ router.get("/workers", async (req, res) => {
   if (workers.length === 0 && agentSessionId) {
     try {
       const { default: MongoWrapper } = await import("../wrappers/MongoWrapper.js");
-      const { MONGO_DB_NAME } = await import("../../secrets.js");
+      const { MONGO_DB_NAME } = await import("../../config.js");
       const { COLLECTIONS } = await import("../constants.js");
       const col = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTIONS.AGENT_SESSIONS);
       const session = await col.findOne(

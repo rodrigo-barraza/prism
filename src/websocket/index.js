@@ -6,7 +6,7 @@ import {
   StartSensitivity,
   EndSensitivity,
 } from "@google/genai";
-import { GOOGLE_API_KEY } from "../../secrets.js";
+import { GOOGLE_API_KEY } from "../../config.js";
 import crypto from "crypto";
 import logger from "../utils/logger.js";
 import RequestLogger from "../services/RequestLogger.js";
@@ -265,7 +265,7 @@ function handleWsLive(ws, project, username, _clientIp, agent) {
           const ToolOrchestratorService = (await import("../services/ToolOrchestratorService.js")).default;
           const { convertToolsToGoogle } = await import("../providers/google.js");
           const MongoWrapper = (await import("../wrappers/MongoWrapper.js")).default;
-          const { MONGO_DB_NAME } = await import("../../secrets.js");
+          const { MONGO_DB_NAME } = await import("../../config.js");
 
           const dynamicTools = [...ToolOrchestratorService.getToolSchemas()];
 
@@ -456,7 +456,7 @@ function handleWsLive(ws, project, username, _clientIp, agent) {
                     const ToolOrchestratorService = (await import("../services/ToolOrchestratorService.js")).default;
                     const { truncateToolResult } = await import("../utils/FunctionCallingUtilities.js");
                     const MongoWrapper = (await import("../wrappers/MongoWrapper.js")).default;
-                    const { MONGO_DB_NAME } = await import("../../secrets.js");
+                    const { MONGO_DB_NAME } = await import("../../config.js");
 
                     // Build merged tool map (custom + built-in) for execution
                     const customToolMap = new Map();

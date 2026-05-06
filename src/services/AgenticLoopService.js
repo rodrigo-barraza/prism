@@ -2,7 +2,7 @@ import ToolOrchestratorService from "./ToolOrchestratorService.js";
 import { expandMessagesForFC, truncateToolResult as _truncateToolResult } from "../utils/FunctionCallingUtilities.js";
 import { stripToolCallMarkup } from "../utils/StreamChunkDispatcher.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
-import { MONGO_DB_NAME } from "../../secrets.js";
+import { MONGO_DB_NAME } from "../../config.js";
 import logger from "../utils/logger.js";
 
 import FileService from "./FileService.js";

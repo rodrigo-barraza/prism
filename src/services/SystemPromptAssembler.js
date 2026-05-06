@@ -3,7 +3,7 @@ import MemoryService from "./MemoryService.js";
 import AgentPersonaRegistry from "./AgentPersonaRegistry.js";
 import EmbeddingService from "./EmbeddingService.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
-import { TOOLS_SERVICE_URL, MONGO_DB_NAME } from "../../secrets.js";
+import { TOOLS_SERVICE_URL, MONGO_DB_NAME } from "../../config.js";
 import logger from "../utils/logger.js";
 import { cosineSimilarity } from "../utils/math.js";
 import { getCoordinatorPromptAddendum, COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
