@@ -3,7 +3,7 @@ import crypto from "crypto";
 import { Readable } from "stream";
 import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
-import { GOOGLE_API_KEY } from "../../config.js";
+import { GOOGLE_API_KEY, GOOGLE_TTS_MODEL, GOOGLE_EMBEDDING_MODEL } from "../../config.js";
 import { TYPES, MODELS, DEFAULT_VOICES, getDefaultModels } from "../config.js";
 
 let client = null;
@@ -982,7 +982,7 @@ const googleProvider = {
   async transcribeAudio(
     audioBuffer,
     mimeType,
-    model = "gemini-3-flash-preview",
+    model = GOOGLE_TTS_MODEL,
     options = {},
   ) {
     logger.provider("Google", `transcribeAudio model=${model}`);
@@ -1029,7 +1029,7 @@ const googleProvider = {
     model =
       model ||
       getDefaultModels(TYPES.TEXT, TYPES.EMBEDDING)?.google ||
-      "gemini-embedding-2-preview";
+      GOOGLE_EMBEDDING_MODEL;
     logger.provider("Google", `generateEmbedding model=${model}`);
     try {
       const params = { model };

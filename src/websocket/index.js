@@ -6,7 +6,7 @@ import {
   StartSensitivity,
   EndSensitivity,
 } from "@google/genai";
-import { GOOGLE_API_KEY } from "../../config.js";
+import { GOOGLE_API_KEY, LIVE_AUDIO_MODEL } from "../../config.js";
 import crypto from "crypto";
 import logger from "../utils/logger.js";
 import RequestLogger from "../services/RequestLogger.js";
@@ -156,7 +156,7 @@ function handleWsLive(ws, project, username, _clientIp, agent) {
   let turnUsage = { inputTokens: 0, outputTokens: 0 };
 
   // Variables for Request Logging
-  let activeModel = "gemini-3.1-flash-live-preview";
+  let activeModel = LIVE_AUDIO_MODEL;
   let activeConversationId = null;
   let activeConfig = {};
   
@@ -246,7 +246,7 @@ function handleWsLive(ws, project, username, _clientIp, agent) {
         liveSession = null;
       }
 
-      const model = data.model || "gemini-3.1-flash-live-preview";
+      const model = data.model || LIVE_AUDIO_MODEL;
       const clientConfig = data.config || {};
       
       activeModel = model;

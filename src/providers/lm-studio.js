@@ -9,7 +9,7 @@ import { sleep } from "@rodrigo-barraza/utilities";
 import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
 import { resolveArchParams } from "../utils/gguf-arch.js";
-import { TOOLS_SERVICE_URL } from "../../config.js";
+import { TOOLS_SERVICE_URL, LM_STUDIO_EVAL_BATCH_SIZE, LM_STUDIO_DEFAULT_MAX_CONTEXT } from "../../config.js";
 import { TYPES, getDefaultModels } from "../config.js";
 import {  } from "../utils/utilities.js";
 // Default MCP server URL for ephemeral tool integrations
@@ -424,10 +424,10 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
                 // Build load options — enforce minContextLength if set
                 // Apply default hardware params for consistent auto-load behavior
                 const loadOpts = {
-                  eval_batch_size: 512,
+                  eval_batch_size: LM_STUDIO_EVAL_BATCH_SIZE,
                 };
                 if (options.minContextLength) {
-                  const maxCtx = modelEntry?.max_context_length || 262144;
+                  const maxCtx = modelEntry?.max_context_length || LM_STUDIO_DEFAULT_MAX_CONTEXT;
                   loadOpts.context_length = Math.min(options.minContextLength, maxCtx);
                   logger.info(`[LM-Studio] Loading with context_length=${loadOpts.context_length} (min=${options.minContextLength}, max=${maxCtx})`);
                 }

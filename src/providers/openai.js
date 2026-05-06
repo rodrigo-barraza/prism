@@ -2,7 +2,7 @@ import OpenAI, { toFile } from "openai";
 import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
 import { extractOpenAIRateLimits } from "../utils/rateLimits.js";
-import { OPENAI_API_KEY } from "../../config.js";
+import { OPENAI_API_KEY, OPENAI_TRANSCRIPTION_MODEL } from "../../config.js";
 import {
   TYPES,
   DEFAULT_VOICES,
@@ -1002,7 +1002,7 @@ const openaiProvider = {
   async transcribeAudio(
     audioBuffer,
     mimeType,
-    model = "gpt-4o-transcribe",
+    model = OPENAI_TRANSCRIPTION_MODEL,
     options = {},
   ) {
     logger.provider("OpenAI", `transcribeAudio model=${model}`);

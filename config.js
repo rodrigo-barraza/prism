@@ -69,3 +69,18 @@ export const MINIO_BUCKET_NAME = process.env.PRISM_SERVICE_MINIO_BUCKET_NAME || 
 
 // ── Tools API ──────────────────────────────────────────────────
 export const TOOLS_SERVICE_URL = process.env.TOOLS_SERVICE_URL;
+
+
+// ── Default Model Names ───────────────────────────────────────
+// Vault-backed model identifiers — swap models without code deploys.
+export const COORDINATOR_DECOMPOSITION_MODEL = process.env.COORDINATOR_DECOMPOSITION_MODEL;
+export const LIVE_AUDIO_MODEL = process.env.LIVE_AUDIO_MODEL;
+export const OPENAI_TRANSCRIPTION_MODEL = process.env.OPENAI_TRANSCRIPTION_MODEL;
+export const GOOGLE_TTS_MODEL = process.env.GOOGLE_TTS_MODEL;
+export const GOOGLE_EMBEDDING_MODEL = process.env.GOOGLE_EMBEDDING_MODEL;
+
+
+// ── LM Studio Tuning ──────────────────────────────────────────
+export const LM_STUDIO_EVAL_BATCH_SIZE = parseInt(process.env.LM_STUDIO_EVAL_BATCH_SIZE, 10) || 512;
+export const LM_STUDIO_DEFAULT_MAX_CONTEXT = parseInt(process.env.LM_STUDIO_DEFAULT_MAX_CONTEXT, 10) || 262144;
+

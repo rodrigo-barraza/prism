@@ -1,4 +1,4 @@
-import { TOOLS_SERVICE_URL } from "../../config.js";
+import { TOOLS_SERVICE_URL, COORDINATOR_DECOMPOSITION_MODEL } from "../../config.js";
 import { resolve, relative } from "node:path";
 import { existsSync } from "node:fs";
 import logger from "../utils/logger.js";
@@ -73,7 +73,6 @@ const MAX_WORKER_ITERATIONS = 15;
 
 /** Model used for task decomposition */
 const DECOMPOSITION_PROVIDER = "anthropic";
-const DECOMPOSITION_MODEL = "claude-sonnet-4-20250514";
 
 /**
  * Resolve the user-configured subagent provider/model from settings.
@@ -1493,7 +1492,7 @@ export default class CoordinatorService {
     let llmSuccess = true;
     let llmError = null;
 
-    const result = await provider.generateText(messages, DECOMPOSITION_MODEL, {
+    const result = await provider.generateText(messages, COORDINATOR_DECOMPOSITION_MODEL, {
       maxTokens: 2000,
       temperature: 0.2,
     }).catch((err) => {
@@ -1510,7 +1509,7 @@ export default class CoordinatorService {
       project: null,
       username: "system",
       provider: DECOMPOSITION_PROVIDER,
-      model: DECOMPOSITION_MODEL,
+      model: COORDINATOR_DECOMPOSITION_MODEL,
       agentSessionId: agentSessionId || null,
       aiMessages: messages,
       resultText: result?.text || "",
@@ -1694,7 +1693,7 @@ export default class CoordinatorService {
         .filter((name) => !coordinatorSet.has(name));
 
       let resolvedProviderName = providerName || DECOMPOSITION_PROVIDER;
-      let resolvedModel = model || DECOMPOSITION_MODEL;
+      let resolvedModel = model || COORDINATOR_DECOMPOSITION_MODEL;
 
       // Local model guard with instance pooling — same logic as spawnFromTool:
       // distribute workers across all instances of the same type.
