@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Prism the AI Gateway — a centralized backend for routing requests to multiple AI providers",
   "type": "module",
-  "main": "src/index.js",
+  "main": "src/boot.js",
   "scripts": {
     "start": "node src/boot.js",
     "dev": "nodemon --legacy-watch src/boot.js",
@@ -45,8 +45,8 @@
     "ws": "^8.19.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.3",
-    "eslint": "^9.39.3",
+    "@eslint/js": "^9.39.4",
+    "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.4.0",
     "nodemon": "^3.1.14",
