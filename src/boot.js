@@ -16,22 +16,9 @@
 //   - Local dev with config.js defaults → still works unchanged
 // ============================================================
 
-import { createVaultClient } from "@rodrigo-barraza/utilities-library/vault";
+import { bootstrapEnv } from "@rodrigo-barraza/utilities-library/vault";
 
-const vault = createVaultClient({
-  localEnvFile: "./.env",
-  fallbackEnvFile: "../vault-service/.env",
-});
-
-const secrets = await vault.fetch();
-
-// Inject into process.env — don't overwrite anything already set
-// (manual env vars and Docker --env take precedence over Vault)
-for (const [key, value] of Object.entries(secrets)) {
-  if (process.env[key] === undefined) {
-    process.env[key] = value;
-  }
-}
+await bootstrapEnv();
 
 // Now import the actual app — all modules will read from process.env
 // via config.js, which is a typed accessor layer over process.env.
