@@ -1033,7 +1033,7 @@ const MEEPO_INTERACTION_RULES = `# Interaction Rules
 PERSONAS.set("MEEPO", {
   id: "MEEPO",
   name: "Meepo",
-  project: "buzzer",
+  project: "chat",
   identity: (_ctx) => {
     const sections = [
       MEEPO_CORE_PERSONALITY,
