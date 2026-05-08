@@ -1361,6 +1361,13 @@ export default class AgenticLoopService {
       // (workers register under the parent session, cleaned up by the coordinator)
       if (!parentAgentSessionId) {
         SessionGenerationTracker.cleanup(trackerSessionId);
+
+        // Clean up coordinator worker state — remove all spawned workers
+        // from the in-memory Map to prevent unbounded growth.
+        try {
+          const { default: CoordinatorService } = await import("./CoordinatorService.js");
+          CoordinatorService.cleanupSession(agentSessionId);
+        } catch { /* CoordinatorService may not be used */ }
       }
     }
   }

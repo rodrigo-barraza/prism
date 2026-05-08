@@ -754,6 +754,15 @@ export default class CoordinatorService {
       logger.info(`[Coordinator] Bulk-aborted ${stopped.length} worker(s) for session ${parentAgentSessionId}`);
     }
 
+    // Remove all workers for this session from the in-memory Map.
+    // Their state has been persisted to the agent session doc already,
+    // and keeping them in the Map leads to unbounded growth.
+    for (const [agentId, worker] of activeWorkers) {
+      if (worker.parentAgentSessionId === parentAgentSessionId) {
+        activeWorkers.delete(agentId);
+      }
+    }
+
     return { stopped, alreadyStopped };
   }
 
@@ -812,6 +821,26 @@ export default class CoordinatorService {
 
   /** Active teams — keyed by team name, value is { agentIds: string[] } */
   static _activeTeams = new Map();
+
+  /**
+   * Remove all workers associated with a parent coordinator session.
+   * Called when the coordinator loop completes/errors to prevent unbounded
+   * growth of the in-memory activeWorkers Map.
+   *
+   * @param {string} parentAgentSessionId
+   */
+  static cleanupSession(parentAgentSessionId) {
+    let cleaned = 0;
+    for (const [agentId, worker] of activeWorkers) {
+      if (worker.parentAgentSessionId === parentAgentSessionId) {
+        activeWorkers.delete(agentId);
+        cleaned++;
+      }
+    }
+    if (cleaned > 0) {
+      logger.info(`[Coordinator] Cleaned up ${cleaned} worker(s) from session ${parentAgentSessionId}`);
+    }
+  }
 
   /**
    * Create a named team of parallel worker agents.
@@ -1395,6 +1424,12 @@ export default class CoordinatorService {
     worker.diff = diffResult.error ? null : diffResult;
     worker.status = "complete";
 
+    // ── Release heavy data from completed workers ──────────────
+    // The messages array can be tens of MBs (includes tool results,
+    // code snippets, base64 images). Strip it now — getTaskOutput
+    // only needs worker.output (the final assistant text).
+    worker.messages = null;
+    worker.abortController = null;
     // Remove worktree now that the diff has been collected — prevents orphaned
     // worktrees from accumulating on disk across sessions.
     if (worker.isolated && worker.worktreePath) {

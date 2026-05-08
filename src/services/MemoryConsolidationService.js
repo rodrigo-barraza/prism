@@ -726,6 +726,14 @@ const MemoryConsolidationService = {
         const partitionClusters = findClusters(memories, CONVERSATIONAL_CLUSTER_THRESHOLD);
         const partitionStale = findStaleConversationalMemories(memories);
 
+        // ── Release embeddings after clustering ──────────────────────
+        // Embeddings (1536-dim float arrays, ~12KB each) are only needed
+        // for cosine similarity in findClusters(). Strip them now so
+        // GC can reclaim before the LLM batch loop.
+        for (const m of memories) {
+          m.embedding = null;
+        }
+
         if (partitionClusters.length === 0 && partitionStale.length === 0) continue;
 
         // Extract metadata for the partition header
@@ -778,6 +786,15 @@ const MemoryConsolidationService = {
     } else {
       // ── Coding / Default Path: original flow ───────────────────────
       const clusters = findClusters(allMemories);
+
+      // ── Release embeddings after clustering ──────────────────────
+      // Embeddings (1536-dim float arrays, ~12KB each) are only needed
+      // for cosine similarity in findClusters(). Strip them now so
+      // GC can reclaim before the LLM batch loop.
+      for (const m of allMemories) {
+        m.embedding = null;
+      }
+
       logger.info(
         `[MemoryConsolidation] Found ${clusters.length} clusters from ${allMemories.length} memories`,
       );

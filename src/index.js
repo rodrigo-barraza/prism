@@ -315,18 +315,23 @@ setupWebSocket(wss);
       // Find all distinct projects with at least some memories
       const projects = await db.collection("memories").distinct("project");
 
+      // Process projects sequentially — each consolidation loads the full
+      // memory corpus with embeddings (~12KB/memory). Running them concurrently
+      // compounds heap usage and can cause OOM on large collections.
       for (const project of projects) {
         const count = await db.collection("memories").countDocuments({ project });
         if (count < 10) continue; // Skip projects with few memories
 
         logger.info(`[AutoDream] Scheduled consolidation for project "${project}" (${count} memories)`);
-        MemoryConsolidationService.consolidate({
-          project,
-          username: "system",
-          trigger: "scheduled",
-        }).catch((err) =>
-          logger.error(`[AutoDream] Scheduled consolidation failed for "${project}": ${err.message}`),
-        );
+        try {
+          await MemoryConsolidationService.consolidate({
+            project,
+            username: "system",
+            trigger: "scheduled",
+          });
+        } catch (err) {
+          logger.error(`[AutoDream] Scheduled consolidation failed for "${project}": ${err.message}`);
+        }
       }
     } catch (err) {
       logger.error(`[AutoDream] Scheduled consolidation sweep failed: ${err.message}`);

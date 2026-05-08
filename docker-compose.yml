@@ -9,6 +9,7 @@ services:
       - .env
     environment:
       - TZ=America/Los_Angeles
+      - NODE_OPTIONS=--max-old-space-size=1536
     volumes:
       - /usr/share/zoneinfo/America/Los_Angeles:/etc/localtime:ro
     healthcheck:
@@ -25,4 +26,4 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 2G
