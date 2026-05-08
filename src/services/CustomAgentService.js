@@ -84,6 +84,7 @@ const CustomAgentService = {
     const doc = {
       name: data.name,
       agentId,
+      type: data.type || "",
       description: data.description || "",
       project: data.project || "coding",
       icon: data.icon || "",

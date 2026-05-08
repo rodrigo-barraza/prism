@@ -264,6 +264,7 @@ const LUPOS_ENABLED_TOOLS = [
  * @typedef {object} AgentPersona
  * @property {string} id           - Unique agent identifier
  * @property {string} name         - Display name
+ * @property {string} type         - Agent type category (e.g. "coding", "conversational")
  * @property {Function} identity   - Returns personality text (may vary by context)
  * @property {string} guidelines   - Response guidelines
  * @property {string} interactionRules - Interaction rules
@@ -293,6 +294,7 @@ const CODING_ENABLED_TOOLS = [
 PERSONAS.set("CODING", {
   id: "CODING",
   name: "Coding Agent",
+  type: "coding",
   project: "coding",
   identity: () =>
     `You are a highly capable coding agent with access to file system, git, command execution, and web tools.`,
@@ -366,6 +368,7 @@ Use it **proactively** — do NOT wait for the user to say "remember":
 PERSONAS.set("LUPOS", {
   id: "LUPOS",
   name: "Lupos",
+  type: "conversational",
   project: "lupos",
   identity: (ctx) => {
     const aprilFools = ctx?.agentContext?.aprilFoolsMode === true;
@@ -539,6 +542,7 @@ const STICKERS_ENABLED_TOOLS = [
 PERSONAS.set("STICKERS", {
   id: "STICKERS",
   name: "Clankerbox",
+  type: "",
   project: "stickers",
   identity: (_ctx) => {
     const sections = [
@@ -645,6 +649,7 @@ const LIGHTS_ENABLED_TOOLS = [
 PERSONAS.set("LIGHTS", {
   id: "LIGHTS",
   name: "Lights",
+  type: "",
   project: "lights",
   identity: (_ctx) => {
     const sections = [
@@ -734,6 +739,7 @@ const OOG_TOOL_POLICY_OVERRIDE = `# Tool Usage — Oog Way
 PERSONAS.set("OOG", {
   id: "OOG",
   name: "Oog Caveman Agent",
+  type: "coding",
   project: "coding",
   identity: () => {
     const sections = [
@@ -881,6 +887,7 @@ const DIGEST_ENABLED_TOOLS = [
 PERSONAS.set("DIGEST", {
   id: "DIGEST",
   name: "Digest",
+  type: "",
   project: "digest",
   identity: (_ctx) => {
     const sections = [
@@ -976,6 +983,7 @@ const AGENT_CREATOR_ENABLED_TOOLS = [
 PERSONAS.set("AGENT_CREATOR", {
   id: "AGENT_CREATOR",
   name: "Agent Creator",
+  type: "",
   project: "coding",
   identity: (_ctx) => {
     const sections = [
@@ -1033,6 +1041,7 @@ const MEEPO_INTERACTION_RULES = `# Interaction Rules
 PERSONAS.set("MEEPO", {
   id: "MEEPO",
   name: "Meepo",
+  type: "conversational",
   project: "chat",
   identity: (_ctx) => {
     const sections = [
@@ -1078,6 +1087,7 @@ const AgentPersonaRegistry = {
     return [...PERSONAS.values()].map((p) => ({
       id: p.id,
       name: p.name,
+      type: p.type || "",
       ...(p.custom ? { custom: true } : {}),
     }));
   },
@@ -1117,6 +1127,7 @@ const AgentPersonaRegistry = {
     const persona = {
       id: doc.agentId,
       name: doc.name,
+      type: doc.type || "",
       description: doc.description || "",
       project: doc.project || "coding",
       custom: true,
