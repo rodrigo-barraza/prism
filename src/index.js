@@ -64,7 +64,20 @@ const app = express();
 const server = http.createServer(app);
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: true,                           // reflect request origin (equivalent to *)
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: [
+    "Content-Type",
+    "x-project",
+    "x-username",
+    "x-workspace-id",
+    "x-workspace-root",
+    "x-api-secret",
+    "x-admin-secret",
+  ],
+  maxAge: 86400,                          // cache preflight for 24h — eliminates burst OPTIONS storms
+}));
 app.use(express.json({ limit: "50mb" }));
 app.use(requestLoggerMiddleware);
 
