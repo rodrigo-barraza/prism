@@ -6,6 +6,7 @@ import { compressImageForSizeLimit } from "../utils/media.js";
 import { EMPTY_USAGE } from "../utils/openai-compat.js";
 import { ANTHROPIC_API_KEY } from "../../config.js";
 import { TYPES, getDefaultModels } from "../config.js";
+import { sleep } from "@rodrigo-barraza/utilities-library";
 
 // Default budget tokens mapped from effort level (for non-adaptive models)
 const EFFORT_BUDGET_MAP = {
@@ -27,13 +28,6 @@ function isRetryableError(error) {
   if (errorType === "overloaded_error") return true;
   if (error.status === 529) return true;
   return false;
-}
-
-/**
- * Sleep helper.
- */
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 let client = null;
