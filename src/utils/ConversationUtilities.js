@@ -1,9 +1,7 @@
 import ConversationService from "../services/ConversationService.js";
 import logger from "./logger.js";
 
-// ============================================================
-// Conversation persistence helpers
-// ============================================================
+// ─── Conversation persistence helpers ───────────────────────
 
 /**
  * Mark a conversation as generating (or not). Fire-and-forget with

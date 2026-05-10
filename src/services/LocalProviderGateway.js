@@ -1,29 +1,4 @@
-// ============================================================
-// LocalProviderGateway — Unified Gateway for Local Model Providers
-// ============================================================
-// Centralizes all local inference provider interactions (LM Studio,
-// Ollama, llama.cpp, vLLM) into a single gateway with:
-//
-//   - Aggregated model discovery across all registered instances
-//   - Model-to-provider auto-routing (given a model name, find who serves it)
-//   - Aggregate health checks across all instances
-//   - Provider capability introspection (thinking, FC, vision, etc.)
-//   - Unified model listing with enrichment (arena, HuggingFace metadata)
-//   - Model management delegation (load, unload, ensure loaded)
-//   - Provider-specific behavior centralization (native MCP, thinking defaults)
-//   - VRAM estimation for GGUF models
-//   - Model search/filter by capability
-//   - Aggregate statistics
-//
-// Usage:
-//   import LocalProviderGateway from "./LocalProviderGateway.js";
-//
-//   const models = await LocalProviderGateway.discoverModels();
-//   const health = await LocalProviderGateway.checkHealth();
-//   const provider = await LocalProviderGateway.resolveProvider("qwen3-8b");
-//   LocalProviderGateway.isLocal("lm-studio"); // true
-//   LocalProviderGateway.isNativeMCP("lm-studio"); // true
-// ============================================================
+// ─── Unified Gateway for Local Model Providers ──────────────
 
 import logger from "../utils/logger.js";
 import { formatFileSize, withTimeoutFallback } from "@rodrigo-barraza/utilities-library";
@@ -39,9 +14,7 @@ import {
 import { TYPES } from "../config.js";
 import { resolveArchParams, estimateMemory } from "../utils/gguf-arch.js";
 
-// ============================================================
-// PROVIDER TYPE CONSTANTS
-// ============================================================
+// ─── PROVIDER TYPE CONSTANTS ────────────────────────────────
 // Canonical provider type identifiers used across the system.
 
 /** All recognized local provider types. */
@@ -68,9 +41,7 @@ const DEFAULT_THINKING_TYPES = new Set(["lm-studio", "llama-cpp"]);
  */
 const MODEL_MANAGEMENT_TYPES = new Set(["lm-studio"]);
 
-// ============================================================
-// MODEL CAPABILITY DETECTION
-// ============================================================
+// ─── MODEL CAPABILITY DETECTION ─────────────────────────────
 // Centralized pattern-matching for inferring model capabilities
 // from their names. These patterns are the canonical source —
 // config.js and other consumers should import from here.
@@ -184,9 +155,7 @@ function detectCapabilities(modelKey, providerMeta = {}) {
   };
 }
 
-// ============================================================
-// FORMATTING HELPERS
-// ============================================================
+// ─── FORMATTING HELPERS ─────────────────────────────────────
 
 /** Format a byte count into a human-readable size string. */
 const formatBytes = formatFileSize;
@@ -240,9 +209,7 @@ function parsePublisherFromName(name) {
   return null;
 }
 
-// ============================================================
-// HUGGINGFACE HUB METADATA CACHE
-// ============================================================
+// ─── HUGGINGFACE HUB METADATA CACHE ─────────────────────────
 
 const _hfCache = new Map();
 const HF_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
@@ -327,9 +294,7 @@ async function enrichWithHuggingFace(entry, modelKey) {
   return entry;
 }
 
-// ============================================================
-// MODEL NORMALIZERS — Per-provider Raw → Canonical Entry
-// ============================================================
+// ─── Per-provider Raw → Canonical Entry ─────────────────────
 // Each normalizer takes raw provider model data and converts it
 // into the canonical model entry format used by the config API.
 
@@ -463,9 +428,7 @@ const NORMALIZER_BY_TYPE = {
 /** Provider types that should get HuggingFace metadata enrichment. */
 const HF_ENRICHED_TYPES = new Set(["vllm", "llama-cpp"]);
 
-// ============================================================
-// GATEWAY CLASS
-// ============================================================
+// ─── GATEWAY CLASS ──────────────────────────────────────────
 
 class LocalProviderGateway {
   constructor() {
@@ -1162,8 +1125,6 @@ class LocalProviderGateway {
     return resolved.provider;
   }
 }
-
-
 
 // ── Singleton Export ─────────────────────────────────────────────
 

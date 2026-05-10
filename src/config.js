@@ -1,6 +1,4 @@
-// ============================================================
-// Prism the AI Gateway — Configuration & Reference Catalog
-// ============================================================
+// ─── Configuration & Reference Catalog ──────────────────────
 
 // PROVIDERS
 const PROVIDERS = {
@@ -17,9 +15,7 @@ const PROVIDERS = {
 
 const PROVIDER_LIST = Object.values(PROVIDERS);
 
-// ============================================================
-// TYPES — Input / Output modality constants
-// ============================================================
+// ─── Input / Output modality constants ──────────────────────
 
 const TYPES = {
   TEXT: "text",
@@ -30,9 +26,7 @@ const TYPES = {
   EMBEDDING: "embedding",
 };
 
-// ============================================================
-// MODEL TYPES — Endpoint-based model category
-// ============================================================
+// ─── Endpoint-based model category ──────────────────────────
 
 const MODEL_TYPES = {
   CONVERSATION: "conversation",
@@ -40,9 +34,7 @@ const MODEL_TYPES = {
   EMBED: "embed",
 };
 
-// ============================================================
-// UNIFIED MODEL CATALOG
-// ============================================================
+// ─── UNIFIED MODEL CATALOG ──────────────────────────────────
 // Every model lives here with all its metadata.
 // Helper functions below derive defaults, options, and pricing.
 
@@ -705,7 +697,6 @@ const MODELS = {
     tools: ["Thinking", "Google Search", "Tool Calling"],
   },
 
-
   // ----- Text-to-Speech -----
   GPT_4O_MINI_TTS: {
     name: "gpt-4o-mini-tts",
@@ -1018,9 +1009,7 @@ const MODELS = {
   },
 };
 
-// ============================================================
-// HELPER FUNCTIONS — derive defaults, options, pricing from MODELS
-// ============================================================
+// ─── derive defaults, options, pricing from MODELS ──────────
 
 /**
  * Get all models whose inputTypes includes `inputType`
@@ -1123,9 +1112,7 @@ function getModelByName(name) {
   return Object.values(MODELS).find((m) => m.name === name) || null;
 }
 
-// ============================================================
-// VOICES (per provider — applies to TEXT → AUDIO models)
-// ============================================================
+// ─── VOICES (per provider — applies to TEXT → AUDIO models) ─
 
 const OPENAI_VOICES = [
   { name: "alloy", gender: "Neutral" },
@@ -1324,9 +1311,7 @@ const DEFAULT_VOICES = {
   [PROVIDERS.INWORLD]: "Dennis",
 };
 
-// ============================================================
-// EXPORTS
-// ============================================================
+// ─── EXPORTS ────────────────────────────────────────────────
 
 export {
   // Providers

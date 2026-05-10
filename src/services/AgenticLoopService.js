@@ -22,7 +22,6 @@ import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
 import SessionGenerationTracker from "./SessionGenerationTracker.js";
 import InternalToolRegistry from "./local-tools/InternalToolRegistry.js";
 
-
 /** Coordinator tools bypass the enabledTools filter (always available) */
 const COORDINATOR_TOOL_NAMES = new Set(COORDINATOR_ONLY_TOOLS);
 
@@ -32,7 +31,6 @@ const PRISM_LOCAL_TOOL_NAMES = { has(name) { if (!_prismLocalCache) _prismLocalC
 
 const MAX_TOOL_ITERATIONS = 25;
 const MAX_CONSECUTIVE_TOOL_ERRORS = 3;
-
 
 // ── Approval Resolver Registry ─────────────────────────────
 // Stores pending { resolve, type } objects keyed by agentSessionId.
@@ -252,8 +250,6 @@ export default class AgenticLoopService {
       finalTools = finalTools.filter((t) => t.name !== "describe_image");
     }
 
-
-
     // Resolve max iterations from client or fall back to the module constant.
     // 0 = unlimited (∞ mode from the frontend), positive values clamped 1–100,
     // undefined/null = default constant (25).
@@ -325,7 +321,6 @@ export default class AgenticLoopService {
     if (options.planFirst) {
       emit({ type: "status", message: "plan_mode_entered" });
     }
-
 
     // Track consecutive errors per tool name for retry budgeting
     const toolErrorCounts = new Map();
@@ -1135,7 +1130,6 @@ export default class AgenticLoopService {
 
           // Clean up empty assistant text content nodes
           currentMessages = currentMessages.filter((m) => !(m.role === "assistant" && !m.content?.trim() && (!m.toolCalls || m.toolCalls.length === 0)));
-
 
           // Run the next iteration
           continue;

@@ -168,9 +168,6 @@ const ARG_REMAPS = {
   search_products: { query: "q" },
 };
 
-
-
-
 async function executeToolGeneric(name, args = {}, ctx = {}) {
   const schema = toolMap.get(name);
   if (!schema || !schema.endpoint) {
@@ -307,7 +304,6 @@ async function fetchJsonPost(url, body, extraHeaders = {}, signal) {
 // ────────────────────────────────────────────────────────────
 // Public API
 // ────────────────────────────────────────────────────────────
-
 
 // ────────────────────────────────────────────────────────────
 // Coordinator Tool Schemas — Prism-local, not routed to tools-api

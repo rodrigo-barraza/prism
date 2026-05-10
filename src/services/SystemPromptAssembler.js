@@ -11,10 +11,6 @@ import { createAbortController } from "../utils/AbortController.js";
 
 const SKILL_RELEVANCE_THRESHOLD = 0.3;
 
-
-
-
-
 /**
  * SystemPromptAssembler — sole owner of the agent's system prompt.
  *

@@ -1,22 +1,4 @@
-// ============================================================
-// Instance Registry — Multi-Instance Local Provider Support
-// ============================================================
-// Creates and registers provider instances from PROVIDER_* arrays
-// in config.js. Each array entry is an instance:
-//   { url, concurrency, nickname? }
-//
-// Instances are auto-numbered per type:
-//   PROVIDER_LM_STUDIO[0] → "lm-studio" (#1)
-//   PROVIDER_LM_STUDIO[1] → "lm-studio-2" (#2)
-//
-// nickname (optional) → display label in the UI:
-//   "Desktop" → "LM Studio (Desktop)"
-//
-// Usage:
-//   getInstanceProvider("lm-studio")   → first LM Studio instance
-//   getInstanceProvider("lm-studio-2") → second LM Studio instance
-//   listInstances()                    → all registered instances
-// ============================================================
+// ─── Multi-Instance Local Provider Support ──────────────────
 
 import logger from "../utils/logger.js";
 import {

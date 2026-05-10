@@ -1,9 +1,5 @@
 import { sleep, roundMs } from "@rodrigo-barraza/utilities-library";
-// ============================================================
-// BenchmarkService — Custom LLM Accuracy Benchmarking
-// ============================================================
-// Orchestrates benchmark test execution against multiple models,
-// evaluates responses against expected values, and persists results.
+// ─── Custom LLM Accuracy Benchmarking ───────────────────────
 import crypto from "crypto";
 import { handleConversation, handleAgent } from "../routes/chat.js";
 import {
@@ -22,9 +18,7 @@ const BENCHMARKS_COL = COLLECTIONS.BENCHMARKS;
 const RUNS_COL = COLLECTIONS.BENCHMARK_RUNS;
 // In-memory counter: how many benchmark model calls are actively generating
 let activeGenerationCount = 0;
-// ============================================================
-// Match Modes — evaluate model response against expected value
-// ============================================================
+// ─── evaluate model response against expected value ─────────
 const MATCH_MODES = {
   CONTAINS: "contains",
   EXACT: "exact",
@@ -86,9 +80,7 @@ function evaluateAssertions(response, benchmark) {
     evaluate(response, a.expectedValue, a.matchMode || MATCH_MODES.CONTAINS),
   );
 }
-// ============================================================
-// Agent Assertion Evaluation — behavioral assertions
-// ============================================================
+// ─── behavioral assertions ──────────────────────────────────
 /**
  * Comparison operators for numeric agent assertions.
  */
@@ -150,9 +142,7 @@ function evaluateAgentAssertions(benchmark, executionData) {
   }
   return assertions.every((a) => evaluateSingleAgentAssertion(a, executionData));
 }
-// ============================================================
-// Model Discovery — list available conversation models
-// ============================================================
+// ─── list available conversation models ─────────────────────
 /**
  * Get all listed conversation-type models grouped by provider.
  * Returns flat array of { provider, model, label }.
@@ -194,9 +184,7 @@ function filterAvailableModels(models) {
     }
   });
 }
-// ============================================================
-// Run a single model against a benchmark prompt
-// ============================================================
+// ─── Run a single model against a benchmark prompt ──────────
 async function runSingleModel(benchmark, model, project, username, { signal, onEvent } = {}) {
   // Config flags carried on every result for stats differentiation
   const configFlags = {
@@ -404,9 +392,7 @@ async function runSingleModel(benchmark, model, project, username, { signal, onE
     };
   }
 }
-// ============================================================
-// BenchmarkService — public API
-// ============================================================
+// ─── public API ─────────────────────────────────────────────
 const BenchmarkService = {
   MATCH_MODES,
   evaluate,

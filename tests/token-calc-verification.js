@@ -1,7 +1,5 @@
 #!/usr/bin/env node
-// ============================================================
-// Token Calculation Verification Test
-// ============================================================
+// ─── Token Calculation Verification Test ────────────────────
 // Sends real agentic requests to Prism → LM Studio (Qwen3.6 35B),
 // captures all SSE events, and verifies:
 // 1. Backend-reported outputTokens on chunk/thinking events
@@ -11,7 +9,6 @@
 //
 // Usage:
 //   node tests/token-calc-verification.js
-// ============================================================
 
 const PRISM_SERVICE_URL = "http://localhost:7777";
 const PROJECT = "prism-client-dev"; // matches prism-client's PROJECT_NAME for local dev

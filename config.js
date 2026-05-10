@@ -1,12 +1,9 @@
-// ============================================================
-// Prism the AI Gateway — Environment Accessors
-// ============================================================
+// ─── Environment Accessors ──────────────────────────────────
 // Typed accessor layer over process.env. The Vault service is
 // the single source of truth — boot.js hydrates process.env
 // from the Vault before any module imports run.
 //
 // This file contains NO defaults and NO secrets.
-// ============================================================
 
 // ── Helpers ────────────────────────────────────────────────────
 
@@ -34,10 +31,8 @@ function parseProviderInstances(envPrefix) {
   return instances;
 }
 
-
 // ── Server ─────────────────────────────────────────────────────
 export const PRISM_SERVICE_PORT = process.env.PRISM_SERVICE_PORT;
-
 
 // ── AI Provider API Keys ───────────────────────────────────────
 export const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -46,7 +41,6 @@ export const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 export const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 export const INWORLD_BASIC = process.env.INWORLD_BASIC;
 
-
 // ── Local Provider Instances ───────────────────────────────────
 // Parsed from indexed env vars: PROVIDER_<TYPE>_<N>_URL, _CONCURRENCY, _NICKNAME
 export const PROVIDER_LM_STUDIO = parseProviderInstances("PROVIDER_LM_STUDIO");
@@ -54,11 +48,9 @@ export const PROVIDER_VLLM = parseProviderInstances("PROVIDER_VLLM");
 export const PROVIDER_OLLAMA = parseProviderInstances("PROVIDER_OLLAMA");
 export const PROVIDER_LLAMA_CPP = parseProviderInstances("PROVIDER_LLAMA_CPP");
 
-
 // ── MongoDB ────────────────────────────────────────────────────
 export const MONGO_URI = process.env.MONGO_URI;
 export const MONGO_DB_NAME = process.env.PRISM_SERVICE_MONGO_DB_NAME || process.env.PRISM_MONGO_DB_NAME || process.env.MONGO_DB_NAME;
-
 
 // ── MinIO (Optional — files stored inline in MongoDB if not set) ──
 export const MINIO_ENDPOINT = process.env.MINIO_ENDPOINT;
@@ -66,10 +58,8 @@ export const MINIO_ACCESS_KEY = process.env.MINIO_ACCESS_KEY;
 export const MINIO_SECRET_KEY = process.env.MINIO_SECRET_KEY;
 export const MINIO_BUCKET_NAME = process.env.PRISM_SERVICE_MINIO_BUCKET_NAME || process.env.PRISM_MINIO_BUCKET_NAME || process.env.MINIO_BUCKET_NAME;
 
-
 // ── Tools API ──────────────────────────────────────────────────
 export const TOOLS_SERVICE_URL = process.env.TOOLS_SERVICE_URL;
-
 
 // ── Default Model Names ───────────────────────────────────────
 // Vault-backed model identifiers — swap models without code deploys.
@@ -78,7 +68,6 @@ export const LIVE_AUDIO_MODEL = process.env.LIVE_AUDIO_MODEL;
 export const OPENAI_TRANSCRIPTION_MODEL = process.env.OPENAI_TRANSCRIPTION_MODEL;
 export const GOOGLE_TTS_MODEL = process.env.GOOGLE_TTS_MODEL;
 export const GOOGLE_EMBEDDING_MODEL = process.env.GOOGLE_EMBEDDING_MODEL;
-
 
 // ── LM Studio Tuning ──────────────────────────────────────────
 export const LM_STUDIO_EVAL_BATCH_SIZE = parseInt(process.env.LM_STUDIO_EVAL_BATCH_SIZE, 10) || 512;

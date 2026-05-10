@@ -2,9 +2,7 @@ import { handleConversation } from "../routes/chat.js";
 import { ProviderError } from "./errors.js";
 import { createAbortController } from "./AbortController.js";
 
-// ============================================================
-// SSE streaming utilities — shared by /chat and /agent routes
-// ============================================================
+// ─── shared by /chat and /agent routes ──────────────────────
 
 /**
  * Configure an Express response for SSE (Server-Sent Events) streaming.

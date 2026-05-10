@@ -116,9 +116,7 @@ function handleWsVoice(ws, project, username, clientIp, agent) {
   });
 }
 
-// ============================================================
-// Live API — persistent bidirectional session proxy
-// ============================================================
+// ─── persistent bidirectional session proxy ─────────────────
 
 /**
  * Manages a persistent Live API WebSocket session.

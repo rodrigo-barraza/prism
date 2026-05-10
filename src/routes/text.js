@@ -6,9 +6,7 @@ import { COLLECTIONS } from "../constants.js";
 const router = express.Router();
 router.use(requireDb);
 
-// ============================================================
-// GET /text — extract text content from the caller's project conversations
-// ============================================================
+// ─── GET /text — extract text content from the caller's project conversations ─
 router.get("/", async (req, res, next) => {
   try {
     const { db } = req;

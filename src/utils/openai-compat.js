@@ -204,7 +204,6 @@ export async function expandVideoToFrames(messages, options = {}) {
   return messages;
 }
 
-
 /**
  * Convert messages with media to OpenAI-compatible multipart content format.
  * Handles images, tool results, assistant tool calls, and optionally

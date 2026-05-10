@@ -50,9 +50,7 @@ function getCollectionOpts(project) {
   }
   return undefined;
 }
-// ============================================================
-// Image reference resolution — converts refs for providers & storage
-// ============================================================
+// ─── converts refs for providers & storage ──────────────────
 /**
  * Resolve image references in messages for both provider use and storage.
  *
@@ -219,9 +217,7 @@ async function resolveMediaRef(ref, project, username) {
   // Unknown — pass through
   return { providerRef: ref, storageRef: ref };
 }
-// ============================================================
-// Shared setup — parameter parsing, validation, model resolution
-// ============================================================
+// ─── parameter parsing, validation, model resolution ────────
 /**
  * Parse and validate incoming request parameters, resolve images,
  * model, and acquire GPU lock if needed.
@@ -473,9 +469,7 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
     localRelease,
   };
 }
-// ============================================================
-// handleConversation — Chat / Conversation persistence path
-// ============================================================
+// ─── Chat / Conversation persistence path ───────────────────
 /**
  * Handle a conversation request: text generation, image generation,
  * vision/captioning — with conversationId-based persistence.
@@ -598,9 +592,7 @@ export async function handleConversation(params, emit, { signal } = {}) {
     emit({ type: "error", message: error.message });
   }
 }
-// ============================================================
-// handleAgent — Agent session path (agentSessionId, no conversationId)
-// ============================================================
+// ─── Agent session path (agentSessionId, no conversationId) ─
 /**
  * Handle an agent request: always dispatches to AgenticLoopService.
  * Persistence uses agentSessionId (not conversationId).
@@ -701,9 +693,7 @@ export async function handleAgent(params, emit, { signal } = {}) {
     emit({ type: "error", message: error.message });
   }
 }
-// ============================================================
-// Dispatch: Image API models (e.g. GPT Image 1.5, OpenAI images)
-// ============================================================
+// ─── Dispatch: Image API models (e.g. GPT Image 1.5, OpenAI images) ─
 async function handleImageAPIModel(ctx) {
   const {
     provider,
@@ -853,10 +843,7 @@ async function handleImageAPIModel(ctx) {
     appendAndFinalize(conversationId, project, username, messagesToAppend, meta, getCollectionOpts(project));
   }
 }
-// ============================================================
-// Shared: Post-generation finalization
-// ── cost, logging, payloads, WAV, done event, persistence ──
-// ============================================================
+// ─── Shared: Post-generation finalization ───────────────────
 export async function finalizeTextGeneration(
   ctx,
   {
@@ -1154,9 +1141,7 @@ export async function finalizeTextGeneration(
     appendAndFinalize(conversationId, project, username, messagesToAppend, finalMeta, getCollectionOpts(project));
   }
 }
-// ============================================================
-// Dispatch: Streaming text/multimodal generation
-// ============================================================
+// ─── Dispatch: Streaming text/multimodal generation ─────────
 async function handleStreamingText(ctx) {
   const {
     provider,
@@ -1311,9 +1296,7 @@ async function handleStreamingText(ctx) {
     rateLimits: ss.rateLimits,
   });
 }
-// ============================================================
-// Dispatch: Non-streaming text generation (fallback)
-// ============================================================
+// ─── Dispatch: Non-streaming text generation (fallback) ─────
 async function handleNonStreamingText(ctx) {
   const {
     provider,
@@ -1430,9 +1413,7 @@ async function handleNonStreamingText(ctx) {
     rateLimits: genResult.rateLimits || null,
   });
 }
-// ============================================================
-// REST endpoint — SSE streaming or JSON fallback
-// ============================================================
+// ─── SSE streaming or JSON fallback ─────────────────────────
 /**
  * POST /chat
  *

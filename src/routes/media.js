@@ -8,10 +8,7 @@ router.use(requireDb);
 const CONVERSATIONS_COL = COLLECTIONS.CONVERSATIONS;
 const REQUESTS_COL = COLLECTIONS.REQUESTS;
 
-// ============================================================
-// GET /media — extract media from the caller's project conversations
-// AND from agent image generation requests (for skipConversation callers)
-// ============================================================
+// ─── GET /media — extract media from the caller's project conversations ─
 router.get("/", async (req, res, next) => {
   try {
     const { db } = req;

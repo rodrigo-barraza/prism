@@ -1,8 +1,6 @@
 import { getModelByName } from "../config.js";
 
-// ============================================================
-// LAYOUT CONSTANTS
-// ============================================================
+// ─── LAYOUT CONSTANTS ───────────────────────────────────────
 
 const STEP_WIDTH = 1250;
 const INPUT_X_OFFSET = 0;
@@ -10,9 +8,7 @@ const CONV_X_OFFSET = 350;
 const MODEL_X_OFFSET = 650;
 const VIEWER_X_OFFSET = MODEL_X_OFFSET + 350;
 
-// ============================================================
-// HELPERS
-// ============================================================
+// ─── HELPERS ────────────────────────────────────────────────
 
 /**
  * Check if a step is an internal utility/decision step (not user-facing output).
@@ -78,9 +74,7 @@ function resolveModelModalities(step) {
   };
 }
 
-// ============================================================
-// MAIN ASSEMBLER
-// ============================================================
+// ─── MAIN ASSEMBLER ─────────────────────────────────────────
 
 /**
  * Assemble a visual workflow graph from raw step data.

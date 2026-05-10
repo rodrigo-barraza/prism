@@ -11,9 +11,7 @@ import logger from "../utils/logger.js";
 import RequestLogger from "../services/RequestLogger.js";
 import {  } from "../utils/utilities.js";
 const router = express.Router();
-// ============================================================
-// Shared core logic — used by both REST and WebSocket
-// ============================================================
+// ─── used by both REST and WebSocket ────────────────────────
 /**
  * Handle an audio (TTS) request.
  *
@@ -231,9 +229,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
     throw error;
   }
 }
-// ============================================================
-// REST endpoint — chunked binary audio
-// ============================================================
+// ─── chunked binary audio ───────────────────────────────────
 /**
  * POST /text-to-audio
  * Body: { provider, text, voice?, instructions?, model?, options?, conversationId?, conversationMeta? }
@@ -293,9 +289,7 @@ router.post("/", async (req, res, next) => {
     }
   }
 });
-// ============================================================
-// REST endpoint — audio transcription (speech-to-text)
-// ============================================================
+// ─── audio transcription (speech-to-text) ───────────────────
 /**
  * POST /audio-to-text
  * Body: { provider, audio (base64 string or data URL), model?, language?, prompt? }

@@ -16,9 +16,7 @@ import os from "os";
 const router = express.Router();
 const { REQUESTS: REQUESTS_COL, CONVERSATIONS: CONVERSATIONS_COL, WORKFLOWS: WORKFLOWS_COL } = COLLECTIONS;
 
-// ============================================================
-// GET /admin/requests — paginated, filtered request logs
-// ============================================================
+// ─── GET /admin/requests — paginated, filtered request logs ─
 router.get("/requests", async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -78,9 +76,7 @@ router.get("/requests", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /admin/requests/:id — single request detail
-// ============================================================
+// ─── GET /admin/requests/:id — single request detail ────────
 router.get("/requests/:id", async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -98,9 +94,7 @@ router.get("/requests/:id", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /admin/requests/:id/associations — conversations, workflows & traces
-// ============================================================
+// ─── GET /admin/requests/:id/associations — conversations, workflows & traces ─
 router.get("/requests/:id/associations", async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -182,9 +176,7 @@ router.get("/requests/:id/associations", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /admin/stats — aggregate stats
-// ============================================================
+// ─── GET /admin/stats — aggregate stats ─────────────────────
 router.get("/stats", async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -288,9 +280,7 @@ router.get("/stats", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /admin/stats/projects — per-project breakdown
-// ============================================================
+// ─── GET /admin/stats/projects — per-project breakdown ──────
 router.get("/stats/projects", async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -413,9 +403,7 @@ router.get("/stats/projects", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /admin/stats/users — per-user breakdown
-// ============================================================
+// ─── GET /admin/stats/users — per-user breakdown ────────────
 router.get("/stats/users", async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -456,9 +444,7 @@ router.get("/stats/users", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /admin/stats/models — per-model breakdown
-// ============================================================
+// ─── GET /admin/stats/models — per-model breakdown ──────────
 router.get("/stats/models", async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -575,10 +561,7 @@ router.get("/stats/models", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /admin/stats/tools — per-tool lifetime usage breakdown
-// Unwinds toolApiNames from every request to aggregate per-tool stats.
-// ============================================================
+// ─── GET /admin/stats/tools — per-tool lifetime usage breakdown ─
 router.get("/stats/tools", async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -675,9 +658,7 @@ router.get("/stats/tools", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /admin/stats/endpoints — per-endpoint breakdown
-// ============================================================
+// ─── GET /admin/stats/endpoints — per-endpoint breakdown ────
 router.get("/stats/endpoints", async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -727,9 +708,7 @@ router.get("/stats/endpoints", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /admin/stats/costs — comprehensive cost breakdown
-// ============================================================
+// ─── GET /admin/stats/costs — comprehensive cost breakdown ──
 router.get("/stats/costs", async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -910,9 +889,7 @@ router.get("/stats/costs", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /admin/stats/timeline — requests grouped by 10min/hour/day
-// ============================================================
+// ─── GET /admin/stats/timeline — requests grouped by 10min/hour/day ─
 router.get("/stats/timeline", async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -1061,9 +1038,7 @@ router.get("/stats/timeline", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /admin/conversations — cross-project conversation list
-// ============================================================
+// ─── GET /admin/conversations — cross-project conversation list ─
 router.get("/conversations", async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -1278,9 +1253,7 @@ router.get("/conversations", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /admin/conversations/filters — distinct project & username values
-// ============================================================
+// ─── GET /admin/conversations/filters — distinct project & username values ─
 router.get("/conversations/filters", async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -1305,9 +1278,7 @@ router.get("/conversations/filters", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /admin/conversations/stats — quick stats snapshot
-// ============================================================
+// ─── GET /admin/conversations/stats — quick stats snapshot ──
 router.get("/conversations/stats", async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -1334,10 +1305,7 @@ router.get("/conversations/stats", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /admin/conversations/stream — SSE for real-time stats
-// Powered by Change Streams when available; polls otherwise.
-// ============================================================
+// ─── GET /admin/conversations/stream — SSE for real-time stats ─
 router.get("/conversations/stream", async (req, res) => {
   const db = MongoWrapper.getDb(MONGO_DB_NAME);
   if (!db) return res.status(503).json({ error: "Database not available" });
@@ -1438,11 +1406,7 @@ router.get("/conversations/stream", async (req, res) => {
   }
 });
 
-// ============================================================
-// GET /admin/changes/stream — SSE for real-time collection changes
-// Powered by MongoDB Change Streams when available (replica set),
-// otherwise clients should fall back to polling.
-// ============================================================
+// ─── GET /admin/changes/stream — SSE for real-time collection changes ─
 router.get("/changes/stream", async (req, res) => {
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
@@ -1499,9 +1463,7 @@ router.get("/changes/stream", async (req, res) => {
   }
 });
 
-// ============================================================
-// GET /admin/conversations/:id — single conversation, full msgs
-// ============================================================
+// ─── GET /admin/conversations/:id — single conversation, full msgs ─
 router.get("/conversations/:id", async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -1519,9 +1481,7 @@ router.get("/conversations/:id", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /admin/live — conversations updated in last N minutes
-// ============================================================
+// ─── GET /admin/live — conversations updated in last N minutes ─
 router.get("/live", async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -1608,9 +1568,7 @@ router.get("/live", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /admin/health — system health
-// ============================================================
+// ─── GET /admin/health — system health ──────────────────────
 router.get("/health", async (_req, res) => {
   const db = MongoWrapper.getDb(MONGO_DB_NAME);
   const mongoStatus = db ? "connected" : "disconnected";
@@ -1644,9 +1602,7 @@ router.get("/health", async (_req, res) => {
   });
 });
 
-// ============================================================
-// LM Studio — Model Management
-// ============================================================
+// ─── Model Management ───────────────────────────────────────
 
 /**
  * GET /admin/lm-studio/models
@@ -1774,9 +1730,7 @@ router.post("/lm-studio/estimate", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// Workflows — admin read-only views (POST lives at /workflows)
-// ============================================================
+// ─── admin read-only views (POST lives at /workflows) ───────
 
 /**
  * GET /admin/workflows — paginated workflow list
@@ -1892,10 +1846,7 @@ router.get("/workflows/:id", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /admin/media — extract media from all conversations
-// AND from agent image generation requests (for skipConversation callers)
-// ============================================================
+// ─── GET /admin/media — extract media from all conversations ─
 router.get("/media", async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -2142,9 +2093,7 @@ router.get("/media", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /admin/text — extract text content from conversations
-// ============================================================
+// ─── GET /admin/text — extract text content from conversations ─
 router.get("/text", async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -2241,9 +2190,7 @@ router.get("/text", async (req, res, next) => {
     next(error);
   }
 });
-// ============================================================
-// GET /admin/traces — paginated trace list (derived from requests)
-// ============================================================
+// ─── GET /admin/traces — paginated trace list (derived from requests) ─
 router.get("/traces", async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -2414,9 +2361,7 @@ router.get("/traces", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /admin/traces/:id — single trace derived from requests
-// ============================================================
+// ─── GET /admin/traces/:id — single trace derived from requests ─
 router.get("/traces/:id", async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -2452,10 +2397,7 @@ router.get("/traces/:id", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /admin/sessions/:id/stats — aggregate stats for an agent session
-// Sums cost, tokens, models, providers across ALL requests with this agentSessionId
-// ============================================================
+// ─── GET /admin/sessions/:id/stats — aggregate stats for an agent session ─
 router.get("/sessions/:id/stats", async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -2577,10 +2519,7 @@ router.get("/sessions/:id/stats", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /admin/sessions/:id/requests — all requests for a session (recursive)
-// Returns requests from the root session AND all descendant worker sessions.
-// ============================================================
+// ─── GET /admin/sessions/:id/requests — all requests for a session (recursive) ─
 router.get("/sessions/:id/requests", async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -2656,9 +2595,7 @@ router.get("/sessions/:id/requests", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /admin/agent-sessions — list all agent sessions (cross-user)
-// ============================================================
+// ─── GET /admin/agent-sessions — list all agent sessions (cross-user) ─
 router.get("/agent-sessions", async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -2707,9 +2644,7 @@ router.get("/agent-sessions", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /admin/agent-sessions/:id — single agent session (with messages)
-// ============================================================
+// ─── GET /admin/agent-sessions/:id — single agent session (with messages) ─
 router.get("/agent-sessions/:id", async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);

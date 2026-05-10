@@ -3,8 +3,6 @@ import logger from "../utils/logger.js";
 
 import { TYPES, getDefaultModels } from "../config.js";
 
-
-
 /**
  * Convert messages with images to Ollama's native format.
  * Ollama expects images as base64 strings (without the data URL prefix).

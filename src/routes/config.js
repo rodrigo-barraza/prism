@@ -174,15 +174,11 @@ function enrichModelsWithArenaScores(modelsMap) {
   return modelsMap;
 }
 
-
 // ── Model capability detection ──────────────────────────────────
 // Patterns and helpers now live in LocalProviderGateway.
 // All local model fetchers (getLmStudioModelOptions, getVllmModelOptions,
 // getOllamaModelOptions, getLlamaCppModelOptions) are replaced by
 // LocalProviderGateway.discoverModels().
-
-
-
 
 // ── Local provider instance metadata ────────────────────────────
 // Built from the instance registry. Model fetching is now delegated
@@ -197,7 +193,6 @@ const LOCAL_PROVIDERS = localInstances.map((inst) => {
   if (inst.nickname) entry.nickname = inst.nickname;
   return entry;
 });
-
 
 /**
  * GET /config

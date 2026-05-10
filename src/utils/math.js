@@ -1,9 +1,3 @@
-// ─────────────────────────────────────────────────────────────
-// Shared math utilities — single source of truth
-// ─────────────────────────────────────────────────────────────
-
-// Re-export generic math from utilities-library so existing
-// import paths within prism-service continue to work.
 export { cosineSimilarity } from "@rodrigo-barraza/utilities-library";
 
 /** Cap — anything above this is a measurement artifact */

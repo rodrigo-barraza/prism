@@ -9,9 +9,7 @@ import {
 
 const router = express.Router();
 
-// ============================================================
-// Approval endpoint — resolves pending plan/tool approvals
-// ============================================================
+// ─── resolves pending plan/tool approvals ───────────────────
 
 /**
  * POST /agent/approve
@@ -49,9 +47,7 @@ router.post("/approve", async (req, res) => {
   res.json({ ok: true, approved: approved !== false });
 });
 
-// ============================================================
-// Answer endpoint — resolves pending ask_user_question pauses
-// ============================================================
+// ─── resolves pending ask_user_question pauses ──────────────
 
 /**
  * POST /agent/answer
@@ -89,9 +85,7 @@ router.post("/answer", async (req, res) => {
   res.json({ ok: true });
 });
 
-// ============================================================
-// REST endpoint — SSE streaming or JSON fallback
-// ============================================================
+// ─── SSE streaming or JSON fallback ─────────────────────────
 
 /**
  * POST /agent

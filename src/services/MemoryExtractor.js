@@ -12,8 +12,6 @@ import { estimateTokens } from "../utils/CostCalculator.js";
 
 const MIN_MESSAGES_FOR_EXTRACTION = 4;
 
-
-
 /**
  * Extraction prompt — CC-style 4-type taxonomy with explicit negative constraints.
  *
@@ -89,7 +87,6 @@ Example:
 \`\`\`
 
 If nothing worth remembering happened, return an empty array: []`;
-
 
 // ─── MemoryExtractor ─────────────────────────────────────────────────────────
 

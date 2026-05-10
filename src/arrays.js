@@ -393,7 +393,6 @@ export const ARENA_SCORES = {
 
   // ── Vision Arena ────────────────────────────────────────────
   // Source: https://arena.ai/leaderboard/vision
-  // TODO: Add scores when provided
   vision: {},
 
   // ── Document Arena ──────────────────────────────────────────

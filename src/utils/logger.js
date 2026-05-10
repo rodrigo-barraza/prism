@@ -1,8 +1,3 @@
-// ─────────────────────────────────────────────────────────────
-// Re-export shared logger, scoped to this service.
-// Extended with Prism-specific methods (provider, request).
-// ─────────────────────────────────────────────────────────────
-
 import { createLogger } from "@rodrigo-barraza/utilities-library/node";
 import { getRequestContext } from "./RequestContext.js";
 

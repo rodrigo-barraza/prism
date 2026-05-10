@@ -26,9 +26,7 @@ registerCleanup(async () => {
   }
 });
 
-// ============================================================
-// GET /benchmark — List all benchmark tests for the caller's project
-// ============================================================
+// ─── GET /benchmark — List all benchmark tests for the caller's project ─
 
 router.get("/", async (req, res, next) => {
   try {
@@ -63,9 +61,7 @@ router.get("/", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /benchmark/stats — Aggregate model performance across all runs
-// ============================================================
+// ─── GET /benchmark/stats — Aggregate model performance across all runs ─
 // Per model+benchmark pair, only the LATEST run's result counts toward
 // pass/fail/error (unique test results). Cost and latency accumulate
 // across all runs for accurate historical totals.
@@ -220,18 +216,14 @@ router.get("/stats", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// GET /benchmark/models — List available conversation models for benchmarking
-// ============================================================
+// ─── GET /benchmark/models — List available conversation models for benchmarking ─
 
 router.get("/models", (_req, res) => {
   const models = BenchmarkService.getConversationModels();
   res.json({ models, count: models.length });
 });
 
-// ============================================================
-// GET /benchmark/active-list — List all benchmarks with active runs
-// ============================================================
+// ─── GET /benchmark/active-list — List all benchmarks with active runs ─
 // Returns an array of benchmark IDs that currently have in-progress runs.
 // Used by the benchmark list page to show running indicators on cards.
 
@@ -240,9 +232,7 @@ router.get("/active-list", (_req, res) => {
   res.json({ activeIds });
 });
 
-// ============================================================
-// POST /benchmark — Create a new benchmark test
-// ============================================================
+// ─── POST /benchmark — Create a new benchmark test ──────────
 
 router.post("/", async (req, res, next) => {
   try {
@@ -308,10 +298,7 @@ router.post("/", async (req, res, next) => {
   }
 });
 
-
-// ============================================================
-// GET /benchmark/:id — Get a single benchmark test + latest run
-// ============================================================
+// ─── GET /benchmark/:id — Get a single benchmark test + latest run ─
 
 router.get("/:id", async (req, res, next) => {
   try {
@@ -329,10 +316,7 @@ router.get("/:id", async (req, res, next) => {
   }
 });
 
-
-// ============================================================
-// DELETE /benchmark/:id — Delete a benchmark test and its runs
-// ============================================================
+// ─── DELETE /benchmark/:id — Delete a benchmark test and its runs ─
 
 router.delete("/:id", async (req, res, next) => {
   try {
@@ -349,9 +333,7 @@ router.delete("/:id", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// POST /benchmark/:id/run — Execute a benchmark against models (SSE)
-// ============================================================
+// ─── POST /benchmark/:id/run — Execute a benchmark against models (SSE) ─
 // Body (optional):
 //   { models: [{ provider: "openai", model: "gpt-5.4" }, ...] }
 // If models is omitted, all available conversation models are tested.
@@ -504,9 +486,7 @@ router.post("/:id/run", async (req, res) => {
   }
 });
 
-// ============================================================
-// POST /benchmark/:id/abort — Explicitly cancel a running benchmark
-// ============================================================
+// ─── POST /benchmark/:id/abort — Explicitly cancel a running benchmark ─
 
 router.post("/:id/abort", (req, res) => {
   const controller = activeRuns.get(req.params.id);
@@ -520,10 +500,7 @@ router.post("/:id/abort", (req, res) => {
   }
 });
 
-
-// ============================================================
-// GET /benchmark/:id/active — Check if a benchmark has an active run
-// ============================================================
+// ─── GET /benchmark/:id/active — Check if a benchmark has an active run ─
 // Returns the current live state (completed results, active model)
 // so reconnecting clients can catch up immediately.
 
@@ -541,9 +518,7 @@ router.get("/:id/active", (req, res) => {
   });
 });
 
-// ============================================================
-// GET /benchmark/:id/follow — Reconnect to an in-progress run (SSE)
-// ============================================================
+// ─── GET /benchmark/:id/follow — Reconnect to an in-progress run (SSE) ─
 // Replays completed results, then streams live events from the
 // running benchmark. Allows clients that navigated away and
 // returned to see live progress without starting a new run.
@@ -600,9 +575,7 @@ router.get("/:id/follow", (req, res) => {
   });
 });
 
-// ============================================================
-// GET /benchmark/:id/runs — Get all past runs for a benchmark
-// ============================================================
+// ─── GET /benchmark/:id/runs — Get all past runs for a benchmark ─
 
 router.get("/:id/runs", async (req, res, next) => {
   try {
@@ -619,9 +592,7 @@ router.get("/:id/runs", async (req, res, next) => {
   }
 });
 
-// ============================================================
-// POST /benchmark/:id/runs/:runId/rerun — Re-run with same models
-// ============================================================
+// ─── POST /benchmark/:id/runs/:runId/rerun — Re-run with same models ─
 
 router.post("/:id/runs/:runId/rerun", async (req, res, next) => {
   try {

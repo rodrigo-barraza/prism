@@ -1,19 +1,4 @@
-// ============================================================
-// LocalModelQueue — Per-Instance Counting Semaphore for Local GPU Models
-// ============================================================
-// Local inference servers (LM Studio, vLLM, Ollama, llama.cpp) can
-// serve a limited number of concurrent requests depending on your
-// GPU / VRAM headroom. This module provides a FIFO counting semaphore
-// per instance that serializes requests — instances on different
-// machines get independent queues with their own concurrency.
-//
-// Each instance's concurrency is configured in config.js via
-// PROVIDER_LM_STUDIO, PROVIDER_OLLAMA, etc. arrays.
-//
-// Usage:
-//   const release = await LocalModelQueue.acquire("lm-studio");
-//   try { await doInference(); }
-//   finally { release(); }
+// ─── Per-Instance Counting Semaphore for Local GPU Models ───
 
 import logger from "../utils/logger.js";
 import { getInstance, isInstance } from "../providers/instance-registry.js";

@@ -1408,7 +1408,6 @@ export default class CoordinatorService {
     worker.messages = finalMessages;
     worker.durationMs = Date.now() - worker.startedAt;
 
-
     // Stage and commit changes in the worktree
     await toolsApiPost("/agentic/command/run", {
       command: "git add -A",
