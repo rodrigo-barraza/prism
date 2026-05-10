@@ -1,5 +1,6 @@
 import express from "express";
 import { basename } from "node:path";
+import { TOOLS_SERVICE_URL } from "../../config.js";
 import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
 import logger from "../utils/logger.js";
 
@@ -30,6 +31,54 @@ router.get("/", (_req, res) => {
   } catch (err) {
     logger.error(`GET /workspaces error: ${err.message}`);
     res.status(500).json({ error: "Failed to retrieve workspace roots" });
+  }
+});
+
+/**
+ * GET /workspaces/full
+ * Returns the full workspace config including connected agent metadata.
+ * Used by the Settings page for the richer workspace management UI.
+ * Shape: { workspaces: [...], agents: [...], staticRoots: string[] }
+ */
+router.get("/full", async (_req, res) => {
+  try {
+    const roots = ToolOrchestratorService.getWorkspaceRoots();
+    const staticRoots = ToolOrchestratorService.getStaticRoots();
+
+    // Fetch full config from tools-api to get agent metadata
+    let agents = [];
+    try {
+      const configRes = await fetch(`${TOOLS_SERVICE_URL}/admin/config`, {
+        signal: AbortSignal.timeout(3000),
+      });
+      if (configRes.ok) {
+        const config = await configRes.json();
+        agents = config.agents || [];
+      }
+    } catch (agentErr) {
+      logger.warn(`GET /workspaces/full agent fetch failed: ${agentErr.message}`);
+    }
+
+    // Build a set of agent-served roots for quick lookup
+    const agentRootSet = new Set();
+    for (const agent of agents) {
+      for (const root of agent.roots || []) {
+        agentRootSet.add(root);
+      }
+    }
+
+    const workspaces = roots.map((rootPath) => ({
+      id: rootPath,
+      name: basename(rootPath),
+      path: rootPath,
+      isPinned: staticRoots.includes(rootPath),
+      isAgentServed: agentRootSet.has(rootPath),
+    }));
+
+    res.json({ workspaces, agents, staticRoots });
+  } catch (err) {
+    logger.error(`GET /workspaces/full error: ${err.message}`);
+    res.status(500).json({ error: "Failed to retrieve full workspace config" });
   }
 });
 

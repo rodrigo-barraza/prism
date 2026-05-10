@@ -68,6 +68,7 @@ import { writeFileSync, readFileSync } from "node:fs";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
 import { MongoClient } from "mongodb";
+import { sleep } from "@rodrigo-barraza/utilities-library";
 import { resolveArchParams, estimateMemory } from "../src/utils/gguf-arch.js";
 import {
   MONGO_URI,
@@ -1065,11 +1066,6 @@ async function sampleGPU(durationMs = SAMPLE_MS, intervalMs = 250) {
 }
 
 // ── Helpers ──────────────────────────────────────────────────
-
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
 function mibToGiB(mib) {
   return mib / 1024;
 }

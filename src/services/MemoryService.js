@@ -225,6 +225,8 @@ const MemoryService = {
     const existing = await collection
       .find(dedupFilter)
       .project({ embedding: 1 })
+      .sort({ createdAt: -1 })
+      .limit(200)
       .toArray();
     const isDuplicate = existing.some((doc) => {
       if (!doc.embedding) return false;
@@ -372,6 +374,8 @@ const MemoryService = {
           createdAt: 1,
         },
       })
+      .sort({ createdAt: -1 })
+      .limit(500)
       .toArray();
     if (memories.length === 0) return [];
     // Compute cosine similarity and sort

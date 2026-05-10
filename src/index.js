@@ -191,11 +191,23 @@ setupWebSocket(wss);
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (db) {
       await Promise.all([
+        // requests — primary lookup by requestId (admin detail view)
+        db.collection("requests").createIndex({ requestId: 1 }, { unique: true }),
         // requests — used by $lookup from conversations and session joins
         db.collection("requests").createIndex({ conversationId: 1 }),
         db.collection("requests").createIndex({ traceId: 1 }),
         db.collection("requests").createIndex({ timestamp: -1 }),
         db.collection("requests").createIndex({ project: 1, timestamp: -1 }),
+        // requests — agent session joins (admin traces, session detail)
+        db.collection("requests").createIndex({ agentSessionId: 1 }),
+        // requests — tool stats aggregation (multikey on array field)
+        db.collection("requests").createIndex({ toolApiNames: 1 }),
+        // requests — model/provider breakdown aggregation
+        db.collection("requests").createIndex({ model: 1, provider: 1 }),
+        // requests — endpoint breakdown aggregation
+        db.collection("requests").createIndex({ endpoint: 1 }),
+        // requests — success/failure filtering with time range
+        db.collection("requests").createIndex({ success: 1, timestamp: -1 }),
         // conversations — used by findOne lookups and list queries
         db.collection("conversations").createIndex({ id: 1 }, { unique: true }),
         db.collection("conversations").createIndex({ updatedAt: -1 }),

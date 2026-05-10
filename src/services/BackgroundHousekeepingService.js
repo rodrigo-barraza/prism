@@ -150,12 +150,14 @@ async function pruneMinioOrphans() {
   let removed = 0;
 
   try {
-    // Get all conversation IDs and agent session IDs that exist
-    const [convIds, sessionIds] = await Promise.all([
-      db.collection(COLLECTIONS.CONVERSATIONS).distinct("id"),
-      db.collection(COLLECTIONS.AGENT_SESSIONS).distinct("id"),
-    ]);
-    const validIds = new Set([...convIds, ...sessionIds]);
+    // Stream IDs instead of distinct() to avoid materializing the entire array
+    const validIds = new Set();
+    const convCursor = db.collection(COLLECTIONS.CONVERSATIONS)
+      .find({}, { projection: { id: 1, _id: 0 } });
+    const sessionCursor = db.collection(COLLECTIONS.AGENT_SESSIONS)
+      .find({}, { projection: { id: 1, _id: 0 } });
+    for await (const doc of convCursor) validIds.add(doc.id);
+    for await (const doc of sessionCursor) validIds.add(doc.id);
 
     // List MinIO objects with the conversation-scoped prefix pattern
     // Convention: objects are stored as {conversationId}/{filename}

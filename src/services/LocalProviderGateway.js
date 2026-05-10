@@ -26,7 +26,7 @@
 // ============================================================
 
 import logger from "../utils/logger.js";
-import { formatFileSize } from "@rodrigo-barraza/utilities-library";
+import { formatFileSize, withTimeoutFallback } from "@rodrigo-barraza/utilities-library";
 import { getProvider } from "../providers/index.js";
 import {
   listInstances,
@@ -645,7 +645,7 @@ class LocalProviderGateway {
       const provider = getProvider(inst.id);
       if (!provider?.listModels) return [];
 
-      const rawResult = await withTimeout(
+      const rawResult = await withTimeoutFallback(
         provider.listModels(),
         timeoutMs,
         { models: [] },
@@ -806,7 +806,7 @@ class LocalProviderGateway {
         const provider = getProvider(inst.id);
         if (!provider?.listModels) return null;
 
-        const result = await withTimeout(
+        const result = await withTimeoutFallback(
           provider.listModels(),
           timeoutMs,
           { models: [] },
@@ -856,7 +856,7 @@ class LocalProviderGateway {
 
         // Prefer native health check if available
         if (provider?.checkHealth) {
-          const result = await withTimeout(
+          const result = await withTimeoutFallback(
             provider.checkHealth(),
             timeoutMs,
             { ok: false, status: "timeout" },
@@ -871,7 +871,7 @@ class LocalProviderGateway {
         // Fallback: probe via listModels
         if (provider?.listModels) {
           try {
-            const result = await withTimeout(
+            const result = await withTimeoutFallback(
               provider.listModels(),
               timeoutMs,
               null,
@@ -1163,15 +1163,7 @@ class LocalProviderGateway {
   }
 }
 
-// ── Utility ─────────────────────────────────────────────────────
 
-/** Race a promise against a timeout. Resolves to fallback on timeout. */
-function withTimeout(promise, ms, fallback = null) {
-  return Promise.race([
-    promise,
-    new Promise((resolve) => setTimeout(() => resolve(fallback), ms)),
-  ]);
-}
 
 // ── Singleton Export ─────────────────────────────────────────────
 

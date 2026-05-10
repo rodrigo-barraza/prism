@@ -24,6 +24,12 @@ router.get("/", async (req, res, next) => {
     const [sessions, toolCountDocs] = await Promise.all([
       db.collection(COLLECTION)
         .find({ project, username })
+        .project({
+          id: 1, project: 1, username: 1, title: 1,
+          createdAt: 1, updatedAt: 1, modalities: 1,
+          providers: 1, totalCost: 1, isGenerating: 1,
+          settings: 1, traceId: 1, parentAgentSessionId: 1,
+        })
         .sort({ updatedAt: -1 })
         .toArray(),
       db.collection(COLLECTIONS.REQUESTS)

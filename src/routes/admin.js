@@ -744,8 +744,59 @@ router.get("/stats/costs", async (req, res, next) => {
     }
     const matchStage = Object.keys(match).length ? [{ $match: match }] : [];
 
-    // Run all aggregations in parallel
-    const [
+    // Shared $group accumulators — reused across all facets
+    const groupFields = {
+      totalCost: COST_SUM_EXPR,
+      totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
+      totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
+      totalRequests: { $sum: 1 },
+      avgTokensPerSec: AVG_TOKENS_PER_SEC_EXPR,
+    };
+
+    // Single $facet pipeline — scans the collection once instead of 8 times
+    const [result] = await db
+      .collection(REQUESTS_COL)
+      .aggregate([
+        ...matchStage,
+        {
+          $facet: {
+            totals: [
+              { $group: { _id: null, ...groupFields } },
+            ],
+            byProject: [
+              { $group: { _id: "$project", ...groupFields } },
+              { $sort: { totalCost: -1 } },
+            ],
+            byProvider: [
+              { $group: { _id: "$provider", ...groupFields } },
+              { $sort: { totalCost: -1 } },
+            ],
+            byModel: [
+              { $group: { _id: { model: "$model", provider: "$provider" }, ...groupFields } },
+              { $sort: { totalCost: -1 } },
+            ],
+            byEndpoint: [
+              { $group: { _id: "$endpoint", ...groupFields } },
+              { $sort: { totalCost: -1 } },
+            ],
+            byProjectProvider: [
+              { $group: { _id: { project: "$project", provider: "$provider" }, ...groupFields } },
+              { $sort: { totalCost: -1 } },
+            ],
+            byProjectEndpoint: [
+              { $group: { _id: { project: "$project", endpoint: "$endpoint" }, ...groupFields } },
+              { $sort: { totalCost: -1 } },
+            ],
+            byProjectModel: [
+              { $group: { _id: { project: "$project", model: "$model", provider: "$provider" }, ...groupFields } },
+              { $sort: { totalCost: -1 } },
+            ],
+          },
+        },
+      ])
+      .toArray();
+
+    const {
       totals,
       byProject,
       byProvider,
@@ -754,162 +805,7 @@ router.get("/stats/costs", async (req, res, next) => {
       byProjectProvider,
       byProjectEndpoint,
       byProjectModel,
-    ] = await Promise.all([
-      // Totals
-      db
-        .collection(REQUESTS_COL)
-        .aggregate([
-          ...matchStage,
-          {
-            $group: {
-              _id: null,
-              totalCost: COST_SUM_EXPR,
-              totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
-              totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
-              totalRequests: { $sum: 1 },
-              avgTokensPerSec: AVG_TOKENS_PER_SEC_EXPR,
-            },
-          },
-        ])
-        .toArray(),
-
-      // By project
-      db
-        .collection(REQUESTS_COL)
-        .aggregate([
-          ...matchStage,
-          {
-            $group: {
-              _id: "$project",
-              totalCost: COST_SUM_EXPR,
-              totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
-              totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
-              totalRequests: { $sum: 1 },
-              avgTokensPerSec: AVG_TOKENS_PER_SEC_EXPR,
-            },
-          },
-          { $sort: { totalCost: -1 } },
-        ])
-        .toArray(),
-
-      // By provider
-      db
-        .collection(REQUESTS_COL)
-        .aggregate([
-          ...matchStage,
-          {
-            $group: {
-              _id: "$provider",
-              totalCost: COST_SUM_EXPR,
-              totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
-              totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
-              totalRequests: { $sum: 1 },
-              avgTokensPerSec: AVG_TOKENS_PER_SEC_EXPR,
-            },
-          },
-          { $sort: { totalCost: -1 } },
-        ])
-        .toArray(),
-
-      // By model
-      db
-        .collection(REQUESTS_COL)
-        .aggregate([
-          ...matchStage,
-          {
-            $group: {
-              _id: { model: "$model", provider: "$provider" },
-              totalCost: COST_SUM_EXPR,
-              totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
-              totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
-              totalRequests: { $sum: 1 },
-              avgTokensPerSec: AVG_TOKENS_PER_SEC_EXPR,
-            },
-          },
-          { $sort: { totalCost: -1 } },
-        ])
-        .toArray(),
-
-      // By endpoint (modality)
-      db
-        .collection(REQUESTS_COL)
-        .aggregate([
-          ...matchStage,
-          {
-            $group: {
-              _id: "$endpoint",
-              totalCost: COST_SUM_EXPR,
-              totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
-              totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
-              totalRequests: { $sum: 1 },
-              avgTokensPerSec: AVG_TOKENS_PER_SEC_EXPR,
-            },
-          },
-          { $sort: { totalCost: -1 } },
-        ])
-        .toArray(),
-
-      // By project + provider (for nested breakdown)
-      db
-        .collection(REQUESTS_COL)
-        .aggregate([
-          ...matchStage,
-          {
-            $group: {
-              _id: { project: "$project", provider: "$provider" },
-              totalCost: COST_SUM_EXPR,
-              totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
-              totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
-              totalRequests: { $sum: 1 },
-              avgTokensPerSec: AVG_TOKENS_PER_SEC_EXPR,
-            },
-          },
-          { $sort: { totalCost: -1 } },
-        ])
-        .toArray(),
-
-      // By project + endpoint (for nested modality breakdown)
-      db
-        .collection(REQUESTS_COL)
-        .aggregate([
-          ...matchStage,
-          {
-            $group: {
-              _id: { project: "$project", endpoint: "$endpoint" },
-              totalCost: COST_SUM_EXPR,
-              totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
-              totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
-              totalRequests: { $sum: 1 },
-              avgTokensPerSec: AVG_TOKENS_PER_SEC_EXPR,
-            },
-          },
-          { $sort: { totalCost: -1 } },
-        ])
-        .toArray(),
-
-      // By project + model (for nested model breakdown)
-      db
-        .collection(REQUESTS_COL)
-        .aggregate([
-          ...matchStage,
-          {
-            $group: {
-              _id: {
-                project: "$project",
-                model: "$model",
-                provider: "$provider",
-              },
-              totalCost: COST_SUM_EXPR,
-              totalInputTokens: { $sum: { $ifNull: ["$inputTokens", 0] } },
-              totalOutputTokens: { $sum: { $ifNull: ["$outputTokens", 0] } },
-              totalRequests: { $sum: 1 },
-              avgTokensPerSec: AVG_TOKENS_PER_SEC_EXPR,
-            },
-          },
-          { $sort: { totalCost: -1 } },
-        ])
-        .toArray(),
-    ]);
+    } = result;
 
     // Nest provider breakdown under each project
     const providersByProject = {};

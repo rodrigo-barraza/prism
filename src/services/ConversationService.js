@@ -259,45 +259,7 @@ const ConversationService = {
   ) {
     const traceId = conversationMeta?.traceId || null;
     const col = MongoWrapper.getCollection(MONGO_DB_NAME, collection);
-
-    // Auto-create conversation if it doesn't exist
-    const existing = await col.findOne({
-      id: conversationId,
-      project,
-      username,
-    });
-    if (!existing) {
-      const now = new Date().toISOString();
-      const metaSettings = conversationMeta?.settings || {};
-      const parentId = conversationMeta?.parentAgentSessionId || null;
-      const isAgentSession = collection === COLLECTIONS.AGENT_SESSIONS;
-
-      // Agent sessions don't need the systemPrompt denormalization —
-      // the system prompt lives in messages[0] with role:"system"
-      const metaSysPrompt = isAgentSession ? undefined : (conversationMeta?.systemPrompt || "");
-
-      await col.insertOne({
-        id: conversationId,
-        project,
-        username,
-        title: conversationMeta?.title || "New Conversation",
-        messages: [],
-        ...(!isAgentSession && { systemPrompt: metaSysPrompt }),
-        settings: isAgentSession
-          ? { ...metaSettings }
-          : { ...metaSettings, systemPrompt: metaSysPrompt },
-        modalities: computeModalities([]),
-        providers: extractProviders([], metaSettings),
-        totalCost: 0,
-        isGenerating: true,
-        ...(conversationMeta?.synthetic && { synthetic: true }),
-        ...(traceId && { traceId }),
-        ...(parentId && { parentAgentSessionId: parentId }),
-
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
+    const isAgentSession = collection === COLLECTIONS.AGENT_SESSIONS;
 
     // Extract files (upload base64 data to MinIO)
     const processedMessages = await extractFiles(
@@ -308,21 +270,14 @@ const ConversationService = {
 
     const now = new Date().toISOString();
 
-    // Build $set — always update timestamp
+    // Build $set fields for metadata
     const setFields = { updatedAt: now };
+    if (traceId) setFields.traceId = traceId;
 
-    // Set traceId if provided and not already on the doc
-    if (traceId) {
-      setFields.traceId = traceId;
-    }
-
-    // Apply conversationMeta if provided (title, settings, systemPrompt, parentAgentSessionId)
-    const isAgentSession = collection === COLLECTIONS.AGENT_SESSIONS;
     if (conversationMeta) {
       if (conversationMeta.title !== undefined) {
         setFields.title = conversationMeta.title;
       }
-      // Skip systemPrompt for agent sessions — already in messages array
       if (conversationMeta.systemPrompt !== undefined && !isAgentSession) {
         setFields.systemPrompt = conversationMeta.systemPrompt;
       }
@@ -339,16 +294,39 @@ const ConversationService = {
       }
     }
 
-    // Push new messages and apply updates
+    // Build $setOnInsert for auto-creation of new conversations
+    const metaSettings = conversationMeta?.settings || {};
+    const metaSysPrompt = isAgentSession ? undefined : (conversationMeta?.systemPrompt || "");
+    const parentId = conversationMeta?.parentAgentSessionId || null;
+
+    const setOnInsert = {
+      title: conversationMeta?.title || "New Conversation",
+      ...(!isAgentSession && { systemPrompt: metaSysPrompt }),
+      settings: isAgentSession
+        ? { ...metaSettings }
+        : { ...metaSettings, systemPrompt: metaSysPrompt },
+      modalities: computeModalities([]),
+      providers: extractProviders([], metaSettings),
+      totalCost: 0,
+      isGenerating: true,
+      ...(conversationMeta?.synthetic && { synthetic: true }),
+      ...(traceId && { traceId }),
+      ...(parentId && { parentAgentSessionId: parentId }),
+      createdAt: now,
+    };
+
+    // 1. Atomic upsert: push messages + set metadata in a single operation
     await col.updateOne(
       { id: conversationId, project, username },
       {
         $push: { messages: { $each: processedMessages } },
         $set: setFields,
+        $setOnInsert: setOnInsert,
       },
+      { upsert: true },
     );
 
-    // Fetch the updated doc to recompute derived fields
+    // 2. Single re-read to compute derived fields
     const conversation = await col.findOne({
       id: conversationId,
       project,
@@ -359,22 +337,19 @@ const ConversationService = {
       throw new Error(`Conversation not found: ${conversationId}`);
     }
 
-    // Recompute derived fields from full message list
+    // 3. Recompute derived fields and persist
+    const derived = {
+      modalities: computeModalities(conversation.messages),
+      providers: extractProviders(conversation.messages, conversation.settings),
+      totalCost: computeTotalCost(conversation.messages),
+    };
     await col.updateOne(
       { id: conversationId, project, username },
-      {
-        $set: {
-          modalities: computeModalities(conversation.messages),
-          providers: extractProviders(
-            conversation.messages,
-            conversation.settings,
-          ),
-          totalCost: computeTotalCost(conversation.messages),
-        },
-      },
+      { $set: derived },
     );
 
-    return col.findOne({ id: conversationId, project, username });
+    // Return the doc with derived fields merged (avoids a third read)
+    return { ...conversation, ...derived };
   },
 
   /**
