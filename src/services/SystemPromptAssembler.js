@@ -204,11 +204,10 @@ export default class SystemPromptAssembler {
    */
   async fetchSkills(project, username, queryText, { traceId, agentSessionId, endpoint, agent } = {}) {
     try {
-      const client = MongoWrapper.getClient(MONGO_DB_NAME);
-      if (!client) return [];
+      const db = MongoWrapper.getDb(MONGO_DB_NAME);
+      if (!db) return [];
 
-      const skills = await client
-        .db(MONGO_DB_NAME)
+      const skills = await db
         .collection("agent_skills")
         .find({ project, username, enabled: true })
         .project({ name: 1, content: 1, description: 1, embedding: 1 })

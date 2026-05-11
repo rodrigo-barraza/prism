@@ -1,54 +1,41 @@
-import { MongoClient } from "mongodb";
-import logger from "../utils/logger.js";
+// ─── MongoWrapper — Thin adapter over service-library MongoManager ───
+//
+// Re-exports MongoManager from the service-library while preserving
+// the Prism-specific API surface (createClient, getClient, getDb, etc.)
+// that is consumed by ~14 internal modules.
+//
+// This adapter bridges the legacy API to the shared library:
+//   createClient(name, uri) → MongoManager.connect(uri, { name })
+//   getClient(name)         → ❌ deprecated — use getDb(name) instead
+//   getDb(name)             → MongoManager.getDB(name)
+//   getCollection(db, col)  → MongoManager.getCollection(col, db)
+//   closeClient(name)       → MongoManager.disconnect(name)
+// ─────────────────────────────────────────────────────────────────────
 
-const clients = new Map();
+import { connectDB, getDB, getCollection, disconnectDB } from "@rodrigo-barraza/service-library/mongo";
+import logger from "../utils/logger.js";
 
 const MongoWrapper = {
   async createClient(name, uri) {
-    try {
-      const client = new MongoClient(uri);
-      await client.connect();
-      clients.set(name, client);
-      logger.success(`MongoDB connected: ${name}`);
-      return client;
-    } catch (error) {
-      logger.error(`MongoDB connection failed: ${name}`, error);
-      throw error;
-    }
+    return connectDB(uri, { name, logger });
   },
-  getClient(name) {
-    return clients.get(name);
+  getClient(_name) {
+    // Deprecated — getClient returns the raw MongoClient, which is no
+    // longer exposed by MongoManager. Use getDb() instead.
+    // Callers that used getClient(name).db(name) should use getDb(name).
+    throw new Error(
+      "MongoWrapper.getClient() is deprecated — use MongoWrapper.getDb() instead",
+    );
   },
-  /**
-   * Get the database instance for a named connection.
-   * Shorthand for `getClient(name)?.db(name)`.
-   *
-   * @param {string} name - Connection/database name
-   * @returns {import("mongodb").Db|null}
-   */
   getDb(name) {
-    const client = clients.get(name);
-    return client ? client.db(name) : null;
+    return getDB(name);
   },
-  /**
-   * Get a collection from a named connection.
-   * Throws if the database is not available.
-   *
-   * @param {string} dbName - Connection/database name
-   * @param {string} collectionName - Collection name
-   * @returns {import("mongodb").Collection}
-   */
   getCollection(dbName, collectionName) {
-    const client = clients.get(dbName);
-    if (!client) throw new Error("Database not available");
-    return client.db(dbName).collection(collectionName);
+    // Note: service-library uses (collectionName, dbName) — reversed order
+    return getCollection(collectionName, dbName);
   },
   closeClient(name) {
-    const client = clients.get(name);
-    if (client) {
-      client.close();
-      clients.delete(name);
-    }
+    return disconnectDB(name);
   },
 };
 
