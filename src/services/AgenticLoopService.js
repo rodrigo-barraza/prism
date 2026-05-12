@@ -68,8 +68,9 @@ export default class AgenticLoopService {
       emit,
       signal,
     } = ctx;
-    // Load tool schemas from tools-api (all tools including creative tools
-    // like generate_image are served as HTTP endpoints by tools-api)
+    // Ensure tool schemas are loaded from tools-api (lazy init — if tools-api
+    // was unreachable at boot, this fetches on-demand before proceeding)
+    await ToolOrchestratorService.ensureSchemas();
     const toolsApiSchemas = ToolOrchestratorService.getToolSchemas();
 
     // Load custom tools from MongoDB

@@ -119,7 +119,9 @@ async function fetchSchemas() {
   }
 }
 
-// Kick off schema fetch immediately at module load
+// Kick off schema fetch eagerly at module load (non-blocking).
+// If tools-api is unreachable, schemas stay empty until the first
+// consumer calls ensureSchemas(), which fetches on-demand.
 fetchSchemas();
 
 // ────────────────────────────────────────────────────────────
@@ -403,6 +405,18 @@ const COORDINATOR_TOOL_SCHEMAS = [
 ];
 
 export default class ToolOrchestratorService {
+  /**
+   * Ensure tool schemas are loaded from tools-api.
+   * No-op if already initialized; fetches on-demand otherwise.
+   * Eliminates boot-order dependency between prism and tools-api.
+   */
+  static async ensureSchemas() {
+    if (!initialized) {
+      logger.info("[ToolOrchestrator] Schemas not loaded — fetching on-demand");
+      await fetchSchemas();
+    }
+  }
+
   /** AI-clean schemas (no endpoint/domain/dataSource/labels) — for LLM tool arrays */
   static getToolSchemas() {
     return [...cachedAISchemas, ...InternalToolRegistry.getSchemas(), ...COORDINATOR_TOOL_SCHEMAS];
