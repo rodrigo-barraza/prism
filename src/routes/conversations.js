@@ -29,7 +29,9 @@ router.get("/", async (req, res, next) => {
 
     const filter = { project, username };
     if (cursor) {
-      filter.updatedAt = { $lt: new Date(cursor) };
+      // updatedAt is stored as ISO-8601 strings — compare string-to-string
+      // to match BSON type and allow index range scan
+      filter.updatedAt = { $lt: cursor };
     }
 
     // Fetch limit + 1 to detect if there's a next page
