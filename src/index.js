@@ -316,9 +316,9 @@ setupWebSocket(wss);
   }
 
   // ── Scheduled Memory Consolidation ─────────────────
-  // Runs every 6 hours, consolidates memories for all active projects.
+  // Runs every 24 hours, consolidates memories for all active projects and agents.
   const { hours } = await import("@rodrigo-barraza/utilities-library");
-  const CONSOLIDATION_INTERVAL_MS = hours(6);
+  const CONSOLIDATION_INTERVAL_MS = hours(24);
   setInterval(async () => {
     try {
       const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -331,18 +331,25 @@ setupWebSocket(wss);
       // memory corpus with embeddings (~12KB/memory). Running them concurrently
       // compounds heap usage and can cause OOM on large collections.
       for (const project of projects) {
-        const count = await db.collection("memories").countDocuments({ project });
-        if (count < 10) continue; // Skip projects with few memories
+        // Find all distinct agents within this project
+        const agents = await db.collection("memories").distinct("agent", { project });
+        if (!agents.length) continue;
 
-        logger.info(`[AutoDream] Scheduled consolidation for project "${project}" (${count} memories)`);
-        try {
-          await MemoryConsolidationService.consolidate({
-            project,
-            username: "system",
-            trigger: "scheduled",
-          });
-        } catch (err) {
-          logger.error(`[AutoDream] Scheduled consolidation failed for "${project}": ${err.message}`);
+        for (const agent of agents) {
+          const count = await db.collection("memories").countDocuments({ project, agent });
+          if (count < 10) continue; // Skip agent/project combos with few memories
+
+          logger.info(`[AutoDream] Scheduled consolidation for agent "${agent}", project "${project}" (${count} memories)`);
+          try {
+            await MemoryConsolidationService.consolidate({
+              agent,
+              project,
+              username: "system",
+              trigger: "scheduled",
+            });
+          } catch (err) {
+            logger.error(`[AutoDream] Scheduled consolidation failed for "${agent}/${project}": ${err.message}`);
+          }
         }
       }
     } catch (err) {
@@ -357,13 +364,14 @@ setupWebSocket(wss);
     logger.error(`[Housekeeping] Boot-time run failed: ${err.message}`),
   );
 
-  // Scheduled run: every 6h (piggybacking on the consolidation interval)
+  // Scheduled run: every 6h (independent of consolidation interval)
+  const HOUSEKEEPING_INTERVAL_MS = hours(6);
   setInterval(() => {
     BackgroundHousekeepingService.run({ trigger: "scheduled" }).catch((err) =>
       logger.error(`[Housekeeping] Scheduled run failed: ${err.message}`),
     );
-  }, CONSOLIDATION_INTERVAL_MS);
-  logger.info(`[Housekeeping] Scheduled cleanup every ${CONSOLIDATION_INTERVAL_MS / 3_600_000}h`);
+  }, HOUSEKEEPING_INTERVAL_MS);
+  logger.info(`[Housekeeping] Scheduled cleanup every ${HOUSEKEEPING_INTERVAL_MS / 3_600_000}h`);
 
   // Initialize MinIO if all secrets are configured
   if (

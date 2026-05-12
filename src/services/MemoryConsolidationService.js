@@ -34,7 +34,7 @@ const CONVERSATIONAL_STALENESS_CONFIG = {
 /** Min sessions between consolidation runs */
 const SESSIONS_BETWEEN_RUNS = 5;
 /** Max consolidation runs per project per day (cost guard) */
-const DAILY_MAX_CONSOLIDATIONS = 3;
+const DAILY_MAX_CONSOLIDATIONS = 20;
 /** Max clusters per LLM batch — keeps input well under context window limits */
 const BATCH_MAX_CLUSTERS = 5;
 /** Max stale memories per LLM batch */

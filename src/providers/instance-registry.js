@@ -126,14 +126,6 @@ export function listInstances() {
 }
 
 /**
- * List all registered instance IDs.
- * @returns {string[]}
- */
-export function listInstanceIds() {
-  return [...registry.keys()];
-}
-
-/**
  * Get all unique provider types that have at least one instance.
  * @returns {string[]}
  */

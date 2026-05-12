@@ -1,6 +1,6 @@
 # Prism — AI Gateway
 
-Centralized AI gateway that routes requests to **9 providers** (OpenAI, Anthropic, Google GenAI, ElevenLabs, Inworld, LM Studio, Ollama, llama.cpp, vLLM) through a unified REST + WebSocket API. Single entry point for the entire Sun ecosystem — every service and client proxies AI calls through Prism.
+Centralized AI gateway that routes requests to **9 providers** (OpenAI, Anthropic, Google GenAI, ElevenLabs, Inworld, LM Studio, Ollama, llama.cpp, vLLM) through a unified REST + WebSocket API. Single entry point for the entire ecosystem — every service and client proxies AI calls through Prism.
 
 **Port:** `7777` · **Runtime:** Node.js (ES Modules) · **Framework:** Express 5 · **DB:** MongoDB · **Storage:** MinIO (S3-compat) · **Tests:** Vitest
 
