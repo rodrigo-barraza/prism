@@ -132,12 +132,19 @@ async function pruneOldRequestLogs() {
 // ─── MinIO Orphan Cleanup ─────────────────────────────────────────────────────
 
 /**
+ * Known top-level prefixes used by FileService and other structured storage.
+ * Objects under these prefixes are NOT conversation-scoped and must never be
+ * treated as orphans based on conversation ID matching.
+ */
+const STRUCTURAL_PREFIXES = new Set(["projects", "uploads", "generations"]);
+
+/**
  * Find MinIO objects that no longer have matching MongoDB references.
  * This handles cases where a conversation is deleted but the MinIO
  * objects (screenshots, file artifacts) remain.
  *
- * Conservative approach: only removes objects in known tool-result
- * prefixes (screenshots/, artifacts/) that have no matching conversation.
+ * Conservative approach: only orphan-checks objects whose top-level prefix
+ * looks like a conversation ID (not a known structural prefix like "projects/").
  *
  * @returns {Promise<number>} Number of orphaned objects removed
  */
@@ -160,15 +167,17 @@ async function pruneMinioOrphans() {
     for await (const doc of sessionCursor) validIds.add(doc.id);
 
     // List MinIO objects with the conversation-scoped prefix pattern
-    // Convention: objects are stored as {conversationId}/{filename}
+    // Convention: conversation objects are stored as {conversationId}/{filename}
+    // FileService objects use: projects/{project}/{user}/{category}/{uuid}.{ext}
     const objects = await MinioWrapper.listObjects("").catch(() => []);
     if (!Array.isArray(objects) || objects.length === 0) return 0;
 
-    // Group objects by their top-level prefix (conversation ID)
+    // Group objects by their top-level prefix — only check prefixes that are
+    // NOT known structural paths (projects/, uploads/, generations/, etc.)
     const prefixes = new Set();
     for (const obj of objects) {
       const prefix = (obj.name || obj).split("/")[0];
-      if (prefix && !validIds.has(prefix)) {
+      if (prefix && !validIds.has(prefix) && !STRUCTURAL_PREFIXES.has(prefix)) {
         prefixes.add(prefix);
       }
     }
