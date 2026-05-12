@@ -177,7 +177,8 @@ router.post("/:id/connect", async (req, res, _next) => {
     });
   } catch (error) {
     logger.error(`MCP connect failed for ${req.params.id}: ${error.message}`);
-    res.status(500).json({ error: `Connection failed: ${error.message}` });
+    logger.error(`MCP connection failed: ${error.message}`);
+    res.status(502).json({ error: "MCP server connection failed" });
   }
 });
 

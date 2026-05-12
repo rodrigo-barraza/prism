@@ -481,7 +481,7 @@ router.post("/:id/run", async (req, res) => {
         res.end();
       } catch { /* client already gone */ }
     } else {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: "Benchmark execution failed" });
     }
   }
 });
