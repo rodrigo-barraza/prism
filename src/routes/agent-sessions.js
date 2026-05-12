@@ -13,40 +13,63 @@ const COLLECTION = COLLECTIONS.AGENT_SESSIONS;
 
 /**
  * GET /agent-sessions
- * List all agent sessions for the given project.
+ * List agent sessions for the given project with cursor-based pagination.
  * Enriches each session with toolCounts from request logs (single aggregation).
+ *
+ * Query params:
+ *   limit  — page size (default 50, max 200)
+ *   cursor — ISO date string (updatedAt of last item from previous page)
+ *
+ * Returns: { items, nextCursor, hasMore }
  */
 router.get("/", async (req, res, next) => {
   try {
     const { project, username, db } = req;
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const cursor = req.query.cursor || null;
 
-    // Fetch sessions and aggregate tool counts from requests in parallel
-    const [sessions, toolCountDocs] = await Promise.all([
-      db.collection(COLLECTION)
-        .find({ project, username })
-        .project({
-          id: 1, project: 1, username: 1, title: 1,
-          createdAt: 1, updatedAt: 1, modalities: 1,
-          providers: 1, totalCost: 1, isGenerating: 1,
-          settings: 1, traceId: 1, parentAgentSessionId: 1,
-        })
-        .sort({ updatedAt: -1 })
-        .toArray(),
-      db.collection(COLLECTIONS.REQUESTS)
-        .aggregate([
-          { $match: { project, username, toolApiNames: { $exists: true, $ne: [] } } },
-          { $unwind: "$toolApiNames" },
-          { $group: {
-            _id: { sessionId: "$agentSessionId", tool: "$toolApiNames" },
-            count: { $sum: 1 },
-          }},
-          { $group: {
-            _id: "$_id.sessionId",
-            tools: { $push: { name: "$_id.tool", count: "$count" } },
-          }},
-        ])
-        .toArray(),
-    ]);
+    const filter = { project, username };
+    if (cursor) {
+      filter.updatedAt = { $lt: new Date(cursor) };
+    }
+
+    // Fetch limit + 1 to detect if there's a next page
+    const rows = await db.collection(COLLECTION)
+      .find(filter)
+      .project({
+        id: 1, project: 1, username: 1, title: 1,
+        createdAt: 1, updatedAt: 1, modalities: 1,
+        providers: 1, totalCost: 1, isGenerating: 1,
+        settings: 1, traceId: 1, parentAgentSessionId: 1,
+      })
+      .sort({ updatedAt: -1 })
+      .limit(limit + 1)
+      .toArray();
+
+    const hasMore = rows.length > limit;
+    const items = hasMore ? rows.slice(0, limit) : rows;
+    const nextCursor = hasMore
+      ? items[items.length - 1].updatedAt?.toISOString?.() || items[items.length - 1].updatedAt
+      : null;
+
+    // Aggregate tool counts only for the returned session IDs
+    const sessionIds = items.map((s) => s.id);
+    const toolCountDocs = sessionIds.length > 0
+      ? await db.collection(COLLECTIONS.REQUESTS)
+          .aggregate([
+            { $match: { agentSessionId: { $in: sessionIds }, toolApiNames: { $exists: true, $ne: [] } } },
+            { $unwind: "$toolApiNames" },
+            { $group: {
+              _id: { sessionId: "$agentSessionId", tool: "$toolApiNames" },
+              count: { $sum: 1 },
+            }},
+            { $group: {
+              _id: "$_id.sessionId",
+              tools: { $push: { name: "$_id.tool", count: "$count" } },
+            }},
+          ])
+          .toArray()
+      : [];
 
     // Build sessionId → toolCounts map
     const toolCountsMap = new Map();
@@ -57,11 +80,11 @@ router.get("/", async (req, res, next) => {
     }
 
     // Merge toolCounts into each session
-    for (const session of sessions) {
+    for (const session of items) {
       session.toolCounts = toolCountsMap.get(session.id) || null;
     }
 
-    res.json(sessions);
+    res.json({ items, nextCursor, hasMore });
   } catch (error) {
     logger.error(`Error fetching agent sessions: ${error.message}`);
     next(error);

@@ -13,14 +13,29 @@ const COLLECTION = COLLECTIONS.CONVERSATIONS;
 
 /**
  * GET /conversations
- * List all conversations for the given project.
+ * List conversations for the given project with cursor-based pagination.
+ *
+ * Query params:
+ *   limit  — page size (default 50, max 200)
+ *   cursor — ISO date string (updatedAt of last item from previous page)
+ *
+ * Returns: { items, nextCursor, hasMore }
  */
 router.get("/", async (req, res, next) => {
   try {
     const { project, username, db } = req;
-    const conversations = await db
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const cursor = req.query.cursor || null;
+
+    const filter = { project, username };
+    if (cursor) {
+      filter.updatedAt = { $lt: new Date(cursor) };
+    }
+
+    // Fetch limit + 1 to detect if there's a next page
+    const rows = await db
       .collection(COLLECTION)
-      .find({ project, username })
+      .find(filter)
       .project({
         id: 1, project: 1, username: 1, title: 1,
         createdAt: 1, updatedAt: 1, modalities: 1,
@@ -28,9 +43,16 @@ router.get("/", async (req, res, next) => {
         traceId: 1, synthetic: 1,
       })
       .sort({ updatedAt: -1 })
+      .limit(limit + 1)
       .toArray();
 
-    res.json(conversations);
+    const hasMore = rows.length > limit;
+    const items = hasMore ? rows.slice(0, limit) : rows;
+    const nextCursor = hasMore
+      ? items[items.length - 1].updatedAt?.toISOString?.() || items[items.length - 1].updatedAt
+      : null;
+
+    res.json({ items, nextCursor, hasMore });
   } catch (error) {
     logger.error(`Error fetching conversations: ${error.message}`);
     next(error);
