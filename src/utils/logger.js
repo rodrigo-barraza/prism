@@ -30,16 +30,16 @@ const logger = {
   provider(provider, action, ...args) {
     const ctx = getRequestContext();
     const tags = buildContextTags(ctx.project, ctx.username, ctx.clientIp);
-    console.log(
-      `[${new Date().toISOString()}] PROV [prism]${tags} [${provider}] ${action}`,
+    base.info(
+      `[${provider}] ${action}${tags}`,
       ...args,
     );
   },
 
   request(project, username, clientIp, message, ...args) {
     const tags = buildContextTags(project, username, clientIp);
-    console.log(
-      `[${new Date().toISOString()}] OK   [prism]${tags} ${message}`,
+    base.info(
+      `${message}${tags}`,
       ...args,
     );
   },

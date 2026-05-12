@@ -1,3 +1,5 @@
+import logger from "./logger.js";
+
 export class ProviderError extends Error {
   constructor(provider, message, statusCode = 500, originalError = null) {
     super(message);
@@ -21,7 +23,7 @@ export class ProviderError extends Error {
 }
 
 export function errorHandler(err, _req, res, _next) {
-  console.error(`[ERROR] ${err.provider || "Server"}:`, err.message);
+  logger.error(`${err.provider || "Server"}: ${err.message}`);
 
   if (err instanceof ProviderError) {
     return res.status(err.statusCode).json(err.toJSON());
