@@ -50,9 +50,7 @@ router.get("/", async (req, res, next) => {
 
     const hasMore = rows.length > limit;
     const items = hasMore ? rows.slice(0, limit) : rows;
-    const nextCursor = hasMore
-      ? items[items.length - 1].updatedAt?.toISOString?.() || items[items.length - 1].updatedAt
-      : null;
+    const nextCursor = hasMore ? items[items.length - 1].updatedAt : null;
 
     res.json({ items, nextCursor, hasMore });
   } catch (error) {
