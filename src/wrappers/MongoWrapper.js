@@ -17,7 +17,7 @@ import logger from "../utils/logger.js";
 
 const MongoWrapper = {
   async createClient(name, uri) {
-    return connectDB(uri, { name, logger });
+    return connectDB(uri, { name, dbName: name, logger });
   },
   getClient(_name) {
     // Deprecated — getClient returns the raw MongoClient, which is no
