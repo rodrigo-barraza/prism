@@ -44,10 +44,6 @@ export function createVllmProvider(baseUrl, instanceId = "vllm") {
         messages: prepared,
         model,
         ...buildPayloadParams(options),
-        // vLLM handles max_tokens=-1 as "fill remaining context window".
-        // Override any client-sent maxTokens to avoid requesting more
-        // output tokens than the model's context length allows.
-        max_tokens: -1,
         // vLLM extensions: top_k, min_p, repetition_penalty
         ...(options.topK > 0 && { top_k: options.topK }),
         ...(options.minP !== undefined && { min_p: options.minP }),
