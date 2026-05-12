@@ -1,5 +1,5 @@
-import { handleConversation } from "../routes/chat.js";
-import { handleVoice } from "../routes/audio.js";
+import { handleConversation } from "../routes/ChatRoutes.js";
+import { handleVoice } from "../routes/AudioRoutes.js";
 import {
   GoogleGenAI,
   Modality,

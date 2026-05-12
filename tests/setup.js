@@ -181,10 +181,10 @@ const { errorHandler } = await import('../src/utils/errors.js');
 const { authMiddleware } = await import('../src/middleware/AuthMiddleware.js');
 const { listProviders } = await import('../src/providers/index.js');
 
-const { default: chatRouter } = await import('../src/routes/chat.js');
-const { default: audioRouter } = await import('../src/routes/audio.js');
-const { default: embedRouter } = await import('../src/routes/embed.js');
-const { default: configRouter } = await import('../src/routes/config.js');
+const { default: chatRouter } = await import('../src/routes/ChatRoutes.js');
+const { default: audioRouter } = await import('../src/routes/AudioRoutes.js');
+const { default: embedRouter } = await import('../src/routes/EmbedRoutes.js');
+const { default: configRouter } = await import('../src/routes/ConfigRoutes.js');
 
 export const app = express();
 app.use(cors());

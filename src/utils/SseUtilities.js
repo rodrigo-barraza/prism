@@ -1,4 +1,4 @@
-import { handleConversation } from "../routes/chat.js";
+import { handleConversation } from "../routes/ChatRoutes.js";
 import { ProviderError } from "./errors.js";
 import { createAbortController } from "./AbortController.js";
 

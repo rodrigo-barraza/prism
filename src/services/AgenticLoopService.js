@@ -6,7 +6,7 @@ import { MONGO_DB_NAME } from "../../config.js";
 import logger from "../utils/logger.js";
 
 import FileService from "./FileService.js";
-import { finalizeTextGeneration } from "../routes/chat.js";
+import { finalizeTextGeneration } from "../routes/ChatRoutes.js";
 import RequestLogger from "./RequestLogger.js";
 import { TYPES, getPricing } from "../config.js";
 import { calculateTextCost, createUsageAccumulator, mergeUsage } from "../utils/CostCalculator.js";

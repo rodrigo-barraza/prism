@@ -1,7 +1,7 @@
 import { sleep, roundMs } from "@rodrigo-barraza/utilities-library";
 // ─── Custom LLM Accuracy Benchmarking ───────────────────────
 import crypto from "crypto";
-import { handleConversation, handleAgent } from "../routes/chat.js";
+import { handleConversation, handleAgent } from "../routes/ChatRoutes.js";
 import {
   MODELS,
   MODEL_TYPES,
