@@ -433,6 +433,35 @@ const MemoryService = {
     ]);
     return { memories, total };
   },
+  // ── Discover ───────────────────────────────────────────────────────────────
+  /**
+   * Aggregate all distinct project/agent combinations with memory counts.
+   * Bypasses project scoping — used by the consolidation CLI's --all sweep.
+   *
+   * @returns {Promise<Array<{ project: string, agent: string, count: number }>>}
+   */
+  async discoverCombos() {
+    const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
+    return collection
+      .aggregate([
+        {
+          $group: {
+            _id: { project: "$project", agent: "$agent" },
+            count: { $sum: 1 },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            project: { $ifNull: ["$_id.project", "default"] },
+            agent: { $ifNull: ["$_id.agent", "CODING"] },
+            count: 1,
+          },
+        },
+        { $sort: { count: -1 } },
+      ])
+      .toArray();
+  },
   // ── Delete / Remove ────────────────────────────────────────────────────────
   /**
    * Delete a specific memory by its id field.

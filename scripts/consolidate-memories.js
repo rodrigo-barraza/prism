@@ -175,8 +175,8 @@ async function runAll() {
   header("Sweeping All Projects & Agents");
   console.log(`  ${DIM}Discovering projects and agents from memory corpus...${RESET}\n`);
 
-  // Fetch all memories with minimal fields to discover project/agent combos
-  const discoverUrl = `${PRISM_URL}/agent-memories?limit=10000`;
+  // Use the discovery endpoint — lightweight aggregation, no project scoping
+  const discoverUrl = `${PRISM_URL}/agent-memories/discover`;
   const discoverRes = await fetch(discoverUrl);
 
   if (!discoverRes.ok) {
@@ -185,32 +185,18 @@ async function runAll() {
     process.exit(1);
   }
 
-  const data = await discoverRes.json();
-  const memories = data.memories || data;
+  const { combos } = await discoverRes.json();
 
-  if (!Array.isArray(memories) || memories.length === 0) {
+  if (!Array.isArray(combos) || combos.length === 0) {
     console.log(`  ${YELLOW}No memories found.${RESET}\n`);
     return;
   }
 
-  // Build unique (project, agent) combos with counts
-  const combos = new Map();
-  for (const m of memories) {
-    const key = `${m.project || "default"}::${m.agent || "CODING"}`;
-    combos.set(key, (combos.get(key) || 0) + 1);
-  }
+  // Already sorted by count descending from the API
+  const totalMemories = combos.reduce((sum, c) => sum + c.count, 0);
+  console.log(`  ${BOLD}Found ${combos.length} project/agent combo(s)${RESET} across ${totalMemories} memories\n`);
 
-  // Sort by count descending
-  const sorted = [...combos.entries()]
-    .map(([key, count]) => {
-      const [project, agent] = key.split("::");
-      return { project, agent, count };
-    })
-    .sort((a, b) => b.count - a.count);
-
-  console.log(`  ${BOLD}Found ${sorted.length} project/agent combo(s)${RESET} across ${memories.length} memories\n`);
-
-  for (const { project, agent, count } of sorted) {
+  for (const { project, agent, count } of combos) {
     divider();
     console.log(`  ${CYAN}${agent}${RESET} / ${BOLD}${project}${RESET}  ${DIM}(${count} memories)${RESET}`);
   }
@@ -220,16 +206,16 @@ async function runAll() {
   const totalStart = performance.now();
   const results = [];
 
-  for (let i = 0; i < sorted.length; i++) {
-    const { project, agent, count } = sorted[i];
+  for (let i = 0; i < combos.length; i++) {
+    const { project, agent, count } = combos[i];
 
     if (count < 2) {
-      console.log(`  ${DIM}[${i + 1}/${sorted.length}] ${agent}/${project} — skipping (only ${count} memory)${RESET}`);
+      console.log(`  ${DIM}[${i + 1}/${combos.length}] ${agent}/${project} — skipping (only ${count} memory)${RESET}`);
       continue;
     }
 
     divider();
-    console.log(`  ${BOLD}[${i + 1}/${sorted.length}]${RESET} Consolidating ${CYAN}${agent}${RESET} / ${BOLD}${project}${RESET} (${count} memories)...`);
+    console.log(`  ${BOLD}[${i + 1}/${combos.length}]${RESET} Consolidating ${CYAN}${agent}${RESET} / ${BOLD}${project}${RESET} (${count} memories)...`);
 
     const url = `${PRISM_URL}/agent-memories/consolidate`;
     const body = { agent, username: "cli" };
@@ -402,11 +388,20 @@ async function main() {
       await runConsolidation(opts);
     }
   } catch (err) {
-    if (err.cause?.code === "ECONNREFUSED") {
+    // Dig into the cause chain for the real network error
+    const cause = err.cause?.cause || err.cause;
+    const code = cause?.code || "";
+    const isNetwork =
+      err.message === "fetch failed" ||
+      ["ECONNREFUSED", "ETIMEDOUT", "ENOTFOUND", "ECONNRESET", "UND_ERR_CONNECT_TIMEOUT"].includes(code);
+
+    if (isNetwork) {
       console.error(`${RED}✗ Cannot connect to Prism at ${PRISM_URL}${RESET}`);
+      console.error(`  ${DIM}${code || cause?.message || err.message}${RESET}`);
       console.error(`  ${DIM}Is the service running? (npm run dev)${RESET}`);
     } else {
       console.error(`${RED}✗ ${err.message}${RESET}`);
+      if (cause) console.error(`  ${DIM}${cause.message || cause}${RESET}`);
     }
     process.exit(1);
   }

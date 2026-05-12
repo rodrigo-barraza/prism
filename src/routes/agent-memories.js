@@ -80,6 +80,21 @@ router.delete("/:id", async (req, res, next) => {
 });
 
 /**
+ * GET /agent-memories/discover
+ * Aggregate all distinct project/agent combinations with memory counts.
+ * Bypasses project scoping — used by the consolidation CLI's --all sweep.
+ */
+router.get("/discover", async (req, res, next) => {
+  try {
+    const combos = await MemoryService.discoverCombos();
+    res.json({ combos });
+  } catch (error) {
+    logger.error(`[agent-memories] DISCOVER ${error.message}`);
+    next(error);
+  }
+});
+
+/**
  * GET /agent-memories/consolidation-history?project=<project>&limit=10
  * Retrieve consolidation run history for a project.
  */

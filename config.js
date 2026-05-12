@@ -32,7 +32,7 @@ function parseProviderInstances(envPrefix) {
 }
 
 // ── Server ─────────────────────────────────────────────────────
-export const PRISM_SERVICE_PORT = process.env.PRISM_SERVICE_PORT;
+export const PRISM_SERVICE_PORT = process.env.PRISM_SERVICE_PORT || 7777;
 
 // ── AI Provider API Keys ───────────────────────────────────────
 export const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
@@ -50,7 +50,7 @@ export const PROVIDER_LLAMA_CPP = parseProviderInstances("PROVIDER_LLAMA_CPP");
 
 // ── MongoDB ────────────────────────────────────────────────────
 export const MONGO_URI = process.env.MONGO_URI;
-export const MONGO_DB_NAME = process.env.PRISM_SERVICE_MONGO_DB_NAME || process.env.PRISM_MONGO_DB_NAME || process.env.MONGO_DB_NAME;
+export const MONGO_DB_NAME = process.env.PRISM_SERVICE_MONGO_DB_NAME || process.env.PRISM_MONGO_DB_NAME || process.env.MONGO_DB_NAME || "prism";
 
 // ── MinIO (Optional — files stored inline in MongoDB if not set) ──
 export const MINIO_ENDPOINT = process.env.MINIO_ENDPOINT;
