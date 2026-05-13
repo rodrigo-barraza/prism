@@ -18,6 +18,9 @@ RUN --mount=type=ssh npm ci --omit=dev
 FROM node:22-alpine
 WORKDIR /app
 
+# ffmpeg is required for GIF compression and video frame extraction
+RUN apk add --no-cache ffmpeg
+
 # Copy pre-built node_modules from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 

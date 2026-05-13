@@ -46,4 +46,13 @@ router.get("/defaults", (_req, res) => {
   res.json(SettingsService.getDefaults());
 });
 
+/**
+ * GET /settings/harnesses
+ * Returns the list of available agentic harnesses.
+ */
+router.get("/harnesses", asyncHandler(async (_req, res) => {
+  const { default: AgenticLoopService } = await import("../services/AgenticLoopService.js");
+  res.json(AgenticLoopService.listHarnesses());
+}));
+
 export default router;

@@ -9,6 +9,26 @@ import { join } from "path";
 import sharp from "sharp";
 import logger from "./logger.js";
 
+// ── ffmpeg availability (cached per process) ────────────────
+let _ffmpegAvailable = null;
+
+/**
+ * Probe whether ffmpeg is on the PATH. Result is cached after first call.
+ * @returns {Promise<boolean>}
+ */
+async function isFfmpegAvailable() {
+  if (_ffmpegAvailable !== null) return _ffmpegAvailable;
+  return new Promise((resolve) => {
+    execFile("ffmpeg", ["-version"], { timeout: 5_000 }, (error) => {
+      _ffmpegAvailable = !error;
+      if (!_ffmpegAvailable) {
+        logger.warn("[media] ffmpeg not found on PATH — GIF animation and video frame extraction will be degraded");
+      }
+      resolve(_ffmpegAvailable);
+    });
+  });
+}
+
 // ── Provider Image Limits ───────────────────────────────────
 
 /** Anthropic's per-image inline base64 limit. */
@@ -143,6 +163,14 @@ export async function constrainImageDimensions(
  * Preserves animation — progressively halves dimensions until under limit.
  */
 async function compressGifWithFfmpeg(base64Data, maxBytes) {
+  // ── Graceful degradation: if ffmpeg is not installed, convert the
+  //    first frame to a static JPEG via sharp instead of crashing.
+  const hasFfmpeg = await isFfmpegAvailable();
+  if (!hasFfmpeg) {
+    logger.warn("[media] ffmpeg unavailable — converting GIF to static JPEG via sharp");
+    return compressWithSharp(base64Data, maxBytes);
+  }
+
   let tmpDir = null;
   try {
     tmpDir = await mkdtemp(join(tmpdir(), "prism-gif-"));
@@ -353,6 +381,16 @@ export function inferMimeFromUrl(url) {
  */
 export async function extractVideoFrames(videoDataUrl, options = {}) {
   const { fps = 1, maxFrames = 8, quality = 5 } = options;
+
+  // ── Graceful degradation: fail fast if ffmpeg is not installed
+  const hasFfmpeg = await isFfmpegAvailable();
+  if (!hasFfmpeg) {
+    throw new Error(
+      "ffmpeg is not installed — video frame extraction requires ffmpeg. " +
+      "Install it with: apt install ffmpeg",
+    );
+  }
+
   let tmpDir = null;
 
   try {

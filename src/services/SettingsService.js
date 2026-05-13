@@ -18,6 +18,7 @@ const DEFAULTS = {
   agents: {
     subagentProvider: "",
     subagentModel: "",
+    harness: "standard",
   },
 };
 

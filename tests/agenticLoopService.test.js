@@ -103,6 +103,31 @@ vi.mock("../src/services/SystemPromptAssembler.js", () => ({
   },
 }));
 
+vi.mock("../src/services/SettingsService.js", () => ({
+  default: {
+    get: vi.fn().mockResolvedValue({ agents: { harness: "standard" } }),
+    getSection: vi.fn().mockResolvedValue({ harness: "standard" }),
+  },
+}));
+
+vi.mock("../src/routes/ChatRoutes.js", () => ({
+  finalizeTextGeneration: vi.fn().mockResolvedValue(),
+}));
+
+vi.mock("../src/services/MemoryExtractor.js", () => ({
+  default: {
+    createHook: vi.fn().mockReturnValue(async () => {}),
+  },
+}));
+
+vi.mock("../src/services/PlanningModeService.js", () => ({
+  default: {
+    injectPlanningInstruction: vi.fn(),
+    stripPlanningInstruction: vi.fn(),
+    extractSteps: vi.fn().mockReturnValue([]),
+  },
+}));
+
 describe("AgenticLoopService", () => {
   let mockProvider;
   let mockCtx;
@@ -137,6 +162,8 @@ describe("AgenticLoopService", () => {
       traceId: "trace-123",
       project: "test-project",
       username: "test-user",
+      requestId: "req-123",
+      requestStart: performance.now(),
       emit: vi.fn((event) => emittedEvents.push(event)),
       signal: new AbortController().signal,
     };
