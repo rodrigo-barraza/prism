@@ -1057,6 +1057,17 @@ export async function finalizeTextGeneration(
     let messagesToAppend = [];
     if (overrideMessagesToAppend) {
       messagesToAppend = [...overrideMessagesToAppend];
+      // When the agentic loop ran multiple iterations, intermediate assistant
+      // messages already carry their own content + toolCalls. Attaching the
+      // full-turn contentSegments/textFragments to the final message would
+      // duplicate that content on page refresh (each intermediate message
+      // renders its own content, then segments re-render everything again).
+      // Only include segments on single-iteration turns where the final
+      // message is the sole assistant message — segments preserve the
+      // thinking ↔ tools ↔ text interleaving for that case.
+      const hasIntermediateToolMessages = overrideMessagesToAppend.some(
+        (m) => m.role === "assistant" && m.toolCalls?.length > 0,
+      );
       // Append the final LLM response block (contains telemetry and final text step)
       messagesToAppend.push({
         role: "assistant",
@@ -1070,7 +1081,7 @@ export async function finalizeTextGeneration(
         // intermediate assistant messages (overrideMessagesToAppend), but
         // native MCP tool calls (e.g. LM Studio) bypass that path — without
         // this, tool calls vanish on page refresh.
-        ...(!overrideMessagesToAppend.some((m) => m.role === "assistant" && m.toolCalls?.length > 0) &&
+        ...(!hasIntermediateToolMessages &&
           toolCalls.length > 0 && { toolCalls }),
         model: resolvedModel,
         provider: providerName,
@@ -1079,10 +1090,13 @@ export async function finalizeTextGeneration(
         totalTime: roundMs(totalSec),
         tokensPerSec,
         estimatedCost,
-        // Display segment metadata — preserves interleaving order for Prism Client
-        ...(contentSegments?.length > 0 && { contentSegments }),
-        ...(textFragments?.length > 0 && { textFragments }),
-        ...(thinkingFragments?.length > 0 && { thinkingFragments }),
+        // Display segment metadata — preserves interleaving order for Prism Client.
+        // Only attach when there are NO intermediate tool-calling messages;
+        // otherwise intermediate messages already carry their own content and
+        // the segments would cause duplicate rendering on page refresh.
+        ...(!hasIntermediateToolMessages && contentSegments?.length > 0 && { contentSegments }),
+        ...(!hasIntermediateToolMessages && textFragments?.length > 0 && { textFragments }),
+        ...(!hasIntermediateToolMessages && thinkingFragments?.length > 0 && { thinkingFragments }),
         // Generation settings — source of truth per request
         generationSettings: {
           temperature: options.temperature,

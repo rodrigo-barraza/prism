@@ -812,11 +812,15 @@ export default class ToolOrchestratorService {
         return { error: `API returned ${res.status}: ${res.statusText}` };
       }
 
-      // Parse the SSE stream
+      // Parse the SSE stream — accumulate stdout/stderr so the final result
+      // includes the full output for persistence (TerminalRenderer reads
+      // result.stdout after page refresh when streamingOutput is gone).
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
       let finalResult = null;
+      const stdoutChunks = [];
+      const stderrChunks = [];
 
       while (true) {
         const { done, value } = await reader.read();
@@ -831,11 +835,17 @@ export default class ToolOrchestratorService {
           try {
             const event = JSON.parse(line.slice(6));
 
-            if (event.event === "stdout" || event.event === "stderr") {
+            if (event.event === "stdout") {
+              stdoutChunks.push(event.data || "");
+              onChunk?.(event.event, event.data);
+            } else if (event.event === "stderr") {
+              stderrChunks.push(event.data || "");
               onChunk?.(event.event, event.data);
             } else if (event.event === "exit") {
               finalResult = {
                 success: event.success,
+                stdout: stdoutChunks.join(""),
+                stderr: stderrChunks.join(""),
                 exitCode: event.exitCode,
                 executionTimeMs: event.executionTimeMs,
                 timedOut: event.timedOut || false,
@@ -851,7 +861,16 @@ export default class ToolOrchestratorService {
         }
       }
 
-      // If we never got an exit event, return a generic result
+      // If we never got an exit event, return accumulated output anyway
+      if (!finalResult && (stdoutChunks.length > 0 || stderrChunks.length > 0)) {
+        finalResult = {
+          success: false,
+          stdout: stdoutChunks.join(""),
+          stderr: stderrChunks.join(""),
+          exitCode: null,
+          error: "Stream ended without exit event",
+        };
+      }
       return finalResult || { error: "Stream ended without exit event" };
     } catch (err) {
       return { error: `Streaming failed: ${err.message}` };
