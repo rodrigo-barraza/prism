@@ -389,7 +389,11 @@ export default class SystemPromptAssembler {
           `## Coding Guidelines\n` +
           `- Always read relevant files before making edits to understand context\n` +
           `- After making changes, verify them by reading the modified section\n` +
-          `- Keep your explanations concise and technical`,
+          `- Keep your explanations concise and technical\n` +
+          `\n## Command Execution\n` +
+          `- For dev servers and long-running processes (npm run dev, next dev, vite, nodemon, etc.), ALWAYS set run_in_background: true. These commands never terminate on their own.\n` +
+          `- You will receive the first ~2.5 seconds of output to confirm the server started correctly.\n` +
+          `- Do NOT use run_in_background for one-shot commands (npm install, npm test, git status, eslint, prettier, tsc, etc.) — let them complete normally.`,
         );
       }
     }
