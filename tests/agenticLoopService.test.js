@@ -359,4 +359,67 @@ describe("AgenticLoopService", () => {
     // Verify cleanup was NOT called for workers (coordinator cleans it up)
     expect(SessionGenerationTracker.cleanup).not.toHaveBeenCalledWith("worker-456");
   });
+
+  it("should load custom tools from MongoDB and pass them to the LLM", async () => {
+    // Override Mongo mock for this test
+    const MongoWrapper = (await import("../src/wrappers/MongoWrapper.js")).default;
+    MongoWrapper.getClient.mockReturnValueOnce({
+      db: () => ({
+        collection: () => ({
+          find: () => ({
+            toArray: async () => [{
+              name: "custom_db_tool",
+              description: "A tool from the database",
+              parameters: [{ name: "param1", type: "string", required: true }]
+            }]
+          })
+        })
+      })
+    });
+
+    // Make sure we just use the dynamic tools 
+    mockCtx.options.enabledTools = null;
+
+    await AgenticLoopService.runAgenticLoop(mockCtx);
+
+    const callArgs = mockProvider.generateTextStream.mock.calls[0][2];
+    const passTools = callArgs.tools;
+    
+    expect(passTools.find(t => t.name === "custom_db_tool")).toBeDefined();
+    expect(passTools.find(t => t.name === "custom_db_tool").description).toBe("A tool from the database");
+  });
+
+  it("should resolve disabledBuiltIns mode correctly", async () => {
+    mockCtx.options.enabledTools = null;
+    mockCtx.options.disabledBuiltIns = ["generate_image"];
+    
+    await AgenticLoopService.runAgenticLoop(mockCtx);
+
+    const callArgs = mockProvider.generateTextStream.mock.calls[0][2];
+    const passTools = callArgs.tools;
+    
+    // Should contain web_search (as it's in the schemas), but NOT generate_image
+    expect(passTools.find(t => t.name === "web_search")).toBeDefined();
+    expect(passTools.find(t => t.name === "generate_image")).toBeUndefined();
+  });
+
+  it("should block unauthorized tools in plan mode by dropping them via schema enforcer", async () => {
+    mockCtx.options.maxIterations = 2;
+    mockCtx.options.planFirst = true;
+    
+    // Iteration 1: model tries to use read_file (not allowed in plan mode)
+    mockProvider.generateTextStream.mockImplementationOnce(async function* () {
+      yield { type: "toolCall", name: "read_file", args: {}, id: "tc-bad" };
+      yield { type: "usage", usage: { inputTokens: 5, outputTokens: 2 } };
+    });
+
+    await AgenticLoopService.runAgenticLoop(mockCtx);
+
+    // Because it's dropped by the schema enforcer, no tool execution occurs
+    const toolExecEvents = emittedEvents.filter(e => e.type === "tool_execution");
+    expect(toolExecEvents.length).toBe(0);
+    
+    // And it shouldn't have iterated a second time because there were no pending tools
+    expect(mockProvider.generateTextStream).toHaveBeenCalledTimes(1);
+  });
 });
