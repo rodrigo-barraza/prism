@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import { Router } from "express";
 import logger from "../utils/logger.js";
 import requireDb from "../middleware/RequireDbMiddleware.js";
@@ -11,7 +12,7 @@ router.use(requireDb);
  * Per-model lifetime usage stats scoped to the current user (req.username).
  * Returns comprehensive aggregated stats for every model the user has used.
  */
-router.get("/models", async (req, res, next) => {
+router.get("/models", asyncHandler(async (req, res, next) => {
   try {
     const { db, username } = req;
     if (!username) return res.json([]);
@@ -74,6 +75,6 @@ router.get("/models", async (req, res, next) => {
     logger.error(`GET /stats/models error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 export default router;

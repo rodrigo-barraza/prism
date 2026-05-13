@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
 import { ObjectId } from "mongodb";
 import requireDb from "../middleware/RequireDbMiddleware.js";
@@ -25,7 +26,7 @@ async function generateSkillEmbedding(skill) {
  * GET /skills
  * List all skills for the given project + username.
  */
-router.get("/", async (req, res, next) => {
+router.get("/", asyncHandler(async (req, res, next) => {
   try {
     const { project, username, db } = req;
 
@@ -41,13 +42,13 @@ router.get("/", async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-});
+}));
 
 /**
  * POST /skills
  * Create a new skill. Generates an embedding vector at creation time.
  */
-router.post("/", async (req, res, next) => {
+router.post("/", asyncHandler(async (req, res, next) => {
   try {
     const { project, username, db } = req;
 
@@ -80,13 +81,13 @@ router.post("/", async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-});
+}));
 
 /**
  * PUT /skills/:id
  * Update an existing skill. Re-generates embedding if content changes.
  */
-router.put("/:id", async (req, res, next) => {
+router.put("/:id", asyncHandler(async (req, res, next) => {
   try {
     const { db } = req;
 
@@ -143,13 +144,13 @@ router.put("/:id", async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-});
+}));
 
 /**
  * DELETE /skills/:id
  * Delete a skill.
  */
-router.delete("/:id", async (req, res, next) => {
+router.delete("/:id", asyncHandler(async (req, res, next) => {
   try {
     const { db } = req;
 
@@ -166,6 +167,6 @@ router.delete("/:id", async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-});
+}));
 
 export default router;

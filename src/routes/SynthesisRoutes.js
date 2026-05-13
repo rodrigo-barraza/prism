@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
 import requireDb from "../middleware/RequireDbMiddleware.js";
 import logger from "../utils/logger.js";
@@ -12,7 +13,7 @@ const COLLECTION = COLLECTIONS.SYNTHESIS;
  * GET /synthesis
  * List all synthesis runs for the current project/user.
  */
-router.get("/", async (req, res, next) => {
+router.get("/", asyncHandler(async (req, res, next) => {
   try {
     const { project, username, db } = req;
     const runs = await db
@@ -26,13 +27,13 @@ router.get("/", async (req, res, next) => {
     logger.error(`Error fetching synthesis runs: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * GET /synthesis/:id
  * Get a specific synthesis run.
  */
-router.get("/:id", async (req, res, next) => {
+router.get("/:id", asyncHandler(async (req, res, next) => {
   try {
     const { project, username, db } = req;
     const run = await db
@@ -48,13 +49,13 @@ router.get("/:id", async (req, res, next) => {
     logger.error(`Error fetching synthesis run: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * POST /synthesis
  * Create a new synthesis run.
  */
-router.post("/", async (req, res, next) => {
+router.post("/", asyncHandler(async (req, res, next) => {
   try {
     const { project, username, db } = req;
     const {
@@ -98,13 +99,13 @@ router.post("/", async (req, res, next) => {
     logger.error(`Error creating synthesis run: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * PATCH /synthesis/:id
  * Update specific fields of a synthesis run.
  */
-router.patch("/:id", async (req, res, next) => {
+router.patch("/:id", asyncHandler(async (req, res, next) => {
   try {
     const { project, username, db } = req;
     const allowedFields = [
@@ -143,13 +144,13 @@ router.patch("/:id", async (req, res, next) => {
     logger.error(`Error patching synthesis run: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * DELETE /synthesis/:id
  * Delete a specific synthesis run.
  */
-router.delete("/:id", async (req, res, next) => {
+router.delete("/:id", asyncHandler(async (req, res, next) => {
   try {
     const { project, username, db } = req;
     const result = await db
@@ -165,6 +166,6 @@ router.delete("/:id", async (req, res, next) => {
     logger.error(`Error deleting synthesis run: ${error.message}`);
     next(error);
   }
-});
+}));
 
 export default router;

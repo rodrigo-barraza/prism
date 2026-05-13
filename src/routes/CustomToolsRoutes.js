@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
 import { ObjectId } from "mongodb";
 import requireDb from "../middleware/RequireDbMiddleware.js";
@@ -13,7 +14,7 @@ const COLLECTION = COLLECTIONS.CUSTOM_TOOLS;
  * GET /custom-tools
  * List all custom tools for the given project + username.
  */
-router.get("/", async (req, res, next) => {
+router.get("/", asyncHandler(async (req, res, next) => {
   try {
     const { project, username, db } = req;
 
@@ -27,13 +28,13 @@ router.get("/", async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-});
+}));
 
 /**
  * POST /custom-tools
  * Create a new custom tool.
  */
-router.post("/", async (req, res, next) => {
+router.post("/", asyncHandler(async (req, res, next) => {
   try {
     const { project, username, db } = req;
 
@@ -59,13 +60,13 @@ router.post("/", async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-});
+}));
 
 /**
  * PUT /custom-tools/:id
  * Update an existing custom tool.
  */
-router.put("/:id", async (req, res, next) => {
+router.put("/:id", asyncHandler(async (req, res, next) => {
   try {
     const { db } = req;
 
@@ -100,13 +101,13 @@ router.put("/:id", async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-});
+}));
 
 /**
  * DELETE /custom-tools/:id
  * Delete a custom tool.
  */
-router.delete("/:id", async (req, res, next) => {
+router.delete("/:id", asyncHandler(async (req, res, next) => {
   try {
     const { db } = req;
 
@@ -123,6 +124,6 @@ router.delete("/:id", async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-});
+}));
 
 export default router;

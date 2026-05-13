@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
 import MemoryService from "../services/MemoryService.js";
 import logger from "../utils/logger.js";
@@ -9,7 +10,7 @@ const router = express.Router();
  * Extract and store memories from a conversation chunk.
  * Body: { guildId, channelId, messages, participants, sourceMessageId? }
  */
-router.post("/extract", async (req, res, next) => {
+router.post("/extract", asyncHandler(async (req, res, next) => {
   try {
     const { guildId, channelId, messages, participants, sourceMessageId, traceId } =
       req.body;
@@ -36,14 +37,14 @@ router.post("/extract", async (req, res, next) => {
     logger.error(`[memory/extract] ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * POST /memory/search
  * Search for relevant memories using vector similarity.
  * Body: { guildId, userIds?, queryText, limit? }
  */
-router.post("/search", async (req, res, next) => {
+router.post("/search", asyncHandler(async (req, res, next) => {
   try {
     const { guildId, userIds, queryText, limit, traceId } = req.body;
 
@@ -69,13 +70,13 @@ router.post("/search", async (req, res, next) => {
     logger.error(`[memory/search] ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * GET /memory/list/:guildId/:userId
  * List all memories for a user in a guild.
  */
-router.get("/list/:guildId/:userId", async (req, res, next) => {
+router.get("/list/:guildId/:userId", asyncHandler(async (req, res, next) => {
   try {
     const { guildId, userId } = req.params;
     const limit = parseInt(req.query.limit) || 50;
@@ -93,13 +94,13 @@ router.get("/list/:guildId/:userId", async (req, res, next) => {
     logger.error(`[memory/list] ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * DELETE /memory/:id
  * Delete a specific memory.
  */
-router.delete("/:id", async (req, res, next) => {
+router.delete("/:id", asyncHandler(async (req, res, next) => {
   try {
     const deleted = await MemoryService.delete(req.params.id);
     res.json({ deleted });
@@ -107,6 +108,6 @@ router.delete("/:id", async (req, res, next) => {
     logger.error(`[memory/delete] ${error.message}`);
     next(error);
   }
-});
+}));
 
 export default router;

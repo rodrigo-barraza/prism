@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
 import { ProviderError } from "../utils/errors.js";
 import EmbeddingService from "../services/EmbeddingService.js";
@@ -19,7 +20,7 @@ const router = express.Router();
  * }
  * Response: { embedding, dimensions, provider, model }
  */
-router.post("/", async (req, res, next) => {
+router.post("/", asyncHandler(async (req, res, next) => {
   try {
     const {
       provider: pName,
@@ -119,6 +120,6 @@ router.post("/", async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-});
+}));
 
 export default router;

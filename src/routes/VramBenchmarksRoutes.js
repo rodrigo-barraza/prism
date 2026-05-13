@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import { Router } from "express";
 import logger from "../utils/logger.js";
 import requireDb from "../middleware/RequireDbMiddleware.js";
@@ -19,7 +20,7 @@ const COLLECTION = COLLECTIONS.VRAM_BENCHMARKS;
  *   provider  — filter by provider string
  *   limit     — max documents (default: 2000)
  */
-router.get("/", async (req, res, next) => {
+router.get("/", asyncHandler(async (req, res, next) => {
   try {
     const { db } = req;
 
@@ -110,13 +111,13 @@ router.get("/", async (req, res, next) => {
     logger.error(`GET /vram-benchmarks error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * GET /vram-benchmarks/machines
  * Returns distinct machines that have run benchmarks.
  */
-router.get("/machines", async (req, res, next) => {
+router.get("/machines", asyncHandler(async (req, res, next) => {
   try {
     const { db } = req;
 
@@ -168,13 +169,13 @@ router.get("/machines", async (req, res, next) => {
     logger.error(`GET /vram-benchmarks/machines error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * GET /vram-benchmarks/settings
  * Returns distinct settings labels available in the benchmark data.
  */
-router.get("/settings", async (req, res, next) => {
+router.get("/settings", asyncHandler(async (req, res, next) => {
   try {
     const { db } = req;
 
@@ -194,13 +195,13 @@ router.get("/settings", async (req, res, next) => {
     logger.error(`GET /vram-benchmarks/settings error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * GET /vram-benchmarks/contexts
  * Returns distinct context lengths available in the benchmark data.
  */
-router.get("/contexts", async (req, res, next) => {
+router.get("/contexts", asyncHandler(async (req, res, next) => {
   try {
     const { db } = req;
 
@@ -220,6 +221,6 @@ router.get("/contexts", async (req, res, next) => {
     logger.error(`GET /vram-benchmarks/contexts error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 export default router;

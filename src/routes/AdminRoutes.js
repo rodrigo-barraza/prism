@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../config.js";
@@ -17,7 +18,7 @@ const router = express.Router();
 const { REQUESTS: REQUESTS_COL, CONVERSATIONS: CONVERSATIONS_COL, WORKFLOWS: WORKFLOWS_COL } = COLLECTIONS;
 
 // ─── GET /admin/requests — paginated, filtered request logs ─
-router.get("/requests", async (req, res, next) => {
+router.get("/requests", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -74,10 +75,10 @@ router.get("/requests", async (req, res, next) => {
     logger.error(`Admin /requests error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /admin/requests/:id — single request detail ────────
-router.get("/requests/:id", async (req, res, next) => {
+router.get("/requests/:id", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -92,10 +93,10 @@ router.get("/requests/:id", async (req, res, next) => {
     logger.error(`Admin /requests/:id error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /admin/requests/:id/associations — conversations, workflows & traces ─
-router.get("/requests/:id/associations", async (req, res, next) => {
+router.get("/requests/:id/associations", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -174,10 +175,10 @@ router.get("/requests/:id/associations", async (req, res, next) => {
     logger.error(`Admin /requests/:id/associations error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /admin/stats — aggregate stats ─────────────────────
-router.get("/stats", async (req, res, next) => {
+router.get("/stats", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -278,10 +279,10 @@ router.get("/stats", async (req, res, next) => {
     logger.error(`Admin /stats error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /admin/stats/projects — per-project breakdown ──────
-router.get("/stats/projects", async (req, res, next) => {
+router.get("/stats/projects", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -401,10 +402,10 @@ router.get("/stats/projects", async (req, res, next) => {
     logger.error(`Admin /stats/projects error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /admin/stats/users — per-user breakdown ────────────
-router.get("/stats/users", async (req, res, next) => {
+router.get("/stats/users", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -442,10 +443,10 @@ router.get("/stats/users", async (req, res, next) => {
     logger.error(`Admin /stats/users error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /admin/stats/models — per-model breakdown ──────────
-router.get("/stats/models", async (req, res, next) => {
+router.get("/stats/models", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -559,10 +560,10 @@ router.get("/stats/models", async (req, res, next) => {
     logger.error(`Admin /stats/models error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /admin/stats/tools — per-tool lifetime usage breakdown ─
-router.get("/stats/tools", async (req, res, next) => {
+router.get("/stats/tools", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -656,10 +657,10 @@ router.get("/stats/tools", async (req, res, next) => {
     logger.error(`Admin /stats/tools error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /admin/stats/endpoints — per-endpoint breakdown ────
-router.get("/stats/endpoints", async (req, res, next) => {
+router.get("/stats/endpoints", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -706,10 +707,10 @@ router.get("/stats/endpoints", async (req, res, next) => {
     logger.error(`Admin /stats/endpoints error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /admin/stats/costs — comprehensive cost breakdown ──
-router.get("/stats/costs", async (req, res, next) => {
+router.get("/stats/costs", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -887,10 +888,10 @@ router.get("/stats/costs", async (req, res, next) => {
     logger.error(`Admin /stats/costs error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /admin/stats/timeline — requests grouped by 10min/hour/day ─
-router.get("/stats/timeline", async (req, res, next) => {
+router.get("/stats/timeline", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -1036,10 +1037,10 @@ router.get("/stats/timeline", async (req, res, next) => {
     logger.error(`Admin /stats/timeline error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /admin/conversations — cross-project conversation list ─
-router.get("/conversations", async (req, res, next) => {
+router.get("/conversations", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -1251,10 +1252,10 @@ router.get("/conversations", async (req, res, next) => {
     logger.error(`Admin /conversations error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /admin/conversations/filters — distinct project & username values ─
-router.get("/conversations/filters", async (req, res, next) => {
+router.get("/conversations/filters", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -1276,10 +1277,10 @@ router.get("/conversations/filters", async (req, res, next) => {
     logger.error(`Admin /conversations/filters error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /admin/conversations/stats — quick stats snapshot ──
-router.get("/conversations/stats", async (req, res, next) => {
+router.get("/conversations/stats", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -1303,10 +1304,10 @@ router.get("/conversations/stats", async (req, res, next) => {
     logger.error(`Admin /conversations/stats error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /admin/conversations/stream — SSE for real-time stats ─
-router.get("/conversations/stream", async (req, res) => {
+router.get("/conversations/stream", asyncHandler(async (req, res) => {
   const db = MongoWrapper.getDb(MONGO_DB_NAME);
   if (!db) return res.status(503).json({ error: "Database not available" });
 
@@ -1404,10 +1405,10 @@ router.get("/conversations/stream", async (req, res) => {
       clearInterval(keepAlive);
     });
   }
-});
+}));
 
 // ─── GET /admin/changes/stream — SSE for real-time collection changes ─
-router.get("/changes/stream", async (req, res) => {
+router.get("/changes/stream", asyncHandler(async (req, res) => {
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
@@ -1461,10 +1462,10 @@ router.get("/changes/stream", async (req, res) => {
       clearInterval(keepAlive);
     });
   }
-});
+}));
 
 // ─── GET /admin/conversations/:id — single conversation, full msgs ─
-router.get("/conversations/:id", async (req, res, next) => {
+router.get("/conversations/:id", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -1479,10 +1480,10 @@ router.get("/conversations/:id", async (req, res, next) => {
     logger.error(`Admin /conversations/:id error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /admin/live — conversations updated in last N minutes ─
-router.get("/live", async (req, res, next) => {
+router.get("/live", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -1566,10 +1567,10 @@ router.get("/live", async (req, res, next) => {
     logger.error(`Admin /live error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /admin/health — system health ──────────────────────
-router.get("/health", async (_req, res) => {
+router.get("/health", asyncHandler(async (_req, res) => {
   const db = MongoWrapper.getDb(MONGO_DB_NAME);
   const mongoStatus = db ? "connected" : "disconnected";
 
@@ -1600,7 +1601,7 @@ router.get("/health", async (_req, res) => {
       freeMemory: os.freemem(),
     },
   });
-});
+}));
 
 // ─── Model Management ───────────────────────────────────────
 
@@ -1608,7 +1609,7 @@ router.get("/health", async (_req, res) => {
  * GET /admin/lm-studio/models
  * List all models available in LM Studio (loaded + downloaded).
  */
-router.get("/lm-studio/models", async (_req, res, next) => {
+router.get("/lm-studio/models", asyncHandler(async (_req, res, next) => {
   try {
     const provider = getProvider("lm-studio");
     const data = await provider.listModels();
@@ -1617,7 +1618,7 @@ router.get("/lm-studio/models", async (_req, res, next) => {
     logger.error(`Admin /lm-studio/models error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * POST /admin/lm-studio/load
@@ -1625,7 +1626,7 @@ router.get("/lm-studio/models", async (_req, res, next) => {
  * to enforce single-model-at-a-time.
  * Body: { model: "model-key" }
  */
-router.post("/lm-studio/load", async (req, res, next) => {
+router.post("/lm-studio/load", asyncHandler(async (req, res, next) => {
   try {
     const { model, context_length, flash_attention, offload_kv_cache_to_gpu } = req.body;
     if (!model) {
@@ -1653,14 +1654,14 @@ router.post("/lm-studio/load", async (req, res, next) => {
     logger.error(`Admin /lm-studio/load error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * POST /admin/lm-studio/unload
  * Unload a model from LM Studio memory.
  * Body: { instance_id: "model-instance-id" }
  */
-router.post("/lm-studio/unload", async (req, res, next) => {
+router.post("/lm-studio/unload", asyncHandler(async (req, res, next) => {
   try {
     const { instance_id } = req.body;
     if (!instance_id) {
@@ -1676,14 +1677,14 @@ router.post("/lm-studio/unload", async (req, res, next) => {
     logger.error(`Admin /lm-studio/unload error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * POST /admin/lm-studio/estimate
  * Estimate VRAM usage for a model with given configuration.
  * Body: { model, contextLength, gpuLayers, flashAttention, offloadKvCache }
  */
-router.post("/lm-studio/estimate", async (req, res, next) => {
+router.post("/lm-studio/estimate", asyncHandler(async (req, res, next) => {
   try {
     const { model, contextLength, gpuLayers, flashAttention, offloadKvCache } = req.body;
     if (!model) {
@@ -1728,14 +1729,14 @@ router.post("/lm-studio/estimate", async (req, res, next) => {
     logger.error(`Admin /lm-studio/estimate error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── admin read-only views (POST lives at /workflows) ───────
 
 /**
  * GET /admin/workflows — paginated workflow list
  */
-router.get("/workflows", async (req, res, next) => {
+router.get("/workflows", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -1818,12 +1819,12 @@ router.get("/workflows", async (req, res, next) => {
     logger.error(`Admin GET /workflows error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * GET /admin/workflows/:id — full workflow detail
  */
-router.get("/workflows/:id", async (req, res, next) => {
+router.get("/workflows/:id", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -1844,10 +1845,10 @@ router.get("/workflows/:id", async (req, res, next) => {
     logger.error(`Admin GET /workflows/:id error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /admin/media — extract media from all conversations ─
-router.get("/media", async (req, res, next) => {
+router.get("/media", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -2091,10 +2092,10 @@ router.get("/media", async (req, res, next) => {
     logger.error(`Admin /media error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /admin/text — extract text content from conversations ─
-router.get("/text", async (req, res, next) => {
+router.get("/text", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -2189,9 +2190,9 @@ router.get("/text", async (req, res, next) => {
     logger.error(`Admin /text error: ${error.message}`);
     next(error);
   }
-});
+}));
 // ─── GET /admin/traces — paginated trace list (derived from requests) ─
-router.get("/traces", async (req, res, next) => {
+router.get("/traces", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -2359,10 +2360,10 @@ router.get("/traces", async (req, res, next) => {
     logger.error(`Admin /traces error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /admin/traces/:id — single trace derived from requests ─
-router.get("/traces/:id", async (req, res, next) => {
+router.get("/traces/:id", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -2395,10 +2396,10 @@ router.get("/traces/:id", async (req, res, next) => {
     logger.error(`Admin /traces/:id error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /admin/sessions/:id/stats — aggregate stats for an agent session ─
-router.get("/sessions/:id/stats", async (req, res, next) => {
+router.get("/sessions/:id/stats", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -2517,10 +2518,10 @@ router.get("/sessions/:id/stats", async (req, res, next) => {
     logger.error(`Admin /sessions/:id/stats error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /admin/sessions/:id/requests — all requests for a session (recursive) ─
-router.get("/sessions/:id/requests", async (req, res, next) => {
+router.get("/sessions/:id/requests", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -2593,10 +2594,10 @@ router.get("/sessions/:id/requests", async (req, res, next) => {
     logger.error(`Admin /sessions/:id/requests error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /admin/agent-sessions — list all agent sessions (cross-user) ─
-router.get("/agent-sessions", async (req, res, next) => {
+router.get("/agent-sessions", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -2642,10 +2643,10 @@ router.get("/agent-sessions", async (req, res, next) => {
     logger.error(`Admin /agent-sessions error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /admin/agent-sessions/:id — single agent session (with messages) ─
-router.get("/agent-sessions/:id", async (req, res, next) => {
+router.get("/agent-sessions/:id", asyncHandler(async (req, res, next) => {
   try {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return res.status(503).json({ error: "Database not available" });
@@ -2661,7 +2662,7 @@ router.get("/agent-sessions/:id", async (req, res, next) => {
     logger.error(`Admin /agent-sessions/:id error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 export default router;
 

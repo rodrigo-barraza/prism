@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
 import AgenticLoopService from "../services/AgenticLoopService.js";
 import { handleAgent } from "./chat.js";
@@ -20,7 +21,7 @@ const router = express.Router();
  * Resolves the pending approval promise in AgenticLoopService
  * so the agentic loop can continue (or abort).
  */
-router.post("/approve", async (req, res) => {
+router.post("/approve", asyncHandler(async (req, res) => {
   const { agentSessionId, approved, approveAll } = req.body;
 
   if (!agentSessionId) {
@@ -45,7 +46,7 @@ router.post("/approve", async (req, res) => {
   );
 
   res.json({ ok: true, approved: approved !== false });
-});
+}));
 
 // ─── resolves pending ask_user_question pauses ──────────────
 
@@ -58,7 +59,7 @@ router.post("/approve", async (req, res) => {
  * Resolves the pending question promise in AgenticLoopService
  * so the agentic loop can continue with the user's answer.
  */
-router.post("/answer", async (req, res) => {
+router.post("/answer", asyncHandler(async (req, res) => {
   const { agentSessionId, answer } = req.body;
 
   if (!agentSessionId) {
@@ -83,7 +84,7 @@ router.post("/answer", async (req, res) => {
   logger.info(`[agent/answer] Answered for session ${agentSessionId}: "${String(answer).slice(0, 80)}"`);
 
   res.json({ ok: true });
-});
+}));
 
 // ─── SSE streaming or JSON fallback ─────────────────────────
 
@@ -100,7 +101,7 @@ router.post("/answer", async (req, res) => {
  * Body (flat, OpenAI-style):
  *   { provider, model?, messages, enabledTools?, temperature?, maxTokens?, ... }
  */
-router.post("/", async (req, res, next) => {
+router.post("/", asyncHandler(async (req, res, next) => {
   // Force agentic mode — the entire point of this endpoint
   const params = {
     ...req.body,
@@ -122,6 +123,6 @@ router.post("/", async (req, res, next) => {
   } else {
     await handleJsonRequest(req, res, next, params, handleAgent);
   }
-});
+}));
 
 export default router;

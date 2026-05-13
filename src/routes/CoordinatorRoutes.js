@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import { Router } from "express";
 import CoordinatorService from "../services/CoordinatorService.js";
 import logger from "../utils/logger.js";
@@ -14,7 +15,7 @@ const router = Router();
  *
  * Body: { task: string, files: string[], repoPath?: string }
  */
-router.post("/plan", async (req, res, next) => {
+router.post("/plan", asyncHandler(async (req, res, next) => {
   try {
     const { task, files, repoPath } = req.body;
 
@@ -31,7 +32,7 @@ router.post("/plan", async (req, res, next) => {
     logger.error(`[coordinator] PLAN ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * POST /coordinator/execute
@@ -39,7 +40,7 @@ router.post("/plan", async (req, res, next) => {
  *
  * Body: { plan: object, provider?: string, model?: string }
  */
-router.post("/execute", async (req, res, next) => {
+router.post("/execute", asyncHandler(async (req, res, next) => {
   try {
     const { plan, provider, model } = req.body;
 
@@ -60,7 +61,7 @@ router.post("/execute", async (req, res, next) => {
     logger.error(`[coordinator] EXECUTE ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * GET /coordinator/status/:taskId
@@ -86,7 +87,7 @@ router.get("/tasks", (_req, res) => {
  * POST /coordinator/approve-merge/:taskId
  * Approve and merge completed worker branches.
  */
-router.post("/approve-merge/:taskId", async (req, res, next) => {
+router.post("/approve-merge/:taskId", asyncHandler(async (req, res, next) => {
   try {
     const result = await CoordinatorService.approveMerge(req.params.taskId);
     if (result.error) {
@@ -97,13 +98,13 @@ router.post("/approve-merge/:taskId", async (req, res, next) => {
     logger.error(`[coordinator] APPROVE-MERGE ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * POST /coordinator/abort/:taskId
  * Abort a running task — kill workers and clean up worktrees.
  */
-router.post("/abort/:taskId", async (req, res, next) => {
+router.post("/abort/:taskId", asyncHandler(async (req, res, next) => {
   try {
     const result = await CoordinatorService.abort(req.params.taskId);
     if (result.error) {
@@ -114,7 +115,7 @@ router.post("/abort/:taskId", async (req, res, next) => {
     logger.error(`[coordinator] ABORT ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ═══════════════════════════════════════════════════════════════
 // Chat-Spawned Worker Endpoints
@@ -125,7 +126,7 @@ router.post("/abort/:taskId", async (req, res, next) => {
  * List all active workers spawned via chat tools.
  * Optional query: ?agentSessionId=xxx to filter by parent coordinator session.
  */
-router.get("/workers", async (req, res) => {
+router.get("/workers", asyncHandler(async (req, res) => {
   const { agentSessionId } = req.query;
   let workers = CoordinatorService.listWorkers({ parentAgentSessionId: agentSessionId });
 
@@ -150,7 +151,7 @@ router.get("/workers", async (req, res) => {
   }
 
   res.json({ workers });
-});
+}));
 
 /**
  * POST /coordinator/workers/stop
@@ -159,7 +160,7 @@ router.get("/workers", async (req, res) => {
  *
  * Body: { agentSessionId: string }
  */
-router.post("/workers/stop", async (req, res) => {
+router.post("/workers/stop", asyncHandler(async (req, res) => {
   const { agentSessionId } = req.body;
   if (!agentSessionId) {
     return res.status(400).json({ error: "'agentSessionId' is required" });
@@ -167,7 +168,7 @@ router.post("/workers/stop", async (req, res) => {
 
   const result = await CoordinatorService.abortWorkersBySession(agentSessionId);
   res.json(result);
-});
+}));
 
 /**
  * GET /coordinator/workers/:agentId

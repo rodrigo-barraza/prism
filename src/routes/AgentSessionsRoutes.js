@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
 import requireDb from "../middleware/RequireDbMiddleware.js";
 import {
@@ -22,7 +23,7 @@ const COLLECTION = COLLECTIONS.AGENT_SESSIONS;
  *
  * Returns: { items, nextCursor, hasMore }
  */
-router.get("/", async (req, res, next) => {
+router.get("/", asyncHandler(async (req, res, next) => {
   try {
     const { project, username, db } = req;
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
@@ -89,13 +90,13 @@ router.get("/", async (req, res, next) => {
     logger.error(`Error fetching agent sessions: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * GET /agent-sessions/:id
  * Get a specific agent session, including aggregated stats from request logs.
  */
-router.get("/:id", async (req, res, next) => {
+router.get("/:id", asyncHandler(async (req, res, next) => {
   try {
     const { project, username, db } = req;
     const session = await db
@@ -254,13 +255,13 @@ router.get("/:id", async (req, res, next) => {
     logger.error(`Error fetching agent session: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * PATCH /agent-sessions/:id
  * Update specific fields of an agent session.
  */
-router.patch("/:id", async (req, res, next) => {
+router.patch("/:id", asyncHandler(async (req, res, next) => {
   try {
     const { project, username, db } = req;
     const setFields = buildConversationPatchFields(req.body);
@@ -282,13 +283,13 @@ router.patch("/:id", async (req, res, next) => {
     logger.error(`Error patching agent session: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * DELETE /agent-sessions/:id
  * Delete a specific agent session.
  */
-router.delete("/:id", async (req, res, next) => {
+router.delete("/:id", asyncHandler(async (req, res, next) => {
   try {
     const { project, username, db } = req;
     const result = await db
@@ -304,6 +305,6 @@ router.delete("/:id", async (req, res, next) => {
     logger.error(`Error deleting agent session: ${error.message}`);
     next(error);
   }
-});
+}));
 
 export default router;

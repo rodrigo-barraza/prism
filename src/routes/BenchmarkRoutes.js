@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
 import { EventEmitter } from "node:events";
 import BenchmarkService from "../services/BenchmarkService.js";
@@ -28,7 +29,7 @@ registerCleanup(async () => {
 
 // ─── GET /benchmark — List all benchmark tests for the caller's project ─
 
-router.get("/", async (req, res, next) => {
+router.get("/", asyncHandler(async (req, res, next) => {
   try {
     const benchmarks = await BenchmarkService.list(req.project);
 
@@ -59,14 +60,14 @@ router.get("/", async (req, res, next) => {
     logger.error(`GET /benchmark error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /benchmark/stats — Aggregate model performance across all runs ─
 // Per model+benchmark pair, only the LATEST run's result counts toward
 // pass/fail/error (unique test results). Cost and latency accumulate
 // across all runs for accurate historical totals.
 
-router.get("/stats", async (req, res, next) => {
+router.get("/stats", asyncHandler(async (req, res, next) => {
   try {
     const benchmarks = await BenchmarkService.list(req.project);
 
@@ -214,7 +215,7 @@ router.get("/stats", async (req, res, next) => {
     logger.error(`GET /benchmark/stats error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /benchmark/models — List available conversation models for benchmarking ─
 
@@ -234,7 +235,7 @@ router.get("/active-list", (_req, res) => {
 
 // ─── POST /benchmark — Create a new benchmark test ──────────
 
-router.post("/", async (req, res, next) => {
+router.post("/", asyncHandler(async (req, res, next) => {
   try {
     const { name, prompt, systemPrompt, expectedValue, matchMode, temperature, maxTokens, tags, assertions, assertionOperator, benchmarkMode, agentAssertions, agentAssertionOperator } =
       req.body;
@@ -296,11 +297,11 @@ router.post("/", async (req, res, next) => {
     logger.error(`POST /benchmark error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── GET /benchmark/:id — Get a single benchmark test + latest run ─
 
-router.get("/:id", async (req, res, next) => {
+router.get("/:id", asyncHandler(async (req, res, next) => {
   try {
     const benchmark = await BenchmarkService.getById(req.params.id, req.project);
     if (!benchmark) {
@@ -314,11 +315,11 @@ router.get("/:id", async (req, res, next) => {
     logger.error(`GET /benchmark/:id error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── DELETE /benchmark/:id — Delete a benchmark test and its runs ─
 
-router.delete("/:id", async (req, res, next) => {
+router.delete("/:id", asyncHandler(async (req, res, next) => {
   try {
     const existing = await BenchmarkService.getById(req.params.id, req.project);
     if (!existing) {
@@ -331,7 +332,7 @@ router.delete("/:id", async (req, res, next) => {
     logger.error(`DELETE /benchmark/:id error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── POST /benchmark/:id/run — Execute a benchmark against models (SSE) ─
 // Body (optional):
@@ -343,7 +344,7 @@ router.delete("/:id", async (req, res, next) => {
 //   model_complete { ...result }
 //   run_complete  { ...run }
 
-router.post("/:id/run", async (req, res) => {
+router.post("/:id/run", asyncHandler(async (req, res) => {
   try {
     const benchmark = await BenchmarkService.getById(req.params.id, req.project);
     if (!benchmark) {
@@ -484,7 +485,7 @@ router.post("/:id/run", async (req, res) => {
       res.status(500).json({ error: "Benchmark execution failed" });
     }
   }
-});
+}));
 
 // ─── POST /benchmark/:id/abort — Explicitly cancel a running benchmark ─
 
@@ -577,7 +578,7 @@ router.get("/:id/follow", (req, res) => {
 
 // ─── GET /benchmark/:id/runs — Get all past runs for a benchmark ─
 
-router.get("/:id/runs", async (req, res, next) => {
+router.get("/:id/runs", asyncHandler(async (req, res, next) => {
   try {
     const benchmark = await BenchmarkService.getById(req.params.id, req.project);
     if (!benchmark) {
@@ -590,11 +591,11 @@ router.get("/:id/runs", async (req, res, next) => {
     logger.error(`GET /benchmark/:id/runs error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 // ─── POST /benchmark/:id/runs/:runId/rerun — Re-run with same models ─
 
-router.post("/:id/runs/:runId/rerun", async (req, res, next) => {
+router.post("/:id/runs/:runId/rerun", asyncHandler(async (req, res, next) => {
   try {
     const benchmark = await BenchmarkService.getById(req.params.id, req.project);
     if (!benchmark) {
@@ -624,6 +625,6 @@ router.post("/:id/runs/:runId/rerun", async (req, res, next) => {
     logger.error(`POST /benchmark/:id/runs/:runId/rerun error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 export default router;

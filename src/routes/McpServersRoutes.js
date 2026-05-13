@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
 import { ObjectId } from "mongodb";
 import requireDb from "../middleware/RequireDbMiddleware.js";
@@ -14,7 +15,7 @@ const COLLECTION = COLLECTIONS.MCP_SERVERS;
  * GET /mcp-servers
  * List all MCP server configs + live connection status.
  */
-router.get("/", async (req, res, next) => {
+router.get("/", asyncHandler(async (req, res, next) => {
   try {
     const { project, username, db } = req;
 
@@ -44,13 +45,13 @@ router.get("/", async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-});
+}));
 
 /**
  * POST /mcp-servers
  * Add a new MCP server config.
  */
-router.post("/", async (req, res, next) => {
+router.post("/", asyncHandler(async (req, res, next) => {
   try {
     const { project, username, db } = req;
 
@@ -79,13 +80,13 @@ router.post("/", async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-});
+}));
 
 /**
  * PUT /mcp-servers/:id
  * Update an MCP server config.
  */
-router.put("/:id", async (req, res, next) => {
+router.put("/:id", asyncHandler(async (req, res, next) => {
   try {
     const { db } = req;
 
@@ -119,13 +120,13 @@ router.put("/:id", async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-});
+}));
 
 /**
  * DELETE /mcp-servers/:id
  * Delete an MCP server config (disconnects if connected).
  */
-router.delete("/:id", async (req, res, next) => {
+router.delete("/:id", asyncHandler(async (req, res, next) => {
   try {
     const { db } = req;
 
@@ -147,13 +148,13 @@ router.delete("/:id", async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-});
+}));
 
 /**
  * POST /mcp-servers/:id/connect
  * Connect to an MCP server.
  */
-router.post("/:id/connect", async (req, res, _next) => {
+router.post("/:id/connect", asyncHandler(async (req, res, _next) => {
   try {
     const { db } = req;
 
@@ -180,13 +181,13 @@ router.post("/:id/connect", async (req, res, _next) => {
     logger.error(`MCP connection failed: ${error.message}`);
     res.status(502).json({ error: "MCP server connection failed" });
   }
-});
+}));
 
 /**
  * POST /mcp-servers/:id/disconnect
  * Disconnect from an MCP server.
  */
-router.post("/:id/disconnect", async (req, res, next) => {
+router.post("/:id/disconnect", asyncHandler(async (req, res, next) => {
   try {
     const { db } = req;
 
@@ -203,6 +204,6 @@ router.post("/:id/disconnect", async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-});
+}));
 
 export default router;

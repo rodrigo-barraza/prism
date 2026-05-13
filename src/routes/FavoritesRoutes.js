@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
 import requireDb from "../middleware/RequireDbMiddleware.js";
 import logger from "../utils/logger.js";
@@ -12,7 +13,7 @@ const COLLECTION = COLLECTIONS.FAVORITES;
  * GET /favorites?type=model
  * List favorites, optionally filtered by type.
  */
-router.get("/", async (req, res, next) => {
+router.get("/", asyncHandler(async (req, res, next) => {
   try {
     const { project, username, db } = req;
     const filter = { project, username };
@@ -29,7 +30,7 @@ router.get("/", async (req, res, next) => {
     logger.error(`Error fetching favorites: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * POST /favorites
@@ -38,7 +39,7 @@ router.get("/", async (req, res, next) => {
  * - key: unique identifier within the type (e.g. "openai:gpt-4o")
  * - meta: optional metadata object (e.g. { provider, name })
  */
-router.post("/", async (req, res, next) => {
+router.post("/", asyncHandler(async (req, res, next) => {
   try {
     const { project, username, db } = req;
     const { type, key, meta } = req.body;
@@ -70,13 +71,13 @@ router.post("/", async (req, res, next) => {
     logger.error(`Error adding favorite: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * DELETE /favorites?type=model&key=openai:gpt-4o
  * Remove a specific favorite by type + key.
  */
-router.delete("/", async (req, res, next) => {
+router.delete("/", asyncHandler(async (req, res, next) => {
   try {
     const { project, username, db } = req;
     const { type, key } = req.query;
@@ -96,6 +97,6 @@ router.delete("/", async (req, res, next) => {
     logger.error(`Error removing favorite: ${error.message}`);
     next(error);
   }
-});
+}));
 
 export default router;

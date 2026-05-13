@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import { sleep } from "@rodrigo-barraza/utilities-library";
 import express from "express";
 import { getProvider } from "../providers/index.js";
@@ -18,7 +19,7 @@ function resolveInstanceId(req) {
  * GET /lm-studio/models
  * List all models available from LM Studio.
  */
-router.get("/models", async (req, res, next) => {
+router.get("/models", asyncHandler(async (req, res, next) => {
   try {
     const instanceId = resolveInstanceId(req);
     const provider = getProvider(instanceId);
@@ -28,13 +29,13 @@ router.get("/models", async (req, res, next) => {
     logger.error(`GET /lm-studio/models error: ${error.message}`);
     next(error);
   }
-});
+}));
 /**
  * POST /lm-studio/load
  * Load a model into LM Studio.
  * Body: { model: "model-key" }
  */
-router.post("/load", async (req, res, next) => {
+router.post("/load", asyncHandler(async (req, res, next) => {
   try {
     const { model, context_length, flash_attention, offload_kv_cache_to_gpu, eval_batch_size } = req.body;
     if (!model) {
@@ -61,7 +62,7 @@ router.post("/load", async (req, res, next) => {
     logger.error(`POST /lm-studio/load error: ${error.message}`);
     next(error);
   }
-});
+}));
 /**
  * POST /lm-studio/load-stream
  * Load a model into LM Studio with SSE progress streaming.
@@ -74,7 +75,7 @@ router.post("/load", async (req, res, next) => {
  *   { type: "complete" }
  *   { type: "error", message: "..." }
  */
-router.post("/load-stream", async (req, res) => {
+router.post("/load-stream", asyncHandler(async (req, res) => {
   const { model, context_length, flash_attention, offload_kv_cache_to_gpu, eval_batch_size } = req.body;
   if (!model) {
     return res
@@ -167,13 +168,13 @@ router.post("/load-stream", async (req, res) => {
   } finally {
     if (!res.writableEnded) res.end();
   }
-});
+}));
 /**
  * POST /lm-studio/unload
  * Unload a model from LM Studio memory.
  * Body: { instance_id: "model-instance-id" }
  */
-router.post("/unload", async (req, res, next) => {
+router.post("/unload", asyncHandler(async (req, res, next) => {
   try {
     const { instance_id } = req.body;
     if (!instance_id) {
@@ -189,13 +190,13 @@ router.post("/unload", async (req, res, next) => {
     logger.error(`POST /lm-studio/unload error: ${error.message}`);
     next(error);
   }
-});
+}));
 /**
  * POST /lm-studio/estimate
  * Estimate VRAM usage for a model with given configuration.
  * Body: { model, contextLength, gpuLayers, flashAttention, offloadKvCache }
  */
-router.post("/estimate", async (req, res, next) => {
+router.post("/estimate", asyncHandler(async (req, res, next) => {
   try {
     const { model, contextLength, gpuLayers, flashAttention, offloadKvCache } = req.body;
     if (!model) {
@@ -226,5 +227,5 @@ router.post("/estimate", async (req, res, next) => {
     logger.error(`POST /lm-studio/estimate error: ${error.message}`);
     next(error);
   }
-});
+}));
 export default router;

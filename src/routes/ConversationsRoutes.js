@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
 import requireDb from "../middleware/RequireDbMiddleware.js";
 import ConversationService, {
@@ -21,7 +22,7 @@ const COLLECTION = COLLECTIONS.CONVERSATIONS;
  *
  * Returns: { items, nextCursor, hasMore }
  */
-router.get("/", async (req, res, next) => {
+router.get("/", asyncHandler(async (req, res, next) => {
   try {
     const { project, username, db } = req;
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
@@ -57,13 +58,13 @@ router.get("/", async (req, res, next) => {
     logger.error(`Error fetching conversations: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * GET /conversations/:id
  * Get a specific conversation.
  */
-router.get("/:id", async (req, res, next) => {
+router.get("/:id", asyncHandler(async (req, res, next) => {
   try {
     const { project, username, db } = req;
     const conversation = await db
@@ -79,13 +80,13 @@ router.get("/:id", async (req, res, next) => {
     logger.error(`Error fetching conversation: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * GET /conversations/:id/workflows
  * Find workflows that include this conversation ID.
  */
-router.get("/:id/workflows", async (req, res, next) => {
+router.get("/:id/workflows", asyncHandler(async (req, res, next) => {
   try {
     const { db } = req;
 
@@ -100,13 +101,13 @@ router.get("/:id/workflows", async (req, res, next) => {
     logger.error(`Error fetching conversation workflows: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * POST /conversations/:id/messages
  * Append messages to an existing conversation (e.g. tool results after execution).
  */
-router.post("/:id/messages", async (req, res, next) => {
+router.post("/:id/messages", asyncHandler(async (req, res, next) => {
   try {
     const { project, username } = req;
     const { messages, conversationMeta } = req.body;
@@ -130,14 +131,14 @@ router.post("/:id/messages", async (req, res, next) => {
     logger.error(`Error appending messages: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * PATCH /conversations/:id
  * Update specific fields of a conversation (messages, title, systemPrompt, settings).
  * Used for non-generation mutations (edit/delete messages, rename, etc.).
  */
-router.patch("/:id", async (req, res, next) => {
+router.patch("/:id", asyncHandler(async (req, res, next) => {
   try {
     const { project, username, db } = req;
     const setFields = buildConversationPatchFields(req.body);
@@ -159,13 +160,13 @@ router.patch("/:id", async (req, res, next) => {
     logger.error(`Error patching conversation: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * DELETE /conversations/:id
  * Delete a specific conversation.
  */
-router.delete("/:id", async (req, res, next) => {
+router.delete("/:id", asyncHandler(async (req, res, next) => {
   try {
     const { project, username, db } = req;
     const result = await db
@@ -181,6 +182,6 @@ router.delete("/:id", async (req, res, next) => {
     logger.error(`Error deleting conversation: ${error.message}`);
     next(error);
   }
-});
+}));
 
 export default router;

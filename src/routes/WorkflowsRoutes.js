@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import { Router } from "express";
 import { ObjectId } from "mongodb";
 import logger from "../utils/logger.js";
@@ -295,7 +296,7 @@ function computeWorkflowMeta(nodes) {
  * GET /workflows
  * List all saved workflows (metadata only).
  */
-router.get("/", async (req, res, next) => {
+router.get("/", asyncHandler(async (req, res, next) => {
   try {
     const { db } = req;
 
@@ -314,13 +315,13 @@ router.get("/", async (req, res, next) => {
     logger.error(`GET /workflows error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * GET /workflows/:id
  * Get a single workflow by ID (full document).
  */
-router.get("/:id", async (req, res, next) => {
+router.get("/:id", asyncHandler(async (req, res, next) => {
   try {
     const { db } = req;
 
@@ -342,7 +343,7 @@ router.get("/:id", async (req, res, next) => {
     logger.error(`GET /workflows/:id error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * POST /workflows
@@ -354,7 +355,7 @@ router.get("/:id", async (req, res, next) => {
  * 2. Pre-built graph (from Prism Client editor): { nodes, edges, ... }
  *    → Passes through unchanged
  */
-router.post("/", async (req, res, next) => {
+router.post("/", asyncHandler(async (req, res, next) => {
   try {
     const { db } = req;
 
@@ -419,13 +420,13 @@ router.post("/", async (req, res, next) => {
     logger.error(`POST /workflows error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * PUT /workflows/:id
  * Update an existing workflow.
  */
-router.put("/:id", async (req, res, next) => {
+router.put("/:id", asyncHandler(async (req, res, next) => {
   try {
     const { db } = req;
 
@@ -471,14 +472,14 @@ router.put("/:id", async (req, res, next) => {
     logger.error(`PUT /workflows/:id error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * PATCH /workflows/:id/conversations
  * Append conversation IDs generated during workflow execution.
  * Body: { conversationIds: string[] }
  */
-router.patch("/:id/conversations", async (req, res, next) => {
+router.patch("/:id/conversations", asyncHandler(async (req, res, next) => {
   try {
     const { db } = req;
 
@@ -526,13 +527,13 @@ router.patch("/:id/conversations", async (req, res, next) => {
     logger.error(`PATCH /workflows/:id/conversations error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * DELETE /workflows/:id
  * Delete a workflow by ID.
  */
-router.delete("/:id", async (req, res, next) => {
+router.delete("/:id", asyncHandler(async (req, res, next) => {
   try {
     const { db } = req;
 
@@ -549,6 +550,6 @@ router.delete("/:id", async (req, res, next) => {
     logger.error(`DELETE /workflows/:id error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 export default router;

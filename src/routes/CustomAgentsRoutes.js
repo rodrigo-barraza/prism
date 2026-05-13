@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
 import CustomAgentService from "../services/CustomAgentService.js";
 import AgentPersonaRegistry from "../services/AgentPersonaRegistry.js";
@@ -9,7 +10,7 @@ const router = express.Router();
  * GET /custom-agents
  * List all custom agents.
  */
-router.get("/", async (_req, res, next) => {
+router.get("/", asyncHandler(async (_req, res, next) => {
   try {
     const agents = await CustomAgentService.list();
     res.json(agents);
@@ -17,13 +18,13 @@ router.get("/", async (_req, res, next) => {
     logger.error(`GET /custom-agents error: ${err.message}`);
     next(err);
   }
-});
+}));
 
 /**
  * POST /custom-agents
  * Create a new custom agent and register it in the persona registry.
  */
-router.post("/", async (req, res, next) => {
+router.post("/", asyncHandler(async (req, res, next) => {
   try {
     const data = req.body;
     if (!data?.name?.trim()) {
@@ -43,13 +44,13 @@ router.post("/", async (req, res, next) => {
     logger.error(`POST /custom-agents error: ${err.message}`);
     next(err);
   }
-});
+}));
 
 /**
  * PUT /custom-agents/:id
  * Update an existing custom agent and refresh its persona registration.
  */
-router.put("/:id", async (req, res, next) => {
+router.put("/:id", asyncHandler(async (req, res, next) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -76,13 +77,13 @@ router.put("/:id", async (req, res, next) => {
     logger.error(`PUT /custom-agents/:id error: ${err.message}`);
     next(err);
   }
-});
+}));
 
 /**
  * DELETE /custom-agents/:id
  * Delete a custom agent and unregister it from the persona registry.
  */
-router.delete("/:id", async (req, res, next) => {
+router.delete("/:id", asyncHandler(async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -100,6 +101,6 @@ router.delete("/:id", async (req, res, next) => {
     logger.error(`DELETE /custom-agents/:id error: ${err.message}`);
     next(err);
   }
-});
+}));
 
 export default router;

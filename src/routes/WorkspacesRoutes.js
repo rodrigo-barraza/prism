@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
 import { basename } from "node:path";
 import { TOOLS_SERVICE_URL } from "../../config.js";
@@ -40,7 +41,7 @@ router.get("/", (_req, res) => {
  * Used by the Settings page for the richer workspace management UI.
  * Shape: { workspaces: [...], agents: [...], staticRoots: string[] }
  */
-router.get("/full", async (_req, res) => {
+router.get("/full", asyncHandler(async (_req, res) => {
   try {
     const roots = ToolOrchestratorService.getWorkspaceRoots();
     const staticRoots = ToolOrchestratorService.getStaticRoots();
@@ -80,7 +81,7 @@ router.get("/full", async (_req, res) => {
     logger.error(`GET /workspaces/full error: ${err.message}`);
     res.status(500).json({ error: "Failed to retrieve full workspace config" });
   }
-});
+}));
 
 /**
  * PUT /workspaces
@@ -88,7 +89,7 @@ router.get("/full", async (_req, res) => {
  * Body: { roots: string[] }
  * Returns the updated workspace list with isPinned metadata.
  */
-router.put("/", async (req, res) => {
+router.put("/", asyncHandler(async (req, res) => {
   try {
     const result = await ToolOrchestratorService.updateWorkspaceRoots(req.body?.roots || []);
     res.json(result);
@@ -96,14 +97,14 @@ router.put("/", async (req, res) => {
     logger.error(`PUT /workspaces error: ${err.message}`);
     res.status(500).json({ error: "Failed to update workspace roots" });
   }
-});
+}));
 
 /**
  * POST /workspaces/validate
  * Validate a single workspace path without persisting.
  * Body: { path: string }
  */
-router.post("/validate", async (req, res) => {
+router.post("/validate", asyncHandler(async (req, res) => {
   try {
     const result = await ToolOrchestratorService.validateWorkspacePath(req.body?.path);
     res.json(result);
@@ -111,7 +112,7 @@ router.post("/validate", async (req, res) => {
     logger.error(`POST /workspaces/validate error: ${err.message}`);
     res.status(500).json({ error: "Failed to validate workspace path" });
   }
-});
+}));
 
 export default router;
 

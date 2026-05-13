@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
 import {
   PROVIDERS,
@@ -200,7 +201,7 @@ const LOCAL_PROVIDERS = localInstances.map((inst) => {
  * Cloud providers resolve instantly; local providers are excluded here
  * and served via GET /config/local-models for progressive loading.
  */
-router.get("/", async (_req, res) => {
+router.get("/", asyncHandler(async (_req, res) => {
   // Get static model options (cloud-only — no network calls)
   let textToTextModels = getModelOptions(TYPES.TEXT, TYPES.TEXT);
   let textToImageModels = getModelOptions(TYPES.TEXT, TYPES.IMAGE);
@@ -291,7 +292,7 @@ Guidelines:
       defaults: filterDefaults(getDefaultModels(TYPES.AUDIO, TYPES.TEXT)),
     },
   });
-});
+}));
 
 /**
  * GET /config-local
@@ -371,14 +372,14 @@ router.get("/tools", (_req, res) => {
  * Re-fetches tool schemas from tools-api and updates the cache.
  * Returns the updated schema count.
  */
-router.post("/tools/refresh", async (_req, res) => {
+router.post("/tools/refresh", asyncHandler(async (_req, res) => {
   try {
     const count = await ToolOrchestratorService.refreshSchemas();
     res.json({ ok: true, count });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
+}));
 
 /**
  * GET /config/rate-limits

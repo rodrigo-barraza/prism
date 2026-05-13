@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
 import requireDb from "../middleware/RequireDbMiddleware.js";
 import logger from "../utils/logger.js";
@@ -7,7 +8,7 @@ const router = express.Router();
 router.use(requireDb);
 
 // ─── GET /text — extract text content from the caller's project conversations ─
-router.get("/", async (req, res, next) => {
+router.get("/", asyncHandler(async (req, res, next) => {
   try {
     const { db } = req;
 
@@ -118,6 +119,6 @@ router.get("/", async (req, res, next) => {
     logger.error(`GET /text error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 export default router;

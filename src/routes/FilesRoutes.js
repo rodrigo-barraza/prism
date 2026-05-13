@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
 import FileService from "../services/FileService.js";
 import logger from "../utils/logger.js";
@@ -10,7 +11,7 @@ const router = express.Router();
  * Body: { data: "data:image/png;base64,..." }
  * Response: { ref, size, contentType }
  */
-router.post("/upload", async (req, res, next) => {
+router.post("/upload", asyncHandler(async (req, res, next) => {
   try {
     const { data } = req.body;
     if (!data) {
@@ -23,14 +24,14 @@ router.post("/upload", async (req, res, next) => {
     logger.error(`File upload error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * GET /files/:key(*)
  * Stream a file from MinIO storage.
  * The key is the full object path, e.g. "files/abc-123.png"
  */
-router.get("/*key", async (req, res, next) => {
+router.get("/*key", asyncHandler(async (req, res, next) => {
   try {
     // Express 5 returns wildcard params as arrays of path segments
     const rawKey = req.params.key;
@@ -51,6 +52,6 @@ router.get("/*key", async (req, res, next) => {
     logger.error(`File retrieval error: ${error.message}`);
     next(error);
   }
-});
+}));
 
 export default router;

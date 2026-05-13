@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import { formatCostTag, roundMs } from "@rodrigo-barraza/utilities-library";
 import express from "express";
 import crypto from "crypto";
@@ -1423,7 +1424,7 @@ async function handleNonStreamingText(ctx) {
  * Body (flat, OpenAI-style):
  *   { provider, model?, messages, tools?, temperature?, maxTokens?, ... }
  */
-router.post("/", async (req, res, next) => {
+router.post("/", asyncHandler(async (req, res, next) => {
   const params = {
     ...req.body,
     project: req.project,
@@ -1435,5 +1436,5 @@ router.post("/", async (req, res, next) => {
   } else {
     await handleJsonRequest(req, res, next, params);
   }
-});
+}));
 export default router;

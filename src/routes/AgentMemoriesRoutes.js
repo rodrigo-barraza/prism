@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
 import MemoryService from "../services/MemoryService.js";
 import MemoryConsolidationService from "../services/MemoryConsolidationService.js";
@@ -10,7 +11,7 @@ const router = express.Router();
  * Create a new memory via MemoryService.store() (embedding + dedup).
  * Called by tools-api's upsert_memory route.
  */
-router.post("/", async (req, res, next) => {
+router.post("/", asyncHandler(async (req, res, next) => {
   try {
     const { agent, project, username, content, type, title, agentSessionId } = req.body;
     if (!content) {
@@ -40,14 +41,14 @@ router.post("/", async (req, res, next) => {
     logger.error(`[agent-memories] POST ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * GET /agent-memories?project=<project>&agent=<agent>&limit=100&skip=0
  * List all agent memories for a project (read-only).
  * Defaults to agent="CODING" for backward compatibility.
  */
-router.get("/", async (req, res, next) => {
+router.get("/", asyncHandler(async (req, res, next) => {
   try {
     const project = req.project;
     const agent = req.query.agent || null;
@@ -60,13 +61,13 @@ router.get("/", async (req, res, next) => {
     logger.error(`[agent-memories] ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * DELETE /agent-memories/:id
  * Delete a specific agent memory.
  */
-router.delete("/:id", async (req, res, next) => {
+router.delete("/:id", asyncHandler(async (req, res, next) => {
   try {
     const deleted = await MemoryService.remove(req.params.id);
     if (!deleted) {
@@ -77,14 +78,14 @@ router.delete("/:id", async (req, res, next) => {
     logger.error(`[agent-memories] DELETE ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * GET /agent-memories/discover
  * Aggregate all distinct project/agent combinations with memory counts.
  * Bypasses project scoping — used by the consolidation CLI's --all sweep.
  */
-router.get("/discover", async (req, res, next) => {
+router.get("/discover", asyncHandler(async (req, res, next) => {
   try {
     const combos = await MemoryService.discoverCombos();
     res.json({ combos });
@@ -92,13 +93,13 @@ router.get("/discover", async (req, res, next) => {
     logger.error(`[agent-memories] DISCOVER ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * GET /agent-memories/consolidation-history?project=<project>&limit=10
  * Retrieve consolidation run history for a project.
  */
-router.get("/consolidation-history", async (req, res, next) => {
+router.get("/consolidation-history", asyncHandler(async (req, res, next) => {
   try {
     const project = req.project;
     const limit = parseInt(req.query.limit) || 10;
@@ -109,13 +110,13 @@ router.get("/consolidation-history", async (req, res, next) => {
     logger.error(`[agent-memories] HISTORY ${error.message}`);
     next(error);
   }
-});
+}));
 
 /**
  * POST /agent-memories/consolidate
  * Trigger on-demand memory consolidation for a project.
  */
-router.post("/consolidate", async (req, res, next) => {
+router.post("/consolidate", asyncHandler(async (req, res, next) => {
   try {
     const project = req.project;
     const agent = req.body.agent || "CODING";
@@ -133,6 +134,6 @@ router.post("/consolidate", async (req, res, next) => {
     logger.error(`[agent-memories] CONSOLIDATE ${error.message}`);
     next(error);
   }
-});
+}));
 
 export default router;

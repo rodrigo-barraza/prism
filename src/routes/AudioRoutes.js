@@ -1,3 +1,4 @@
+import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import { formatCostTag, roundMs } from "@rodrigo-barraza/utilities-library";
 import express from "express";
 import crypto from "crypto";
@@ -237,7 +238,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
  * Default:          Binary audio stream with content-type header
  * ?format=dataUrl:  JSON response { audioDataUrl, contentType }
  */
-router.post("/", async (req, res, next) => {
+router.post("/", asyncHandler(async (req, res, next) => {
   // Skip TTS handler when mounted at /audio-to-text
   if (req.baseUrl.includes("audio-to-text")) return next();
   try {
@@ -288,14 +289,14 @@ router.post("/", async (req, res, next) => {
       next(error);
     }
   }
-});
+}));
 // ─── audio transcription (speech-to-text) ───────────────────
 /**
  * POST /audio-to-text
  * Body: { provider, audio (base64 string or data URL), model?, language?, prompt? }
  * Response: { text, usage? }
  */
-router.post("/", async (req, res, next) => {
+router.post("/", asyncHandler(async (req, res, next) => {
   const requestId = crypto.randomUUID();
   const requestStart = performance.now();
   const {
@@ -504,5 +505,5 @@ router.post("/", async (req, res, next) => {
     });
     next(error);
   }
-});
+}));
 export default router;
