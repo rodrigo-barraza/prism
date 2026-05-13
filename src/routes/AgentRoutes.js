@@ -1,7 +1,7 @@
 import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
 import AgenticLoopService from "../services/AgenticLoopService.js";
-import { handleAgent } from "./chat.js";
+import { handleAgent } from "./ChatRoutes.js";
 import logger from "../utils/logger.js";
 import {
   handleSseRequest,
