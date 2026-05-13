@@ -6,7 +6,8 @@ import RequestLogger from "./RequestLogger.js";
 import SettingsService from "./SettingsService.js";
 import logger from "../utils/logger.js";
 import { parseJsonFromLlmResponse } from "../utils/utilities.js";
-import { estimateTokens } from "../utils/CostCalculator.js";
+import { estimateTokens, calculateTextCost } from "../utils/CostCalculator.js";
+import { TYPES, getPricing } from "../config.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -218,9 +219,15 @@ export default class MemoryExtractor {
         });
 
         // Emit incremental usage so the UI token badge updates in real-time
-        // instead of jumping when fetchSessionStats runs 2-8s later
+        // instead of jumping when fetchSessionStats runs 2-8s later.
+        // Include estimatedCost so the session cost badge is accurate
+        // before the backend aggregation (fetchSessionStats) completes.
         if (emit && success) {
           try {
+            const extractPricing = getPricing(TYPES.TEXT, TYPES.TEXT)[extractionModel];
+            const extractCost = extractPricing
+              ? calculateTextCost({ inputTokens: approxInputTokens, outputTokens: approxOutputTokens }, extractPricing)
+              : null;
             emit({
               type: "usage_update",
               operation: "memory:extract",
@@ -228,6 +235,7 @@ export default class MemoryExtractor {
                 requests: 1,
                 inputTokens: approxInputTokens,
                 outputTokens: approxOutputTokens,
+                estimatedCost: extractCost,
               },
             });
           } catch { /* SSE channel may be closed */ }
@@ -288,13 +296,22 @@ export default class MemoryExtractor {
       // aggregate so the UI request count grows incrementally.
       if (emit && stored.length > 0) {
         try {
+          const embedTokens = stored.length * 50; // ~50 tokens per memory title+content
+          // Embedding cost: input tokens only (no output tokens)
+          const embedPricing = getPricing(TYPES.TEXT, TYPES.EMBEDDING);
+          const embedModel = (await SettingsService.getSection("memory"))?.embeddingModel;
+          const embedModelPricing = embedModel ? embedPricing[embedModel] : null;
+          const embedCost = embedModelPricing?.inputPerMillion
+            ? (embedTokens / 1_000_000) * embedModelPricing.inputPerMillion
+            : null;
           emit({
             type: "usage_update",
             operation: "embed:memory",
             usage: {
               requests: stored.length,
-              inputTokens: stored.length * 50, // ~50 tokens per memory title+content
+              inputTokens: embedTokens,
               outputTokens: 0,
+              estimatedCost: embedCost,
             },
           });
         } catch { /* SSE channel may be closed */ }

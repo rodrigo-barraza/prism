@@ -11,7 +11,8 @@ import { parseJsonFromLlmResponse } from "../utils/utilities.js";
 import { COLLECTIONS } from "../constants.js";
 import AgentPersonaRegistry from "./AgentPersonaRegistry.js";
 import SettingsService from "./SettingsService.js";
-import { estimateTokens } from "../utils/CostCalculator.js";
+import { estimateTokens, calculateTextCost } from "../utils/CostCalculator.js";
+import { TYPES, getPricing } from "../config.js";
 // ─── Constants ────────────────────────────────────────────────────────────────
 /** Resolve the current consolidation provider + model from settings. */
 async function getConsolidationConfig() {
@@ -612,9 +613,13 @@ async function processBatch(batch, batchIndex, totalBatches, {
     },
   });
 
-  // Broadcast incremental usage
+  // Broadcast incremental usage with cost
   if (typeof broadcast === "function" && llmSuccess) {
     try {
+      const consolidatePricing = getPricing(TYPES.TEXT, TYPES.TEXT)[consolidationModel];
+      const consolidateCost = consolidatePricing
+        ? calculateTextCost({ inputTokens: approxInputTokens, outputTokens: approxOutputTokens }, consolidatePricing)
+        : null;
       broadcast({
         type: "usage_update",
         operation: "memory:consolidate",
@@ -622,6 +627,7 @@ async function processBatch(batch, batchIndex, totalBatches, {
           requests: 1,
           inputTokens: approxInputTokens,
           outputTokens: approxOutputTokens,
+          estimatedCost: consolidateCost,
         },
       });
     } catch { /* SSE channel may be closed */ }
