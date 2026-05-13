@@ -28,6 +28,8 @@ vi.mock("../src/services/ToolOrchestratorService.js", () => ({
       { name: "read_file", domain: "system", labels: ["safe"] },
     ]),
     getMCPToolSchemas: vi.fn().mockReturnValue([]),
+    executeTool: vi.fn().mockResolvedValue({ success: true, result: "mocked" }),
+    isStreamable: vi.fn().mockReturnValue(false),
   },
 }));
 
@@ -288,5 +290,48 @@ describe("AgenticLoopService", () => {
     // Ensure it didn't queue a standard tool_execution
     const toolExecutionEvents = emittedEvents.filter(e => e.type === "tool_execution");
     expect(toolExecutionEvents.length).toBe(0);
+  });
+
+  it("should iterate multiple times when tools are executed and maxIterations > 1", async () => {
+    mockCtx.options.maxIterations = 3;
+    mockCtx.options.autoApprove = true;
+    mockCtx.options.enabledTools = ["read_file"];
+
+    // First iteration: Model calls read_file
+    mockProvider.generateTextStream.mockImplementationOnce(async function* () {
+      yield { type: "toolCall", name: "read_file", args: { path: "test.txt" }, id: "tc-1" };
+      yield { type: "usage", usage: { inputTokens: 5, outputTokens: 2 } };
+    });
+
+    // Second iteration: Model sees tool result and replies with text
+    mockProvider.generateTextStream.mockImplementationOnce(async function* () {
+      yield "File contents are: xyz";
+      yield { type: "usage", usage: { inputTokens: 10, outputTokens: 5 } };
+    });
+
+    await AgenticLoopService.runAgenticLoop(mockCtx);
+
+    // It should have called the provider twice
+    expect(mockProvider.generateTextStream).toHaveBeenCalledTimes(2);
+
+    // Verify it executed the tool
+    const toolExecEvents = emittedEvents.filter(e => e.type === "tool_execution");
+    expect(toolExecEvents.length).toBe(2);
+    expect(toolExecEvents[0].status).toBe("calling");
+    expect(toolExecEvents[1].status).toBe("done");
+    expect(toolExecEvents[0].tool.name).toBe("read_file");
+
+    // Verify chunk from the second iteration
+    const chunkEvents = emittedEvents.filter(e => e.type === "chunk");
+    expect(chunkEvents.length).toBe(1);
+    expect(chunkEvents[0].content).toBe("File contents are: xyz");
+
+    // Verify messages array grew with assistant + tool result
+    // User msg (1) + Assistant tool call (1) + Tool result (1) + Assistant reply (0 inside the loop, the final reply isn't appended until next iter)
+    // Wait, let's just check the provider calls
+    const secondCallArgs = mockProvider.generateTextStream.mock.calls[1][0];
+    expect(secondCallArgs.length).toBeGreaterThan(1);
+    const lastMsgBeforeSecondIter = secondCallArgs[secondCallArgs.length - 1];
+    expect(lastMsgBeforeSecondIter.role).toBe("tool");
   });
 });
