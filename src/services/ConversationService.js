@@ -299,7 +299,7 @@ const ConversationService = {
     const metaSysPrompt = isAgentSession ? undefined : (conversationMeta?.systemPrompt || "");
     const parentId = conversationMeta?.parentAgentSessionId || null;
 
-    const setOnInsert = {
+    const setOnInsertBase = {
       title: conversationMeta?.title || "New Conversation",
       ...(!isAgentSession && { systemPrompt: metaSysPrompt }),
       settings: isAgentSession
@@ -314,6 +314,14 @@ const ConversationService = {
       ...(parentId && { parentAgentSessionId: parentId }),
       createdAt: now,
     };
+
+    // MongoDB forbids the same field path in both $set and $setOnInsert —
+    // strip any keys already present in $set to prevent MongoServerError:
+    // "Updating the path 'X' would create a conflict at 'X'"
+    const setOnInsert = { ...setOnInsertBase };
+    for (const key of Object.keys(setFields)) {
+      delete setOnInsert[key];
+    }
 
     // 1. Atomic upsert: push messages + set metadata in a single operation
     await col.updateOne(
