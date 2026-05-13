@@ -334,4 +334,29 @@ describe("AgenticLoopService", () => {
     const lastMsgBeforeSecondIter = secondCallArgs[secondCallArgs.length - 1];
     expect(lastMsgBeforeSecondIter.role).toBe("tool");
   });
+
+  it("should configure session tracking correctly for worker sub-agents", async () => {
+    // Set up a worker context
+    mockCtx.parentAgentSessionId = "coordinator-123";
+    mockCtx.agentSessionId = "worker-456";
+    mockCtx.options.maxIterations = 1;
+
+    await AgenticLoopService.runAgenticLoop(mockCtx);
+
+    // Should register generation against the parent/coordinator session
+    const SessionGenerationTracker = (await import("../src/services/SessionGenerationTracker.js")).default;
+    
+    // Verify register was called with the parent session ID and source: worker
+    expect(SessionGenerationTracker.register).toHaveBeenCalledWith(
+      "coordinator-123", 
+      expect.any(String), 
+      expect.objectContaining({
+        source: "worker",
+        workerId: "worker-456"
+      })
+    );
+
+    // Verify cleanup was NOT called for workers (coordinator cleans it up)
+    expect(SessionGenerationTracker.cleanup).not.toHaveBeenCalledWith("worker-456");
+  });
 });
