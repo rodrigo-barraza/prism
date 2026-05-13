@@ -1,7 +1,25 @@
 import ConversationService from "../services/ConversationService.js";
+import MongoWrapper from "../wrappers/MongoWrapper.js";
+import { MONGO_DB_NAME } from "../../config.js";
 import logger from "./logger.js";
 
 // ─── Conversation persistence helpers ───────────────────────
+
+/**
+ * Persist a diagnostic event to MongoDB for post-mortem analysis.
+ * Best-effort: never throws, never blocks the caller.
+ */
+function logDiagnostic(data) {
+  try {
+    const db = MongoWrapper.getDb(MONGO_DB_NAME);
+    if (db) {
+      db.collection("_persistence_diagnostics").insertOne({
+        ...data,
+        timestamp: new Date().toISOString(),
+      }).catch(() => {});
+    }
+  } catch { /* best-effort */ }
+}
 
 /**
  * Mark a conversation as generating (or not). Fire-and-forget with
@@ -48,6 +66,24 @@ export function markGenerating(conversationId, project, username, generating, op
  */
 export function appendAndFinalize(conversationId, project, username, messagesToAppend, meta, opts) {
   if (!conversationId) return;
+
+  const collection = opts?.collection || "conversations";
+  const msgCount = messagesToAppend?.length ?? 0;
+  const msgRoles = (messagesToAppend || []).map((m) => m.role).join(",");
+
+  // Log entry — proves appendAndFinalize was called with the right args
+  logDiagnostic({
+    event: "appendAndFinalize_called",
+    conversationId,
+    project,
+    username,
+    collection,
+    messageCount: msgCount,
+    messageRoles: msgRoles,
+    metaTitle: meta?.title,
+    hasParentSession: !!meta?.parentAgentSessionId,
+  });
+
   ConversationService.appendMessages(
     conversationId,
     project,
@@ -56,20 +92,40 @@ export function appendAndFinalize(conversationId, project, username, messagesToA
     meta,
     opts,
   )
-    .then(() =>
-      ConversationService.setGenerating(
+    .then((result) => {
+      // Log success — proves appendMessages completed
+      logDiagnostic({
+        event: "appendMessages_success",
+        conversationId,
+        project,
+        collection,
+        savedMessageCount: result?.messages?.length ?? "unknown",
+      });
+      return ConversationService.setGenerating(
         conversationId,
         project,
         username,
         false,
         opts,
-      ),
-    )
+      );
+    })
     .catch((err) => {
       logger.error(
-        `Failed to append ${messagesToAppend?.length ?? 0} messages to conversation ${conversationId} ` +
-        `(project=${project}, collection=${opts?.collection || "conversations"}): ${err.message}`,
+        `Failed to append ${msgCount} messages to ${conversationId} ` +
+        `(project=${project}, collection=${collection}): ${err.message}`,
       );
+      // Log failure with full context
+      logDiagnostic({
+        event: "appendMessages_error",
+        conversationId,
+        project,
+        username,
+        collection,
+        messageCount: msgCount,
+        error: err.message,
+        stack: err.stack?.slice(0, 2000),
+      });
+
       // Always clear isGenerating even on failure — prevents sessions
       // from being permanently stuck as "generating" on the next page load.
       ConversationService.setGenerating(

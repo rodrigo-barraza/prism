@@ -533,6 +533,14 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
 
     const newTurnMessages = currentMessages.slice(Math.max(0, state.originalMessageCount - 1));
 
+    logger.info(
+      `[AgenticLoop] _finalize: session=${agentSessionId} project=${project} ` +
+      `originalMsgCount=${state.originalMessageCount} currentMsgs=${currentMessages.length} ` +
+      `newTurnMsgs=${newTurnMessages.length} ` +
+      `roles=[${newTurnMessages.map((m) => m.role).join(",")}] ` +
+      `text=${(state.finalStreamedText || "").length}chars`,
+    );
+
     await finalizeTextGeneration(ctx, {
       text: state.finalStreamedText.trim(),
       thinking: state.streamedThinking.trim() || "",
