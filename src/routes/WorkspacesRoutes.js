@@ -114,5 +114,41 @@ router.post("/validate", asyncHandler(async (req, res) => {
   }
 }));
 
+/**
+ * GET /workspaces/tree?path=...&maxDepth=...
+ * Returns the directory tree for a workspace path.
+ * Proxies to tools-service /agentic/project/summary which routes through
+ * workspace-service agents via JSON-RPC (project.summary).
+ */
+router.get("/tree", asyncHandler(async (req, res) => {
+  const { path: workspacePath, maxDepth } = req.query;
+  if (!workspacePath) {
+    return res.status(400).json({ error: "'path' query parameter is required" });
+  }
+
+  try {
+    const toolsRes = await fetch(`${TOOLS_SERVICE_URL}/agentic/project/summary`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        path: workspacePath,
+        maxDepth: maxDepth ? parseInt(maxDepth, 10) : 3,
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!toolsRes.ok) {
+      const err = await toolsRes.json().catch(() => ({}));
+      return res.status(toolsRes.status).json({ error: err.error || `tools-service returned ${toolsRes.status}` });
+    }
+
+    const result = await toolsRes.json();
+    res.json(result);
+  } catch (err) {
+    logger.error(`GET /workspaces/tree error: ${err.message}`);
+    res.status(500).json({ error: "Failed to fetch workspace tree" });
+  }
+}));
+
 export default router;
 

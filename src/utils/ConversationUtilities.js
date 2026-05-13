@@ -33,6 +33,11 @@ export function markGenerating(conversationId, project, username, generating, op
  * Append messages to a conversation and clear the isGenerating flag.
  * Fire-and-forget with error logging.
  *
+ * IMPORTANT: isGenerating is always cleared, even when appendMessages
+ * fails — preventing sessions from being permanently stuck as
+ * "generating" when the $push operation encounters BSON errors or
+ * connectivity issues.
+ *
  * @param {string}        conversationId
  * @param {string}        project
  * @param {string}        username
@@ -60,9 +65,23 @@ export function appendAndFinalize(conversationId, project, username, messagesToA
         opts,
       ),
     )
-    .catch((err) =>
+    .catch((err) => {
       logger.error(
-        `Failed to append messages to conversation ${conversationId}: ${err.message}`,
-      ),
-    );
+        `Failed to append ${messagesToAppend?.length ?? 0} messages to conversation ${conversationId} ` +
+        `(project=${project}, collection=${opts?.collection || "conversations"}): ${err.message}`,
+      );
+      // Always clear isGenerating even on failure — prevents sessions
+      // from being permanently stuck as "generating" on the next page load.
+      ConversationService.setGenerating(
+        conversationId,
+        project,
+        username,
+        false,
+        opts,
+      ).catch((clearErr) =>
+        logger.error(
+          `Failed to clear isGenerating after append failure: ${clearErr.message}`,
+        ),
+      );
+    });
 }
