@@ -1,7 +1,7 @@
 import BaseAgenticHarness from "./BaseAgenticHarness.js";
 import ToolOrchestratorService from "../ToolOrchestratorService.js";
 import MongoWrapper from "../../wrappers/MongoWrapper.js";
-import { MONGO_DB_NAME } from "../../config.js";
+import { MONGO_DB_NAME } from "../../../config.js";
 import logger from "../../utils/logger.js";
 
 import { finalizeTextGeneration } from "../../routes/ChatRoutes.js";
