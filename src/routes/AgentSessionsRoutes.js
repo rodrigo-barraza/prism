@@ -107,10 +107,14 @@ router.get("/", asyncHandler(async (req, res, next) => {
     // Merge toolCounts and authoritative cost into each session
     for (const session of items) {
       session.toolCounts = toolCountsMap.get(session.id) || null;
-      // Overlay request-log cost when available (authoritative source of truth)
+      // Overlay request-log cost when it's higher than the document-level cost.
+      // Request-log aggregation is authoritative for NEW sessions (includes background
+      // costs like memory extraction). For OLD sessions with the cache-token NaN bug,
+      // per-iteration request logs under-report cost — the document's message-level
+      // totalCost (computed from overallUsage) is more accurate in that case.
       const requestLogCost = costMap.get(session.id);
       if (requestLogCost != null) {
-        session.totalCost = requestLogCost;
+        session.totalCost = Math.max(session.totalCost || 0, requestLogCost);
       }
     }
 
@@ -272,6 +276,10 @@ router.get("/:id", asyncHandler(async (req, res, next) => {
     if (requests.length > 0) {
       const allStats = aggregateRequests(requests);
       allStats.workerRequestCount = workerRequests.length;
+      // Guard against old sessions where per-iteration request logs under-report
+      // cost due to the NaN cache token bug — prefer the higher of request-log
+      // aggregate vs document-level message cost.
+      allStats.totalCost = Math.max(allStats.totalCost, session.totalCost || 0);
       stats = {
         ...allStats,
         orchestrator: aggregateRequests(orchestratorRequests),

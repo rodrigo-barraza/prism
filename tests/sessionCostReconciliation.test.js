@@ -92,7 +92,8 @@ describe("Session Cost Reconciliation", () => {
   describe("Request-log cost overlay contract", () => {
     /**
      * Simulates the overlay logic from GET /agent-sessions (list endpoint).
-     * The actual implementation lives in AgentSessionsRoutes.js.
+     * Uses Math.max to guard against old sessions where request logs
+     * under-report due to the NaN cache token bug.
      */
     function applyRequestLogCostOverlay(sessions, costDocs) {
       const costMap = new Map();
@@ -102,25 +103,40 @@ describe("Session Cost Reconciliation", () => {
       for (const session of sessions) {
         const requestLogCost = costMap.get(session.id);
         if (requestLogCost != null) {
-          session.totalCost = requestLogCost;
+          session.totalCost = Math.max(session.totalCost || 0, requestLogCost);
         }
       }
       return sessions;
     }
 
-    it("should replace stale document cost with request-log aggregate", () => {
+    it("should adopt request-log cost when higher than document cost (new sessions)", () => {
       const sessions = [
-        { id: "session-1", totalCost: 0.01851 }, // stale message-level cost
+        { id: "session-1", totalCost: 0.01851 }, // message-level cost
       ];
 
-      // Request log aggregation result (sum of all iterations)
+      // Request log aggregation includes background costs (memory, embedding)
       const costDocs = [
         { _id: "session-1", totalCost: 0.19312 },
       ];
 
       const result = applyRequestLogCostOverlay(sessions, costDocs);
       expect(result[0].totalCost).toBeCloseTo(0.19312, 5);
-      expect(result[0].totalCost).not.toBeCloseTo(0.01851, 5);
+    });
+
+    it("should keep document cost when request-log cost is lower (old buggy sessions)", () => {
+      // Old session: message has correct cost ($0.0451) but request log
+      // has broken cost ($0.00038) due to NaN cache token bug.
+      const sessions = [
+        { id: "session-old", totalCost: 0.0451 },
+      ];
+
+      const costDocs = [
+        { _id: "session-old", totalCost: 0.01770 }, // under-reported
+      ];
+
+      const result = applyRequestLogCostOverlay(sessions, costDocs);
+      // Should keep the higher document cost
+      expect(result[0].totalCost).toBeCloseTo(0.0451, 5);
     });
 
     it("should preserve document totalCost when no request logs exist", () => {
@@ -135,15 +151,14 @@ describe("Session Cost Reconciliation", () => {
 
     it("should handle multiple sessions with varying cost discrepancies", () => {
       const sessions = [
-        { id: "s1", totalCost: 0.01000 }, // stale
-        { id: "s2", totalCost: 0.00500 }, // stale
+        { id: "s1", totalCost: 0.01000 }, // stale doc, request log is higher
+        { id: "s2", totalCost: 0.00500 }, // stale doc, request log is higher
         { id: "s3", totalCost: 0.00000 }, // new session, no cost yet
       ];
 
       const costDocs = [
-        { _id: "s1", totalCost: 0.15000 }, // 15x more from request logs
-        { _id: "s2", totalCost: 0.08000 }, // 16x more
-        // s3 has no request logs
+        { _id: "s1", totalCost: 0.15000 },
+        { _id: "s2", totalCost: 0.08000 },
       ];
 
       const result = applyRequestLogCostOverlay(sessions, costDocs);
@@ -152,20 +167,20 @@ describe("Session Cost Reconciliation", () => {
       expect(result[2].totalCost).toBe(0); // unchanged
     });
 
-    it("should handle zero-cost request log entries correctly", () => {
-      // Edge case: request logs exist but all have estimatedCost: 0
-      // (e.g. local model with no pricing configured)
+    it("should preserve document cost when request logs show zero (local model)", () => {
+      // Local model with no pricing → request log estimatedCost: 0
+      // But document may have a pre-computed cost from a previous run
       const sessions = [
-        { id: "s1", totalCost: 0.001 }, // stale document value
+        { id: "s1", totalCost: 0.001 },
       ];
 
       const costDocs = [
-        { _id: "s1", totalCost: 0 }, // request logs say free
+        { _id: "s1", totalCost: 0 }, // local model, no pricing
       ];
 
       const result = applyRequestLogCostOverlay(sessions, costDocs);
-      // Should overlay with 0 (request log is authoritative)
-      expect(result[0].totalCost).toBe(0);
+      // Math.max keeps the document value since 0.001 > 0
+      expect(result[0].totalCost).toBe(0.001);
     });
   });
 
