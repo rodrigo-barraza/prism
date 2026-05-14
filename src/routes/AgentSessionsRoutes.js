@@ -53,8 +53,10 @@ router.get("/", asyncHandler(async (req, res, next) => {
     const items = hasMore ? rows.slice(0, limit) : rows;
     const nextCursor = hasMore ? items[items.length - 1].updatedAt : null;
 
-    // Aggregate tool counts only for the returned session IDs
+    // Aggregate tool counts and authoritative cost from request logs
     const sessionIds = items.map((s) => s.id);
+
+    // --- Tool counts aggregation (existing) ---
     const toolCountDocs = sessionIds.length > 0
       ? await db.collection(COLLECTIONS.REQUESTS)
           .aggregate([
@@ -72,6 +74,22 @@ router.get("/", asyncHandler(async (req, res, next) => {
           .toArray()
       : [];
 
+    // --- Authoritative cost aggregation from request logs ---
+    // The document-level totalCost (computed from message.estimatedCost) only
+    // captures the last iteration's cost per message. Request logs contain the
+    // true per-iteration cost — summing them gives the correct session total.
+    const costDocs = sessionIds.length > 0
+      ? await db.collection(COLLECTIONS.REQUESTS)
+          .aggregate([
+            { $match: { agentSessionId: { $in: sessionIds } } },
+            { $group: {
+              _id: "$agentSessionId",
+              totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
+            }},
+          ])
+          .toArray()
+      : [];
+
     // Build sessionId → toolCounts map
     const toolCountsMap = new Map();
     for (const doc of toolCountDocs) {
@@ -80,9 +98,20 @@ router.get("/", asyncHandler(async (req, res, next) => {
       toolCountsMap.set(doc._id, counts);
     }
 
-    // Merge toolCounts into each session
+    // Build sessionId → authoritative cost map
+    const costMap = new Map();
+    for (const doc of costDocs) {
+      costMap.set(doc._id, doc.totalCost);
+    }
+
+    // Merge toolCounts and authoritative cost into each session
     for (const session of items) {
       session.toolCounts = toolCountsMap.get(session.id) || null;
+      // Overlay request-log cost when available (authoritative source of truth)
+      const requestLogCost = costMap.get(session.id);
+      if (requestLogCost != null) {
+        session.totalCost = requestLogCost;
+      }
     }
 
     res.json({ items, nextCursor, hasMore });
