@@ -1,5 +1,5 @@
 import { expandMessagesForFC } from "../../utils/FunctionCallingUtilities.js";
-import { mergeUsage } from "../../utils/CostCalculator.js";
+import { mergeUsage, createUsageAccumulator } from "../../utils/CostCalculator.js";
 import { calculateTextCost } from "../../utils/CostCalculator.js";
 import { calculateTokensPerSec } from "../../utils/math.js";
 import { getPricing, TYPES } from "../../config.js";
@@ -402,7 +402,7 @@ export default class BaseAgenticHarness {
       firstTokenTime: null,
       generationEnd: null,
       outputCharacters: 0,
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      usage: createUsageAccumulator(),
       options: passOptions,
       requestId: null, // set after tracker registration
     };

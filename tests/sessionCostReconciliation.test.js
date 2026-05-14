@@ -31,6 +31,11 @@ vi.mock("../config.js", () => ({
 
 // Import after mocks
 const { computeTotalCost } = await import("../src/services/ConversationService.js");
+const {
+  mergeUsage,
+  createUsageAccumulator,
+  calculateTextCost,
+} = await import("../src/utils/CostCalculator.js");
 
 // ═══════════════════════════════════════════════════════════════
 describe("Session Cost Reconciliation", () => {
@@ -231,6 +236,87 @@ describe("Session Cost Reconciliation", () => {
 
       // For Direct Chat, both methods agree
       expect(messageLevelTotal).toBeCloseTo(requestLogTotal, 8);
+    });
+  });
+
+  // ── Per-iteration usage accumulator (root cause regression) ────
+  describe("Per-iteration usage accumulator", () => {
+    it("createUsageAccumulator should include all cache token fields", () => {
+      const acc = createUsageAccumulator();
+      expect(acc).toHaveProperty("inputTokens", 0);
+      expect(acc).toHaveProperty("outputTokens", 0);
+      expect(acc).toHaveProperty("cacheReadInputTokens", 0);
+      expect(acc).toHaveProperty("cacheCreationInputTokens", 0);
+      expect(acc).toHaveProperty("reasoningOutputTokens", 0);
+    });
+
+    it("mergeUsage should correctly accumulate cache tokens into a proper accumulator", () => {
+      const target = createUsageAccumulator();
+      const source = {
+        inputTokens: 3,
+        outputTokens: 75,
+        cacheReadInputTokens: 0,
+        cacheCreationInputTokens: 34751,
+      };
+
+      mergeUsage(target, source);
+
+      expect(target.inputTokens).toBe(3);
+      expect(target.outputTokens).toBe(75);
+      expect(target.cacheCreationInputTokens).toBe(34751);
+      expect(target.cacheReadInputTokens).toBe(0);
+    });
+
+    it("mergeUsage into bare object WITHOUT cache fields should produce NaN (regression guard)", () => {
+      // This is the bug that existed before the fix: pass.usage was initialized
+      // as { inputTokens: 0, outputTokens: 0, totalTokens: 0 } — missing
+      // cacheReadInputTokens and cacheCreationInputTokens. mergeUsage does
+      // `target.cacheCreationInputTokens += source.cacheCreationInputTokens`
+      // which is `undefined += 34751` → NaN.
+      const broken = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+      const source = {
+        inputTokens: 3,
+        outputTokens: 75,
+        cacheCreationInputTokens: 34751,
+      };
+
+      mergeUsage(broken, source);
+
+      // Confirm the NaN behavior that caused the bug
+      expect(Number.isNaN(broken.cacheCreationInputTokens)).toBe(true);
+    });
+
+    it("calculateTextCost should include cache write cost when tokens are present", () => {
+      const usage = createUsageAccumulator();
+      usage.inputTokens = 3;
+      usage.outputTokens = 75;
+      usage.cacheCreationInputTokens = 34751;
+
+      // Anthropic claude-haiku-4-5 pricing (per million tokens)
+      const pricing = {
+        inputPerMillion: 0.80,
+        outputPerMillion: 4.00,
+        cachedInputPerMillion: 0.08,
+        cacheWriteInputPerMillion: 1.00,
+      };
+
+      const cost = calculateTextCost(usage, pricing);
+
+      // Expected cost breakdown:
+      // input:       3 / 1M * 0.80 = 0.0000024
+      // output:     75 / 1M * 4.00 = 0.0003
+      // cache_write: 34751 / 1M * 1.00 = 0.034751
+      // total ≈ 0.0350534
+      expect(cost).toBeGreaterThan(0.034);
+      expect(cost).toBeLessThan(0.036);
+
+      // The broken path (without cache init) would only calculate:
+      // input + output = 0.0000024 + 0.0003 = ~0.00030
+      const brokenUsage = { inputTokens: 3, outputTokens: 75, totalTokens: 78 };
+      mergeUsage(brokenUsage, { cacheCreationInputTokens: 34751 });
+      const brokenCost = calculateTextCost(brokenUsage, pricing);
+      // NaN cache tokens get skipped → cost is ~100x lower
+      expect(brokenCost).toBeLessThan(cost * 0.02);
     });
   });
 });
