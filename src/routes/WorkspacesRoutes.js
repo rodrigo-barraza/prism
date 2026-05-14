@@ -15,9 +15,15 @@ const router = express.Router();
  *   - name: last path segment (e.g. "sun")
  *   - path: full absolute path
  *   - isPinned: true if from config.js (non-removable)
+ *
+ * Always refreshes from tools-api to pick up dynamically-registered
+ * agent roots (workspace-service agents add roots at connection time).
  */
-router.get("/", (_req, res) => {
+router.get("/", asyncHandler(async (_req, res) => {
   try {
+    // Refresh from tools-api to pick up agent-registered roots
+    await ToolOrchestratorService.refreshWorkspaceRoots();
+
     const roots = ToolOrchestratorService.getWorkspaceRoots();
     const staticRoots = ToolOrchestratorService.getStaticRoots();
 
@@ -33,7 +39,7 @@ router.get("/", (_req, res) => {
     logger.error(`GET /workspaces error: ${err.message}`);
     res.status(500).json({ error: "Failed to retrieve workspace roots" });
   }
-});
+}));
 
 /**
  * GET /workspaces/full
