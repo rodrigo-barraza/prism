@@ -1547,6 +1547,7 @@ export default class CoordinatorService {
       agentSessionId: agentSessionId || null,
       aiMessages: messages,
       resultText: result?.text || "",
+      usage: result?.usage || null,
       success: llmSuccess,
       errorMessage: llmError,
       requestStartMs: requestStart,

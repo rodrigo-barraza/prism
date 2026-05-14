@@ -53,68 +53,94 @@ router.get("/", asyncHandler(async (req, res, next) => {
     const items = hasMore ? rows.slice(0, limit) : rows;
     const nextCursor = hasMore ? items[items.length - 1].updatedAt : null;
 
-    // Aggregate tool counts and authoritative cost from request logs
+    // ── Enrich session items from request logs (single aggregation) ──
+    // Collects authoritative cost, unique models/providers, merged modalities,
+    // and per-tool counts in one pipeline pass rather than separate queries.
     const sessionIds = items.map((s) => s.id);
 
-    // --- Tool counts aggregation (existing) ---
-    const toolCountDocs = sessionIds.length > 0
-      ? await db.collection(COLLECTIONS.REQUESTS)
-          .aggregate([
-            { $match: { agentSessionId: { $in: sessionIds }, toolApiNames: { $exists: true, $ne: [] } } },
-            { $unwind: "$toolApiNames" },
-            { $group: {
-              _id: { sessionId: "$agentSessionId", tool: "$toolApiNames" },
-              count: { $sum: 1 },
-            }},
-            { $group: {
-              _id: "$_id.sessionId",
-              tools: { $push: { name: "$_id.tool", count: "$count" } },
-            }},
-          ])
-          .toArray()
-      : [];
-
-    // --- Authoritative cost aggregation from request logs ---
-    // The document-level totalCost (computed from message.estimatedCost) only
-    // captures the last iteration's cost per message. Request logs contain the
-    // true per-iteration cost — summing them gives the correct session total.
-    const costDocs = sessionIds.length > 0
+    const enrichDocs = sessionIds.length > 0
       ? await db.collection(COLLECTIONS.REQUESTS)
           .aggregate([
             { $match: { agentSessionId: { $in: sessionIds } } },
             { $group: {
               _id: "$agentSessionId",
               totalCost: { $sum: { $ifNull: ["$estimatedCost", 0] } },
+              models: { $addToSet: "$model" },
+              providers: { $addToSet: "$provider" },
+              // Merge per-request modality flags into arrays of distinct true keys
+              modalityKeys: { $addToSet: {
+                $reduce: {
+                  input: { $objectToArray: { $ifNull: ["$modalities", {}] } },
+                  initialValue: [],
+                  in: { $cond: [
+                    { $eq: ["$$this.v", true] },
+                    { $concatArrays: ["$$value", ["$$this.k"]] },
+                    "$$value",
+                  ]},
+                },
+              }},
+              // Flatten all toolApiNames for per-tool counting
+              allToolApiNames: { $push: { $ifNull: ["$toolApiNames", []] } },
             }},
           ])
           .toArray()
       : [];
 
-    // Build sessionId → toolCounts map
-    const toolCountsMap = new Map();
-    for (const doc of toolCountDocs) {
-      const counts = {};
-      for (const t of doc.tools) counts[t.name] = t.count;
-      toolCountsMap.set(doc._id, counts);
+    // Build sessionId → enrichment map
+    const enrichMap = new Map();
+    for (const doc of enrichDocs) {
+      // Unique non-null models and providers
+      const models = doc.models.filter(Boolean);
+      const providers = doc.providers.filter(Boolean);
+
+      // Merge modality keys from all requests into a single flags object
+      const mergedModalities = {};
+      for (const keySet of doc.modalityKeys) {
+        for (const k of keySet) mergedModalities[k] = true;
+      }
+
+      // Count per-tool occurrences
+      const toolCounts = {};
+      for (const arr of doc.allToolApiNames) {
+        for (const name of arr) {
+          toolCounts[name] = (toolCounts[name] || 0) + 1;
+        }
+      }
+
+      enrichMap.set(doc._id, {
+        totalCost: doc.totalCost,
+        models,
+        providers,
+        modalities: mergedModalities,
+        toolCounts: Object.keys(toolCounts).length > 0 ? toolCounts : null,
+      });
     }
 
-    // Build sessionId → authoritative cost map
-    const costMap = new Map();
-    for (const doc of costDocs) {
-      costMap.set(doc._id, doc.totalCost);
-    }
-
-    // Merge toolCounts and authoritative cost into each session
+    // Merge enriched data into each session
     for (const session of items) {
-      session.toolCounts = toolCountsMap.get(session.id) || null;
+      const enrichment = enrichMap.get(session.id);
+      if (!enrichment) continue;
+
+      session.toolCounts = enrichment.toolCounts;
+
       // Overlay request-log cost when it's higher than the document-level cost.
       // Request-log aggregation is authoritative for NEW sessions (includes background
       // costs like memory extraction). For OLD sessions with the cache-token NaN bug,
       // per-iteration request logs under-report cost — the document's message-level
       // totalCost (computed from overallUsage) is more accurate in that case.
-      const requestLogCost = costMap.get(session.id);
-      if (requestLogCost != null) {
-        session.totalCost = Math.max(session.totalCost || 0, requestLogCost);
+      session.totalCost = Math.max(session.totalCost || 0, enrichment.totalCost);
+
+      // Authoritative models/providers from request logs — the document-level
+      // fields may be stale or absent because they're only recomputed from messages.
+      if (enrichment.models.length > 0) session.modelNames = enrichment.models;
+      if (enrichment.providers.length > 0) session.providers = enrichment.providers;
+
+      // Merge request-log modalities into the document-level modalities.
+      // Request logs capture per-request modalities (e.g. imageOut from DALL-E,
+      // thinking from Claude) that the document-level field may miss because
+      // it's computed only from persisted messages.
+      if (Object.keys(enrichment.modalities).length > 0) {
+        session.modalities = { ...(session.modalities || {}), ...enrichment.modalities };
       }
     }
 

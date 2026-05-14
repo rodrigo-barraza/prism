@@ -281,6 +281,7 @@ const RequestLogger = {
     agentSessionId,
     aiMessages,
     resultText,
+    usage: apiUsage = null,
     success,
     errorMessage,
     requestStartMs,
@@ -289,13 +290,19 @@ const RequestLogger = {
   }) {
     const totalSec = (performance.now() - requestStartMs) / 1000;
     const inputText = aiMessages.map((m) => m.content).join("\n");
-    const approxInputTokens = estimateTokens(inputText);
-    const approxOutputTokens = resultText ? estimateTokens(resultText) : 0;
+
+    // Prefer real API-reported usage over the ~4 chars/token heuristic.
+    // The heuristic remains as fallback for callers that don't pass usage.
+    const inputTokens = apiUsage ? getTotalInputTokens(apiUsage) : estimateTokens(inputText);
+    const outputTokens = apiUsage ? (apiUsage.outputTokens || 0) : (resultText ? estimateTokens(resultText) : 0);
+    const cacheReadInputTokens = apiUsage?.cacheReadInputTokens || 0;
+    const cacheCreationInputTokens = apiUsage?.cacheCreationInputTokens || 0;
+
     const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[model];
     let estimatedCost = null;
     if (pricing) {
       estimatedCost = calculateTextCost(
-        { inputTokens: approxInputTokens, outputTokens: approxOutputTokens },
+        apiUsage || { inputTokens, outputTokens },
         pricing,
       );
     }
@@ -314,9 +321,11 @@ const RequestLogger = {
       success,
       errorMessage,
       estimatedCost,
-      inputTokens: approxInputTokens,
-      outputTokens: approxOutputTokens,
-      tokensPerSec: calculateTokensPerSec(approxOutputTokens, totalSec),
+      inputTokens,
+      outputTokens,
+      ...(cacheReadInputTokens > 0 && { cacheReadInputTokens }),
+      ...(cacheCreationInputTokens > 0 && { cacheCreationInputTokens }),
+      tokensPerSec: calculateTokensPerSec(outputTokens, totalSec),
       inputCharacters: inputText.length,
       totalTime: roundMs(totalSec),
       modalities: { textIn: true, textOut: true },

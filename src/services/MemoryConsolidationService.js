@@ -11,7 +11,7 @@ import { parseJsonFromLlmResponse } from "../utils/utilities.js";
 import { COLLECTIONS } from "../constants.js";
 import AgentPersonaRegistry from "./AgentPersonaRegistry.js";
 import SettingsService from "./SettingsService.js";
-import { estimateTokens, calculateTextCost } from "../utils/CostCalculator.js";
+import { estimateTokens, calculateTextCost, getTotalInputTokens } from "../utils/CostCalculator.js";
 import { TYPES, getPricing } from "../config.js";
 // ─── Constants ────────────────────────────────────────────────────────────────
 /** Resolve the current consolidation provider + model from settings. */
@@ -586,8 +586,10 @@ async function processBatch(batch, batchIndex, totalBatches, {
     );
   }
 
-  // Log the LLM call
-  const approxOutputTokens = result?.text ? estimateTokens(result.text) : 0;
+  // Use real API-reported usage when available; fall back to heuristic
+  const realUsage = result?.usage || null;
+  const inputTokens = realUsage ? getTotalInputTokens(realUsage) : estimateTokens(inputText);
+  const outputTokens = realUsage ? (realUsage.outputTokens || 0) : (result?.text ? estimateTokens(result.text) : 0);
   RequestLogger.logBackgroundLlmCall({
     requestId: llmRequestId,
     endpoint: endpoint || null,
@@ -601,6 +603,7 @@ async function processBatch(batch, batchIndex, totalBatches, {
     agentSessionId: agentSessionId || null,
     aiMessages,
     resultText: result?.text || "",
+    usage: realUsage,
     success: llmSuccess,
     errorMessage: llmError,
     requestStartMs: llmStart,
@@ -618,15 +621,15 @@ async function processBatch(batch, batchIndex, totalBatches, {
     try {
       const consolidatePricing = getPricing(TYPES.TEXT, TYPES.TEXT)[consolidationModel];
       const consolidateCost = consolidatePricing
-        ? calculateTextCost({ inputTokens: approxInputTokens, outputTokens: approxOutputTokens }, consolidatePricing)
+        ? calculateTextCost(realUsage || { inputTokens, outputTokens }, consolidatePricing)
         : null;
       broadcast({
         type: "usage_update",
         operation: "memory:consolidate",
         usage: {
           requests: 1,
-          inputTokens: approxInputTokens,
-          outputTokens: approxOutputTokens,
+          inputTokens,
+          outputTokens,
           estimatedCost: consolidateCost,
         },
       });
@@ -645,7 +648,7 @@ async function processBatch(batch, batchIndex, totalBatches, {
     const tail = responseLen > 300 ? result.text.substring(responseLen - 200) : "";
     logger.warn(
       `[MemoryConsolidation] ${batchLabel} Failed to parse LLM response ` +
-      `(${responseLen} chars, ~${approxOutputTokens} tokens). ` +
+      `(${responseLen} chars, ~${outputTokens} tokens). ` +
       `Head: ${snippet}${tail ? `\n  Tail: ${tail}` : ""}`,
     );
     return [];

@@ -6,7 +6,7 @@ import RequestLogger from "./RequestLogger.js";
 import SettingsService from "./SettingsService.js";
 import logger from "../utils/logger.js";
 import { parseJsonFromLlmResponse } from "../utils/utilities.js";
-import { estimateTokens, calculateTextCost } from "../utils/CostCalculator.js";
+import { estimateTokens, calculateTextCost, getTotalInputTokens } from "../utils/CostCalculator.js";
 import { TYPES, getPricing } from "../config.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -191,10 +191,11 @@ export default class MemoryExtractor {
         errorMessage = err.message;
         throw err;
       } finally {
-        // Compute estimated tokens for logging and live UI updates
+        // Use real API-reported usage when available; fall back to heuristic
+        const realUsage = result?.usage || null;
         const inputText = aiMessages.map((m) => m.content).join("\n");
-        const approxInputTokens = estimateTokens(inputText);
-        const approxOutputTokens = result?.text ? estimateTokens(result.text) : 0;
+        const approxInputTokens = realUsage ? getTotalInputTokens(realUsage) : estimateTokens(inputText);
+        const approxOutputTokens = realUsage ? (realUsage.outputTokens || 0) : (result?.text ? estimateTokens(result.text) : 0);
 
         RequestLogger.logBackgroundLlmCall({
           requestId,
@@ -209,6 +210,7 @@ export default class MemoryExtractor {
           agentSessionId: agentSessionId || null,
           aiMessages,
           resultText: result?.text || "",
+          usage: realUsage,
           success,
           errorMessage,
           requestStartMs: requestStart,

@@ -150,6 +150,7 @@ ${participantList}`;
       agentSessionId: meta.agentSessionId || null,
       aiMessages,
       resultText: result?.text || "",
+      usage: result?.usage || null,
       success,
       errorMessage,
       requestStartMs: requestStart,
