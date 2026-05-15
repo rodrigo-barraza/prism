@@ -125,14 +125,14 @@ export default class AgenticLoopService {
   /**
    * Resolve a pending question for an agent session.
    * @param {string} agentSessionId
-   * @param {string} answer
+   * @param {Array<{ answer: string|string[], annotations?: string }>} answers
    * @returns {boolean} true if resolved
    */
-  static resolveUserQuestion(agentSessionId, answer) {
+  static resolveUserQuestion(agentSessionId, answers) {
     const entry = pendingQuestions.get(agentSessionId);
     if (!entry) return false;
     pendingQuestions.delete(agentSessionId);
-    entry.resolve({ answer });
+    entry.resolve({ answers });
     return true;
   }
 

@@ -54,24 +54,32 @@ router.post("/approve", asyncHandler(async (req, res) => {
  * POST /agent/answer
  *
  * Body:
- *   { agentSessionId: string, answer: string }
+ *   { agentSessionId: string, answer: string }          ← simple (backward-compat)
+ *   { agentSessionId: string, answers: Array<{ answer: string|string[], annotations?: string }> }  ← structured multi-question
  *
  * Resolves the pending question promise in AgenticLoopService
- * so the agentic loop can continue with the user's answer.
+ * so the agentic loop can continue with the user's answer(s).
  */
 router.post("/answer", asyncHandler(async (req, res) => {
-  const { agentSessionId, answer } = req.body;
+  const { agentSessionId, answer, answers } = req.body;
 
   if (!agentSessionId) {
     return res.status(400).json({ error: "Missing agentSessionId" });
   }
-  if (answer === undefined || answer === null) {
-    return res.status(400).json({ error: "Missing answer" });
+
+  // Normalize: structured answers take priority, fall back to simple string
+  let normalizedAnswers;
+  if (Array.isArray(answers) && answers.length > 0) {
+    normalizedAnswers = answers;
+  } else if (answer !== undefined && answer !== null) {
+    normalizedAnswers = [{ answer: String(answer) }];
+  } else {
+    return res.status(400).json({ error: "Missing answer or answers" });
   }
 
   const resolved = AgenticLoopService.resolveUserQuestion(
     agentSessionId,
-    String(answer),
+    normalizedAnswers,
   );
 
   if (!resolved) {
@@ -81,7 +89,7 @@ router.post("/answer", asyncHandler(async (req, res) => {
     });
   }
 
-  logger.info(`[agent/answer] Answered for session ${agentSessionId}: "${String(answer).slice(0, 80)}"`);
+  logger.info(`[agent/answer] ${normalizedAnswers.length} answer(s) for session ${agentSessionId}`);
 
   res.json({ ok: true });
 }));

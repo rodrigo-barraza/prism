@@ -5,50 +5,178 @@ export default {
   schema: {
     name: "ask_user_question",
     description:
-      "Ask the user a question and wait for their response before continuing. " +
+      "Ask the user one or more questions and wait for their responses before continuing. " +
       "Use this when you need clarification, a decision between options, or explicit " +
       "confirmation before proceeding with a potentially impactful action. " +
-      "The agent loop pauses until the user responds.",
+      "The agent loop pauses until the user responds. " +
+      "You can batch up to 4 related questions in a single call to reduce round-trips.",
     parameters: {
       type: "object",
       properties: {
-        question: { type: "string", description: "The question to present to the user." },
-        choices: { type: "array", items: { type: "string" }, description: "Optional: predefined answer choices." },
-        context: { type: "string", description: "Optional: additional context shown below the question." },
+        // ── Single question (simple) ───────────────────
+        question: {
+          type: "string",
+          description: "The question to present to the user. For a single question, use this directly. For multiple questions, use the 'questions' array instead.",
+        },
+        choices: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional: predefined answer choices for a single question.",
+        },
+        context: {
+          type: "string",
+          description: "Optional: additional context shown below a single question.",
+        },
+
+        // ── Multi-question batch ───────────────────────
+        questions: {
+          type: "array",
+          maxItems: 4,
+          description: "Optional: batch multiple related questions in one call (up to 4). Each item is a question object.",
+          items: {
+            type: "object",
+            properties: {
+              question: {
+                type: "string",
+                description: "The question text.",
+              },
+              header: {
+                type: "string",
+                maxLength: 16,
+                description: "Optional: short label chip displayed as a tag (e.g. 'Auth method', 'Database'). Max 16 chars.",
+              },
+              options: {
+                type: "array",
+                maxItems: 6,
+                description: "Optional: predefined choices (up to 6).",
+                items: {
+                  type: "object",
+                  properties: {
+                    label: {
+                      type: "string",
+                      description: "The choice label shown to the user.",
+                    },
+                    preview: {
+                      type: "string",
+                      description: "Optional: markdown or code preview content shown when this option is focused/hovered.",
+                    },
+                  },
+                  required: ["label"],
+                },
+              },
+              multiSelect: {
+                type: "boolean",
+                description: "Optional: if true, the user can select multiple options (checkboxes). Default: false (single select).",
+              },
+            },
+            required: ["question"],
+          },
+        },
       },
-      required: ["question"],
+      // At least one of question or questions is required — validated in execute()
     },
   },
   domain: "Agentic: Control Flow",
   labels: ["coding"],
 
   async execute(args, ctx) {
-    const { question, choices, context: questionContext } = args;
-    if (!question || typeof question !== "string") {
-      return { error: "'question' is required and must be a non-empty string" };
+    const { question, choices, context: questionContext, questions } = args;
+
+    // ── Normalize into questions array ─────────────────
+    let normalizedQuestions;
+    if (questions && Array.isArray(questions) && questions.length > 0) {
+      // Multi-question mode — validate uniqueness
+      const seen = new Set();
+      for (const q of questions) {
+        if (!q.question || typeof q.question !== "string") {
+          return { error: "Each question in the 'questions' array must have a non-empty 'question' string" };
+        }
+        if (seen.has(q.question)) {
+          return { error: `Duplicate question text: "${q.question.slice(0, 60)}"` };
+        }
+        seen.add(q.question);
+        // Validate option label uniqueness within each question
+        if (q.options?.length > 0) {
+          const labelsSeen = new Set();
+          for (const opt of q.options) {
+            if (labelsSeen.has(opt.label)) {
+              return { error: `Duplicate option label "${opt.label}" in question "${q.question.slice(0, 40)}"` };
+            }
+            labelsSeen.add(opt.label);
+          }
+        }
+      }
+      if (questions.length > 4) {
+        return { error: "Maximum 4 questions per call" };
+      }
+      normalizedQuestions = questions.map((q) => ({
+        question: q.question,
+        header: q.header?.slice(0, 16) || null,
+        options: (q.options || []).slice(0, 6).map((o) => ({
+          label: o.label,
+          preview: o.preview || null,
+        })),
+        multiSelect: !!q.multiSelect,
+      }));
+    } else if (question && typeof question === "string") {
+      // Single question mode — backward-compatible
+      normalizedQuestions = [{
+        question,
+        header: null,
+        options: (choices || []).map((c) => ({ label: c, preview: null })),
+        multiSelect: false,
+      }];
+    } else {
+      return { error: "Either 'question' (string) or 'questions' (array) is required" };
     }
+
     const sessionId = ctx.agentSessionId;
     if (!sessionId) {
       return { error: "No agent session — ask_user_question requires an active session" };
     }
-    logger.info(`[AskUserQuestion] "${question.slice(0, 80)}${question.length > 80 ? "..." : ""}" (${choices?.length || 0} choices)`);
+
+    const totalOptions = normalizedQuestions.reduce((sum, q) => sum + q.options.length, 0);
+    logger.info(
+      `[AskUserQuestion] ${normalizedQuestions.length} question(s), ` +
+      `${totalOptions} total options — ` +
+      `"${normalizedQuestions[0].question.slice(0, 60)}${normalizedQuestions[0].question.length > 60 ? "..." : ""}"`,
+    );
+
+    // Emit the SSE event with the full questions array
     if (ctx._emit) {
-      ctx._emit({ type: "user_question", question, choices: choices || [], context: questionContext || null });
+      ctx._emit({
+        type: "user_question",
+        // Full multi-question payload
+        questions: normalizedQuestions,
+        // Backward-compat fields for simple consumers
+        question: normalizedQuestions[0].question,
+        choices: normalizedQuestions[0].options.map((o) => o.label),
+        context: questionContext || null,
+      });
     }
+
     const { default: AgenticLoopService } = await import("../AgenticLoopService.js");
-    const answer = await new Promise((resolve) => {
-      const timeoutId = setTimeout(() => resolve({ answer: null, timedOut: true }), 300_000);
+    const result = await new Promise((resolve) => {
+      const timeoutId = setTimeout(() => resolve({ answers: null, timedOut: true }), 300_000);
       AgenticLoopService._setPendingQuestion(sessionId, {
         resolve: (val) => { clearTimeout(timeoutId); resolve(val); },
-        question,
-        choices: choices || [],
+        questions: normalizedQuestions,
       });
     });
-    if (answer.timedOut) {
+
+    if (result.timedOut) {
       logger.warn(`[AskUserQuestion] Timed out after 5 minutes`);
-      return { answer: null, timedOut: true, message: "The user did not respond within 5 minutes." };
+      return { answers: null, timedOut: true, message: "The user did not respond within 5 minutes." };
     }
-    logger.info(`[AskUserQuestion] Answered: "${String(answer.answer).slice(0, 80)}"`);
-    return { answer: answer.answer, question };
+
+    logger.info(`[AskUserQuestion] Answered: ${JSON.stringify(result.answers).slice(0, 200)}`);
+
+    // Return structured response
+    return {
+      questions: normalizedQuestions.map((q) => q.question),
+      answers: result.answers,
+      // Backward-compat for simple single-question consumers
+      answer: Array.isArray(result.answers) ? result.answers[0]?.answer : result.answers,
+    };
   },
 };
