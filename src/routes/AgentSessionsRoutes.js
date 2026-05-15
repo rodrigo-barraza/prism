@@ -44,6 +44,7 @@ router.get("/", asyncHandler(async (req, res, next) => {
         createdAt: 1, updatedAt: 1, modalities: 1,
         providers: 1, totalCost: 1, isGenerating: 1,
         settings: 1, traceId: 1, parentAgentSessionId: 1,
+        workspaceRoot: 1,
       })
       .sort({ updatedAt: -1 })
       .limit(limit + 1)

@@ -292,6 +292,9 @@ const ConversationService = {
       if (conversationMeta.parentAgentSessionId) {
         setFields.parentAgentSessionId = conversationMeta.parentAgentSessionId;
       }
+      if (conversationMeta.workspaceRoot) {
+        setFields.workspaceRoot = conversationMeta.workspaceRoot;
+      }
     }
 
     // Build $setOnInsert for auto-creation of new conversations
@@ -312,6 +315,7 @@ const ConversationService = {
       ...(conversationMeta?.synthetic && { synthetic: true }),
       ...(traceId && { traceId }),
       ...(parentId && { parentAgentSessionId: parentId }),
+      ...(conversationMeta?.workspaceRoot && { workspaceRoot: conversationMeta.workspaceRoot }),
       createdAt: now,
     };
 
