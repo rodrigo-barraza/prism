@@ -885,6 +885,7 @@ export async function finalizeTextGeneration(
     username,
     clientIp,
     agent,
+    workspaceRoot,
     requestId,
     emit,
     signal,
@@ -1149,10 +1150,14 @@ export async function finalizeTextGeneration(
           settings: { provider: providerName, model: resolvedModel },
         }
       : undefined;
-    // Merge parentAgentSessionId into meta for worker sub-agent sessions
-    const finalMeta = parentAgentSessionId
-      ? { ...(meta || {}), parentAgentSessionId }
-      : meta;
+    // Merge parentAgentSessionId and workspaceRoot into meta for persistence
+    let finalMeta = meta;
+    if (parentAgentSessionId) {
+      finalMeta = { ...(finalMeta || {}), parentAgentSessionId };
+    }
+    if (workspaceRoot) {
+      finalMeta = { ...(finalMeta || {}), workspaceRoot };
+    }
     appendAndFinalize(conversationId, project, username, messagesToAppend, finalMeta, getCollectionOpts(project));
   }
 }
