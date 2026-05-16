@@ -23,6 +23,7 @@ import logger from "../utils/logger.js";
 export default class AgentHooks extends EventEmitter {
   constructor() {
     super();
+    // @ts-ignore
     this._hooks = new Map();
   }
 
@@ -34,11 +35,16 @@ export default class AgentHooks extends EventEmitter {
    * @param {Function} handler - Async handler function
    * @param {string} [name] - Optional name for logging
    */
-  register(event, handler, name) {
+  register(event: any, handler: any, name: any) {
+    // @ts-ignore
     if (!this._hooks.has(event)) {
+      // @ts-ignore
       this._hooks.set(event, []);
     }
-    this._hooks.get(event).push({ handler, name: name || handler.name || "anonymous" });
+    // @ts-ignore
+    this._hooks
+      .get(event)
+      .push({ handler, name: name || handler.name || "anonymous" });
   }
 
   /**
@@ -49,18 +55,22 @@ export default class AgentHooks extends EventEmitter {
    * @param  {...any} args - Arguments passed to each handler
    * @returns {Promise<object|undefined>} Merged results from handlers
    */
-  async run(event, ...args) {
+  async run(event: any, ...args: any) {
+    // @ts-ignore
     const hooks = this._hooks.get(event) || [];
-    let result;
+    let result: any;
 
-    for (const { handler, name } of hooks) {
+    // @ts-ignore
+    for ( const { handler, name } of hooks) {
       try {
         const hookResult = await handler(...args);
         if (hookResult && typeof hookResult === "object") {
           result = { ...result, ...hookResult };
         }
-      } catch (error) {
-        logger.error(`[AgentHooks] Hook "${name}" on "${event}" failed: ${error.message}`);
+      } catch (error: any) {
+        logger.error(
+          `[AgentHooks] Hook "${name}" on "${event}" failed: ${error.message}`,
+        );
       }
     }
 
@@ -72,7 +82,8 @@ export default class AgentHooks extends EventEmitter {
    * @param {string} event
    * @returns {boolean}
    */
-  hasHooks(event) {
+  hasHooks(event: any) {
+    // @ts-ignore
     return (this._hooks.get(event) || []).length > 0;
   }
 }

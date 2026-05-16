@@ -6,6 +6,7 @@ import {
   PROVIDER_VLLM,
   PROVIDER_OLLAMA,
   PROVIDER_LLAMA_CPP,
+  // @ts-ignore
 } from "../../config.js";
 
 // Import factories
@@ -51,7 +52,8 @@ const registry = new Map();
  * @param {string} type - Provider type key
  * @param {Array<{url: string, concurrency?: number, nickname?: string}>} instances
  */
-function registerType(type, instances) {
+function registerType(type: any, instances: any) {
+  // @ts-ignore
   const factory = FACTORIES[type];
   if (!factory) return;
 
@@ -72,6 +74,7 @@ function registerType(type, instances) {
       instanceNumber,
       provider,
     };
+    // @ts-ignore
     if (nickname) entry.nickname = nickname;
 
     registry.set(id, entry);
@@ -84,7 +87,8 @@ function registerType(type, instances) {
 }
 
 // ── Register all instances from secrets ─────────────────────
-for (const [type, instances] of Object.entries(PROVIDER_ARRAYS)) {
+// @ts-ignore
+for ( const [type, instances] of Object.entries(PROVIDER_ARRAYS)) {
   registerType(type, instances);
 }
 
@@ -95,7 +99,7 @@ for (const [type, instances] of Object.entries(PROVIDER_ARRAYS)) {
  * @param {string} id - Instance ID (e.g. "lm-studio", "lm-studio-2")
  * @returns {object|null} Provider object or null if not found
  */
-export function getInstanceProvider(id) {
+export function getInstanceProvider(id: any) {
   return registry.get(id)?.provider || null;
 }
 
@@ -104,7 +108,7 @@ export function getInstanceProvider(id) {
  * @param {string} id - Instance ID
  * @returns {InstanceEntry|null}
  */
-export function getInstance(id) {
+export function getInstance(id: any) {
   return registry.get(id) || null;
 }
 
@@ -113,7 +117,7 @@ export function getInstance(id) {
  * @param {string} id
  * @returns {boolean}
  */
-export function isInstance(id) {
+export function isInstance(id: any) {
   return registry.has(id);
 }
 
@@ -130,7 +134,7 @@ export function listInstances() {
  * @returns {string[]}
  */
 export function listInstanceTypes() {
-  return [...new Set([...registry.values()].map((e) => e.type))];
+  return [...new Set([...registry.values()].map((e: any) => e.type))];
 }
 
 /**
@@ -138,8 +142,8 @@ export function listInstanceTypes() {
  * @param {string} type - Provider type (e.g. "lm-studio")
  * @returns {InstanceEntry[]}
  */
-export function getInstancesByType(type) {
-  return [...registry.values()].filter((e) => e.type === type);
+export function getInstancesByType(type: any) {
+  return [...registry.values()].filter((e: any) => e.type === type);
 }
 
 /**
@@ -148,6 +152,6 @@ export function getInstancesByType(type) {
  * @param {string} id - Instance ID
  * @returns {string|null}
  */
-export function getInstanceType(id) {
+export function getInstanceType(id: any) {
   return registry.get(id)?.type || null;
 }

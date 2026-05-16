@@ -11,7 +11,8 @@ import { getProvider } from "../providers/index.js";
  * Regex to match GGUF quantization suffixes.
  * Captures the quant tag (e.g. "Q8_0", "IQ4_XS", "F16", "BF16").
  */
-const GGUF_QUANT_SUFFIX_RE = /[-_]((?:I?Q[0-9]+(?:_[A-Z0-9]+)*|[BF](?:16|32)))(?:\.gguf)?$/i;
+const GGUF_QUANT_SUFFIX_RE =
+  /[-_]((?:I?Q[0-9]+(?:_[A-Z0-9]+)*|[BF](?:16|32)))(?:\.gguf)?$/i;
 
 /**
  * Extract the base model name from a GGUF model key by stripping the
@@ -25,7 +26,7 @@ const GGUF_QUANT_SUFFIX_RE = /[-_]((?:I?Q[0-9]+(?:_[A-Z0-9]+)*|[BF](?:16|32)))(?
  * @param {string} modelKey
  * @returns {{ base: string, quant: string|null }}
  */
-export function parseModelQuant(modelKey) {
+export function parseModelQuant(modelKey: any) {
   // Handle @quant suffix (e.g. "qwen3-32b@q4_k_m")
   if (modelKey.includes("@")) {
     const [base, quant] = modelKey.split("@");
@@ -53,12 +54,13 @@ export function parseModelQuant(modelKey) {
  * @param {Array<{key?: string, id?: string, size_bytes?: number}>} availableModels - Models on the instance
  * @returns {string|null} The best available model key (by file size), or null
  */
-export function findBestQuantFallback(targetModel, availableModels) {
+export function findBestQuantFallback(targetModel: any, availableModels: any) {
   const { base: targetBase, quant: targetQuant } = parseModelQuant(targetModel);
 
   // Find all available models that share the same base name (any quant variant)
   const candidates = [];
-  for (const m of availableModels) {
+  // @ts-ignore
+  for ( const m of availableModels) {
     const mKey = m.key || m.id;
     const { base, quant } = parseModelQuant(mKey);
 
@@ -85,7 +87,7 @@ export function findBestQuantFallback(targetModel, availableModels) {
   if (candidates.length === 0) return null;
 
   // Sort by file size descending — largest file = highest quality quant
-  candidates.sort((a, b) => b.sizeBytes - a.sizeBytes);
+  candidates.sort((a: any, b: any) => b.sizeBytes - a.sizeBytes);
   return candidates[0].key;
 }
 
@@ -100,26 +102,30 @@ export function findBestQuantFallback(targetModel, availableModels) {
  * @param {Array<{id: string, concurrency: number}>} siblings - All instances of this provider type
  * @returns {Promise<{ usable: Array<{id: string, concurrency: number}>, modelOverrides: Map<string, string> }>}
  */
-export async function resolveModelForInstances(modelKey, siblings) {
+export async function resolveModelForInstances(modelKey: any, siblings: any) {
   /** @type {Map<string, string>} Per-instance model override (when quant fallback is used) */
   const modelOverrides = new Map();
 
   try {
     const checks = await Promise.allSettled(
-      siblings.map(async (inst) => {
+      siblings.map(async (inst: any) => {
         const provider = getProvider(inst.id);
         if (!provider?.listModels) return { exact: false, fallback: null };
         const result = await Promise.race([
           provider.listModels(),
-          new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000)),
+          new Promise((_: any, rej: any) =>
+            setTimeout(() => rej(new Error("timeout")), 3000),
+          ),
         ]);
         const models = result?.models || result?.data || [];
-        const modelKeys = models.map((m) => m.key || m.id);
+        const modelKeys = models.map((m: any) => m.key || m.id);
         const exactMatch = modelKeys.includes(modelKey);
         if (exactMatch) return { exact: true, fallback: null };
 
         // No exact key match — find the best variant with the same base name
-        logger.info(`[ModelResolution] ${inst.id}: no exact match for "${modelKey}" — available: [${modelKeys.join(", ")}]`);
+        logger.info(
+          `[ModelResolution] ${inst.id}: no exact match for "${modelKey}" — available: [${modelKeys.join(", ")}]`,
+        );
         const fallback = findBestQuantFallback(modelKey, models);
         return { exact: false, fallback };
       }),
@@ -129,6 +135,7 @@ export async function resolveModelForInstances(modelKey, siblings) {
     const usable = [];
     for (let i = 0; i < siblings.length; i++) {
       if (checks[i].status !== "fulfilled") continue;
+      // @ts-ignore
       const { exact, fallback } = checks[i].value;
 
       if (exact) {
@@ -139,15 +146,21 @@ export async function resolveModelForInstances(modelKey, siblings) {
       }
     }
 
-    const summary = usable.map((s) => {
-      const override = modelOverrides.get(s.id);
-      return override ? `${s.id}→"${override}"` : `${s.id} (exact)`;
-    }).join(", ");
-    logger.info(`[ModelResolution] Model "${modelKey}": ${usable.length}/${siblings.length} instances usable [${summary}]`);
+    const summary = usable
+      .map((s: any) => {
+        const override = modelOverrides.get(s.id);
+        return override ? `${s.id}→"${override}"` : `${s.id} (exact)`;
+      })
+      .join(", ");
+    logger.info(
+      `[ModelResolution] Model "${modelKey}": ${usable.length}/${siblings.length} instances usable [${summary}]`,
+    );
 
     return { usable, modelOverrides };
-  } catch (error) {
-    logger.warn(`[ModelResolution] Model availability check failed: ${error.message}`);
+  } catch (error: any) {
+    logger.warn(
+      `[ModelResolution] Model availability check failed: ${error.message}`,
+    );
     return { usable: siblings, modelOverrides };
   }
 }

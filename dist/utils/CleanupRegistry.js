@@ -1,0 +1,10 @@
+// ────────────────────────────────────────────────────────────
+// CleanupRegistry — Re-export from service-library GracefulShutdown
+// ────────────────────────────────────────────────────────────
+// Previously a standalone 116-line module; now delegates to the
+// shared implementation in @rodrigo-barraza/service-library.
+// ────────────────────────────────────────────────────────────
+export { registerCleanup, runCleanupFunctions, installShutdownHandlers, cleanupCount,
+// @ts-ignore
+ } from "@rodrigo-barraza/service-library/shutdown";
+//# sourceMappingURL=CleanupRegistry.js.map

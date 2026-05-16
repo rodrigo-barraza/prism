@@ -1,3 +1,4 @@
+// @ts-ignore
 import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import { Router } from "express";
 import CoordinatorService from "../services/CoordinatorService.js";
@@ -15,24 +16,34 @@ const router = Router();
  *
  * Body: { task: string, files: string[], repoPath?: string }
  */
-router.post("/plan", asyncHandler(async (req, res, next) => {
-  try {
-    const { task, files, repoPath } = req.body;
+router.post(
+  "/plan",
+  asyncHandler(async (req: any, res: any, next: any) => {
+    try {
+      const { task, files, repoPath } = req.body;
 
-    if (!task || typeof task !== "string") {
-      return res.status(400).json({ error: "'task' (string) is required" });
-    }
-    if (!files || !Array.isArray(files) || files.length === 0) {
-      return res.status(400).json({ error: "'files' (non-empty array) is required" });
-    }
+      if (!task || typeof task !== "string") {
+        return res.status(400).json({ error: "'task' (string) is required" });
+      }
+      if (!files || !Array.isArray(files) || files.length === 0) {
+        return res
+          .status(400)
+          .json({ error: "'files' (non-empty array) is required" });
+      }
 
-    const plan = await CoordinatorService.decompose({ task, files, repoPath, endpoint: "/coordinator/plan" });
-    res.json(plan);
-  } catch (error) {
-    logger.error(`[coordinator] PLAN ${error.message}`);
-    next(error);
-  }
-}));
+      const plan = await CoordinatorService.decompose({
+        task,
+        files,
+        repoPath,
+        endpoint: "/coordinator/plan",
+      });
+      res.json(plan);
+    } catch (error: any) {
+      logger.error(`[coordinator] PLAN ${error.message}`);
+      next(error);
+    }
+  }),
+);
 
 /**
  * POST /coordinator/execute
@@ -40,34 +51,39 @@ router.post("/plan", asyncHandler(async (req, res, next) => {
  *
  * Body: { plan: object, provider?: string, model?: string }
  */
-router.post("/execute", asyncHandler(async (req, res, next) => {
-  try {
-    const { plan, provider, model } = req.body;
+router.post(
+  "/execute",
+  asyncHandler(async (req: any, res: any, next: any) => {
+    try {
+      const { plan, provider, model } = req.body;
 
-    if (!plan || !plan.taskId || !plan.subTasks) {
-      return res.status(400).json({ error: "'plan' object with taskId and subTasks is required" });
+      if (!plan || !plan.taskId || !plan.subTasks) {
+        return res.status(400).json({
+          error: "'plan' object with taskId and subTasks is required",
+        });
+      }
+
+      // Fire and respond immediately — progress via polling or WebSocket
+      const result = await CoordinatorService.execute(plan, {
+        provider,
+        model,
+        project: req.project,
+        username: req.username,
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      logger.error(`[coordinator] EXECUTE ${error.message}`);
+      next(error);
     }
-
-    // Fire and respond immediately — progress via polling or WebSocket
-    const result = await CoordinatorService.execute(plan, {
-      provider,
-      model,
-      project: req.project,
-      username: req.username,
-    });
-
-    res.json(result);
-  } catch (error) {
-    logger.error(`[coordinator] EXECUTE ${error.message}`);
-    next(error);
-  }
-}));
+  }),
+);
 
 /**
  * GET /coordinator/status/:taskId
  * Get the current status of a coordinator task.
  */
-router.get("/status/:taskId", (req, res) => {
+router.get("/status/:taskId", (req: any, res: any) => {
   const status = CoordinatorService.getStatus(req.params.taskId);
   if (!status) {
     return res.status(404).json({ error: "Task not found" });
@@ -79,7 +95,7 @@ router.get("/status/:taskId", (req, res) => {
  * GET /coordinator/tasks
  * List all active coordinator tasks.
  */
-router.get("/tasks", (_req, res) => {
+router.get("/tasks", (_req: any, res: any) => {
   res.json({ tasks: CoordinatorService.listTasks() });
 });
 
@@ -87,35 +103,41 @@ router.get("/tasks", (_req, res) => {
  * POST /coordinator/approve-merge/:taskId
  * Approve and merge completed worker branches.
  */
-router.post("/approve-merge/:taskId", asyncHandler(async (req, res, next) => {
-  try {
-    const result = await CoordinatorService.approveMerge(req.params.taskId);
-    if (result.error) {
-      return res.status(400).json(result);
+router.post(
+  "/approve-merge/:taskId",
+  asyncHandler(async (req: any, res: any, next: any) => {
+    try {
+      const result = await CoordinatorService.approveMerge(req.params.taskId);
+      if (result.error) {
+        return res.status(400).json(result);
+      }
+      res.json(result);
+    } catch (error: any) {
+      logger.error(`[coordinator] APPROVE-MERGE ${error.message}`);
+      next(error);
     }
-    res.json(result);
-  } catch (error) {
-    logger.error(`[coordinator] APPROVE-MERGE ${error.message}`);
-    next(error);
-  }
-}));
+  }),
+);
 
 /**
  * POST /coordinator/abort/:taskId
  * Abort a running task — kill workers and clean up worktrees.
  */
-router.post("/abort/:taskId", asyncHandler(async (req, res, next) => {
-  try {
-    const result = await CoordinatorService.abort(req.params.taskId);
-    if (result.error) {
-      return res.status(400).json(result);
+router.post(
+  "/abort/:taskId",
+  asyncHandler(async (req: any, res: any, next: any) => {
+    try {
+      const result = await CoordinatorService.abort(req.params.taskId);
+      if (result.error) {
+        return res.status(400).json(result);
+      }
+      res.json(result);
+    } catch (error: any) {
+      logger.error(`[coordinator] ABORT ${error.message}`);
+      next(error);
     }
-    res.json(result);
-  } catch (error) {
-    logger.error(`[coordinator] ABORT ${error.message}`);
-    next(error);
-  }
-}));
+  }),
+);
 
 // ═══════════════════════════════════════════════════════════════
 // Chat-Spawned Worker Endpoints
@@ -126,32 +148,44 @@ router.post("/abort/:taskId", asyncHandler(async (req, res, next) => {
  * List all active workers spawned via chat tools.
  * Optional query: ?agentSessionId=xxx to filter by parent coordinator session.
  */
-router.get("/workers", asyncHandler(async (req, res) => {
-  const { agentSessionId } = req.query;
-  let workers = CoordinatorService.listWorkers({ parentAgentSessionId: agentSessionId });
+router.get(
+  "/workers",
+  asyncHandler(async (req: any, res: any) => {
+    const { agentSessionId } = req.query;
+    let workers = CoordinatorService.listWorkers({
+      parentAgentSessionId: agentSessionId,
+    });
 
-  // Fall back to persisted workers from the agent_session document
-  // when in-memory is empty (page refresh, server restart)
-  if (workers.length === 0 && agentSessionId) {
-    try {
-      const { default: MongoWrapper } = await import("../wrappers/MongoWrapper.js");
-      const { MONGO_DB_NAME } = await import("../../config.js");
-      const { COLLECTIONS } = await import("../constants.js");
-      const col = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTIONS.AGENT_SESSIONS);
-      const session = await col.findOne(
-        { id: agentSessionId },
-        { projection: { workers: 1 } },
-      );
-      if (session?.workers?.length > 0) {
-        workers = session.workers;
+    // Fall back to persisted workers from the agent_session document
+    // when in-memory is empty (page refresh, server restart)
+    if (workers.length === 0 && agentSessionId) {
+      try {
+        const { default: MongoWrapper } =
+          await import("../wrappers/MongoWrapper.js");
+        // @ts-ignore
+        const { MONGO_DB_NAME } = await import("../../config.js");
+        const { COLLECTIONS } = await import("../constants.js");
+        const col = MongoWrapper.getCollection(
+          MONGO_DB_NAME,
+          COLLECTIONS.AGENT_SESSIONS,
+        );
+        const session = await col.findOne(
+          { id: agentSessionId },
+          { projection: { workers: 1 } },
+        );
+        if (session?.workers?.length > 0) {
+          workers = session.workers;
+        }
+      } catch (error: any) {
+        logger.warn(
+          `[coordinator] Failed to load persisted workers: ${error.message}`,
+        );
       }
-    } catch (error) {
-      logger.warn(`[coordinator] Failed to load persisted workers: ${error.message}`);
     }
-  }
 
-  res.json({ workers });
-}));
+    res.json({ workers });
+  }),
+);
 
 /**
  * POST /coordinator/workers/stop
@@ -160,21 +194,25 @@ router.get("/workers", asyncHandler(async (req, res) => {
  *
  * Body: { agentSessionId: string }
  */
-router.post("/workers/stop", asyncHandler(async (req, res) => {
-  const { agentSessionId } = req.body;
-  if (!agentSessionId) {
-    return res.status(400).json({ error: "'agentSessionId' is required" });
-  }
+router.post(
+  "/workers/stop",
+  asyncHandler(async (req: any, res: any) => {
+    const { agentSessionId } = req.body;
+    if (!agentSessionId) {
+      return res.status(400).json({ error: "'agentSessionId' is required" });
+    }
 
-  const result = await CoordinatorService.abortWorkersBySession(agentSessionId);
-  res.json(result);
-}));
+    const result =
+      await CoordinatorService.abortWorkersBySession(agentSessionId);
+    res.json(result);
+  }),
+);
 
 /**
  * GET /coordinator/workers/:agentId
  * Get the status of a specific chat-spawned worker.
  */
-router.get("/workers/:agentId", (req, res) => {
+router.get("/workers/:agentId", (req: any, res: any) => {
   const status = CoordinatorService.getWorkerStatus(req.params.agentId);
   if (!status) {
     return res.status(404).json({ error: "Worker not found" });

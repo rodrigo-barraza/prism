@@ -1,5 +1,6 @@
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import FileService from "./FileService.js";
+// @ts-ignore
 import { MONGO_DB_NAME } from "../../config.js";
 import logger from "../utils/logger.js";
 import { COLLECTIONS } from "../constants.js";
@@ -14,18 +15,24 @@ const DEFAULT_COLLECTION = COLLECTIONS.CONVERSATIONS;
  * @param {string} username
  * @returns {Promise<Array>} messages with refs replacing inline data
  */
-export async function extractFiles(messages, project = null, username = null) {
+export async function extractFiles(
+  messages: any,
+  project = null,
+  username = null,
+) {
   if (!messages || !FileService.isExternalStorage()) return messages;
 
   const processed = [];
-  for (const msg of messages) {
+  // @ts-ignore
+  for ( const msg of messages) {
     let updated = msg;
 
     // Handle images
     if (msg.images && msg.images.length > 0) {
       const category = msg.role === "assistant" ? "generations" : "uploads";
       const newImages = [];
-      for (const img of msg.images) {
+      // @ts-ignore
+      for ( const img of msg.images) {
         if (FileService.isMinioRef(img) || img.startsWith("http")) {
           newImages.push(img);
           continue;
@@ -39,7 +46,7 @@ export async function extractFiles(messages, project = null, username = null) {
               username,
             );
             newImages.push(ref);
-          } catch (error) {
+          } catch (error: any) {
             logger.error(`Failed to upload file: ${error.message}`);
             newImages.push(img);
           }
@@ -65,7 +72,7 @@ export async function extractFiles(messages, project = null, username = null) {
           username,
         );
         updated = { ...updated, audio: ref };
-      } catch (error) {
+      } catch (error: any) {
         logger.error(`Failed to upload audio: ${error.message}`);
       }
     }
@@ -80,7 +87,7 @@ export async function extractFiles(messages, project = null, username = null) {
  * @param {Array} messages
  * @returns {Object} modalities flags
  */
-export function computeModalities(messages) {
+export function computeModalities(messages: any) {
   const mod = {
     textIn: false,
     textOut: false,
@@ -98,7 +105,8 @@ export function computeModalities(messages) {
   const WEB_SEARCH_NAMES = new Set(["web_search", "web_search_preview"]);
   const CODE_EXEC_NAMES = new Set(["code_execution"]);
 
-  for (const m of messages || []) {
+  // @ts-ignore
+  for ( const m of messages || []) {
     if (m.deleted) continue;
     const isUser = m.role === "user";
     const isAssistant = m.role === "assistant";
@@ -121,7 +129,7 @@ export function computeModalities(messages) {
     if (
       m.documents?.length > 0 ||
       m.images?.some(
-        (ref) =>
+        (ref: any) =>
           typeof ref === "string" &&
           (ref.endsWith(".pdf") || ref.endsWith(".txt")),
       )
@@ -131,7 +139,8 @@ export function computeModalities(messages) {
 
     // Classify tool calls by type
     if (m.toolCalls?.length > 0) {
-      for (const tc of m.toolCalls) {
+      // @ts-ignore
+      for ( const tc of m.toolCalls) {
         const name = (tc.name || "").toLowerCase();
         if (WEB_SEARCH_NAMES.has(name)) {
           mod.webSearch = true;
@@ -181,9 +190,10 @@ export function computeModalities(messages) {
  * @param {Object} settings
  * @returns {string[]}
  */
-export function extractProviders(messages, settings) {
+export function extractProviders(messages: any, settings: any) {
   const providers = new Set();
-  for (const m of messages || []) {
+  // @ts-ignore
+  for ( const m of messages || []) {
     if (m.deleted) continue;
     if (m.provider) providers.add(m.provider.toLowerCase());
   }
@@ -196,9 +206,10 @@ export function extractProviders(messages, settings) {
  * @param {Array} messages
  * @returns {number}
  */
-export function computeTotalCost(messages) {
+export function computeTotalCost(messages: any) {
   let total = 0;
-  for (const m of messages || []) {
+  // @ts-ignore
+  for ( const m of messages || []) {
     if (m.deleted) continue;
     if (m.estimatedCost) total += m.estimatedCost;
   }
@@ -212,17 +223,29 @@ export function computeTotalCost(messages) {
  * @param {object} body - req.body from the PATCH request
  * @returns {object} $set fields ready for updateOne
  */
-export function buildConversationPatchFields({ title, messages, systemPrompt, settings }) {
+export function buildConversationPatchFields({
+  title,
+  messages,
+  systemPrompt,
+  settings,
+}: any) {
   const setFields = { updatedAt: new Date().toISOString() };
+  // @ts-ignore
   if (title !== undefined) setFields.title = title;
   if (messages !== undefined) {
+    // @ts-ignore
     setFields.messages = messages;
+    // @ts-ignore
     setFields.modalities = computeModalities(messages);
+    // @ts-ignore
     setFields.providers = extractProviders(messages, settings);
+    // @ts-ignore
     setFields.totalCost = computeTotalCost(messages);
   }
+  // @ts-ignore
   if (systemPrompt !== undefined) setFields.systemPrompt = systemPrompt;
   if (settings !== undefined) {
+    // @ts-ignore
     setFields.settings = { ...settings, systemPrompt: systemPrompt || "" };
   }
   return setFields;
@@ -250,13 +273,14 @@ const ConversationService = {
      * @returns {Promise<object>} The updated conversation document
      */
   async appendMessages(
-    conversationId,
-    project,
-    username,
-    newMessages,
+    conversationId: any,
+    project: any,
+    username: any,
+    newMessages: any,
     conversationMeta = null,
     { collection = DEFAULT_COLLECTION } = {},
   ) {
+    // @ts-ignore
     const traceId = conversationMeta?.traceId || null;
     const col = MongoWrapper.getCollection(MONGO_DB_NAME, collection);
     const isAgentSession = collection === COLLECTIONS.AGENT_SESSIONS;
@@ -272,37 +296,58 @@ const ConversationService = {
 
     // Build $set fields for metadata
     const setFields = { updatedAt: now };
+    // @ts-ignore
     if (traceId) setFields.traceId = traceId;
 
     if (conversationMeta) {
+      // @ts-ignore
       if (conversationMeta.title !== undefined) {
+        // @ts-ignore
         setFields.title = conversationMeta.title;
       }
+      // @ts-ignore
       if (conversationMeta.systemPrompt !== undefined && !isAgentSession) {
+        // @ts-ignore
         setFields.systemPrompt = conversationMeta.systemPrompt;
       }
+      // @ts-ignore
       if (conversationMeta.settings !== undefined) {
+        // @ts-ignore
         setFields.settings = isAgentSession
-          ? { ...conversationMeta.settings }
+          ? // @ts-ignore
+            { ...conversationMeta.settings }
           : {
+              // @ts-ignore
               ...conversationMeta.settings,
+              // @ts-ignore
               systemPrompt: conversationMeta.systemPrompt || "",
             };
       }
+      // @ts-ignore
       if (conversationMeta.parentAgentSessionId) {
+        // @ts-ignore
         setFields.parentAgentSessionId = conversationMeta.parentAgentSessionId;
       }
+      // @ts-ignore
       if (conversationMeta.workspaceRoot) {
+        // @ts-ignore
         setFields.workspaceRoot = conversationMeta.workspaceRoot;
       }
     }
 
     // Build $setOnInsert for auto-creation of new conversations
+    // @ts-ignore
     const metaSettings = conversationMeta?.settings || {};
-    const metaSysPrompt = isAgentSession ? undefined : (conversationMeta?.systemPrompt || "");
+    // @ts-ignore
+    const metaSysPrompt = isAgentSession
+      ? undefined
+      // @ts-ignore
+      : conversationMeta?.systemPrompt || "";
+    // @ts-ignore
     const parentId = conversationMeta?.parentAgentSessionId || null;
 
     const setOnInsertBase = {
+      // @ts-ignore
       title: conversationMeta?.title || "New Conversation",
       ...(!isAgentSession && { systemPrompt: metaSysPrompt }),
       settings: isAgentSession
@@ -312,10 +357,15 @@ const ConversationService = {
       providers: extractProviders([], metaSettings),
       totalCost: 0,
       isGenerating: true,
+      // @ts-ignore
       ...(conversationMeta?.synthetic && { synthetic: true }),
       ...(traceId && { traceId }),
       ...(parentId && { parentAgentSessionId: parentId }),
-      ...(conversationMeta?.workspaceRoot && { workspaceRoot: conversationMeta.workspaceRoot }),
+      // @ts-ignore
+      ...(conversationMeta?.workspaceRoot && {
+        // @ts-ignore
+        workspaceRoot: conversationMeta.workspaceRoot,
+      }),
       createdAt: now,
     };
 
@@ -323,7 +373,8 @@ const ConversationService = {
     // strip any keys already present in $set to prevent MongoServerError:
     // "Updating the path 'X' would create a conflict at 'X'"
     const setOnInsert = { ...setOnInsertBase };
-    for (const key of Object.keys(setFields)) {
+    // @ts-ignore
+    for ( const key of Object.keys(setFields)) {
       delete setOnInsert[key];
     }
 
@@ -373,7 +424,13 @@ const ConversationService = {
    * @param {string} username
    * @param {boolean} generating
    */
-  async setGenerating(conversationId, project, username, generating, { collection = DEFAULT_COLLECTION } = {}) {
+  async setGenerating(
+    conversationId: any,
+    project: any,
+    username: any,
+    generating: any,
+    { collection = DEFAULT_COLLECTION } = {},
+  ) {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return;
     const now = new Date().toISOString();

@@ -26,15 +26,25 @@ registerCleanup(async () => {
   if (connections.size === 0) return;
   logger.info(`[MCP] Shutdown: disconnecting ${connections.size} server(s)…`);
   const names = [...connections.keys()];
-  await Promise.allSettled(names.map(async (n) => {
-    const conn = connections.get(n);
-    if (!conn) return;
-    try { await conn.client.close(); } catch { /* best-effort */ }
-    if (conn.transport?.close) {
-      try { await conn.transport.close(); } catch { /* best-effort */ }
-    }
-    connections.delete(n);
-  }));
+  await Promise.allSettled(
+    names.map(async (n: any) => {
+      const conn = connections.get(n);
+      if (!conn) return;
+      try {
+        await conn.client.close();
+      } catch {
+        /* best-effort */
+      }
+      if (conn.transport?.close) {
+        try {
+          await conn.transport.close();
+        } catch {
+          /* best-effort */
+        }
+      }
+      connections.delete(n);
+    }),
+  );
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -43,7 +53,7 @@ registerCleanup(async () => {
  * Convert an MCP tool schema (JSON Schema) to OpenAI function-calling format.
  * Namespaces the tool name with the server prefix.
  */
-function mcpToolToSchema(serverName, mcpTool) {
+function mcpToolToSchema(serverName: any, mcpTool: any) {
   return {
     name: `${MCP_PREFIX}${serverName}${MCP_DELIMITER}${mcpTool.name}`,
     description: mcpTool.description || "",
@@ -58,7 +68,7 @@ function mcpToolToSchema(serverName, mcpTool) {
  * Parse a namespaced MCP tool name back into { serverName, toolName }.
  * Returns null if the name doesn't match the MCP pattern.
  */
-function parseMCPToolName(fullName) {
+function parseMCPToolName(fullName: any) {
   if (!fullName.startsWith(MCP_PREFIX)) return null;
   const rest = fullName.slice(MCP_PREFIX.length);
   const delimIdx = rest.indexOf(MCP_DELIMITER);
@@ -72,7 +82,7 @@ function parseMCPToolName(fullName) {
 /**
  * Create the appropriate transport based on server config.
  */
-function createTransport(config) {
+function createTransport(config: any) {
   if (config.transport === "stdio") {
     return new StdioClientTransport({
       command: config.command,
@@ -109,7 +119,7 @@ const MCPClientService = {
    * @param {object} [config.headers] - Headers for streamable-http
    * @returns {Promise<{ tools: Array, serverName: string }>}
    */
-  async connect(config) {
+  async connect(config: any) {
     const { name: serverName } = config;
 
     // Disconnect existing connection if any
@@ -127,27 +137,34 @@ const MCPClientService = {
 
     try {
       await client.connect(transport);
-    } catch (error) {
-      logger.error(`[MCP] Failed to connect to "${serverName}": ${error.message}`);
+    } catch (error: any) {
+      logger.error(
+        `[MCP] Failed to connect to "${serverName}": ${error.message}`,
+      );
       throw error;
     }
 
     // Discover tools
+    // @ts-ignore
     let mcpTools = [];
     try {
       const result = await client.listTools();
       mcpTools = result.tools || [];
-    } catch (error) {
-      logger.warn(`[MCP] Failed to list tools for "${serverName}": ${error.message}`);
+    } catch (error: any) {
+      logger.warn(
+        `[MCP] Failed to list tools for "${serverName}": ${error.message}`,
+      );
     }
 
     // Convert to our schema format
-    const schemas = mcpTools.map((t) => mcpToolToSchema(serverName, t));
+    // @ts-ignore
+    const schemas = mcpTools.map((t: any) => mcpToolToSchema(serverName, t));
 
     connections.set(serverName, {
       client,
       transport,
       tools: schemas,
+      // @ts-ignore
       mcpTools,
       config,
       status: "connected",
@@ -155,7 +172,8 @@ const MCPClientService = {
     });
 
     logger.info(
-      `[MCP] Connected to "${serverName}" — ${schemas.length} tools: ${mcpTools.map((t) => t.name).join(", ")}`,
+      // @ts-ignore
+      `[MCP] Connected to "${serverName}" — ${schemas.length} tools: ${mcpTools.map((t: any) => t.name).join(", ")}`,
     );
 
     return { tools: schemas, serverName };
@@ -165,13 +183,13 @@ const MCPClientService = {
    * Disconnect from an MCP server.
    * @param {string} serverName
    */
-  async disconnect(serverName) {
+  async disconnect(serverName: any) {
     const conn = connections.get(serverName);
     if (!conn) return;
 
     try {
       await conn.client.close();
-    } catch (error) {
+    } catch (error: any) {
       logger.warn(`[MCP] Error closing "${serverName}": ${error.message}`);
     }
 
@@ -193,7 +211,7 @@ const MCPClientService = {
    * @param {string} serverName
    * @returns {Promise<{ tools: Array, serverName: string }>}
    */
-  async reconnect(serverName) {
+  async reconnect(serverName: any) {
     const conn = connections.get(serverName);
     if (!conn) throw new Error(`Server "${serverName}" is not connected`);
     return this.connect(conn.config);
@@ -207,7 +225,8 @@ const MCPClientService = {
    * @param {object} args - Tool arguments
    * @returns {Promise<object>} Tool result
    */
-  async callTool(serverName, toolName, args = {}) {
+  // @ts-ignore
+  async callTool(serverName: any, toolName: any, args = {}) {
     const conn = connections.get(serverName);
     if (!conn) {
       return { error: `MCP server "${serverName}" is not connected` };
@@ -221,17 +240,19 @@ const MCPClientService = {
 
       // MCP returns { content: [{ type: "text", text: "..." }, ...], isError? }
       if (result.isError) {
-        const errorText = result.content
-          ?.filter((c) => c.type === "text")
-          .map((c) => c.text)
-          .join("\n") || "MCP tool returned an error";
+        const errorText =
+          result.content
+            ?.filter((c: any) => c.type === "text")
+            .map((c: any) => c.text)
+            .join("\n") || "MCP tool returned an error";
         return { error: errorText };
       }
 
       // Flatten content to a usable format
-      const textParts = result.content
-        ?.filter((c) => c.type === "text")
-        .map((c) => c.text) || [];
+      const textParts =
+        result.content
+          ?.filter((c: any) => c.type === "text")
+          .map((c: any) => c.text) || [];
 
       // If there's only one text part, return it directly for cleaner output
       if (textParts.length === 1) {
@@ -244,15 +265,22 @@ const MCPClientService = {
       }
 
       return { result: textParts.join("\n") };
-    } catch (error) {
+    } catch (error: any) {
       // Attempt reconnect once on connection errors
-      if (error.message?.includes("closed") || error.message?.includes("transport")) {
-        logger.warn(`[MCP] Connection lost to "${serverName}", attempting reconnect...`);
+      if (
+        error.message?.includes("closed") ||
+        error.message?.includes("transport")
+      ) {
+        logger.warn(
+          `[MCP] Connection lost to "${serverName}", attempting reconnect...`,
+        );
         try {
           await this.reconnect(serverName);
           return this.callTool(serverName, toolName, args);
-        } catch (reconnectErr) {
-          return { error: `MCP server "${serverName}" connection lost and reconnect failed: ${reconnectErr.message}` };
+        } catch (reconnectErr: any) {
+          return {
+            error: `MCP server "${serverName}" connection lost and reconnect failed: ${reconnectErr.message}`,
+          };
         }
       }
       return { error: `MCP tool call failed: ${error.message}` };
@@ -265,7 +293,8 @@ const MCPClientService = {
    */
   getToolSchemas() {
     const allSchemas = [];
-    for (const conn of connections.values()) {
+    // @ts-ignore
+    for ( const conn of connections.values()) {
       allSchemas.push(...conn.tools);
     }
     return allSchemas;
@@ -277,12 +306,16 @@ const MCPClientService = {
    */
   getConnectedServers() {
     const servers = [];
-    for (const [name, conn] of connections) {
+    // @ts-ignore
+    for ( const [name, conn] of connections) {
       servers.push({
         name,
         status: conn.status,
         toolCount: conn.tools.length,
-        tools: conn.mcpTools.map((t) => ({ name: t.name, description: t.description })),
+        tools: conn.mcpTools.map((t: any) => ({
+          name: t.name,
+          description: t.description,
+        })),
         transport: conn.config.transport,
         connectedAt: conn.connectedAt,
       });
@@ -295,7 +328,7 @@ const MCPClientService = {
    * @param {string} serverName
    * @returns {boolean}
    */
-  isConnected(serverName) {
+  isConnected(serverName: any) {
     return connections.has(serverName);
   },
 
@@ -304,7 +337,7 @@ const MCPClientService = {
    * @param {string} toolName
    * @returns {boolean}
    */
-  isMCPTool(toolName) {
+  isMCPTool(toolName: any) {
     return toolName.startsWith(MCP_PREFIX);
   },
 
@@ -313,7 +346,7 @@ const MCPClientService = {
    * @param {string} fullName
    * @returns {{ serverName: string, toolName: string } | null}
    */
-  parseMCPToolName(fullName) {
+  parseMCPToolName(fullName: any) {
     return parseMCPToolName(fullName);
   },
 
@@ -325,7 +358,7 @@ const MCPClientService = {
    * @param {string} serverName - Server slug
    * @returns {Promise<{ resources: Array<{ uri: string, name: string, description?: string, mimeType?: string }> }>}
    */
-  async listResources(serverName) {
+  async listResources(serverName: any) {
     const conn = connections.get(serverName);
     if (!conn) {
       return { error: `MCP server "${serverName}" is not connected` };
@@ -333,19 +366,30 @@ const MCPClientService = {
 
     try {
       const result = await conn.client.listResources();
-      const resources = (result.resources || []).map((r) => ({
+      const resources = (result.resources || []).map((r: any) => ({
         uri: r.uri,
         name: r.name || r.uri,
         description: r.description || null,
         mimeType: r.mimeType || null,
       }));
       return { resources, serverName, count: resources.length };
-    } catch (error) {
+    } catch (error: any) {
       // Some servers don't implement resources — that's fine
-      if (error.message?.includes("not supported") || error.message?.includes("not implemented") || error.code === -32601) {
-        return { resources: [], serverName, count: 0, note: "Server does not support resources" };
+      if (
+        error.message?.includes("not supported") ||
+        error.message?.includes("not implemented") ||
+        error.code === -32601
+      ) {
+        return {
+          resources: [],
+          serverName,
+          count: 0,
+          note: "Server does not support resources",
+        };
       }
-      return { error: `Failed to list resources from "${serverName}": ${error.message}` };
+      return {
+        error: `Failed to list resources from "${serverName}": ${error.message}`,
+      };
     }
   },
 
@@ -356,7 +400,7 @@ const MCPClientService = {
    * @param {string} uri - Resource URI (from listResources)
    * @returns {Promise<object>} Resource content
    */
-  async readResource(serverName, uri) {
+  async readResource(serverName: any, uri: any) {
     const conn = connections.get(serverName);
     if (!conn) {
       return { error: `MCP server "${serverName}" is not connected` };
@@ -365,7 +409,7 @@ const MCPClientService = {
     try {
       const result = await conn.client.readResource({ uri });
       // MCP returns { contents: [{ uri, mimeType?, text?, blob? }] }
-      const contents = (result.contents || []).map((c) => ({
+      const contents = (result.contents || []).map((c: any) => ({
         uri: c.uri,
         mimeType: c.mimeType || null,
         text: c.text || null,
@@ -384,8 +428,10 @@ const MCPClientService = {
       }
 
       return { contents, serverName };
-    } catch (error) {
-      return { error: `Failed to read resource "${uri}" from "${serverName}": ${error.message}` };
+    } catch (error: any) {
+      return {
+        error: `Failed to read resource "${uri}" from "${serverName}": ${error.message}`,
+      };
     }
   },
 
@@ -407,7 +453,7 @@ const MCPClientService = {
    * @param {object} [auth.headers] - Additional headers to inject (for HTTP servers)
    * @returns {Promise<object>} Reconnection result
    */
-  async authenticate(serverName, auth = {}) {
+  async authenticate(serverName: any, auth = {}) {
     const conn = connections.get(serverName);
     if (!conn) {
       return { error: `MCP server "${serverName}" is not connected` };
@@ -419,14 +465,21 @@ const MCPClientService = {
     if (updatedConfig.transport === "streamable-http") {
       const headers = { ...(updatedConfig.headers || {}) };
 
+      // @ts-ignore
       if (auth.token) {
+        // @ts-ignore
         headers["Authorization"] = `Bearer ${auth.token}`;
       }
+      // @ts-ignore
       if (auth.apiKey) {
+        // @ts-ignore
         const headerName = auth.apiKeyHeader || "X-API-Key";
+        // @ts-ignore
         headers[headerName] = auth.apiKey;
       }
+      // @ts-ignore
       if (auth.headers) {
+        // @ts-ignore
         Object.assign(headers, auth.headers);
       }
 
@@ -435,13 +488,19 @@ const MCPClientService = {
       // For stdio, inject auth as env vars
       const env = { ...(updatedConfig.env || {}) };
 
+      // @ts-ignore
       if (auth.token) {
+        // @ts-ignore
         env.MCP_AUTH_TOKEN = auth.token;
       }
+      // @ts-ignore
       if (auth.apiKey) {
+        // @ts-ignore
         env.MCP_API_KEY = auth.apiKey;
       }
+      // @ts-ignore
       if (auth.env) {
+        // @ts-ignore
         Object.assign(env, auth.env);
       }
 
@@ -451,15 +510,19 @@ const MCPClientService = {
     // Reconnect with updated config
     try {
       const result = await this.connect(updatedConfig);
-      logger.info(`[MCP] Authenticated and reconnected to "${serverName}" — ${result.tools.length} tools`);
+      logger.info(
+        `[MCP] Authenticated and reconnected to "${serverName}" — ${result.tools.length} tools`,
+      );
       return {
         acknowledged: true,
         serverName,
         toolCount: result.tools.length,
         message: `Successfully authenticated with "${serverName}". ${result.tools.length} tools available.`,
       };
-    } catch (error) {
-      return { error: `Authentication failed for "${serverName}": ${error.message}` };
+    } catch (error: any) {
+      return {
+        error: `Authentication failed for "${serverName}": ${error.message}`,
+      };
     }
   },
 
@@ -469,7 +532,7 @@ const MCPClientService = {
    * @param {string} project - Project identifier
    * @param {string} username - Username
    */
-  async connectAllFromDB(db, project, username) {
+  async connectAllFromDB(db: any, project: any, username: any) {
     if (!db) return;
 
     try {
@@ -480,20 +543,23 @@ const MCPClientService = {
 
       if (servers.length === 0) return;
 
-      logger.info(`[MCP] Auto-connecting ${servers.length} enabled server(s)...`);
+      logger.info(
+        `[MCP] Auto-connecting ${servers.length} enabled server(s)...`,
+      );
 
       const results = await Promise.allSettled(
-        servers.map((s) => this.connect(s)),
+        servers.map((s: any) => this.connect(s)),
       );
 
       for (let i = 0; i < results.length; i++) {
         if (results[i].status === "rejected") {
           logger.warn(
+            // @ts-ignore
             `[MCP] Auto-connect failed for "${servers[i].name}": ${results[i].reason?.message}`,
           );
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       logger.warn(`[MCP] Auto-connect DB query failed: ${error.message}`);
     }
   },
@@ -503,7 +569,7 @@ const MCPClientService = {
    */
   async disconnectAll() {
     const names = [...connections.keys()];
-    await Promise.allSettled(names.map((n) => this.disconnect(n)));
+    await Promise.allSettled(names.map((n: any) => this.disconnect(n)));
   },
 };
 

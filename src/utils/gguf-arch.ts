@@ -49,25 +49,49 @@ const ARCH_DB = {
     { minB: 40, maxB: 80, layers: 94, kvHeads: 8, headDim: 128 },
     { minB: 80, maxB: 300, layers: 94, kvHeads: 8, headDim: 128 },
   ],
-  qwen3moe: [
-    { minB: 0, maxB: 40, layers: 48, kvHeads: 4, headDim: 128 },
-  ],
+  qwen3moe: [{ minB: 0, maxB: 40, layers: 48, kvHeads: 4, headDim: 128 }],
   // Qwen3.5 (hybrid: linear_attention + full_attention)
   qwen35: [
-    { minB: 0, maxB: 12, layers: 32, kvHeads: 4, headDim: 256, attnRatio: 0.25 },
-    { minB: 12, maxB: 25, layers: 40, kvHeads: 4, headDim: 256, attnRatio: 0.25 },
-    { minB: 25, maxB: 40, layers: 64, kvHeads: 4, headDim: 256, attnRatio: 0.25 },
+    {
+      minB: 0,
+      maxB: 12,
+      layers: 32,
+      kvHeads: 4,
+      headDim: 256,
+      attnRatio: 0.25,
+    },
+    {
+      minB: 12,
+      maxB: 25,
+      layers: 40,
+      kvHeads: 4,
+      headDim: 256,
+      attnRatio: 0.25,
+    },
+    {
+      minB: 25,
+      maxB: 40,
+      layers: 64,
+      kvHeads: 4,
+      headDim: 256,
+      attnRatio: 0.25,
+    },
   ],
   qwen35moe: [
-    { minB: 0, maxB: 50, layers: 48, kvHeads: 4, headDim: 128, attnRatio: 0.25 },
+    {
+      minB: 0,
+      maxB: 50,
+      layers: 48,
+      kvHeads: 4,
+      headDim: 128,
+      attnRatio: 0.25,
+    },
   ],
   qwen3vl: [
     { minB: 0, maxB: 5, layers: 32, kvHeads: 4, headDim: 128 },
     { minB: 5, maxB: 12, layers: 32, kvHeads: 4, headDim: 128 },
   ],
-  qwen3vlmoe: [
-    { minB: 0, maxB: 50, layers: 48, kvHeads: 4, headDim: 128 },
-  ],
+  qwen3vlmoe: [{ minB: 0, maxB: 50, layers: 48, kvHeads: 4, headDim: 128 }],
   // Gemma family (Google) — verified from HF config
   gemma3: [
     { minB: 0, maxB: 3, layers: 26, kvHeads: 4, headDim: 256 },
@@ -88,23 +112,42 @@ const ARCH_DB = {
   // GraniteHybrid: Mamba-2 + attention (9:1 ratio) — verified from HF config
   granitehybrid: [
     { minB: 0, maxB: 12, layers: 40, kvHeads: 4, headDim: 128, attnRatio: 0.1 },
-    { minB: 12, maxB: 40, layers: 40, kvHeads: 8, headDim: 128, attnRatio: 0.1 },
+    {
+      minB: 12,
+      maxB: 40,
+      layers: 40,
+      kvHeads: 8,
+      headDim: 128,
+      attnRatio: 0.1,
+    },
   ],
   // Mistral family
   mistral: [
     { minB: 0, maxB: 10, layers: 32, kvHeads: 8, headDim: 128 },
     { minB: 10, maxB: 30, layers: 56, kvHeads: 8, headDim: 128 },
   ],
-  mistral3: [
-    { minB: 0, maxB: 30, layers: 56, kvHeads: 8, headDim: 128 },
-  ],
+  mistral3: [{ minB: 0, maxB: 30, layers: 56, kvHeads: 8, headDim: 128 }],
   // Nemotron (NVIDIA) — Mamba-2 hybrid — verified from HF config
   nemotron_h: [
     { minB: 0, maxB: 6, layers: 32, kvHeads: 8, headDim: 128, attnRatio: 0.08 },
-    { minB: 6, maxB: 12, layers: 52, kvHeads: 8, headDim: 128, attnRatio: 0.08 },
+    {
+      minB: 6,
+      maxB: 12,
+      layers: 52,
+      kvHeads: 8,
+      headDim: 128,
+      attnRatio: 0.08,
+    },
   ],
   nemotron_h_moe: [
-    { minB: 0, maxB: 40, layers: 54, kvHeads: 8, headDim: 128, attnRatio: 0.08 },
+    {
+      minB: 0,
+      maxB: 40,
+      layers: 54,
+      kvHeads: 8,
+      headDim: 128,
+      attnRatio: 0.08,
+    },
   ],
   // LFM2 (Liquid AI) — Hybrid architecture
   lfm2: [
@@ -122,7 +165,12 @@ const ARCH_DB = {
  * @param {number} [bitsPerWeight=4] — quantization bits per weight
  * @returns {{ layers: number, kvHeads: number, headDim: number, attnRatio: number, isKnown: boolean }}
  */
-export function resolveArchParams(architecture, paramsString, sizeBytes, bitsPerWeight = 4) {
+export function resolveArchParams(
+  architecture: any,
+  paramsString: any,
+  sizeBytes: any,
+  bitsPerWeight = 4,
+) {
   let billions = 0;
   if (paramsString) {
     const match = paramsString.match(/([\d.]+)\s*[Bb]/);
@@ -134,9 +182,11 @@ export function resolveArchParams(architecture, paramsString, sizeBytes, bitsPer
   if (billions <= 0) billions = 7;
 
   const archKey = architecture?.toLowerCase() || "";
+  // @ts-ignore
   const variants = ARCH_DB[archKey];
   if (variants) {
-    for (const v of variants) {
+    // @ts-ignore
+    for ( const v of variants) {
       if (billions >= v.minB && billions < v.maxB) {
         return {
           layers: v.layers,
@@ -158,21 +208,35 @@ export function resolveArchParams(architecture, paramsString, sizeBytes, bitsPer
   }
 
   // Fallback: generic estimate from param count
-  let layers, kvHeads, headDim;
+  let layers: any, kvHeads: any, headDim: any;
   if (billions < 2) {
-    layers = 24; kvHeads = 4; headDim = 64;
+    layers = 24;
+    kvHeads = 4;
+    headDim = 64;
   } else if (billions < 5) {
-    layers = 32; kvHeads = 4; headDim = 128;
+    layers = 32;
+    kvHeads = 4;
+    headDim = 128;
   } else if (billions < 10) {
-    layers = 32; kvHeads = 8; headDim = 128;
+    layers = 32;
+    kvHeads = 8;
+    headDim = 128;
   } else if (billions < 20) {
-    layers = 40; kvHeads = 8; headDim = 128;
+    layers = 40;
+    kvHeads = 8;
+    headDim = 128;
   } else if (billions < 40) {
-    layers = 64; kvHeads = 8; headDim = 128;
+    layers = 64;
+    kvHeads = 8;
+    headDim = 128;
   } else if (billions < 80) {
-    layers = 80; kvHeads = 8; headDim = 128;
+    layers = 80;
+    kvHeads = 8;
+    headDim = 128;
   } else {
-    layers = 96; kvHeads = 8; headDim = 128;
+    layers = 96;
+    kvHeads = 8;
+    headDim = 128;
   }
   return { layers, kvHeads, headDim, attnRatio: 1.0, isKnown: false };
 }
@@ -214,8 +278,9 @@ export function estimateMemory({
   vision = false,
   gpuTotalGiB,
   gpuBaselineGiB = 0,
-}) {
-  if (!sizeBytes || !archParams) return { gpuGiB: 0, totalGiB: 0, cpuOffloaded: false };
+}: any) {
+  if (!sizeBytes || !archParams)
+    return { gpuGiB: 0, totalGiB: 0, cpuOffloaded: false };
 
   const { layers, kvHeads, headDim, attnRatio } = archParams;
   const fileSizeGiB = sizeBytes / GiB;
@@ -229,7 +294,13 @@ export function estimateMemory({
   const effectiveKvLayers = Math.round(layers * attnRatio);
   const bytesPerElement = flashAttention ? 1 : 4;
   const kvCacheGiB =
-    (2 * effectiveKvLayers * kvHeads * headDim * bytesPerElement * contextLength) / GiB;
+    (2 *
+      effectiveKvLayers *
+      kvHeads *
+      headDim *
+      bytesPerElement *
+      contextLength) /
+    GiB;
 
   // ── CUDA context + compute buffer overhead ────────────────
   // Calibrated: 0.8 GiB base (benchmarked: avg Δ minimized at 0.8–0.9).
@@ -255,7 +326,11 @@ export function estimateMemory({
     visionOverhead = 0.7 + fileSizeGiB * 0.025;
   }
 
-  let gpuGiB = weightsOnGPU + (offloadKvCache ? kvCacheGiB : 0) + overhead + visionOverhead;
+  let gpuGiB =
+    weightsOnGPU +
+    (offloadKvCache ? kvCacheGiB : 0) +
+    overhead +
+    visionOverhead;
   const totalGiB = gpuGiB + weightsOnCPU + (!offloadKvCache ? kvCacheGiB : 0);
 
   // ── Auto-offload clamping ─────────────────────────────────

@@ -1,6 +1,7 @@
 import WebSocket from "ws";
 import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
+// @ts-ignore
 import { ELEVENLABS_API_KEY } from "../../config.js";
 import { TYPES, DEFAULT_VOICES, getDefaultModels } from "../config.js";
 
@@ -15,7 +16,7 @@ const elevenlabsProvider = {
   name: "elevenlabs",
 
   async generateSpeech(
-    text,
+    text: any,
     voiceId = DEFAULT_VOICES.elevenlabs,
     options = {},
   ) {
@@ -34,10 +35,14 @@ const elevenlabsProvider = {
           body: JSON.stringify({
             text,
             model_id:
+              // @ts-ignore
               options.modelId ||
+              // @ts-ignore
               getDefaultModels(TYPES.TEXT, TYPES.AUDIO).elevenlabs,
             voice_settings: {
+              // @ts-ignore
               stability: options.stability || 0.5,
+              // @ts-ignore
               similarity_boost: options.similarityBoost || 0.8,
             },
           }),
@@ -52,7 +57,7 @@ const elevenlabsProvider = {
       }
 
       return { stream: response.body, contentType: "audio/mpeg" };
-    } catch (error) {
+    } catch (error: any) {
       if (error instanceof ProviderError) throw error;
       throw new ProviderError("elevenlabs", error.message, 500, error);
     }
@@ -66,13 +71,14 @@ const elevenlabsProvider = {
    * @returns {AsyncGenerator<Buffer>} Audio chunks.
    */
   async *generateSpeechStream(
-    textStream,
+    textStream: any,
     voiceId = DEFAULT_VOICES.elevenlabs,
     options = {},
   ) {
     logger.provider("ElevenLabs", `generateSpeechStream voiceId=${voiceId}`);
     const apiKey = getApiKey();
     const modelId =
+      // @ts-ignore
       options.modelId || getDefaultModels(TYPES.TEXT, TYPES.AUDIO).elevenlabs;
     const wsUrl = `wss://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream-input?model_id=${modelId}`;
 
@@ -81,7 +87,7 @@ const elevenlabsProvider = {
     });
 
     // Wait for connection
-    await new Promise((resolve, reject) => {
+    await new Promise((resolve: any, reject: any) => {
       ws.on("open", resolve);
       ws.on("error", reject);
     });
@@ -91,7 +97,9 @@ const elevenlabsProvider = {
       JSON.stringify({
         text: " ",
         voice_settings: {
+          // @ts-ignore
           stability: options.stability || 0.5,
+          // @ts-ignore
           similarity_boost: options.similarityBoost || 0.8,
         },
         xi_api_key: apiKey,
@@ -99,14 +107,17 @@ const elevenlabsProvider = {
     );
 
     // Message queue for yielding in order
+    // @ts-ignore
     const messageQueue = [];
+    // @ts-ignore
     let resolveMessage = null;
     let ended = false;
     let error = null;
 
-    ws.on("message", (data) => {
+    ws.on("message", (data: any) => {
       const response = JSON.parse(data);
       messageQueue.push(response);
+      // @ts-ignore
       if (resolveMessage) {
         const resolve = resolveMessage;
         resolveMessage = null;
@@ -116,11 +127,13 @@ const elevenlabsProvider = {
 
     ws.on("close", () => {
       ended = true;
+      // @ts-ignore
       if (resolveMessage) resolveMessage();
     });
 
-    ws.on("error", (wsError) => {
+    ws.on("error", (wsError: any) => {
       error = wsError;
+      // @ts-ignore
       if (resolveMessage) resolveMessage();
     });
 
@@ -128,9 +141,10 @@ const elevenlabsProvider = {
     (async () => {
       try {
         let buffer = "";
-        for await (const chunk of textStream) {
+        // @ts-ignore
+        for await ( const chunk of textStream) {
           buffer += chunk;
-          let match;
+          let match: any;
           while ((match = buffer.match(/([.!?]+)\s/))) {
             const cutIndex = match.index + match[0].length;
             const sentence = buffer.slice(0, cutIndex);
@@ -157,7 +171,7 @@ const elevenlabsProvider = {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ text: "" }));
         }
-      } catch (error) {
+      } catch (error: any) {
         logger.error("Error sending to ElevenLabs WS:", error);
         ws.close();
       }
@@ -167,6 +181,7 @@ const elevenlabsProvider = {
     try {
       while (true) {
         if (messageQueue.length > 0) {
+          // @ts-ignore
           const msg = messageQueue.shift();
           if (msg.audio) {
             yield Buffer.from(msg.audio, "base64");
@@ -176,9 +191,10 @@ const elevenlabsProvider = {
           }
         } else {
           if (error)
+            // @ts-ignore
             throw new ProviderError("elevenlabs", error.message, 500, error);
           if (ended) break;
-          await new Promise((r) => (resolveMessage = r));
+          await new Promise((r: any) => (resolveMessage = r));
         }
       }
     } finally {

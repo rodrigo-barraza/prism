@@ -22,7 +22,7 @@ export default class AgenticLoopService {
    * @param {object} ctx — generation context from ChatRoutes.prepareGenerationContext
    * @returns {Promise<{ messages: object[] }>}
    */
-  static async runAgenticLoop(ctx) {
+  static async runAgenticLoop(ctx: any) {
     const {
       options,
       agent,
@@ -53,7 +53,8 @@ export default class AgenticLoopService {
     let harnessId = options.harness;
     if (!harnessId) {
       try {
-        const { default: SettingsService } = await import("./SettingsService.js");
+        const { default: SettingsService } =
+          await import("./SettingsService.js");
         const agentSettings = await SettingsService.getSection("agents");
         harnessId = agentSettings?.harness || "standard";
       } catch {
@@ -61,7 +62,9 @@ export default class AgenticLoopService {
       }
     }
     const HarnessClass = HarnessRegistry.get(harnessId);
-    logger.info(`[AgenticLoop] Using harness: "${HarnessClass.id}" (${HarnessClass.label})`);
+    logger.info(
+      `[AgenticLoop] Using harness: "${HarnessClass.id}" (${HarnessClass.label})`,
+    );
 
     // 4. Instantiate and run
     const harness = new HarnessClass(ctx, state, resolvedTools);
@@ -75,9 +78,12 @@ export default class AgenticLoopService {
         const trackerSessionId = parentAgentSessionId || agentSessionId;
         SessionGenerationTracker.cleanup(trackerSessionId);
         try {
-          const { default: CoordinatorService } = await import("./CoordinatorService.js");
+          const { default: CoordinatorService } =
+            await import("./CoordinatorService.js");
           CoordinatorService.cleanupSession(agentSessionId);
-        } catch { /* CoordinatorService may not be used */ }
+        } catch {
+          /* CoordinatorService may not be used */
+        }
       }
     }
   }
@@ -90,14 +96,22 @@ export default class AgenticLoopService {
    * @param {boolean} approved
    * @returns {boolean} true if resolved
    */
-  static resolveApproval(agentSessionId, approved, { approveAll = false } = {}) {
+  static resolveApproval(
+    agentSessionId: any,
+    approved: any,
+    { approveAll = false } = {},
+  ) {
     const entry = pendingApprovals.get(agentSessionId);
     if (!entry) return false;
 
     if (entry.type === "plan") {
       entry.resolve(approved);
     } else {
-      entry.resolve({ approved, approveAll, reason: approved ? "user_approved" : "user_rejected" });
+      entry.resolve({
+        approved,
+        approveAll,
+        reason: approved ? "user_approved" : "user_rejected",
+      });
     }
     return true;
   }
@@ -107,7 +121,7 @@ export default class AgenticLoopService {
    * @param {string} agentSessionId
    * @returns {{ pending: boolean, type?: string, tools?: string[] }}
    */
-  static getPendingApproval(agentSessionId) {
+  static getPendingApproval(agentSessionId: any) {
     const entry = pendingApprovals.get(agentSessionId);
     if (!entry) return { pending: false };
     return { pending: true, type: entry.type, tools: entry.tools };
@@ -118,7 +132,7 @@ export default class AgenticLoopService {
   /**
    * Store a pending question resolver (called by ToolOrchestratorService).
    */
-  static _setPendingQuestion(agentSessionId, entry) {
+  static _setPendingQuestion(agentSessionId: any, entry: any) {
     pendingQuestions.set(agentSessionId, entry);
   }
 
@@ -128,7 +142,7 @@ export default class AgenticLoopService {
    * @param {Array<{ answer: string|string[], annotations?: string }>} answers
    * @returns {boolean} true if resolved
    */
-  static resolveUserQuestion(agentSessionId, answers) {
+  static resolveUserQuestion(agentSessionId: any, answers: any) {
     const entry = pendingQuestions.get(agentSessionId);
     if (!entry) return false;
     pendingQuestions.delete(agentSessionId);
@@ -141,7 +155,7 @@ export default class AgenticLoopService {
    * @param {string} agentSessionId
    * @returns {{ pending: boolean, question?: string, choices?: string[] }}
    */
-  static getPendingQuestion(agentSessionId) {
+  static getPendingQuestion(agentSessionId: any) {
     const entry = pendingQuestions.get(agentSessionId);
     if (!entry) return { pending: false };
     return { pending: true, question: entry.question, choices: entry.choices };

@@ -1,0 +1,39 @@
+declare class LocalModelQueue {
+    constructor();
+    /**
+     * Check whether a provider requires the local GPU lock.
+     * Checks both base provider types and instance IDs.
+     * @param {string} provider
+     * @returns {boolean}
+     */
+    isLocal(provider: any): boolean;
+    /**
+     * Get or create the semaphore queue for an instance.
+     * @param {string} instanceId
+     * @returns {InstanceQueue}
+     */
+    _getQueue(instanceId: any): any;
+    /**
+     * Acquire a semaphore slot for an instance. Resolves immediately if a
+     * slot is available, otherwise enqueues and waits (FIFO order).
+     *
+     * @param {string} [instanceId] - Instance ID. If omitted, uses a shared
+     *   default queue (backward compat for callers that don't pass an ID).
+     * @returns {Promise<() => void>} A release function — MUST be called
+     *   when inference is complete (use try/finally).
+     */
+    acquire(instanceId?: string): any;
+    /** Number of requests waiting for a specific instance. */
+    pending(instanceId?: string): any;
+    /** Whether all slots are in use for a specific instance. */
+    busy(instanceId?: string): any;
+    /** Number of active slots for a specific instance. */
+    get activeCount(): number;
+    /** Max concurrency for a specific instance (or default). */
+    maxConcurrency(instanceId?: string): any;
+    /** Total requests processed across all instances. */
+    get totalProcessed(): number;
+}
+declare const localModelQueue: LocalModelQueue;
+export default localModelQueue;
+//# sourceMappingURL=LocalModelQueue.d.ts.map

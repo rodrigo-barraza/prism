@@ -1,3 +1,4 @@
+// @ts-ignore
 export { cosineSimilarity } from "@rodrigo-barraza/utilities-library";
 
 /** Cap — anything above this is a measurement artifact */
@@ -18,20 +19,28 @@ const MAX_TOKENS_PER_SEC = 10_000;
  * @param {number} [opts.fallbackSec]      - Fallback duration if `sec` is not usable (e.g. totalSec)
  * @returns {number|null} Rounded to 1 decimal, or null if not computable
  */
-export function calculateTokensPerSec(tokens, sec, opts = {}) {
+export function calculateTokensPerSec(tokens: any, sec: any, opts = {}) {
   // 1. Provider-reported value takes priority
+  // @ts-ignore
   if (opts.providerReported != null && opts.providerReported > 0) {
+    // @ts-ignore
     const val = parseFloat(opts.providerReported.toFixed(1));
     return val > MAX_TOKENS_PER_SEC ? null : val;
   }
 
   // 2. Determine effective duration
   const effectiveSec =
-    sec && sec > 0.001 ? sec : opts.fallbackSec && opts.fallbackSec > 0 ? opts.fallbackSec : null;
+    // @ts-ignore
+    sec && sec > 0.001
+      ? sec
+      // @ts-ignore
+      : opts.fallbackSec && opts.fallbackSec > 0
+        // @ts-ignore
+        ? opts.fallbackSec
+        : null;
 
   if (!effectiveSec || !tokens || tokens <= 0) return null;
 
   const val = parseFloat((tokens / effectiveSec).toFixed(1));
   return val > MAX_TOKENS_PER_SEC ? null : val;
 }
-

@@ -9,6 +9,7 @@
 // This adapter bridges the positional-args API to the config-object API.
 // ─────────────────────────────────────────────────────────────────────
 
+// @ts-ignore
 import { MinioManager } from "@rodrigo-barraza/service-library/minio";
 import logger from "../utils/logger.js";
 
@@ -20,7 +21,7 @@ const MinioWrapper = {
    * @param {string} secretKey
    * @param {string} bucket
    */
-  async init(endpoint, accessKey, secretKey, bucket) {
+  async init(endpoint: any, accessKey: any, secretKey: any, bucket: any) {
     return MinioManager.init({
       endpoint,
       accessKey,
@@ -33,12 +34,13 @@ const MinioWrapper = {
 
   isAvailable: () => MinioManager.isAvailable(),
   getBucketUrl: () => MinioManager.getBucketUrl(),
-  getPublicUrl: (key) => MinioManager.getPublicUrl(key),
-  upload: (key, buffer, contentType) => MinioManager.upload(key, buffer, contentType),
-  get: (key) => MinioManager.get(key),
-  remove: (key) => MinioManager.remove(key),
-  stat: (key) => MinioManager.stat(key),
-  listObjects: (prefix) => MinioManager.listObjects(prefix),
+  getPublicUrl: (key: any) => MinioManager.getPublicUrl(key),
+  upload: (key: any, buffer: any, contentType: any) =>
+    MinioManager.upload(key, buffer, contentType),
+  get: (key: any) => MinioManager.get(key),
+  remove: (key: any) => MinioManager.remove(key),
+  stat: (key: any) => MinioManager.stat(key),
+  listObjects: (prefix: any) => MinioManager.listObjects(prefix),
 };
 
 export default MinioWrapper;

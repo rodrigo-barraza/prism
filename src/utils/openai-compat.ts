@@ -14,9 +14,9 @@ import { ThinkTagParser, extractThinkTags } from "./ThinkTagParser.js";
  * Input:  [{ name, description, parameters }]
  * Output: [{ type: "function", function: { name, description, parameters } }]
  */
-export function convertToolsToOpenAI(tools) {
+export function convertToolsToOpenAI(tools: any) {
   if (!tools || !Array.isArray(tools) || tools.length === 0) return null;
-  return tools.map((t) => ({
+  return tools.map((t: any) => ({
     type: "function",
     function: {
       name: t.name,
@@ -40,16 +40,28 @@ export function convertToolsToOpenAI(tools) {
  * @param {number} [defaults.maxTokens=-1] - Default max_tokens
  * @returns {object} Payload fields to spread into the request body
  */
-export function buildPayloadParams(options, { temperature = 0.7, maxTokens = -1 } = {}) {
+export function buildPayloadParams(
+  options: any,
+  { temperature = 0.7, maxTokens = -1 } = {},
+) {
   return {
-    temperature: options.temperature !== undefined ? options.temperature : temperature,
+    temperature:
+      options.temperature !== undefined ? options.temperature : temperature,
     top_p: options.topP !== undefined ? options.topP : undefined,
-    frequency_penalty: options.frequencyPenalty !== undefined ? options.frequencyPenalty : undefined,
-    presence_penalty: options.presencePenalty !== undefined ? options.presencePenalty : undefined,
-    stop: options.stopSequences !== undefined ? options.stopSequences : undefined,
+    frequency_penalty:
+      options.frequencyPenalty !== undefined
+        ? options.frequencyPenalty
+        : undefined,
+    presence_penalty:
+      options.presencePenalty !== undefined
+        ? options.presencePenalty
+        : undefined,
+    stop:
+      options.stopSequences !== undefined ? options.stopSequences : undefined,
     max_tokens: options.maxTokens || maxTokens,
     // Reproducibility seed — supported by OpenAI-compat servers (vLLM, LM Studio, llama.cpp)
-    ...(options.seed !== undefined && options.seed !== "" && { seed: Number(options.seed) }),
+    ...(options.seed !== undefined &&
+      options.seed !== "" && { seed: Number(options.seed) }),
   };
 }
 
@@ -63,10 +75,10 @@ export function buildPayloadParams(options, { temperature = 0.7, maxTokens = -1 
  * @param {object} msg - The message object from choices[0].message
  * @returns {Array|null} Array of { id, name, args } or null if no tool calls
  */
-export function extractToolCallsFromMessage(msg) {
+export function extractToolCallsFromMessage(msg: any) {
   if (!msg?.tool_calls || msg.tool_calls.length === 0) return null;
 
-  return msg.tool_calls.map((tc) => {
+  return msg.tool_calls.map((tc: any) => {
     const fnName = tc.function?.name || tc.name || "";
     const fnArgs = tc.function?.arguments || tc.arguments || "{}";
     let args = {};
@@ -97,7 +109,7 @@ export function extractToolCallsFromMessage(msg) {
  * @param {object} [rawUsage] - The usage object from the API response
  * @returns {{ inputTokens: number, outputTokens: number, cacheReadInputTokens?: number, reasoningOutputTokens?: number }}
  */
-export function normalizeUsage(rawUsage) {
+export function normalizeUsage(rawUsage: any) {
   const usage = {
     inputTokens: rawUsage?.prompt_tokens ?? 0,
     outputTokens: rawUsage?.completion_tokens ?? 0,
@@ -106,6 +118,7 @@ export function normalizeUsage(rawUsage) {
   // KV cache hits — reported by LM Studio and OpenAI
   const cachedTokens = rawUsage?.prompt_tokens_details?.cached_tokens;
   if (cachedTokens > 0) {
+    // @ts-ignore
     usage.cacheReadInputTokens = cachedTokens;
     // Adjust inputTokens to reflect only the non-cached portion,
     // mirroring Anthropic's convention where inputTokens excludes cache hits
@@ -115,6 +128,7 @@ export function normalizeUsage(rawUsage) {
   // Reasoning token breakdown
   const reasoningTokens = rawUsage?.completion_tokens_details?.reasoning_tokens;
   if (reasoningTokens > 0) {
+    // @ts-ignore
     usage.reasoningOutputTokens = reasoningTokens;
   }
 
@@ -158,10 +172,11 @@ export const MEDIA_STRATEGIES = {
  * @param {number} [options.maxFrames=30] - Maximum frames per video
  * @returns {Promise<Array>} The same messages array with videos expanded
  */
-export async function expandVideoToFrames(messages, options = {}) {
+export async function expandVideoToFrames(messages: any, options = {}) {
   const { extractVideoFrames, getDataUrlMimeType } = await import("./media.js");
 
-  for (const msg of messages) {
+  // @ts-ignore
+  for ( const msg of messages) {
     // Collect video data URLs from both `video` and `images` arrays.
     // The frontend may place video files in `images` if it doesn't
     // categorize by MIME type (backwards compatibility).
@@ -176,7 +191,8 @@ export async function expandVideoToFrames(messages, options = {}) {
 
     // Check images field for misclassified video data URLs
     if (msg.images && Array.isArray(msg.images)) {
-      for (const dataUrl of msg.images) {
+      // @ts-ignore
+      for ( const dataUrl of msg.images) {
         const mime = getDataUrlMimeType(dataUrl);
         if (mime && mime.startsWith("video/")) {
           videoUrls.push(dataUrl);
@@ -190,7 +206,8 @@ export async function expandVideoToFrames(messages, options = {}) {
     if (videoUrls.length === 0) continue;
 
     const allFrames = [];
-    for (const videoDataUrl of videoUrls) {
+    // @ts-ignore
+    for ( const videoDataUrl of videoUrls) {
       const frames = await extractVideoFrames(videoDataUrl, options);
       allFrames.push(...frames);
     }
@@ -214,9 +231,13 @@ export async function expandVideoToFrames(messages, options = {}) {
  * @param {string} [options.mediaStrategy="images_only"] - How to handle non-image media
  * @returns {Array} OpenAI-compatible messages
  */
-export function prepareOpenAICompatMessages(messages, { mediaStrategy = MEDIA_STRATEGIES.IMAGES_ONLY } = {}) {
-  return messages.map((m) => {
+export function prepareOpenAICompatMessages(
+  messages: any,
+  { mediaStrategy = MEDIA_STRATEGIES.IMAGES_ONLY } = {},
+) {
+  return messages.map((m: any) => {
     const base = { role: m.role };
+    // @ts-ignore
     if (m.name) base.name = m.name;
 
     // Tool result messages — include tool_call_id for correlation
@@ -235,7 +256,7 @@ export function prepareOpenAICompatMessages(messages, { mediaStrategy = MEDIA_ST
         ...base,
         // Per OpenAI spec, content must be null when tool_calls are present
         content: m.content?.trim() || null,
-        tool_calls: m.toolCalls.map((tc, i) => ({
+        tool_calls: m.toolCalls.map((tc: any, i: any) => ({
           id: tc.id || `call_${i}`,
           type: "function",
           function: {
@@ -255,17 +276,20 @@ export function prepareOpenAICompatMessages(messages, { mediaStrategy = MEDIA_ST
     if (mediaStrategy === MEDIA_STRATEGIES.IMAGES_ONLY) {
       // Simple image-only handling (lm-studio)
       if (m.images && m.images.length > 0) {
-        for (const dataUrl of m.images) {
+        // @ts-ignore
+        for ( const dataUrl of m.images) {
           content.push({ type: "image_url", image_url: { url: dataUrl } });
         }
       }
     } else {
       // Full media handling (vllm, llama-cpp)
-      for (const field of ["images", "audio", "video", "pdf"]) {
+      // @ts-ignore
+      for ( const field of ["images", "audio", "video", "pdf"]) {
         const arr = m[field];
         if (!arr || !Array.isArray(arr) || arr.length === 0) continue;
 
-        for (const dataUrl of arr) {
+        // @ts-ignore
+        for ( const dataUrl of arr) {
           const mime = getDataUrlMimeType(dataUrl);
 
           if (mime && mime.startsWith("image/")) {
@@ -348,11 +372,12 @@ export function prepareOpenAICompatMessages(messages, { mediaStrategy = MEDIA_ST
  * @param {boolean} [options.thinkingEnabled] - When false, suppress thinking separation
  * @returns {{ text: string, thinking: string|null, usage: object, toolCalls: Array|null }}
  */
-export function processNonStreamingResponse(data, options = {}) {
+export function processNonStreamingResponse(data: any, options = {}) {
   const msg = data.choices?.[0]?.message;
   const rawText = msg?.content || "";
 
   // When thinking is disabled, return raw text without parsing <think> tags
+  // @ts-ignore
   if (options.thinkingEnabled === false) {
     const usage = normalizeUsage(data.usage);
     const toolCalls = extractToolCallsFromMessage(msg);
@@ -391,10 +416,11 @@ export function processNonStreamingResponse(data, options = {}) {
  * @param {function} [options.onUsage] - Called with raw usage JSON for provider-specific extensions (e.g. llama.cpp timings)
  * @param {function} [options.onChunkJson] - Called with each parsed SSE JSON object for provider-specific processing
  */
-export async function* parseSSEStream(reader, options = {}) {
+export async function* parseSSEStream(reader: any, options = {}) {
   const decoder = new TextDecoder();
   let buffer = "";
   let usage = null;
+  // @ts-ignore
   const suppressThinking = options.thinkingEnabled === false;
   // Skip ThinkTagParser entirely when thinking is disabled — no overhead
   const thinkParser = suppressThinking ? null : new ThinkTagParser();
@@ -402,6 +428,7 @@ export async function* parseSSEStream(reader, options = {}) {
 
   try {
     while (true) {
+      // @ts-ignore
       if (options.signal?.aborted) {
         reader.cancel();
         break;
@@ -411,9 +438,11 @@ export async function* parseSSEStream(reader, options = {}) {
 
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split("\n");
+      // @ts-ignore
       buffer = lines.pop(); // keep incomplete line in buffer
 
-      for (const line of lines) {
+      // @ts-ignore
+      for ( const line of lines) {
         const trimmed = line.trim();
         if (!trimmed || trimmed.startsWith(":")) continue; // skip empty lines / comments
         if (trimmed === "data: [DONE]") continue;
@@ -426,10 +455,12 @@ export async function* parseSSEStream(reader, options = {}) {
           if (json.usage) {
             usage = normalizeUsage(json.usage);
             // Let provider handle extensions (e.g. llama.cpp timings)
+            // @ts-ignore
             if (options.onUsage) options.onUsage(json, usage);
           }
 
           // Let provider handle custom fields
+          // @ts-ignore
           if (options.onChunkJson) options.onChunkJson(json);
 
           const delta = json.choices?.[0]?.delta;
@@ -451,8 +482,10 @@ export async function* parseSSEStream(reader, options = {}) {
               yield content;
             } else {
               // Parse <think> tags from the streamed content
+              // @ts-ignore
               const parts = thinkParser.feed(content);
-              for (const part of parts) {
+              // @ts-ignore
+              for ( const part of parts) {
                 if (part.type === "thinking") {
                   yield { type: "thinking", content: part.content };
                 } else {
@@ -467,20 +500,26 @@ export async function* parseSSEStream(reader, options = {}) {
           // during tool call argument streaming.
           if (delta?.tool_calls) {
             let deltaChars = 0;
-            for (const tc of delta.tool_calls) {
+            // @ts-ignore
+            for ( const tc of delta.tool_calls) {
               const idx = tc.index;
+              // @ts-ignore
               if (!pendingToolCalls[idx]) {
+                // @ts-ignore
                 pendingToolCalls[idx] = {
                   id: tc.id || "",
                   name: tc.function?.name || tc.name || "",
                   args: "",
                 };
               }
+              // @ts-ignore
               if (tc.id) pendingToolCalls[idx].id = tc.id;
               const chunkName = tc.function?.name || tc.name;
+              // @ts-ignore
               if (chunkName) pendingToolCalls[idx].name = chunkName;
               const chunkArgs = tc.function?.arguments || tc.arguments;
               if (chunkArgs) {
+                // @ts-ignore
                 pendingToolCalls[idx].args += chunkArgs;
                 deltaChars += chunkArgs.length;
               }
@@ -495,16 +534,20 @@ export async function* parseSSEStream(reader, options = {}) {
           // If finish_reason indicates tool calls, yield accumulated tool calls
           const finishReason = json.choices?.[0]?.finish_reason;
           if (finishReason === "tool_calls" || finishReason === "tool") {
-            for (const tc of Object.values(pendingToolCalls)) {
+            // @ts-ignore
+            for ( const tc of Object.values(pendingToolCalls)) {
               let args = {};
               try {
+                // @ts-ignore
                 args = JSON.parse(tc.args || "{}");
               } catch {
                 /* ignore */
               }
               yield {
                 type: "toolCall",
+                // @ts-ignore
                 id: tc.id,
+                // @ts-ignore
                 name: tc.name,
                 args,
               };
@@ -519,7 +562,8 @@ export async function* parseSSEStream(reader, options = {}) {
     // Flush any remaining buffered content from the think parser
     if (thinkParser) {
       const remaining = thinkParser.flush();
-      for (const part of remaining) {
+      // @ts-ignore
+      for ( const part of remaining) {
         if (part.type === "thinking") {
           yield { type: "thinking", content: part.content };
         } else {
@@ -552,11 +596,12 @@ export async function* parseSSEStream(reader, options = {}) {
  * @returns {Promise<Response>} The fetch response (guaranteed to be ok)
  * @throws {Error} With a parsed error message from the API
  */
-export async function fetchOpenAICompat(url, payload, options = {}) {
+export async function fetchOpenAICompat(url: any, payload: any, options = {}) {
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+    // @ts-ignore
     ...(options.signal && { signal: options.signal }),
   });
 
@@ -567,7 +612,9 @@ export async function fetchOpenAICompat(url, payload, options = {}) {
       const parsed = JSON.parse(errorText);
       if (parsed?.error?.message) errorMsg = parsed.error.message;
       else if (parsed?.message) errorMsg = parsed.message;
-    } catch { /* raw text fallback */ }
+    } catch {
+      /* raw text fallback */
+    }
     throw new Error(errorMsg);
   }
 

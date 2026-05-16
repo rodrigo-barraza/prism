@@ -18,9 +18,11 @@ const registry = new Map();
  * Register a tool with the internal registry.
  * @param {object} tool - Tool module default export
  */
-function register(tool) {
+function register(tool: any) {
   if (!tool.name || !tool.execute) {
-    logger.warn(`[InternalToolRegistry] Skipping invalid tool: missing name or execute`);
+    logger.warn(
+      `[InternalToolRegistry] Skipping invalid tool: missing name or execute`,
+    );
     return;
   }
   registry.set(tool.name, tool);
@@ -42,11 +44,13 @@ async function init() {
     import("./McpTools.js"),
   ]);
 
-  for (const mod of modules) {
+  // @ts-ignore
+  for ( const mod of modules) {
     const tools = mod.default;
     // Modules can export a single tool or an array of tools
     if (Array.isArray(tools)) {
-      for (const tool of tools) register(tool);
+      // @ts-ignore
+      for ( const tool of tools) register(tool);
     } else {
       register(tools);
     }
@@ -58,7 +62,7 @@ async function init() {
 }
 
 // Kick off registration at module load
-init().catch((error) =>
+init().catch((error: any) =>
   logger.error(`[InternalToolRegistry] Init failed: ${error.message}`),
 );
 
@@ -68,7 +72,7 @@ export default class InternalToolRegistry {
    * @param {string} name
    * @returns {boolean}
    */
-  static has(name) {
+  static has(name: any) {
     return registry.has(name);
   }
 
@@ -79,7 +83,7 @@ export default class InternalToolRegistry {
    * @param {object} ctx - Orchestrator context (emit, session, project, etc.)
    * @returns {Promise<object>}
    */
-  static async execute(name, args, ctx = {}) {
+  static async execute(name: any, args: any, ctx = {}) {
     const tool = registry.get(name);
     if (!tool) {
       return { error: `Unknown internal tool: ${name}` };
@@ -92,7 +96,7 @@ export default class InternalToolRegistry {
    * @returns {Array<object>}
    */
   static getSchemas() {
-    return [...registry.values()].map((t) => t.schema);
+    return [...registry.values()].map((t: any) => t.schema);
   }
 
   /**
@@ -100,7 +104,7 @@ export default class InternalToolRegistry {
    * @returns {Array<object>}
    */
   static getClientSchemas() {
-    return [...registry.values()].map((t) => ({
+    return [...registry.values()].map((t: any) => ({
       ...t.schema,
       domain: t.domain || "Reasoning",
       labels: t.labels || ["coding"],

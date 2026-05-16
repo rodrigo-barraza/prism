@@ -1,10 +1,16 @@
+// @ts-ignore
 import { roundMs } from "@rodrigo-barraza/utilities-library";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
+// @ts-ignore
 import { MONGO_DB_NAME } from "../../config.js";
 import logger from "../utils/logger.js";
-import { getTotalInputTokens, estimateTokens, calculateTextCost } from "../utils/CostCalculator.js";
+import {
+  getTotalInputTokens,
+  estimateTokens,
+  calculateTextCost,
+} from "../utils/CostCalculator.js";
 import { computeModalities } from "./ConversationService.js";
-import {  } from "../utils/utilities.js";
+import {} from "../utils/utilities.js";
 import { COLLECTIONS } from "../constants.js";
 import { TYPES, getPricing } from "../config.js";
 import { calculateTokensPerSec } from "../utils/math.js";
@@ -27,9 +33,10 @@ const API_TO_CANONICAL = {
   imageGeneration: "Image Generation",
   image_generation: "Image Generation",
 };
-function sanitizeMsg(m) {
-  const sanitizeStr = (s) => (typeof s === "string" && s.startsWith("data:") ? `[base64 data]` : s);
-  const sanitizeMedia = (val) => {
+function sanitizeMsg(m: any) {
+  const sanitizeStr = (s: any) =>
+    typeof s === "string" && s.startsWith("data:") ? `[base64 data]` : s;
+  const sanitizeMedia = (val: any) => {
     if (Array.isArray(val)) return val.map(sanitizeStr);
     if (typeof val === "string") return sanitizeStr(val);
     return val;
@@ -87,7 +94,7 @@ const RequestLogger = {
     responsePayload = null,
     modalities = null,
     rateLimits = null,
-  }) {
+  }: any) {
     try {
       const db = MongoWrapper.getDb(MONGO_DB_NAME);
       if (!db) {
@@ -137,7 +144,7 @@ const RequestLogger = {
         rateLimits,
       };
       await db.collection(COLLECTION).insertOne(doc);
-    } catch (error) {
+    } catch (error: any) {
       logger.error("RequestLogger: failed to save request", error.message);
     }
   },
@@ -181,9 +188,9 @@ const RequestLogger = {
     // Optional
     agenticIteration = null,
     rateLimits = null,
-  }) {
+  }: any) {
     const inputTokens = usage ? getTotalInputTokens(usage) : 0;
-    const outputTokens = usage ? (usage.outputTokens || 0) : 0;
+    const outputTokens = usage ? usage.outputTokens || 0 : 0;
     const cacheReadInputTokens = usage?.cacheReadInputTokens || 0;
     const cacheCreationInputTokens = usage?.cacheCreationInputTokens || 0;
     const reasoningOutputTokens = usage?.reasoningOutputTokens || 0;
@@ -215,8 +222,22 @@ const RequestLogger = {
       agentSessionId,
       parentAgentSessionId,
       toolsUsed: toolCalls && toolCalls.length > 0,
-      toolDisplayNames: toolCalls && toolCalls.length > 0 ? [...new Set(toolCalls.map((tc) => API_TO_CANONICAL[tc.name] || tc.name))] : [],
-      toolApiNames: toolCalls && toolCalls.length > 0 ? [...new Set(toolCalls.map((tc) => tc.name))] : [],
+      // @ts-ignore
+      toolDisplayNames:
+        toolCalls && toolCalls.length > 0
+          ? [
+              ...new Set(
+                toolCalls.map(
+                  // @ts-ignore
+                  (tc: any) => API_TO_CANONICAL[tc.name] || tc.name,
+                ),
+              ),
+            ]
+          : [],
+      toolApiNames:
+        toolCalls && toolCalls.length > 0
+          ? [...new Set(toolCalls.map((tc: any) => tc.name))]
+          : [],
       success,
       errorMessage,
       inputTokens,
@@ -235,23 +256,36 @@ const RequestLogger = {
       stopSequences: options?.stopSequences ?? null,
       messageCount: messages.length,
       inputCharacters: messages.reduce(
-        (sum, m) => sum + (typeof m.content === "string" ? m.content.length : 0),
+        (sum: any, m: any) =>
+          sum + (typeof m.content === "string" ? m.content.length : 0),
         0,
       ),
       outputCharacters,
-      timeToGeneration: timeToGenerationSec !== null ? roundMs(timeToGenerationSec) : null,
+      timeToGeneration:
+        timeToGenerationSec !== null ? roundMs(timeToGenerationSec) : null,
       generationTime: generationSec !== null ? roundMs(generationSec) : null,
       totalTime: totalSec !== null ? roundMs(totalSec) : null,
       requestPayload: {
         messages: messages.map(sanitizeMsg),
-        ...(options?.tools ? { tools: options.tools.map((t) => t.name || t.function?.name) } : {}),
+        ...(options?.tools
+          ? { tools: options.tools.map((t: any) => t.name || t.function?.name) }
+          : {}),
         ...(agenticIteration !== null ? { agenticIteration } : {}),
       },
       responsePayload: {
         text: text || null,
         thinking: thinking || null,
         ...(images && images.length > 0 ? { images } : {}),
-        toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls.map((tc) => ({ name: API_TO_CANONICAL[tc.name] || tc.name, id: tc.id, args: tc.args })) : null,
+        // @ts-ignore
+        toolCalls:
+          toolCalls && toolCalls.length > 0
+            ? toolCalls.map((tc: any) => ({
+                // @ts-ignore
+                name: API_TO_CANONICAL[tc.name] || tc.name,
+                id: tc.id,
+                args: tc.args,
+              }))
+            : null,
         ...(audioRef ? { audioRef } : {}),
         usage,
       },
@@ -287,17 +321,24 @@ const RequestLogger = {
     requestStartMs,
     extraRequestPayload,
     extraResponsePayload,
-  }) {
+  }: any) {
     const totalSec = (performance.now() - requestStartMs) / 1000;
-    const inputText = aiMessages.map((m) => m.content).join("\n");
+    const inputText = aiMessages.map((m: any) => m.content).join("\n");
 
     // Prefer real API-reported usage over the ~4 chars/token heuristic.
     // The heuristic remains as fallback for callers that don't pass usage.
-    const inputTokens = apiUsage ? getTotalInputTokens(apiUsage) : estimateTokens(inputText);
-    const outputTokens = apiUsage ? (apiUsage.outputTokens || 0) : (resultText ? estimateTokens(resultText) : 0);
+    const inputTokens = apiUsage
+      ? getTotalInputTokens(apiUsage)
+      : estimateTokens(inputText);
+    const outputTokens = apiUsage
+      ? apiUsage.outputTokens || 0
+      : resultText
+        ? estimateTokens(resultText)
+        : 0;
     const cacheReadInputTokens = apiUsage?.cacheReadInputTokens || 0;
     const cacheCreationInputTokens = apiUsage?.cacheCreationInputTokens || 0;
 
+    // @ts-ignore
     const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[model];
     let estimatedCost = null;
     if (pricing) {
@@ -334,7 +375,10 @@ const RequestLogger = {
         ...extraRequestPayload,
       },
       responsePayload: success
-        ? { textPreview: (resultText || "").slice(0, 200), ...extraResponsePayload }
+        ? {
+            textPreview: (resultText || "").slice(0, 200),
+            ...extraResponsePayload,
+          }
         : { error: errorMessage },
     });
   },

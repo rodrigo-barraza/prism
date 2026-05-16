@@ -1,5 +1,6 @@
 import ToolOrchestratorService from "./ToolOrchestratorService.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
+// @ts-ignore
 import { MONGO_DB_NAME } from "../../config.js";
 import logger from "../utils/logger.js";
 import AgentPersonaRegistry from "./AgentPersonaRegistry.js";
@@ -11,9 +12,9 @@ import { TYPES } from "../config.js";
 const COORDINATOR_TOOL_NAMES = new Set(COORDINATOR_ONLY_TOOLS);
 
 /** Prism-local tools bypass the enabledTools filter (always available to all agents) — derived from registry */
-let _prismLocalCache;
+let _prismLocalCache: any;
 const PRISM_LOCAL_TOOL_NAMES = {
-  has(name) {
+  has(name: any) {
     if (!_prismLocalCache) _prismLocalCache = InternalToolRegistry.getNames();
     return _prismLocalCache.has(name);
   },
@@ -25,7 +26,7 @@ export default class AgenticToolResolver {
    * Handles MongoDB custom tools, MCP tools, disabledBuiltIns mode, prefix expansion,
    * and native provider tool collision prevention.
    */
-  static async resolve({ options, agent, project, username, modelDef }) {
+  static async resolve({ options, agent, project, username, modelDef }: any) {
     // Ensure tool schemas are loaded from tools-api (lazy init — if tools-api
     // was unreachable at boot, this fetches on-demand before proceeding)
     await ToolOrchestratorService.ensureSchemas();
@@ -42,9 +43,11 @@ export default class AgenticToolResolver {
           .toArray();
       }
       if (customToolsData.length > 0) {
-        logger.info(`[AgenticToolResolver] Loaded ${customToolsData.length} custom tool(s) from MongoDB: [${customToolsData.map((t) => t.name).join(", ")}]`);
+        logger.info(
+          `[AgenticToolResolver] Loaded ${customToolsData.length} custom tool(s) from MongoDB: [${customToolsData.map((t: any) => t.name).join(", ")}]`,
+        );
       }
-    } catch (error) {
+    } catch (error: any) {
       logger.warn(`Failed to fetch custom tools for loop: ${error.message}`);
     }
 
@@ -52,7 +55,8 @@ export default class AgenticToolResolver {
     const customToolMap = new Map();
     const dynamicTools = [...toolsApiSchemas];
 
-    for (const t of customToolsData) {
+    // @ts-ignore
+    for ( const t of customToolsData) {
       customToolMap.set(t.name, t);
       dynamicTools.push({
         name: t.name,
@@ -61,7 +65,7 @@ export default class AgenticToolResolver {
         parameters: {
           type: "object",
           properties: Object.fromEntries(
-            (t.parameters || []).map((p) => [
+            (t.parameters || []).map((p: any) => [
               p.name,
               {
                 type: p.type || "string",
@@ -70,7 +74,9 @@ export default class AgenticToolResolver {
               },
             ]),
           ),
-          required: (t.parameters || []).filter((p) => p.required).map((p) => p.name),
+          required: (t.parameters || [])
+            .filter((p: any) => p.required)
+            .map((p: any) => p.name),
         },
       });
     }
@@ -79,18 +85,25 @@ export default class AgenticToolResolver {
     const mcpTools = ToolOrchestratorService.getMCPToolSchemas();
     if (mcpTools.length > 0) {
       // Strip internal metadata before passing to LLM
-      for (const t of mcpTools) {
+      // @ts-ignore
+      for ( const t of mcpTools) {
         const { _mcpServer, _mcpOriginalName, ...schema } = t;
         dynamicTools.push(schema);
       }
-      logger.info(`[AgenticLoop] Merged ${mcpTools.length} MCP tools from connected servers`);
+      logger.info(
+        `[AgenticLoop] Merged ${mcpTools.length} MCP tools from connected servers`,
+      );
     }
 
     // ── Tool filtering ────────────────────────────────────────────
     let resolvedEnabledTools = options.enabledTools;
 
     // Mode 2: disabledBuiltIns — resolve server-side
-    if (!resolvedEnabledTools && options.disabledBuiltIns && Array.isArray(options.disabledBuiltIns)) {
+    if (
+      !resolvedEnabledTools &&
+      options.disabledBuiltIns &&
+      Array.isArray(options.disabledBuiltIns)
+    ) {
       const disabledSet = new Set(options.disabledBuiltIns);
       const persona = agent ? AgentPersonaRegistry.get(agent) : null;
       const baseTools = persona?.enabledTools || null;
@@ -98,29 +111,37 @@ export default class AgenticToolResolver {
       if (baseTools) {
         const clientSchemas = ToolOrchestratorService.getClientToolSchemas();
         const expandedSet = new Set();
-        for (const entry of baseTools) {
+        // @ts-ignore
+        for ( const entry of baseTools) {
           if (entry.startsWith("label:")) {
             const label = entry.slice(6);
-            for (const t of clientSchemas) {
+            // @ts-ignore
+            for ( const t of clientSchemas) {
               if (t.labels?.includes(label)) expandedSet.add(t.name);
             }
           } else if (entry.startsWith("domain:")) {
             const domain = entry.slice(7);
-            for (const t of clientSchemas) {
+            // @ts-ignore
+            for ( const t of clientSchemas) {
               if (t.domain === domain) expandedSet.add(t.name);
             }
           } else {
             expandedSet.add(entry);
           }
         }
-        for (const name of disabledSet) expandedSet.delete(name);
+        // @ts-ignore
+        for ( const name of disabledSet) expandedSet.delete(name);
         resolvedEnabledTools = [...expandedSet];
-        logger.info(`[AgenticLoop] disabledBuiltIns mode: ${disabledSet.size} disabled → ${resolvedEnabledTools.length} enabled tools`);
+        logger.info(
+          `[AgenticLoop] disabledBuiltIns mode: ${disabledSet.size} disabled → ${resolvedEnabledTools.length} enabled tools`,
+        );
       } else {
         resolvedEnabledTools = dynamicTools
-          .map((t) => t.name)
-          .filter((name) => !disabledSet.has(name));
-        logger.info(`[AgenticLoop] disabledBuiltIns mode (no persona): ${disabledSet.size} disabled → ${resolvedEnabledTools.length} enabled tools`);
+          .map((t: any) => t.name)
+          .filter((name: any) => !disabledSet.has(name));
+        logger.info(
+          `[AgenticLoop] disabledBuiltIns mode (no persona): ${disabledSet.size} disabled → ${resolvedEnabledTools.length} enabled tools`,
+        );
       }
     }
 
@@ -129,68 +150,85 @@ export default class AgenticToolResolver {
       const persona = AgentPersonaRegistry.get(agent);
       if (persona?.enabledTools) {
         resolvedEnabledTools = persona.enabledTools;
-        logger.info(`[AgenticLoop] Using persona "${agent}" enabledTools: [${resolvedEnabledTools.join(", ")}]`);
+        logger.info(
+          `[AgenticLoop] Using persona "${agent}" enabledTools: [${resolvedEnabledTools.join(", ")}]`,
+        );
       }
     }
 
     let finalTools = dynamicTools;
     if (resolvedEnabledTools && Array.isArray(resolvedEnabledTools)) {
-      const hasPrefixed = resolvedEnabledTools.some((e) => e.startsWith("label:") || e.startsWith("domain:"));
+      const hasPrefixed = resolvedEnabledTools.some(
+        (e: any) => e.startsWith("label:") || e.startsWith("domain:"),
+      );
 
-      let enabledSet;
+      let enabledSet: any;
       if (hasPrefixed) {
         const clientSchemas = ToolOrchestratorService.getClientToolSchemas();
         enabledSet = new Set();
-        for (const entry of resolvedEnabledTools) {
+        // @ts-ignore
+        for ( const entry of resolvedEnabledTools) {
           if (entry.startsWith("label:")) {
             const label = entry.slice(6);
-            for (const t of clientSchemas) {
+            // @ts-ignore
+            for ( const t of clientSchemas) {
               if (t.labels?.includes(label)) enabledSet.add(t.name);
             }
           } else if (entry.startsWith("domain:")) {
             const domain = entry.slice(7);
-            for (const t of clientSchemas) {
+            // @ts-ignore
+            for ( const t of clientSchemas) {
               if (t.domain === domain) enabledSet.add(t.name);
             }
           } else {
             enabledSet.add(entry);
           }
         }
-        logger.info(`[AgenticLoop] Expanded ${resolvedEnabledTools.length} enabledTools entries → ${enabledSet.size} unique tools`);
+        logger.info(
+          `[AgenticLoop] Expanded ${resolvedEnabledTools.length} enabledTools entries → ${enabledSet.size} unique tools`,
+        );
       } else {
         enabledSet = new Set(resolvedEnabledTools);
       }
 
-      const preFilterCustom = finalTools.filter((t) => t._isCustom).map((t) => t.name);
+      const preFilterCustom = finalTools
+        .filter((t: any) => t._isCustom)
+        .map((t: any) => t.name);
       finalTools = finalTools.filter(
-        (t) =>
+        (t: any) =>
           enabledSet.has(t.name) ||
           t._isCustom ||
           t.name.startsWith("mcp__") ||
           COORDINATOR_TOOL_NAMES.has(t.name) ||
           PRISM_LOCAL_TOOL_NAMES.has(t.name),
       );
-      const postFilterCustom = finalTools.filter((t) => t._isCustom).map((t) => t.name);
+      const postFilterCustom = finalTools
+        .filter((t: any) => t._isCustom)
+        .map((t: any) => t.name);
       if (preFilterCustom.length > 0) {
-        logger.info(`[AgenticToolResolver] Custom tools: pre-filter=[${preFilterCustom.join(", ")}] post-filter=[${postFilterCustom.join(", ")}] (enabledSet has ${enabledSet.size} entries)`);
+        logger.info(
+          `[AgenticToolResolver] Custom tools: pre-filter=[${preFilterCustom.join(", ")}] post-filter=[${postFilterCustom.join(", ")}] (enabledSet has ${enabledSet.size} entries)`,
+        );
       }
     }
 
     // ── Native tool collision prevention ────────────────────────
     if (options.webSearch) {
-      finalTools = finalTools.filter((t) => t.name !== "web_search");
+      finalTools = finalTools.filter((t: any) => t.name !== "web_search");
     }
 
     if (modelDef?.outputTypes?.includes(TYPES.IMAGE)) {
-      finalTools = finalTools.filter((t) => t.name !== "generate_image");
+      finalTools = finalTools.filter((t: any) => t.name !== "generate_image");
     }
 
     if (modelDef?.inputTypes?.includes(TYPES.IMAGE)) {
-      finalTools = finalTools.filter((t) => t.name !== "describe_image");
+      finalTools = finalTools.filter((t: any) => t.name !== "describe_image");
     }
 
-    const finalCustomCount = finalTools.filter((t) => t._isCustom).length;
-    logger.info(`[AgenticToolResolver] Final: ${finalTools.length} tools (${finalCustomCount} custom, ${customToolMap.size} in map)`);
+    const finalCustomCount = finalTools.filter((t: any) => t._isCustom).length;
+    logger.info(
+      `[AgenticToolResolver] Final: ${finalTools.length} tools (${finalCustomCount} custom, ${customToolMap.size} in map)`,
+    );
     return { finalTools, customToolMap, resolvedEnabledTools };
   }
 }

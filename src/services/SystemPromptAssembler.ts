@@ -3,10 +3,14 @@ import MemoryService from "./MemoryService.js";
 import AgentPersonaRegistry from "./AgentPersonaRegistry.js";
 import EmbeddingService from "./EmbeddingService.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
+// @ts-ignore
 import { TOOLS_SERVICE_URL, MONGO_DB_NAME } from "../../config.js";
 import logger from "../utils/logger.js";
 import { cosineSimilarity } from "../utils/math.js";
-import { getCoordinatorPromptAddendum, COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
+import {
+  getCoordinatorPromptAddendum,
+  COORDINATOR_ONLY_TOOLS,
+} from "./CoordinatorPrompt.js";
 import { createAbortController } from "../utils/AbortController.js";
 
 const SKILL_RELEVANCE_THRESHOLD = 0.3;
@@ -29,12 +33,18 @@ export default class SystemPromptAssembler {
    * @param {string} [options.workspaceRoot] - Workspace root path
    */
   constructor(options = {}) {
-    this.workspaceRoot = options.workspaceRoot
-      || ToolOrchestratorService.getWorkspaceRoot()
-      || process.env.HOME
-      || "/home";
+    // @ts-ignore
+    this.workspaceRoot =
+      // @ts-ignore
+      options.workspaceRoot ||
+      ToolOrchestratorService.getWorkspaceRoot() ||
+      process.env.HOME ||
+      "/home";
+    // @ts-ignore
     this._directoryCache = null;
+    // @ts-ignore
     this._directoryCacheTime = 0;
+    // @ts-ignore
     this._directoryCacheTTL = 60_000; // 1 minute
   }
 
@@ -46,7 +56,14 @@ export default class SystemPromptAssembler {
    */
   async fetchDirectoryTree() {
     const now = Date.now();
-    if (this._directoryCache && now - this._directoryCacheTime < this._directoryCacheTTL) {
+    // @ts-ignore
+    if (
+      // @ts-ignore
+      this._directoryCache &&
+      // @ts-ignore
+      now - this._directoryCacheTime < this._directoryCacheTTL
+    ) {
+      // @ts-ignore
       return this._directoryCache;
     }
 
@@ -54,22 +71,30 @@ export default class SystemPromptAssembler {
       const controller = createAbortController();
       const timeout = setTimeout(() => controller.abort(), 5000);
 
+      // @ts-ignore
       const url = `${TOOLS_SERVICE_URL}/filesystem/list?path=${encodeURIComponent(this.workspaceRoot)}&depth=2`;
       const res = await fetch(url, { signal: controller.signal });
       clearTimeout(timeout);
 
       if (!res.ok) {
-        logger.warn(`[SystemPromptAssembler] Directory fetch failed: ${res.status}`);
+        logger.warn(
+          `[SystemPromptAssembler] Directory fetch failed: ${res.status}`,
+        );
         return "";
       }
 
       const data = await res.json();
       const tree = this._formatDirectoryTree(data);
+      // @ts-ignore
       this._directoryCache = tree;
+      // @ts-ignore
       this._directoryCacheTime = now;
       return tree;
-    } catch (error) {
-      logger.warn(`[SystemPromptAssembler] Directory fetch error: ${error.message}`);
+    } catch (error: any) {
+      logger.warn(
+        `[SystemPromptAssembler] Directory fetch error: ${error.message}`,
+      );
+      // @ts-ignore
       return this._directoryCache || "";
     }
   }
@@ -79,18 +104,20 @@ export default class SystemPromptAssembler {
    * @param {object} data - Response from tools-api list endpoint
    * @returns {string}
    */
-  _formatDirectoryTree(data) {
+  _formatDirectoryTree(data: any) {
     if (!data || !data.entries) return "";
 
     const lines = [];
-    for (const entry of data.entries) {
+    // @ts-ignore
+    for ( const entry of data.entries) {
       const prefix = entry.type === "directory" ? "📁" : "📄";
       const name = entry.name || entry.path;
       lines.push(`${prefix} ${name}`);
 
       // Include first-level children for directories
       if (entry.children && Array.isArray(entry.children)) {
-        for (const child of entry.children.slice(0, 20)) {
+        // @ts-ignore
+        for ( const child of entry.children.slice(0, 20)) {
           const childPrefix = child.type === "directory" ? "📁" : "📄";
           lines.push(`  ${childPrefix} ${child.name || child.path}`);
         }
@@ -113,19 +140,20 @@ export default class SystemPromptAssembler {
    * @param {Array} [enabledTools] - If provided, only include these tool names
    * @returns {string}
    */
-  buildToolDescriptions(enabledTools) {
+  buildToolDescriptions(enabledTools: any) {
     const schemas = ToolOrchestratorService.getToolSchemas();
     const enabledSet = enabledTools ? new Set(enabledTools) : null;
 
     const filtered = enabledSet
-      ? schemas.filter((t) => enabledSet.has(t.name))
+      ? schemas.filter((t: any) => enabledSet.has(t.name))
       : schemas;
 
     if (filtered.length === 0) return "";
 
     // Group by domain
     const groups = new Map();
-    for (const tool of filtered) {
+    // @ts-ignore
+    for ( const tool of filtered) {
       const domain = (tool.domain || "Other").replace(/^Agentic:\s*/i, "");
       if (!groups.has(domain)) groups.set(domain, []);
       groups.get(domain).push(tool);
@@ -133,15 +161,16 @@ export default class SystemPromptAssembler {
 
     // Build categorised sections with parameter details
     const sections = [];
-    for (const [domain, domainTools] of groups) {
-      const entries = domainTools.map((tool) => {
+    // @ts-ignore
+    for ( const [domain, domainTools] of groups) {
+      const entries = domainTools.map((tool: any) => {
         const desc = tool.description || "";
 
         const params = tool.parameters?.properties || {};
         const paramNames = Object.keys(params);
         const required = tool.parameters?.required || [];
         const paramStr = paramNames
-          .map((p) => {
+          .map((p: any) => {
             const isReq = required.includes(p);
             const paramDesc = params[p].description || "";
             return `  - ${p}${isReq ? " (required)" : ""}: ${paramDesc}`;
@@ -170,7 +199,14 @@ export default class SystemPromptAssembler {
    * @param {string} [username] - Username
    * @returns {Promise<string>} Formatted memory sections for the system prompt
    */
-  async fetchMemories(agent, project, queryText, { traceId, agentSessionId, endpoint, _username } = {}) {
+  // @ts-ignore
+  async fetchMemories(
+    agent: any,
+    project: any,
+    queryText: any,
+    // @ts-ignore
+    { traceId, agentSessionId, endpoint, _username } = {},
+  ) {
     try {
       const memories = await MemoryService.search({
         agent,
@@ -188,8 +224,10 @@ export default class SystemPromptAssembler {
         `[SystemPromptAssembler] Memory search returned ${memories.length} results for ${agent}`,
       );
       return MemoryService.formatForPrompt(memories);
-    } catch (error) {
-      logger.warn(`[SystemPromptAssembler] Memory fetch error: ${error.message}`);
+    } catch (error: any) {
+      logger.warn(
+        `[SystemPromptAssembler] Memory fetch error: ${error.message}`,
+      );
       return "";
     }
   }
@@ -202,7 +240,14 @@ export default class SystemPromptAssembler {
    * @param {string} queryText - The user's latest message (used for relevance matching)
    * @returns {Promise<Array<{ name: string, content: string, score: number }>>}
    */
-  async fetchSkills(project, username, queryText, { traceId, agentSessionId, endpoint, agent } = {}) {
+  // @ts-ignore
+  async fetchSkills(
+    project: any,
+    username: any,
+    queryText: any,
+    // @ts-ignore
+    { traceId, agentSessionId, endpoint, agent } = {},
+  ) {
     try {
       const db = MongoWrapper.getDb(MONGO_DB_NAME);
       if (!db) return [];
@@ -216,41 +261,64 @@ export default class SystemPromptAssembler {
       if (skills.length === 0) return [];
 
       // If no query or no skills have embeddings, return all (graceful fallback)
-      const hasEmbeddings = skills.some((s) => s.embedding?.length > 0);
+      const hasEmbeddings = skills.some((s: any) => s.embedding?.length > 0);
       if (!queryText || !hasEmbeddings) {
         logger.info(
           `[SystemPromptAssembler] Returning all ${skills.length} skills (no query or no embeddings)`,
         );
-        return skills.map((s) => ({ name: s.name, content: s.content, description: s.description, score: 1 }));
+        return skills.map((s: any) => ({
+          name: s.name,
+          content: s.content,
+          description: s.description,
+          score: 1,
+        }));
       }
 
       // Generate query embedding
-      let queryEmbedding;
+      let queryEmbedding: any;
       try {
-        queryEmbedding = await EmbeddingService.embed(queryText, { source: "skill-relevance", project, endpoint: endpoint || "/agent", traceId: traceId || null, agentSessionId: agentSessionId || null, agent: agent || null });
-      } catch (error) {
-        logger.warn(`[SystemPromptAssembler] Query embedding failed: ${error.message} — returning all skills`);
-        return skills.map((s) => ({ name: s.name, content: s.content, description: s.description, score: 1 }));
+        queryEmbedding = await EmbeddingService.embed(queryText, {
+          source: "skill-relevance",
+          project,
+          endpoint: endpoint || "/agent",
+          traceId: traceId || null,
+          agentSessionId: agentSessionId || null,
+          agent: agent || null,
+        });
+      } catch (error: any) {
+        logger.warn(
+          `[SystemPromptAssembler] Query embedding failed: ${error.message} — returning all skills`,
+        );
+        return skills.map((s: any) => ({
+          name: s.name,
+          content: s.content,
+          description: s.description,
+          score: 1,
+        }));
       }
 
       // Score and filter by relevance threshold
       const scored = skills
-        .map((s) => ({
+        .map((s: any) => ({
           name: s.name,
           content: s.content,
           description: s.description,
-          score: s.embedding ? cosineSimilarity(queryEmbedding, s.embedding) : 0,
+          score: s.embedding
+            ? cosineSimilarity(queryEmbedding, s.embedding)
+            : 0,
         }))
-        .filter((s) => s.score >= SKILL_RELEVANCE_THRESHOLD)
-        .sort((a, b) => b.score - a.score);
+        .filter((s: any) => s.score >= SKILL_RELEVANCE_THRESHOLD)
+        .sort((a: any, b: any) => b.score - a.score);
 
       logger.info(
-        `[SystemPromptAssembler] Skills: ${scored.length}/${skills.length} above threshold (${scored.map((s) => `${s.name}:${s.score.toFixed(2)}`).join(", ")})`,
+        `[SystemPromptAssembler] Skills: ${scored.length}/${skills.length} above threshold (${scored.map((s: any) => `${s.name}:${s.score.toFixed(2)}`).join(", ")})`,
       );
 
       return scored;
-    } catch (error) {
-      logger.warn(`[SystemPromptAssembler] Skills fetch error: ${error.message}`);
+    } catch (error: any) {
+      logger.warn(
+        `[SystemPromptAssembler] Skills fetch error: ${error.message}`,
+      );
       return [];
     }
   }
@@ -281,7 +349,7 @@ export default class SystemPromptAssembler {
    * @param {Array} [ctx.enabledTools] - Enabled tool names
    * @returns {Promise<{ prompt: string, skillNames: string[] }>} Complete system prompt + skill names for UI emission
    */
-  async assemble(ctx) {
+  async assemble(ctx: any) {
     const sections = [];
     // null/undefined agent = direct chat mode (no persona)
     const isDirectMode = !ctx.agent;
@@ -289,7 +357,8 @@ export default class SystemPromptAssembler {
     const persona = isDirectMode ? null : AgentPersonaRegistry.get(agentId);
 
     // If no persona found, fall back to CODING defaults (unless direct mode)
-    const codingFallback = !isDirectMode && (!persona || persona.id === "CODING");
+    const codingFallback =
+      !isDirectMode && (!persona || persona.id === "CODING");
 
     // ── 1. Agent Identity ────────────────────────────────────────
     if (isDirectMode) {
@@ -297,9 +366,10 @@ export default class SystemPromptAssembler {
         `You are a helpful AI assistant with access to a comprehensive suite of real-time data and utility tools. Present data clearly with relevant formatting. For questions that don't require API data, respond naturally without tool calls.`,
       );
     } else if (persona) {
-      const identityText = typeof persona.identity === "function"
-        ? persona.identity(ctx)
-        : persona.identity;
+      const identityText =
+        typeof persona.identity === "function"
+          ? persona.identity(ctx)
+          : persona.identity;
       sections.push(identityText);
     } else {
       sections.push(
@@ -355,9 +425,10 @@ export default class SystemPromptAssembler {
 
     // ── 3. Tool Policy (persona-specific) ────────────────────────
     if (persona?.toolPolicy) {
-      const policyText = typeof persona.toolPolicy === "function"
-        ? persona.toolPolicy(ctx)
-        : persona.toolPolicy;
+      const policyText =
+        typeof persona.toolPolicy === "function"
+          ? persona.toolPolicy(ctx)
+          : persona.toolPolicy;
       if (policyText) sections.push(policyText);
     }
 
@@ -370,7 +441,8 @@ export default class SystemPromptAssembler {
       if (toolDescs) {
         const schemas = ToolOrchestratorService.getToolSchemas();
         const count = ctx.enabledTools
-          ? schemas.filter((t) => new Set(ctx.enabledTools).has(t.name)).length
+          ? schemas.filter((t: any) => new Set(ctx.enabledTools).has(t.name))
+              .length
           : schemas.length;
         sections.push(`## Available Tools (${count})\n` + toolDescs);
       }
@@ -387,13 +459,13 @@ export default class SystemPromptAssembler {
       } else if (codingFallback || persona?.usesCodingGuidelines) {
         sections.push(
           `## Coding Guidelines\n` +
-          `- Always read relevant files before making edits to understand context\n` +
-          `- After making changes, verify them by reading the modified section\n` +
-          `- Keep your explanations concise and technical\n` +
-          `\n## Command Execution\n` +
-          `- For dev servers and long-running processes (npm run dev, next dev, vite, nodemon, etc.), ALWAYS set run_in_background: true. These commands never terminate on their own.\n` +
-          `- You will receive the first ~2.5 seconds of output to confirm the server started correctly.\n` +
-          `- Do NOT use run_in_background for one-shot commands (npm install, npm test, git status, eslint, prettier, tsc, etc.) — let them complete normally.`,
+            `- Always read relevant files before making edits to understand context\n` +
+            `- After making changes, verify them by reading the modified section\n` +
+            `- Keep your explanations concise and technical\n` +
+            `\n## Command Execution\n` +
+            `- For dev servers and long-running processes (npm run dev, next dev, vite, nodemon, etc.), ALWAYS set run_in_background: true. These commands never terminate on their own.\n` +
+            `- You will receive the first ~2.5 seconds of output to confirm the server started correctly.\n` +
+            `- Do NOT use run_in_background for one-shot commands (npm install, npm test, git status, eslint, prettier, tsc, etc.) — let them complete normally.`,
         );
       }
     }
@@ -402,15 +474,16 @@ export default class SystemPromptAssembler {
     if (!isDirectMode && (codingFallback || persona?.usesCodingGuidelines)) {
       const enabledSet = ctx.enabledTools ? new Set(ctx.enabledTools) : null;
       const coordinatorAvailable = enabledSet
-        ? COORDINATOR_ONLY_TOOLS.some((t) => enabledSet.has(t))
+        ? COORDINATOR_ONLY_TOOLS.some((t: any) => enabledSet.has(t))
         : true; // No filter = all tools available including coordinator
 
       if (coordinatorAvailable) {
         const allSchemas = ToolOrchestratorService.getToolSchemas();
         const coordinatorSet = new Set(COORDINATOR_ONLY_TOOLS);
         const workerTools = allSchemas
-          .map((t) => t.name)
-          .filter((name) => !coordinatorSet.has(name));
+          .map((t: any) => t.name)
+          .filter((name: any) => !coordinatorSet.has(name));
+        // @ts-ignore
         sections.push(getCoordinatorPromptAddendum({ workerTools }));
       }
     }
@@ -418,9 +491,10 @@ export default class SystemPromptAssembler {
     // ── 6. Environment ───────────────────────────────────────────
     sections.push(
       `## Environment\n` +
-      `- Date/Time: ${new Date().toLocaleString("en-US", { dateStyle: "full", timeStyle: "long" })}\n` +
-      `- OS: Linux (WSL2)\n` +
-      `- Workspace: ${this.workspaceRoot}`,
+        `- Date/Time: ${new Date().toLocaleString("en-US", { dateStyle: "full", timeStyle: "long" })}\n` +
+        `- OS: Linux (WSL2)\n` +
+        // @ts-ignore
+        `- Workspace: ${this.workspaceRoot}`,
     );
 
     // ── 7. Project Structure (cached) ────────────────────────────
@@ -434,34 +508,53 @@ export default class SystemPromptAssembler {
     // ── 8. Project Skills (relevance-filtered) ────────────────────
     const lastUserMsg = [...(ctx.messages || [])]
       .reverse()
-      .find((m) => m.role === "user");
+      .find((m: any) => m.role === "user");
     const queryText = lastUserMsg?.content || "";
 
-    const skills = await this.fetchSkills(ctx.project, ctx.username, queryText, { traceId: ctx.traceId, agentSessionId: ctx.agentSessionId, endpoint: "/agent", agent: agentId });
+    const skills = await this.fetchSkills(
+      ctx.project,
+      ctx.username,
+      queryText,
+      {
+        traceId: ctx.traceId,
+        agentSessionId: ctx.agentSessionId,
+        endpoint: "/agent",
+        agent: agentId,
+      },
+    );
+    // @ts-ignore
     const skillNames = [];
     if (skills.length > 0) {
-      const skillBlocks = skills.map((s) => {
+      const skillBlocks = skills.map((s: any) => {
         skillNames.push(s.name);
         return `### ${s.name}\n${s.content}`;
       });
-      sections.push(`## Project Skills (${skills.length})\n` + skillBlocks.join("\n\n"));
+      sections.push(
+        `## Project Skills (${skills.length})\n` + skillBlocks.join("\n\n"),
+      );
     }
 
     // ── 9. Session Memory (embedding search) ────────────────────
     const memoryQuery = queryText || ctx.project || "";
 
     if (memoryQuery) {
-      const memories = await this.fetchMemories(agentId, ctx.project, memoryQuery, {
-        traceId: ctx.traceId,
-        agentSessionId: ctx.agentSessionId,
-        endpoint: "/agent",
-        username: ctx.username,
-      });
+      const memories = await this.fetchMemories(
+        agentId,
+        ctx.project,
+        memoryQuery,
+        {
+          traceId: ctx.traceId,
+          agentSessionId: ctx.agentSessionId,
+          endpoint: "/agent",
+          username: ctx.username,
+        },
+      );
       if (memories) {
         sections.push(`## Agent Memory\n` + memories);
       }
     }
 
+    // @ts-ignore
     return { prompt: sections.join("\n\n"), skillNames };
   }
 
@@ -475,7 +568,7 @@ export default class SystemPromptAssembler {
    * @returns {Function}
    */
   createHook() {
-    return async (ctx) => {
+    return async (ctx: any) => {
       try {
         const { prompt: systemPrompt, skillNames } = await this.assemble(ctx);
         if (!systemPrompt) return;
@@ -484,7 +577,9 @@ export default class SystemPromptAssembler {
         ctx._injectedSkills = skillNames;
 
         // Replace existing system message or prepend a new one
-        const systemIdx = ctx.messages?.findIndex((m) => m.role === "system");
+        const systemIdx = ctx.messages?.findIndex(
+          (m: any) => m.role === "system",
+        );
         if (systemIdx !== undefined && systemIdx >= 0) {
           ctx.messages[systemIdx].content = systemPrompt;
         } else {
@@ -494,8 +589,10 @@ export default class SystemPromptAssembler {
         logger.info(
           `[SystemPromptAssembler] Assembled ${systemPrompt.length} char system prompt for agent="${ctx.agent || "DIRECT"}" (${skillNames.length} skills)`,
         );
-      } catch (error) {
-        logger.error(`[SystemPromptAssembler] Assembly failed: ${error.message}`);
+      } catch (error: any) {
+        logger.error(
+          `[SystemPromptAssembler] Assembly failed: ${error.message}`,
+        );
       }
     };
   }

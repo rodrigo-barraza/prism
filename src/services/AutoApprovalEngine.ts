@@ -107,7 +107,9 @@ export default class AutoApprovalEngine {
    * @param {object} [options.tierOverrides] - Per-tool tier overrides { toolName: tier }
    */
   constructor(options = {}) {
+    // @ts-ignore
     this.fullAuto = options.fullAuto || false;
+    // @ts-ignore
     this.tierOverrides = options.tierOverrides || {};
   }
 
@@ -116,10 +118,13 @@ export default class AutoApprovalEngine {
    * @param {string} toolName
    * @returns {number} Tier constant (1, 2, or 3)
    */
-  getTier(toolName) {
+  getTier(toolName: any) {
+    // @ts-ignore
     if (this.tierOverrides[toolName] !== undefined) {
+      // @ts-ignore
       return this.tierOverrides[toolName];
     }
+    // @ts-ignore
     return DEFAULT_TIER_MAP[toolName] ?? APPROVAL_TIERS.WRITE; // Unknown tools default to Tier 2
   }
 
@@ -128,7 +133,7 @@ export default class AutoApprovalEngine {
    * @param {string} toolName
    * @returns {string}
    */
-  getTierLabel(toolName) {
+  getTierLabel(toolName: any) {
     return TIER_LABELS[this.getTier(toolName)] || "write";
   }
 
@@ -138,11 +143,12 @@ export default class AutoApprovalEngine {
    * @param {object} toolCall - { name, args, id }
    * @returns {{ approved: boolean, tier: number, tierLabel: string, reason: string }}
    */
-  check(toolCall) {
+  check(toolCall: any) {
     const tier = this.getTier(toolCall.name);
     const tierLabel = TIER_LABELS[tier] || "write";
 
     // Full Auto mode: everything runs
+    // @ts-ignore
     if (this.fullAuto) {
       return { approved: true, tier, tierLabel, reason: "full_auto" };
     }
@@ -162,11 +168,12 @@ export default class AutoApprovalEngine {
    * @param {Array<object>} toolCalls - Array of { name, args, id }
    * @returns {{ autoApproved: Array, needsApproval: Array }}
    */
-  checkBatch(toolCalls) {
+  checkBatch(toolCalls: any) {
     const autoApproved = [];
     const needsApproval = [];
 
-    for (const tc of toolCalls) {
+    // @ts-ignore
+    for ( const tc of toolCalls) {
       const result = this.check(tc);
       if (result.approved) {
         autoApproved.push({ ...tc, _approval: result });
@@ -177,7 +184,7 @@ export default class AutoApprovalEngine {
 
     if (needsApproval.length > 0) {
       logger.info(
-        `[AutoApproval] ${autoApproved.length} auto-approved, ${needsApproval.length} need approval: ${needsApproval.map((t) => t.name).join(", ")}`,
+        `[AutoApproval] ${autoApproved.length} auto-approved, ${needsApproval.length} need approval: ${needsApproval.map((t: any) => t.name).join(", ")}`,
       );
     }
 
@@ -189,7 +196,7 @@ export default class AutoApprovalEngine {
    * @returns {Function}
    */
   createHook() {
-    return async (toolCall, _ctx) => {
+    return async (toolCall: any, _ctx: any) => {
       return this.check(toolCall);
     };
   }

@@ -27,7 +27,7 @@
 // average. The token estimate (~4 chars/token) can massively
 // overcount on large thinking deltas, so we need a generous
 // window to let the rate stabilize before reporting.
-const MIN_ELAPSED_SEC = 0.5;    // 500ms minimum sample window
+const MIN_ELAPSED_SEC = 0.5; // 500ms minimum sample window
 const MIN_TOKENS_FOR_RATE = 10; // minimum tokens before reporting rate
 
 /**
@@ -77,7 +77,13 @@ const SessionGenerationTracker = {
    * @param {string} [meta.source="orchestrator"] - "orchestrator" | "worker" | "tool-sub-request"
    * @param {string} [meta.workerId]              - Worker agent ID (for worker requests)
    */
-  register(agentSessionId, requestId, { provider, model, source = "orchestrator", workerId = null } = {}) {
+  // @ts-ignore
+  register(
+    agentSessionId: any,
+    requestId: any,
+    // @ts-ignore
+    { provider, model, source = "orchestrator", workerId = null } = {},
+  ) {
     if (!agentSessionId || !requestId) return;
 
     const entry = {
@@ -126,7 +132,8 @@ const SessionGenerationTracker = {
    * @param {number} [data.inputTokens]  - Input token count (from provider usage)
    * @param {number} [data.ttft]         - Time to first token in seconds
    */
-  update(requestId, { outputTokens, inputTokens, ttft } = {}) {
+  // @ts-ignore
+  update(requestId: any, { outputTokens, inputTokens, ttft } = {}) {
     const entry = activeRequests.get(requestId);
     if (!entry) return;
 
@@ -158,7 +165,7 @@ const SessionGenerationTracker = {
    * @param {string} requestId
    * @param {number} [charCount=0] - Number of characters in this chunk
    */
-  recordChunkTiming(requestId, charCount = 0) {
+  recordChunkTiming(requestId: any, charCount = 0) {
     const entry = activeRequests.get(requestId);
     if (!entry) return;
     const now = performance.now();
@@ -176,21 +183,28 @@ const SessionGenerationTracker = {
    *
    * @param {string} requestId
    */
-  complete(requestId) {
+  complete(requestId: any) {
     const entry = activeRequests.get(requestId);
     if (!entry) return;
 
     // Use provider-reported output tokens when available (authoritative).
     // Fall back to chars/4 estimation when the provider didn't report usage
     // (e.g. OpenAI response.completed event intermittently missing).
-    const effectiveOutputTokens = entry.outputTokens > 0
-      ? entry.outputTokens
-      : (entry.outputCharacters > 0 ? Math.ceil(entry.outputCharacters / 4) : 0);
+    const effectiveOutputTokens =
+      entry.outputTokens > 0
+        ? entry.outputTokens
+        : entry.outputCharacters > 0
+          ? Math.ceil(entry.outputCharacters / 4)
+          : 0;
 
     // Compute this request's tok/s from the effective token count and
     // the timing window captured during streaming.
     let requestTokPerSec = null;
-    if (effectiveOutputTokens > 0 && entry.firstTokenTime && entry.lastTokenTime) {
+    if (
+      effectiveOutputTokens > 0 &&
+      entry.firstTokenTime &&
+      entry.lastTokenTime
+    ) {
       const elapsed = (entry.lastTokenTime - entry.firstTokenTime) / 1000;
       if (elapsed >= MIN_ELAPSED_SEC) {
         requestTokPerSec = effectiveOutputTokens / elapsed;
@@ -238,7 +252,7 @@ const SessionGenerationTracker = {
    *   avgTtft: number|null,
    * }}
    */
-  getSessionStats(agentSessionId) {
+  getSessionStats(agentSessionId: any) {
     const requestIds = sessionIndex.get(agentSessionId);
     const acc = sessionAccumulators.get(agentSessionId);
     const completedOutputTokens = acc?.completedOutputTokens || 0;
@@ -248,14 +262,17 @@ const SessionGenerationTracker = {
     if (!requestIds || requestIds.size === 0) {
       const totalOut = completedOutputTokens;
       const totalIn = completedInputTokens;
-      const avgTtft = ttftSamples.length > 0
-        ? ttftSamples.reduce((a, b) => a + b, 0) / ttftSamples.length
-        : null;
+      const avgTtft =
+        ttftSamples.length > 0
+          ? ttftSamples.reduce((a: any, b: any) => a + b, 0) /
+            ttftSamples.length
+          : null;
       // Use the most recent completed tok/s (last iteration's rate)
       const completedSamples = acc?.completedTokPerSecSamples || [];
-      const lastTokPerSec = completedSamples.length > 0
-        ? parseFloat(completedSamples[completedSamples.length - 1].toFixed(1))
-        : null;
+      const lastTokPerSec =
+        completedSamples.length > 0
+          ? parseFloat(completedSamples[completedSamples.length - 1].toFixed(1))
+          : null;
       return {
         tokPerSec: lastTokPerSec,
         activeRequests: 0,
@@ -273,7 +290,8 @@ const SessionGenerationTracker = {
     let activeTtftSum = 0;
     let activeTtftCount = 0;
 
-    for (const rid of requestIds) {
+    // @ts-ignore
+    for ( const rid of requestIds) {
       const req = activeRequests.get(rid);
       if (!req) continue;
 
@@ -295,11 +313,17 @@ const SessionGenerationTracker = {
       // output characters using ~4 chars/token heuristic. This is far
       // more accurate than raw chunkCount for providers like Anthropic
       // that send large thinking deltas as single chunks.
-      const estimatedFromChars = req.outputCharacters > 0
-        ? Math.ceil(req.outputCharacters / 4)
-        : req.chunkCount;
-      const effectiveTokens = req.outputTokens > 0 ? req.outputTokens : estimatedFromChars;
-      if (req.firstTokenTime && req.lastTokenTime && effectiveTokens >= MIN_TOKENS_FOR_RATE) {
+      const estimatedFromChars =
+        req.outputCharacters > 0
+          ? Math.ceil(req.outputCharacters / 4)
+          : req.chunkCount;
+      const effectiveTokens =
+        req.outputTokens > 0 ? req.outputTokens : estimatedFromChars;
+      if (
+        req.firstTokenTime &&
+        req.lastTokenTime &&
+        effectiveTokens >= MIN_TOKENS_FOR_RATE
+      ) {
         const elapsed = (req.lastTokenTime - req.firstTokenTime) / 1000;
         if (elapsed >= MIN_ELAPSED_SEC) {
           totalTokPerSec += effectiveTokens / elapsed;
@@ -312,7 +336,8 @@ const SessionGenerationTracker = {
     const totalIn = completedInputTokens + activeInputTokens;
 
     // Average TTFT across completed + active samples
-    const allTtftSum = ttftSamples.reduce((a, b) => a + b, 0) + activeTtftSum;
+    const allTtftSum =
+      ttftSamples.reduce((a: any, b: any) => a + b, 0) + activeTtftSum;
     const allTtftCount = ttftSamples.length + activeTtftCount;
     const avgTtft = allTtftCount > 0 ? allTtftSum / allTtftCount : null;
 
@@ -325,7 +350,9 @@ const SessionGenerationTracker = {
     } else {
       const completedSamples = acc?.completedTokPerSecSamples || [];
       if (completedSamples.length > 0) {
-        tokPerSec = parseFloat(completedSamples[completedSamples.length - 1].toFixed(1));
+        tokPerSec = parseFloat(
+          completedSamples[completedSamples.length - 1].toFixed(1),
+        );
       }
     }
 
@@ -345,10 +372,11 @@ const SessionGenerationTracker = {
    *
    * @param {string} agentSessionId
    */
-  cleanup(agentSessionId) {
+  cleanup(agentSessionId: any) {
     const requestIds = sessionIndex.get(agentSessionId);
     if (requestIds) {
-      for (const rid of requestIds) {
+      // @ts-ignore
+      for ( const rid of requestIds) {
         activeRequests.delete(rid);
       }
       sessionIndex.delete(agentSessionId);
@@ -362,7 +390,7 @@ const SessionGenerationTracker = {
    * @param {string} agentSessionId
    * @returns {boolean}
    */
-  hasActiveRequests(agentSessionId) {
+  hasActiveRequests(agentSessionId: any) {
     const requestIds = sessionIndex.get(agentSessionId);
     return !!(requestIds && requestIds.size > 0);
   },

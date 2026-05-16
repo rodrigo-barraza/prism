@@ -25,7 +25,7 @@ export default {
   domain: "Agentic: Control Flow",
   labels: ["coding"],
 
-  async execute(args) {
+  async execute(args: any) {
     logger.info(`[EnterPlanMode] ${args.reason || "(no reason given)"}`);
     return {
       acknowledged: true,

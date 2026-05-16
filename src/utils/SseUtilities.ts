@@ -10,7 +10,7 @@ import { createAbortController } from "./AbortController.js";
  *
  * @param {import("express").Response} res
  */
-export function initSseResponse(res) {
+export function initSseResponse(res: any) {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
@@ -25,13 +25,13 @@ export function initSseResponse(res) {
  * @param {AbortSignal} signal
  * @returns {(event: object) => void}
  */
-export function createSseEmitter(res, signal) {
+export function createSseEmitter(res: any, signal: any) {
   // Disable Nagle's algorithm for minimal SSE latency.
   // Without this, small SSE events can sit in the TCP buffer when
   // the server blocks on await (e.g. plan approval promise).
   if (res.socket) res.socket.setNoDelay(true);
 
-  return (event) => {
+  return (event: any) => {
     if (!signal.aborted) {
       if (event.type === "image" && event.minioRef && event.data) {
         const { data: _stripped, ...lightweight } = event;
@@ -63,32 +63,32 @@ export function createSseEmitter(res, signal) {
  * @param {object}        reqBody  - The original request body (for fallback provider/model)
  * @returns {{ error?: object, response?: object }}
  */
-export function buildJsonResponseFromEvents(events, reqBody) {
-  const errorEvent = events.find((e) => e.type === "error");
+export function buildJsonResponseFromEvents(events: any, reqBody: any) {
+  const errorEvent = events.find((e: any) => e.type === "error");
   if (errorEvent) {
     return { error: new ProviderError("server", errorEvent.message, 500) };
   }
 
-  const doneEvent = events.find((e) => e.type === "done") || {};
+  const doneEvent = events.find((e: any) => e.type === "done") || {};
   const text = events
-    .filter((e) => e.type === "chunk")
-    .map((e) => e.content)
+    .filter((e: any) => e.type === "chunk")
+    .map((e: any) => e.content)
     .join("");
   const thinking = events
-    .filter((e) => e.type === "thinking")
-    .map((e) => e.content)
+    .filter((e: any) => e.type === "thinking")
+    .map((e: any) => e.content)
     .join("");
   const images = events
-    .filter((e) => e.type === "image")
-    .map((e) => ({
+    .filter((e: any) => e.type === "image")
+    .map((e: any) => ({
       data: e.data,
       mimeType: e.mimeType,
       minioRef: e.minioRef || null,
     }));
 
   const toolCalls = events
-    .filter((e) => e.type === "tool_execution" && e.status === "calling")
-    .map((e) => ({
+    .filter((e: any) => e.type === "tool_execution" && e.status === "calling")
+    .map((e: any) => ({
       name: e.tool?.name,
       args: e.tool?.args,
     }));
@@ -104,7 +104,9 @@ export function buildJsonResponseFromEvents(events, reqBody) {
       usage: doneEvent.usage || null,
       estimatedCost: doneEvent.estimatedCost ?? null,
       ...(doneEvent.traceId && { traceId: doneEvent.traceId }),
-      ...(doneEvent.conversationId && { conversationId: doneEvent.conversationId }),
+      ...(doneEvent.conversationId && {
+        conversationId: doneEvent.conversationId,
+      }),
     },
   };
 }
@@ -118,7 +120,12 @@ export function buildJsonResponseFromEvents(events, reqBody) {
  * @param {object}                     params  - Parameters to pass to the handler
  * @param {Function}                   [handler] - Generation handler (default: handleConversation)
  */
-export async function handleSseRequest(req, res, params, handler = handleConversation) {
+export async function handleSseRequest(
+  req: any,
+  res: any,
+  params: any,
+  handler = handleConversation,
+) {
   initSseResponse(res);
 
   const controller = createAbortController();
@@ -126,11 +133,9 @@ export async function handleSseRequest(req, res, params, handler = handleConvers
     if (!res.writableFinished) controller.abort();
   });
 
-  await handler(
-    params,
-    createSseEmitter(res, controller.signal),
-    { signal: controller.signal },
-  );
+  await handler(params, createSseEmitter(res, controller.signal), {
+    signal: controller.signal,
+  });
 
   if (!controller.signal.aborted) res.end();
 }
@@ -145,10 +150,18 @@ export async function handleSseRequest(req, res, params, handler = handleConvers
  * @param {object}                     params  - Parameters to pass to the handler
  * @param {Function}                   [handler] - Generation handler (default: handleConversation)
  */
-export async function handleJsonRequest(req, res, next, params, handler = handleConversation) {
+export async function handleJsonRequest(
+  req: any,
+  res: any,
+  next: any,
+  params: any,
+  handler = handleConversation,
+) {
+  // @ts-ignore
   const events = [];
-  await handler(params, (event) => events.push(event));
+  await handler(params, (event: any) => events.push(event));
 
+  // @ts-ignore
   const { error, response } = buildJsonResponseFromEvents(events, req.body);
   if (error) return next(error);
 

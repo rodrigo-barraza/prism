@@ -15,7 +15,7 @@ const VIEWER_X_OFFSET = MODEL_X_OFFSET + 350;
  * These steps are shown in the graph but don't get viewers or chain edges,
  * keeping the graph clean and focused on meaningful output.
  */
-function isUtilityStep(step) {
+function isUtilityStep(step: any) {
   const label = step.label || "";
   // 🧠 prefix = internal decision steps (Emoji React, Image Detection, Fetch Count, etc.)
   return label.startsWith("🧠");
@@ -25,13 +25,14 @@ function isUtilityStep(step) {
  * Build compound port IDs for a conversation input node.
  * Format: "{messageIndex}.{modality}" e.g. "0.text", "1.text", "1.image"
  */
-function buildConversationPorts(messages, supportedModalities = ["text"]) {
+function buildConversationPorts(messages: any, supportedModalities = ["text"]) {
   const ports = [];
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
     ports.push(`${i}.text`);
     if (msg.role === "user" || msg.role === "assistant") {
-      for (const mod of supportedModalities) {
+      // @ts-ignore
+      for ( const mod of supportedModalities) {
         if (mod !== "text") {
           ports.push(`${i}.${mod}`);
         }
@@ -45,7 +46,7 @@ function buildConversationPorts(messages, supportedModalities = ["text"]) {
  * Resolve a model's input/output types from the Prism config.
  * Falls back to step-derived values if the model isn't found in config.
  */
-function resolveModelModalities(step) {
+function resolveModelModalities(step: any) {
   const configModel = getModelByName(step.model);
   const isImageGen = step.outputType === "image";
 
@@ -58,8 +59,10 @@ function resolveModelModalities(step) {
       modelType:
         configModel.modelType || (isImageGen ? "image" : "conversation"),
       supportsSystemPrompt:
+        // @ts-ignore
         configModel.supportsSystemPrompt !== undefined
-          ? configModel.supportsSystemPrompt
+          ? // @ts-ignore
+            configModel.supportsSystemPrompt
           : (configModel.outputTypes?.includes("text") ?? true),
     };
   }
@@ -94,19 +97,22 @@ function resolveModelModalities(step) {
  * @param {Array} steps - Raw step data from the client
  * @returns {{ nodes, edges, nodeResults }}
  */
-function assembleGraph(steps) {
+function assembleGraph(steps: any) {
   if (!Array.isArray(steps) || steps.length === 0) {
     return { nodes: [], edges: [], nodeResults: {} };
   }
 
+  // @ts-ignore
   const allNodes = [];
+  // @ts-ignore
   const allEdges = [];
   const nodeResults = {};
 
   // Track the last non-utility model ID for chain edges
+  // @ts-ignore
   let prevOutputModelId = null;
 
-  steps.forEach((step, i) => {
+  steps.forEach((step: any, i: any) => {
     const baseX = 80 + i * STEP_WIDTH;
     const baseY = 80;
     const stepPrefix = `s${i}`;
@@ -154,13 +160,14 @@ function assembleGraph(steps) {
     messages.push(userMsg);
     if (step.output) {
       const assistantMsg = { role: "assistant", content: step.output };
+      // @ts-ignore
       if (step.outputImageRef) assistantMsg.images = [step.outputImageRef];
       messages.push(assistantMsg);
     }
 
     // Derive conversation supported modalities from the model's raw input types
     const supportedModalities = (modalities.rawInputTypes || ["text"]).filter(
-      (t) => t !== "conversation",
+      (t: any) => t !== "conversation",
     );
     const convInputTypes = buildConversationPorts(
       messages,
@@ -233,25 +240,33 @@ function assembleGraph(steps) {
 
     // Store model results
     const result = {};
+    // @ts-ignore
     if (step.output) result.text = step.output;
+    // @ts-ignore
     if (step.outputImageRef) result.image = step.outputImageRef;
+    // @ts-ignore
     nodeResults[modelId] = result;
 
     // ── 5. Output Viewer ──
     {
       const viewerId = `${stepPrefix}_viewer`;
       const viewerResult = {};
+      // @ts-ignore
       if (step.output) viewerResult.text = step.output;
+      // @ts-ignore
       if (step.outputImageRef) viewerResult.image = step.outputImageRef;
 
       allNodes.push({
         id: viewerId,
         nodeType: "viewer",
         modality: null,
+        // @ts-ignore
         content: viewerResult.text || viewerResult.image || null,
+        // @ts-ignore
         contentType: viewerResult.image
           ? "image"
-          : viewerResult.text
+          : // @ts-ignore
+            viewerResult.text
             ? "text"
             : null,
         receivedOutputs: viewerResult,
@@ -283,10 +298,12 @@ function assembleGraph(steps) {
         });
       }
 
+      // @ts-ignore
       nodeResults[viewerId] = viewerResult;
     }
 
     // ── 6. Chain edge from previous output model → this model (non-utility only) ──
+    // @ts-ignore
     if (!utility && prevOutputModelId) {
       allEdges.push({
         id: `chain_${prevOutputModelId}_to_${modelId}`,
@@ -303,6 +320,7 @@ function assembleGraph(steps) {
     }
   });
 
+  // @ts-ignore
   return { nodes: allNodes, edges: allEdges, nodeResults };
 }
 

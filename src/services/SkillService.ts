@@ -1,4 +1,5 @@
 import MongoWrapper from "../wrappers/MongoWrapper.js";
+// @ts-ignore
 import { MONGO_DB_NAME } from "../../config.js";
 import { COLLECTIONS } from "../constants.js";
 import logger from "../utils/logger.js";
@@ -41,11 +42,21 @@ const SkillService = {
    * @param {string} [data.agent] - Agent persona override
    * @returns {Promise<object>}
    */
-  async create(data) {
+  async create(data: any) {
     const col = getCollection();
     if (!col) throw new Error("Database not available");
 
-    const { name, description, prompt, steps, tools, maxIterations, model, project, agent } = data;
+    const {
+      name,
+      description,
+      prompt,
+      steps,
+      tools,
+      maxIterations,
+      model,
+      project,
+      agent,
+    } = data;
 
     if (!name || typeof name !== "string") {
       return { error: "'name' is required (string)" };
@@ -55,12 +66,17 @@ const SkillService = {
     }
 
     // Derive a stable skill ID
-    const skillId = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    const skillId = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
 
     // Check for duplicate
     const existing = await col.findOne({ skillId });
     if (existing) {
-      return { error: `Skill "${skillId}" already exists. Delete it first or use a different name.` };
+      return {
+        error: `Skill "${skillId}" already exists. Delete it first or use a different name.`,
+      };
     }
 
     const doc = {
@@ -70,7 +86,10 @@ const SkillService = {
       prompt,
       steps: Array.isArray(steps) ? steps : [],
       tools: Array.isArray(tools) ? tools : null, // null = all tools
-      maxIterations: typeof maxIterations === "number" ? Math.min(100, Math.max(1, maxIterations)) : 25,
+      maxIterations:
+        typeof maxIterations === "number"
+          ? Math.min(100, Math.max(1, maxIterations))
+          : 25,
       model: model || null,
       project: project || null,
       agent: agent || null,
@@ -95,11 +114,13 @@ const SkillService = {
    * @param {number} [options.limit] - Max results
    * @returns {Promise<object>}
    */
+  // @ts-ignore
   async list({ project, limit = 50 } = {}) {
     const col = getCollection();
     if (!col) return { skills: [], total: 0 };
 
     const filter = {};
+    // @ts-ignore
     if (project) filter.project = project;
 
     const skills = await col
@@ -119,7 +140,7 @@ const SkillService = {
    * @param {string} skillId
    * @returns {Promise<object|null>}
    */
-  async get(skillId) {
+  async get(skillId: any) {
     const col = getCollection();
     if (!col) return null;
     const doc = await col.findOne({ skillId });
@@ -131,7 +152,7 @@ const SkillService = {
    * @param {string} skillId
    * @returns {Promise<object>}
    */
-  async delete(skillId) {
+  async delete(skillId: any) {
     const col = getCollection();
     if (!col) return { error: "Database not available" };
 
@@ -157,29 +178,40 @@ const SkillService = {
    * @param {object} [variables] - Key-value pairs for {{variable}} interpolation
    * @returns {Promise<object>} { prompt, config } or { error }
    */
-  async prepare(skillId, variables = {}) {
+  async prepare(skillId: any, variables = {}) {
     const col = getCollection();
     if (!col) return { error: "Database not available" };
 
     const doc = await col.findOne({ skillId });
     if (!doc) {
-      return { error: `Skill "${skillId}" not found. Use skill_list to see available skills.` };
+      return {
+        error: `Skill "${skillId}" not found. Use skill_list to see available skills.`,
+      };
     }
 
     // Interpolate variables into the prompt template
     let prompt = doc.prompt;
-    for (const [key, value] of Object.entries(variables)) {
-      prompt = prompt.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), String(value));
+    // @ts-ignore
+    for ( const [key, value] of Object.entries(variables)) {
+      prompt = prompt.replace(
+        new RegExp(`\\{\\{${key}\\}\\}`, "g"),
+        String(value),
+      );
     }
 
     // Warn about unresolved variables
     const unresolvedMatch = prompt.match(/\{\{(\w+)\}\}/g);
-    const unresolved = unresolvedMatch ? [...new Set(unresolvedMatch.map((m) => m.slice(2, -2)))] : [];
+    const unresolved = unresolvedMatch
+      ? [...new Set(unresolvedMatch.map((m: any) => m.slice(2, -2)))]
+      : [];
 
     // Increment usage counter
     await col.updateOne(
       { skillId },
-      { $inc: { usageCount: 1 }, $set: { updatedAt: new Date().toISOString() } },
+      {
+        $inc: { usageCount: 1 },
+        $set: { updatedAt: new Date().toISOString() },
+      },
     );
 
     const config = {
@@ -201,7 +233,7 @@ const SkillService = {
   },
 };
 
-function sanitize(doc) {
+function sanitize(doc: any) {
   if (!doc) return null;
   const { _id, ...rest } = doc;
   return rest;

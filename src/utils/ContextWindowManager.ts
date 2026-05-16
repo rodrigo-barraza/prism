@@ -22,7 +22,7 @@ import { estimateTokens } from "./CostCalculator.js";
 const TOOL_SCHEMA_OVERHEAD_TOKENS = 2000;
 
 /** Fraction of context window to target (leave headroom for output + safety) */
-const TARGET_UTILIZATION = 0.80;
+const TARGET_UTILIZATION = 0.8;
 
 /** Minimum tokens to reserve for the model's output */
 const MIN_OUTPUT_RESERVE = 8192;
@@ -40,12 +40,16 @@ const PROTECTED_RECENT_TURNS = 4;
  * @param {object} msg
  * @returns {number}
  */
-function estimateMessageTokens(msg) {
+function estimateMessageTokens(msg: any) {
   let tokens = 4; // Per-message overhead (role, formatting)
 
   // Text content
   if (msg.content) {
-    tokens += estimateTokens(typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content));
+    tokens += estimateTokens(
+      typeof msg.content === "string"
+        ? msg.content
+        : JSON.stringify(msg.content),
+    );
   }
 
   // Thinking blocks
@@ -55,18 +59,25 @@ function estimateMessageTokens(msg) {
 
   // Tool calls (function name + args + results)
   if (msg.toolCalls && Array.isArray(msg.toolCalls)) {
-    for (const tc of msg.toolCalls) {
+    // @ts-ignore
+    for ( const tc of msg.toolCalls) {
       tokens += estimateTokens(tc.name || "");
       tokens += estimateTokens(tc.args ? JSON.stringify(tc.args) : "");
       if (tc.result) {
-        tokens += estimateTokens(typeof tc.result === "string" ? tc.result : JSON.stringify(tc.result));
+        tokens += estimateTokens(
+          typeof tc.result === "string" ? tc.result : JSON.stringify(tc.result),
+        );
       }
     }
   }
 
   // Tool response content (standalone tool messages)
   if (msg.role === "tool" && msg.content) {
-    tokens += estimateTokens(typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content));
+    tokens += estimateTokens(
+      typeof msg.content === "string"
+        ? msg.content
+        : JSON.stringify(msg.content),
+    );
   }
 
   // Images (rough: ~1000 tokens per image reference)
@@ -83,8 +94,11 @@ function estimateMessageTokens(msg) {
  * @param {Array} messages
  * @returns {number}
  */
-function estimateTotalTokens(messages) {
-  return messages.reduce((sum, msg) => sum + estimateMessageTokens(msg), 0);
+function estimateTotalTokens(messages: any) {
+  return messages.reduce(
+    (sum: any, msg: any) => sum + estimateMessageTokens(msg),
+    0,
+  );
 }
 
 // ────────────────────────────────────────────────────────────
@@ -104,7 +118,10 @@ function estimateTotalTokens(messages) {
  * @param {number} [protectedTurns] - Number of recent user turns to protect
  * @returns {Array} Messages with truncated tool results
  */
-function truncateToolResults(messages, protectedTurns = PROTECTED_RECENT_TURNS) {
+function truncateToolResults(
+  messages: any,
+  protectedTurns = PROTECTED_RECENT_TURNS,
+) {
   // Find the protection boundary (same logic as compressOldAssistantMessages)
   let userTurnsSeen = 0;
   let protectionIndex = messages.length;
@@ -119,21 +136,24 @@ function truncateToolResults(messages, protectedTurns = PROTECTED_RECENT_TURNS) 
     }
   }
 
-  return messages.map((msg, i) => {
+  return messages.map((msg: any, i: any) => {
     // Never truncate tool results in recent (protected) messages
     if (i >= protectionIndex) return msg;
     if (msg.role !== "assistant" || !msg.toolCalls?.length) return msg;
 
     const truncated = { ...msg };
-    truncated.toolCalls = msg.toolCalls.map((tc) => {
+    truncated.toolCalls = msg.toolCalls.map((tc: any) => {
       if (!tc.result) return tc;
 
-      const resultStr = typeof tc.result === "string" ? tc.result : JSON.stringify(tc.result);
+      const resultStr =
+        typeof tc.result === "string" ? tc.result : JSON.stringify(tc.result);
       if (resultStr.length <= AGGRESSIVE_TOOL_RESULT_CAP) return tc;
 
       return {
         ...tc,
-        result: resultStr.slice(0, AGGRESSIVE_TOOL_RESULT_CAP) + `\n...[truncated ${resultStr.length - AGGRESSIVE_TOOL_RESULT_CAP} chars]`,
+        result:
+          resultStr.slice(0, AGGRESSIVE_TOOL_RESULT_CAP) +
+          `\n...[truncated ${resultStr.length - AGGRESSIVE_TOOL_RESULT_CAP} chars]`,
       };
     });
     return truncated;
@@ -149,7 +169,10 @@ function truncateToolResults(messages, protectedTurns = PROTECTED_RECENT_TURNS) 
  * @param {number} protectedCount - Number of recent turns to protect
  * @returns {Array}
  */
-function compressOldAssistantMessages(messages, protectedCount = PROTECTED_RECENT_TURNS) {
+function compressOldAssistantMessages(
+  messages: any,
+  protectedCount = PROTECTED_RECENT_TURNS,
+) {
   // Count user turns from the end to determine protection boundary
   let userTurnsSeen = 0;
   let protectionIndex = messages.length;
@@ -164,7 +187,7 @@ function compressOldAssistantMessages(messages, protectedCount = PROTECTED_RECEN
     }
   }
 
-  return messages.map((msg, i) => {
+  return messages.map((msg: any, i: any) => {
     // Never compress system messages, user messages, or protected recent messages
     if (msg.role === "system" || msg.role === "user" || i >= protectionIndex) {
       return msg;
@@ -175,16 +198,19 @@ function compressOldAssistantMessages(messages, protectedCount = PROTECTED_RECEN
       const compressed = { ...msg };
 
       // Keep a short summary of what the assistant did
-      const toolNames = msg.toolCalls?.map((tc) => tc.name).join(", ") || "";
+      const toolNames =
+        msg.toolCalls?.map((tc: any) => tc.name).join(", ") || "";
       const contentPreview = msg.content?.slice(0, 200) || "";
 
       compressed.content = `[Earlier response${toolNames ? ` — used: ${toolNames}` : ""}]${contentPreview ? `\n${contentPreview}...` : ""}`;
       compressed.thinking = undefined;
 
       if (compressed.toolCalls) {
-        compressed.toolCalls = compressed.toolCalls.map((tc) => ({
+        compressed.toolCalls = compressed.toolCalls.map((tc: any) => ({
           ...tc,
-          result: tc.result ? "[result truncated for context budget]" : undefined,
+          result: tc.result
+            ? "[result truncated for context budget]"
+            : undefined,
         }));
       }
 
@@ -212,7 +238,7 @@ function compressOldAssistantMessages(messages, protectedCount = PROTECTED_RECEN
  * @param {number} maxTokens - Token budget
  * @returns {Array}
  */
-function slidingWindowTruncation(messages, maxTokens) {
+function slidingWindowTruncation(messages: any, maxTokens: any) {
   if (messages.length <= 3) return messages;
 
   // Always keep: system message, first user message
@@ -269,39 +295,65 @@ export default class ContextWindowManager {
    * @param {number} [options.toolCount=0] - Number of tools (for schema overhead estimation)
    * @returns {{ messages: Array, truncated: boolean, strategy: string|null, estimatedTokens: number }}
    */
-  static enforce(messages, options = {}) {
+  static enforce(messages: any, options = {}) {
     const {
+      // @ts-ignore
       maxInputTokens = 128_000,
+      // @ts-ignore
       maxOutputTokens = MIN_OUTPUT_RESERVE,
+      // @ts-ignore
       toolCount = 0,
     } = options;
 
     // Calculate the effective token budget
-    const schemaOverhead = TOOL_SCHEMA_OVERHEAD_TOKENS + (toolCount * 150);
+    const schemaOverhead = TOOL_SCHEMA_OVERHEAD_TOKENS + toolCount * 150;
     const outputReserve = Math.max(maxOutputTokens, MIN_OUTPUT_RESERVE);
-    const budget = Math.floor((maxInputTokens - outputReserve - schemaOverhead) * TARGET_UTILIZATION);
+    const budget = Math.floor(
+      (maxInputTokens - outputReserve - schemaOverhead) * TARGET_UTILIZATION,
+    );
 
     if (budget <= 0) {
-      logger.warn(`[ContextWindowManager] Negative budget: maxInput=${maxInputTokens}, outputReserve=${outputReserve}, schemaOverhead=${schemaOverhead}`);
-      return { messages, truncated: false, strategy: null, estimatedTokens: estimateTotalTokens(messages) };
+      logger.warn(
+        `[ContextWindowManager] Negative budget: maxInput=${maxInputTokens}, outputReserve=${outputReserve}, schemaOverhead=${schemaOverhead}`,
+      );
+      return {
+        messages,
+        truncated: false,
+        strategy: null,
+        estimatedTokens: estimateTotalTokens(messages),
+      };
     }
 
     let currentTokens = estimateTotalTokens(messages);
 
     // Fast path: fits within budget
     if (currentTokens <= budget) {
-      return { messages, truncated: false, strategy: null, estimatedTokens: currentTokens };
+      return {
+        messages,
+        truncated: false,
+        strategy: null,
+        estimatedTokens: currentTokens,
+      };
     }
 
-    logger.info(`[ContextWindowManager] Context overflow: ${currentTokens} tokens > ${budget} budget (${maxInputTokens} window, ${outputReserve} output reserve)`);
+    logger.info(
+      `[ContextWindowManager] Context overflow: ${currentTokens} tokens > ${budget} budget (${maxInputTokens} window, ${outputReserve} output reserve)`,
+    );
 
     // Strategy 1: Truncate tool results aggressively
     let result = truncateToolResults(messages);
     currentTokens = estimateTotalTokens(result);
 
     if (currentTokens <= budget) {
-      logger.info(`[ContextWindowManager] Fixed with tool result truncation: ${currentTokens} tokens`);
-      return { messages: result, truncated: true, strategy: "tool_truncation", estimatedTokens: currentTokens };
+      logger.info(
+        `[ContextWindowManager] Fixed with tool result truncation: ${currentTokens} tokens`,
+      );
+      return {
+        messages: result,
+        truncated: true,
+        strategy: "tool_truncation",
+        estimatedTokens: currentTokens,
+      };
     }
 
     // Strategy 2: Compress old assistant messages
@@ -309,16 +361,30 @@ export default class ContextWindowManager {
     currentTokens = estimateTotalTokens(result);
 
     if (currentTokens <= budget) {
-      logger.info(`[ContextWindowManager] Fixed with assistant compression: ${currentTokens} tokens`);
-      return { messages: result, truncated: true, strategy: "assistant_compression", estimatedTokens: currentTokens };
+      logger.info(
+        `[ContextWindowManager] Fixed with assistant compression: ${currentTokens} tokens`,
+      );
+      return {
+        messages: result,
+        truncated: true,
+        strategy: "assistant_compression",
+        estimatedTokens: currentTokens,
+      };
     }
 
     // Strategy 3: Sliding window — drop middle turns
     result = slidingWindowTruncation(result, budget);
     currentTokens = estimateTotalTokens(result);
 
-    logger.info(`[ContextWindowManager] Applied sliding window: ${currentTokens} tokens (budget: ${budget})`);
-    return { messages: result, truncated: true, strategy: "sliding_window", estimatedTokens: currentTokens };
+    logger.info(
+      `[ContextWindowManager] Applied sliding window: ${currentTokens} tokens (budget: ${budget})`,
+    );
+    return {
+      messages: result,
+      truncated: true,
+      strategy: "sliding_window",
+      estimatedTokens: currentTokens,
+    };
   }
 
   /**
@@ -326,7 +392,7 @@ export default class ContextWindowManager {
    * @param {Array} messages
    * @returns {number}
    */
-  static estimateTokens(messages) {
+  static estimateTokens(messages: any) {
     return estimateTotalTokens(messages);
   }
 
@@ -335,7 +401,7 @@ export default class ContextWindowManager {
    * @param {object} msg
    * @returns {number}
    */
-  static estimateMessageTokens(msg) {
+  static estimateMessageTokens(msg: any) {
     return estimateMessageTokens(msg);
   }
 }

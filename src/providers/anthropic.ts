@@ -4,8 +4,10 @@ import logger from "../utils/logger.js";
 import { extractAnthropicRateLimits } from "../utils/rateLimits.js";
 import { compressImageForSizeLimit } from "../utils/media.js";
 import { EMPTY_USAGE } from "../utils/openai-compat.js";
+// @ts-ignore
 import { ANTHROPIC_API_KEY } from "../../config.js";
 import { TYPES, getDefaultModels } from "../config.js";
+// @ts-ignore
 import { sleep } from "@rodrigo-barraza/utilities-library";
 
 // Default budget tokens mapped from effort level (for non-adaptive models)
@@ -22,7 +24,7 @@ const MAX_RETRIES = 3;
 /**
  * Check if an Anthropic error is retryable (overloaded or 529).
  */
-function isRetryableError(error) {
+function isRetryableError(error: any) {
   // SDK wraps the error body — check both the error type and HTTP status
   const errorType = error?.error?.type || error?.type;
   if (errorType === "overloaded_error") return true;
@@ -30,9 +32,11 @@ function isRetryableError(error) {
   return false;
 }
 
+// @ts-ignore
 let client = null;
 
 function getClient() {
+  // @ts-ignore
   if (!client) {
     if (!ANTHROPIC_API_KEY) {
       throw new ProviderError("anthropic", "ANTHROPIC_API_KEY is not set", 401);
@@ -48,10 +52,12 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
  * Walk all Anthropic-format message content blocks and compress any
  * base64 image that exceeds 5 MB. Mutates the messages array in-place.
  */
-async function enforceImageSizeLimits(messages) {
-  for (const msg of messages) {
+async function enforceImageSizeLimits(messages: any) {
+  // @ts-ignore
+  for ( const msg of messages) {
     if (!Array.isArray(msg.content)) continue;
-    for (const block of msg.content) {
+    // @ts-ignore
+    for ( const block of msg.content) {
       if (block.type !== "image" || block.source?.type !== "base64") continue;
       const data = block.source.data;
       if (!data) continue;
@@ -63,7 +69,10 @@ async function enforceImageSizeLimits(messages) {
       logger.warn(
         `[anthropic] SAFETY NET: image still ${(size / 1024 / 1024).toFixed(2)} MB after prepareMessages. Compressing now...`,
       );
-      const result = await compressImageForSizeLimit(block.source.data, block.source.media_type || "image/png");
+      const result = await compressImageForSizeLimit(
+        block.source.data,
+        block.source.media_type || "image/png",
+      );
       block.source.data = result.data;
       block.source.media_type = result.mediaType;
 
@@ -79,11 +88,11 @@ async function enforceImageSizeLimits(messages) {
  * Anthropic requires alternating user/assistant roles and handles system messages separately.
  * This helper extracts the system message and merges consecutive same-role messages.
  */
-async function prepareMessages(messages) {
-  let systemMessage;
+async function prepareMessages(messages: any) {
+  let systemMessage: any;
 
   // Extract system message
-  const conversation = messages.map((m) => ({ ...m }));
+  const conversation = messages.map((m: any) => ({ ...m }));
   if (conversation.length > 0 && conversation[0].role === "system") {
     systemMessage = conversation.shift().content;
   }
@@ -92,167 +101,177 @@ async function prepareMessages(messages) {
   // Whitelist approach: explicitly construct each output object instead of
   // destructuring + ...rest, which leaks any new internal fields (e.g.
   // _ttftSamples, _liveGenProgress, _workerTokens) into the API payload.
-  const cleaned = await Promise.all(conversation
-    .filter(
-      (m) => m.role === "user" || m.role === "assistant" || m.role === "tool",
-    )
-    .map(async (m) => {
-      // Convert tool role messages to tool_result user messages for Anthropic
-      if (m.role === "tool") {
-        return {
-          role: "user",
-          content: [
-            {
-              type: "tool_result",
-              tool_use_id: m.tool_call_id || m.id || m.name || "unknown",
-              content:
-                typeof m.content === "string"
-                  ? m.content
-                  : JSON.stringify(m.content),
-            },
-          ],
-        };
-      }
-
-      // Convert assistant messages with toolCalls to multi-part content
-      if (m.role === "assistant" && m.toolCalls?.length > 0) {
-        const contentBlocks = [];
-        // Preserve thinking blocks for multi-step reasoning continuity.
-        // The signature field is REQUIRED by Anthropic's API for multi-turn
-        // conversations — without it the API returns a 400.
-        // Only include thinking when we have the signature; conversations
-        // missing it must omit the block to avoid API 400 errors.
-        if (m.thinking && m.thinkingSignature) {
-          contentBlocks.push({
-            type: "thinking",
-            thinking: m.thinking,
-            signature: m.thinkingSignature,
-          });
-        }
-        if (m.content?.trim()) {
-          contentBlocks.push({ type: "text", text: m.content });
-        }
-        for (const tc of m.toolCalls) {
-          contentBlocks.push({
-            type: "tool_use",
-            id: tc.id || tc.name || `tc-${Date.now()}`,
-            name: tc.name,
-            input: tc.args || {},
-          });
-        }
-        return {
-          role: "assistant",
-          content: contentBlocks,
-        };
-      }
-
-      // Convert messages with media to Anthropic content block format
-      const images = m.images;
-      if (images && images.length > 0) {
-        const contentBlocks = [];
-        for (const dataUrl of images) {
-          const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
-          if (!match) continue;
-          const mimeType = match[1];
-          let data = match[2];
-
-          if (mimeType.startsWith("image/")) {
-            // Image content block
-            let mediaType = mimeType;
-            if (data.startsWith("/9j/")) mediaType = "image/jpeg";
-            else if (data.startsWith("iVBOR")) mediaType = "image/png";
-            else if (data.startsWith("R0lG")) mediaType = "image/gif";
-            else if (data.startsWith("UklG")) mediaType = "image/webp";
-
-            // Enforce Anthropic's 5 MB per-image limit
-            logger.info(`[anthropic] Image block: ${mediaType}, b64_len=${data.length} (${(data.length / 1024 / 1024).toFixed(2)} MB), decoded=${(Buffer.byteLength(data, "base64") / 1024 / 1024).toFixed(2)} MB`);
-            const compressed = await compressImageForSizeLimit(data, mediaType);
-            data = compressed.data;
-            mediaType = compressed.mediaType;
-
-            contentBlocks.push({
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: mediaType,
-                data,
+  const cleaned = await Promise.all(
+    conversation
+      .filter(
+        (m: any) =>
+          m.role === "user" || m.role === "assistant" || m.role === "tool",
+      )
+      .map(async (m: any) => {
+        // Convert tool role messages to tool_result user messages for Anthropic
+        if (m.role === "tool") {
+          return {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: m.tool_call_id || m.id || m.name || "unknown",
+                content:
+                  typeof m.content === "string"
+                    ? m.content
+                    : JSON.stringify(m.content),
               },
-            });
-          } else if (mimeType === "application/pdf") {
-            // PDF document content block
+            ],
+          };
+        }
+
+        // Convert assistant messages with toolCalls to multi-part content
+        if (m.role === "assistant" && m.toolCalls?.length > 0) {
+          const contentBlocks = [];
+          // Preserve thinking blocks for multi-step reasoning continuity.
+          // The signature field is REQUIRED by Anthropic's API for multi-turn
+          // conversations — without it the API returns a 400.
+          // Only include thinking when we have the signature; conversations
+          // missing it must omit the block to avoid API 400 errors.
+          if (m.thinking && m.thinkingSignature) {
             contentBlocks.push({
-              type: "document",
-              source: {
-                type: "base64",
-                media_type: "application/pdf",
-                data,
-              },
+              type: "thinking",
+              thinking: m.thinking,
+              signature: m.thinkingSignature,
             });
-          } else if (
-            mimeType.startsWith("text/") ||
-            mimeType === "application/json"
-          ) {
-            // Text-based files — decode and inline as text
-            try {
-              const decoded = Buffer.from(data, "base64").toString("utf-8");
-              contentBlocks.push({
-                type: "text",
-                text: `[Attached file (${mimeType})]:\n${decoded}`,
-              });
-            } catch {
-              // Skip if decoding fails
-            }
           }
-          // Other MIME types (audio, video) are not supported by Anthropic — skip
+          if (m.content?.trim()) {
+            contentBlocks.push({ type: "text", text: m.content });
+          }
+          // @ts-ignore
+          for ( const tc of m.toolCalls) {
+            contentBlocks.push({
+              type: "tool_use",
+              id: tc.id || tc.name || `tc-${Date.now()}`,
+              name: tc.name,
+              input: tc.args || {},
+            });
+          }
+          return {
+            role: "assistant",
+            content: contentBlocks,
+          };
         }
-        if (m.content) {
-          contentBlocks.push({ type: "text", text: m.content });
-        }
-        return {
-          role: m.role,
-          content: contentBlocks.length > 0 ? contentBlocks : m.content,
-        };
-      }
 
-      // Handle assistant messages that have thinking but no toolCalls.
-      // Anthropic requires thinking blocks as structured content blocks,
-      // not top-level fields — convert them into the proper format.
-      // Only include thinking when we have the signature; conversations
-      // without it must omit the block to avoid API 400 errors.
-      if (m.role === "assistant" && m.thinking && !m.toolCalls?.length) {
-        const contentBlocks = [];
-        if (m.thinkingSignature) {
-          contentBlocks.push({
-            type: "thinking",
-            thinking: m.thinking,
-            signature: m.thinkingSignature,
-          });
-        }
-        if (m.content?.trim()) {
-          contentBlocks.push({ type: "text", text: m.content });
-        } else {
-          contentBlocks.push({ type: "text", text: " " });
-        }
-        return {
-          role: "assistant",
-          content: contentBlocks.length > 1 ? contentBlocks : m.content?.trim() || " ",
-        };
-      }
+        // Convert messages with media to Anthropic content block format
+        const images = m.images;
+        if (images && images.length > 0) {
+          const contentBlocks = [];
+          // @ts-ignore
+          for ( const dataUrl of images) {
+            const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+            if (!match) continue;
+            const mimeType = match[1];
+            let data = match[2];
 
-      // Ensure assistant messages never have empty content
-      if (
-        m.role === "assistant" &&
-        (!m.content || !m.content.trim())
-      ) {
-        return { role: "assistant", content: " " };
-      }
+            if (mimeType.startsWith("image/")) {
+              // Image content block
+              let mediaType = mimeType;
+              if (data.startsWith("/9j/")) mediaType = "image/jpeg";
+              else if (data.startsWith("iVBOR")) mediaType = "image/png";
+              else if (data.startsWith("R0lG")) mediaType = "image/gif";
+              else if (data.startsWith("UklG")) mediaType = "image/webp";
 
-      // Default: user or assistant with plain text — whitelist only role + content
-      return { role: m.role, content: m.content || " " };
-    }));
+              // Enforce Anthropic's 5 MB per-image limit
+              logger.info(
+                `[anthropic] Image block: ${mediaType}, b64_len=${data.length} (${(data.length / 1024 / 1024).toFixed(2)} MB), decoded=${(Buffer.byteLength(data, "base64") / 1024 / 1024).toFixed(2)} MB`,
+              );
+              const compressed = await compressImageForSizeLimit(
+                data,
+                mediaType,
+              );
+              data = compressed.data;
+              mediaType = compressed.mediaType;
+
+              contentBlocks.push({
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: mediaType,
+                  data,
+                },
+              });
+            } else if (mimeType === "application/pdf") {
+              // PDF document content block
+              contentBlocks.push({
+                type: "document",
+                source: {
+                  type: "base64",
+                  media_type: "application/pdf",
+                  data,
+                },
+              });
+            } else if (
+              mimeType.startsWith("text/") ||
+              mimeType === "application/json"
+            ) {
+              // Text-based files — decode and inline as text
+              try {
+                const decoded = Buffer.from(data, "base64").toString("utf-8");
+                contentBlocks.push({
+                  type: "text",
+                  text: `[Attached file (${mimeType})]:\n${decoded}`,
+                });
+              } catch {
+                // Skip if decoding fails
+              }
+            }
+            // Other MIME types (audio, video) are not supported by Anthropic — skip
+          }
+          if (m.content) {
+            contentBlocks.push({ type: "text", text: m.content });
+          }
+          return {
+            role: m.role,
+            content: contentBlocks.length > 0 ? contentBlocks : m.content,
+          };
+        }
+
+        // Handle assistant messages that have thinking but no toolCalls.
+        // Anthropic requires thinking blocks as structured content blocks,
+        // not top-level fields — convert them into the proper format.
+        // Only include thinking when we have the signature; conversations
+        // without it must omit the block to avoid API 400 errors.
+        if (m.role === "assistant" && m.thinking && !m.toolCalls?.length) {
+          const contentBlocks = [];
+          if (m.thinkingSignature) {
+            contentBlocks.push({
+              type: "thinking",
+              thinking: m.thinking,
+              signature: m.thinkingSignature,
+            });
+          }
+          if (m.content?.trim()) {
+            contentBlocks.push({ type: "text", text: m.content });
+          } else {
+            contentBlocks.push({ type: "text", text: " " });
+          }
+          return {
+            role: "assistant",
+            content:
+              contentBlocks.length > 1
+                ? contentBlocks
+                : m.content?.trim() || " ",
+          };
+        }
+
+        // Ensure assistant messages never have empty content
+        if (m.role === "assistant" && (!m.content || !m.content.trim())) {
+          return { role: "assistant", content: " " };
+        }
+
+        // Default: user or assistant with plain text — whitelist only role + content
+        return { role: m.role, content: m.content || " " };
+      }),
+  );
 
   // Merge consecutive same-role messages
-  const merged = cleaned.reduce((acc, cur) => {
+  const merged = cleaned.reduce((acc: any, cur: any) => {
     if (acc.length && acc[acc.length - 1].role === cur.role) {
       const prev = acc[acc.length - 1];
       // Handle merging when content might be string or array
@@ -281,10 +300,11 @@ async function prepareMessages(messages) {
   // The frontend may send both inline results (from assistant.toolCalls
   // expansion) and standalone tool-role messages with the same ID,
   // which after merging creates duplicate tool_result blocks.
-  for (const msg of merged) {
+  // @ts-ignore
+  for ( const msg of merged) {
     if (msg.role !== "user" || !Array.isArray(msg.content)) continue;
     const seenToolResultIds = new Set();
-    msg.content = msg.content.filter((block) => {
+    msg.content = msg.content.filter((block: any) => {
       if (block.type !== "tool_result") return true;
       if (seenToolResultIds.has(block.tool_use_id)) return false;
       seenToolResultIds.add(block.tool_use_id);
@@ -304,18 +324,18 @@ async function prepareMessages(messages) {
     const msg = merged[i];
     if (msg.role !== "assistant" || !Array.isArray(msg.content)) continue;
 
-    const hasToolUse = msg.content.some((b) => b.type === "tool_use");
+    const hasToolUse = msg.content.some((b: any) => b.type === "tool_use");
     if (!hasToolUse) continue;
 
     const next = merged[i + 1];
     const nextHasToolResult =
       next?.role === "user" &&
       Array.isArray(next.content) &&
-      next.content.some((b) => b.type === "tool_result");
+      next.content.some((b: any) => b.type === "tool_result");
 
     if (!nextHasToolResult) {
       // Strip tool_use blocks, keep only text
-      msg.content = msg.content.filter((b) => b.type !== "tool_use");
+      msg.content = msg.content.filter((b: any) => b.type !== "tool_use");
       if (msg.content.length === 0) {
         msg.content = " ";
       }
@@ -325,12 +345,14 @@ async function prepareMessages(messages) {
   // Anthropic rejects requests where the final assistant message content ends
   // with trailing whitespace (400: "final assistant content cannot end with
   // trailing whitespace"). Sanitize all assistant text blocks to be safe.
-  for (const msg of merged) {
+  // @ts-ignore
+  for ( const msg of merged) {
     if (msg.role !== "assistant") continue;
     if (typeof msg.content === "string") {
       msg.content = msg.content.trimEnd() || " ";
     } else if (Array.isArray(msg.content)) {
-      for (const block of msg.content) {
+      // @ts-ignore
+      for ( const block of msg.content) {
         if (block.type === "text" && typeof block.text === "string") {
           block.text = block.text.trimEnd() || " ";
         }
@@ -344,7 +366,7 @@ async function prepareMessages(messages) {
 /**
  * Build the tools array based on options.
  */
-function buildTools(options) {
+function buildTools(options: any) {
   const tools = [];
   if (options.webSearch) {
     tools.push({
@@ -368,7 +390,8 @@ function buildTools(options) {
   }
   // Custom function calling tools
   if (options.tools && Array.isArray(options.tools)) {
-    for (const t of options.tools) {
+    // @ts-ignore
+    for ( const t of options.tools) {
       tools.push({
         name: t.name,
         description: t.description || "",
@@ -382,19 +405,21 @@ function buildTools(options) {
 /**
  * Extract text, thinking, citations, and code results from a multi-block response.
  */
-function extractResponseContent(contentBlocks) {
+function extractResponseContent(contentBlocks: any) {
   let text = "";
   let thinking = null;
   let thinkingSignature = null;
   const citations = [];
   const toolCalls = [];
 
-  for (const block of contentBlocks || []) {
+  // @ts-ignore
+  for ( const block of contentBlocks || []) {
     if (block.type === "text") {
       text += block.text || "";
       // Collect inline citations from this text block
       if (block.citations) {
-        for (const cite of block.citations) {
+        // @ts-ignore
+        for ( const cite of block.citations) {
           if (cite.type === "web_search_result_location") {
             citations.push({
               url: cite.url,
@@ -423,7 +448,7 @@ function extractResponseContent(contentBlocks) {
 /**
  * Build the common usage object from an Anthropic response.
  */
-function buildUsage(responseUsage) {
+function buildUsage(responseUsage: any) {
   return {
     inputTokens: responseUsage?.input_tokens ?? 0,
     outputTokens: responseUsage?.output_tokens ?? 0,
@@ -436,7 +461,8 @@ const anthropicProvider = {
   name: "anthropic",
 
   async generateText(
-    messages,
+    messages: any,
+    // @ts-ignore
     model = getDefaultModels(TYPES.TEXT, TYPES.TEXT).anthropic,
     options = {},
   ) {
@@ -448,18 +474,29 @@ const anthropicProvider = {
       system: prepared.systemMessage,
       model,
       messages: prepared.messages,
+      // @ts-ignore
       max_tokens: options.maxTokens || 1000,
       temperature:
-        options.temperature !== undefined ? Math.min(options.temperature, 1) : undefined,
-      top_p:
-        options.temperature === undefined && options.topP !== undefined
-          ? options.topP
+        // @ts-ignore
+        options.temperature !== undefined
+          // @ts-ignore
+          ? Math.min(options.temperature, 1)
           : undefined,
+      top_p:
+        // @ts-ignore
+        options.temperature === undefined && options.topP !== undefined
+          ? // @ts-ignore
+            options.topP
+          : undefined,
+      // @ts-ignore
       top_k: options.topK !== undefined ? options.topK : undefined,
       stop_sequences:
+        // @ts-ignore
         options.stopSequences !== undefined
-          ? options.stopSequences
+          ? // @ts-ignore
+            options.stopSequences
           : undefined,
+      // @ts-ignore
       ...(options.serviceTier && { service_tier: options.serviceTier }),
     };
 
@@ -467,11 +504,23 @@ const anthropicProvider = {
     const tools = buildTools(options);
     if (tools) payload.tools = tools;
 
-    if (options.thinkingEnabled !== false && (options.thinkingEnabled === true || options.thinkingBudget || options.reasoningEffort)) {
+    // @ts-ignore
+    if (
+      // @ts-ignore
+      options.thinkingEnabled !== false &&
+      // @ts-ignore
+      (options.thinkingEnabled === true ||
+        // @ts-ignore
+        options.thinkingBudget ||
+        // @ts-ignore
+        options.reasoningEffort)
+    ) {
+      // @ts-ignore
       const budget = options.thinkingBudget
-        ? parseInt(options.thinkingBudget)
-        : EFFORT_BUDGET_MAP[options.reasoningEffort] ||
-          EFFORT_BUDGET_MAP.high;
+        ? // @ts-ignore
+          parseInt(options.thinkingBudget)
+        : // @ts-ignore
+          EFFORT_BUDGET_MAP[options.reasoningEffort] || EFFORT_BUDGET_MAP.high;
       payload.thinking = { type: "enabled", budget_tokens: budget };
       if (payload.max_tokens <= budget) {
         payload.max_tokens = budget + 1024;
@@ -482,29 +531,37 @@ const anthropicProvider = {
       delete payload.top_k;
     }
 
-    let lastError;
+    let lastError: any;
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const { data: response, response: rawResponse } = await getClient().messages.create(payload).withResponse();
+        const { data: response, response: rawResponse } = await getClient()
+          .messages.create(payload)
+          .withResponse();
         const rateLimits = extractAnthropicRateLimits(rawResponse, model);
 
-        const { text, thinking, thinkingSignature, citations, toolCalls } = extractResponseContent(
-          response.content,
-        );
+        const { text, thinking, thinkingSignature, citations, toolCalls } =
+          extractResponseContent(response.content);
         const result = {
           text,
           usage: buildUsage(response.usage),
         };
+        // @ts-ignore
         if (thinking) result.thinking = thinking;
+        // @ts-ignore
         if (thinkingSignature) result.thinkingSignature = thinkingSignature;
+        // @ts-ignore
         if (citations.length > 0) result.citations = citations;
+        // @ts-ignore
         if (toolCalls.length > 0) result.toolCalls = toolCalls;
+        // @ts-ignore
         if (rateLimits) result.rateLimits = rateLimits;
         // Forward structured stop details for observability (SDK 0.82+)
+        // @ts-ignore
         if (response.stop_reason) result.stopReason = response.stop_reason;
+        // @ts-ignore
         if (response.stop_details) result.stopDetails = response.stop_details;
         return result;
-      } catch (error) {
+      } catch (error: any) {
         lastError = error;
         if (isRetryableError(error) && attempt < MAX_RETRIES) {
           logger.warn(
@@ -522,7 +579,12 @@ const anthropicProvider = {
       }
     }
     // Should never reach here, but safety net
-    throw new ProviderError("anthropic", lastError?.message || "Max retries exceeded", lastError?.status || 500, lastError);
+    throw new ProviderError(
+      "anthropic",
+      lastError?.message || "Max retries exceeded",
+      lastError?.status || 500,
+      lastError,
+    );
   },
 
   /**
@@ -533,16 +595,18 @@ const anthropicProvider = {
    * @returns {Promise<{ text: string, usage: object }>}
    */
   async captionImage(
-    images,
+    images: any,
     prompt = "Describe this image.",
+    // @ts-ignore
     model = getDefaultModels(TYPES.TEXT, TYPES.TEXT).anthropic,
-    systemPrompt,
+    systemPrompt: any,
   ) {
     logger.provider("Anthropic", `captionImage model=${model}`);
     try {
       const contentBlocks = [];
 
-      for (const imageUrlOrBase64 of images) {
+      // @ts-ignore
+      for ( const imageUrlOrBase64 of images) {
         const match = imageUrlOrBase64.match(/^data:([^;]+);base64,(.+)$/);
         if (match) {
           let mediaType = match[1];
@@ -586,6 +650,7 @@ const anthropicProvider = {
         max_tokens: 1000,
       };
       if (systemPrompt) {
+        // @ts-ignore
         payload.system = systemPrompt;
       }
 
@@ -596,7 +661,7 @@ const anthropicProvider = {
         text,
         usage: buildUsage(response.usage),
       };
-    } catch (error) {
+    } catch (error: any) {
       throw new ProviderError(
         "anthropic",
         error.message,
@@ -606,8 +671,10 @@ const anthropicProvider = {
     }
   },
 
+  // @ts-ignore
   async *generateTextStream(
-    messages,
+    messages: any,
+    // @ts-ignore
     model = getDefaultModels(TYPES.TEXT, TYPES.TEXT).anthropic,
     options = {},
   ) {
@@ -619,18 +686,29 @@ const anthropicProvider = {
         system: prepared.systemMessage,
         model,
         messages: prepared.messages,
+        // @ts-ignore
         max_tokens: options.maxTokens || 1000,
         temperature:
-          options.temperature !== undefined ? Math.min(options.temperature, 1) : undefined,
-        top_p:
-          options.temperature === undefined && options.topP !== undefined
-            ? options.topP
+          // @ts-ignore
+          options.temperature !== undefined
+            // @ts-ignore
+            ? Math.min(options.temperature, 1)
             : undefined,
+        top_p:
+          // @ts-ignore
+          options.temperature === undefined && options.topP !== undefined
+            ? // @ts-ignore
+              options.topP
+            : undefined,
+        // @ts-ignore
         top_k: options.topK !== undefined ? options.topK : undefined,
         stop_sequences:
+          // @ts-ignore
           options.stopSequences !== undefined
-            ? options.stopSequences
+            ? // @ts-ignore
+              options.stopSequences
             : undefined,
+        // @ts-ignore
         ...(options.serviceTier && { service_tier: options.serviceTier }),
       };
 
@@ -638,10 +716,23 @@ const anthropicProvider = {
       const tools = buildTools(options);
       if (tools) streamPayload.tools = tools;
 
-      if (options.thinkingEnabled !== false && (options.thinkingEnabled === true || options.thinkingBudget || options.reasoningEffort)) {
+      // @ts-ignore
+      if (
+        // @ts-ignore
+        options.thinkingEnabled !== false &&
+        // @ts-ignore
+        (options.thinkingEnabled === true ||
+          // @ts-ignore
+          options.thinkingBudget ||
+          // @ts-ignore
+          options.reasoningEffort)
+      ) {
+        // @ts-ignore
         const budget = options.thinkingBudget
-          ? parseInt(options.thinkingBudget)
-          : EFFORT_BUDGET_MAP[options.reasoningEffort] ||
+          ? // @ts-ignore
+            parseInt(options.thinkingBudget)
+          : // @ts-ignore
+            EFFORT_BUDGET_MAP[options.reasoningEffort] ||
             EFFORT_BUDGET_MAP.high;
         streamPayload.thinking = { type: "enabled", budget_tokens: budget };
         if (streamPayload.max_tokens <= budget) {
@@ -656,6 +747,7 @@ const anthropicProvider = {
       await enforceImageSizeLimits(streamPayload.messages);
 
       const stream = getClient().messages.stream(streamPayload, {
+        // @ts-ignore
         ...(options.signal && { signal: options.signal }),
       });
 
@@ -668,7 +760,9 @@ const anthropicProvider = {
       let messageStartUsage = null;
       let rateLimits = null;
 
-      for await (const chunk of stream) {
+      // @ts-ignore
+      for await ( const chunk of stream) {
+        // @ts-ignore
         if (options.signal?.aborted) {
           stream.abort();
           break;
@@ -759,7 +853,10 @@ const anthropicProvider = {
           // back verbatim in multi-turn conversations, otherwise the API rejects
           // the request with a 400.
           if (chunk.delta.type === "signature_delta") {
-            yield { type: "thinking_signature", signature: chunk.delta.signature };
+            yield {
+              type: "thinking_signature",
+              signature: chunk.delta.signature,
+            };
             continue;
           }
           // Text delta
@@ -810,11 +907,11 @@ const anthropicProvider = {
           if (Array.isArray(content)) {
             const results = content
               .filter(
-                (r) =>
+                (r: any) =>
                   r.type === "web_search_result" ||
                   r.type === "web_fetch_result",
               )
-              .map((r) => ({
+              .map((r: any) => ({
                 url: r.url,
                 title: r.title,
                 pageAge: r.page_age,
@@ -843,7 +940,10 @@ const anthropicProvider = {
             yield { type: "stopReason", stopReason: chunk.delta.stop_reason };
           }
           if (chunk.delta?.stop_details) {
-            yield { type: "stopDetails", stopDetails: chunk.delta.stop_details };
+            yield {
+              type: "stopDetails",
+              stopDetails: chunk.delta.stop_details,
+            };
           }
         }
       }
@@ -865,11 +965,12 @@ const anthropicProvider = {
       if (rateLimits) {
         yield { type: "rateLimits", rateLimits };
       }
-    } catch (error) {
+    } catch (error: any) {
       if (error.name === "AbortError") return;
       // For streaming, retry overloaded errors with the same delay/attempts policy
       if (isRetryableError(error)) {
         // Recursive retry with attempt tracking via options._retryAttempt
+        // @ts-ignore
         const attempt = options._retryAttempt || 1;
         if (attempt < MAX_RETRIES) {
           logger.warn(

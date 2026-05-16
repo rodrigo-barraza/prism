@@ -6,7 +6,11 @@ import RequestLogger from "./RequestLogger.js";
 import SettingsService from "./SettingsService.js";
 import logger from "../utils/logger.js";
 import { parseJsonFromLlmResponse } from "../utils/utilities.js";
-import { estimateTokens, calculateTextCost, getTotalInputTokens } from "../utils/CostCalculator.js";
+import {
+  estimateTokens,
+  calculateTextCost,
+  getTotalInputTokens,
+} from "../utils/CostCalculator.js";
 import { TYPES, getPricing } from "../config.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -116,7 +120,18 @@ export default class MemoryExtractor {
    * @param {Array} [params.toolCalls] - Tool calls from the current turn (for mutual exclusion)
    * @returns {Promise<Array>} Stored memory documents
    */
-  static async extractAndStore({ project, username, messages, traceId, agentSessionId, conversationId, endpoint, agent, toolCalls, emit }) {
+  static async extractAndStore({
+    project,
+    username,
+    messages,
+    traceId,
+    agentSessionId,
+    conversationId,
+    endpoint,
+    agent,
+    toolCalls,
+    emit,
+  }: any) {
     if (!messages || messages.length < MIN_MESSAGES_FOR_EXTRACTION) {
       logger.info(
         `[MemoryExtractor] Skipping — only ${messages?.length || 0} messages (min: ${MIN_MESSAGES_FOR_EXTRACTION})`,
@@ -129,7 +144,7 @@ export default class MemoryExtractor {
     // skip extraction — the agent's explicit memory writes take precedence.
     // This prevents duplicate or conflicting memories from the extraction
     // pipeline when the agent has already decided what to remember.
-    if (toolCalls?.some((tc) => tc.name === "upsert_memory")) {
+    if (toolCalls?.some((tc: any) => tc.name === "upsert_memory")) {
       logger.info(
         `[MemoryExtractor] Skipping — main agent used upsert_memory this turn (mutual exclusion)`,
       );
@@ -138,19 +153,23 @@ export default class MemoryExtractor {
 
     try {
       // ── Resolve extraction model from settings ────────────────
-      let extractionProvider, extractionModel;
+      let extractionProvider: any, extractionModel: any;
       try {
         const mem = await SettingsService.getSection("memory");
         extractionProvider = mem.extractionProvider;
         extractionModel = mem.extractionModel;
       } catch {
         // Settings not configured — skip extraction silently
-        logger.info("[MemoryExtractor] Extraction model not configured in Settings → Memory Models. Skipping.");
+        logger.info(
+          "[MemoryExtractor] Extraction model not configured in Settings → Memory Models. Skipping.",
+        );
         return [];
       }
 
       if (!extractionProvider || !extractionModel) {
-        logger.info("[MemoryExtractor] Extraction provider/model not set. Skipping.");
+        logger.info(
+          "[MemoryExtractor] Extraction provider/model not set. Skipping.",
+        );
         return [];
       }
 
@@ -158,11 +177,12 @@ export default class MemoryExtractor {
 
       // Build conversation text (compact format to save tokens)
       const conversationText = messages
-        .filter((m) => m.role === "user" || m.role === "assistant")
-        .map((m) => {
+        .filter((m: any) => m.role === "user" || m.role === "assistant")
+        .map((m: any) => {
           const content = m.content || "";
           // Truncate very long messages to save tokens
-          const truncated = content.length > 500 ? content.slice(0, 500) + "..." : content;
+          const truncated =
+            content.length > 500 ? content.slice(0, 500) + "..." : content;
           return `${m.role}: ${truncated}`;
         })
         .join("\n");
@@ -177,7 +197,7 @@ export default class MemoryExtractor {
 
       const requestId = crypto.randomUUID();
       const requestStart = performance.now();
-      let result;
+      let result: any;
       let success = true;
       let errorMessage = null;
 
@@ -186,16 +206,22 @@ export default class MemoryExtractor {
           maxTokens: 1000,
           temperature: 0.1,
         });
-      } catch (error) {
+      } catch (error: any) {
         success = false;
         errorMessage = error.message;
         throw error;
       } finally {
         // Use real API-reported usage when available; fall back to heuristic
         const realUsage = result?.usage || null;
-        const inputText = aiMessages.map((m) => m.content).join("\n");
-        const approxInputTokens = realUsage ? getTotalInputTokens(realUsage) : estimateTokens(inputText);
-        const approxOutputTokens = realUsage ? (realUsage.outputTokens || 0) : (result?.text ? estimateTokens(result.text) : 0);
+        const inputText = aiMessages.map((m: any) => m.content).join("\n");
+        const approxInputTokens = realUsage
+          ? getTotalInputTokens(realUsage)
+          : estimateTokens(inputText);
+        const approxOutputTokens = realUsage
+          ? realUsage.outputTokens || 0
+          : result?.text
+            ? estimateTokens(result.text)
+            : 0;
 
         RequestLogger.logBackgroundLlmCall({
           requestId,
@@ -226,9 +252,18 @@ export default class MemoryExtractor {
         // before the backend aggregation (fetchSessionStats) completes.
         if (emit && success) {
           try {
-            const extractPricing = getPricing(TYPES.TEXT, TYPES.TEXT)[extractionModel];
+            // @ts-ignore
+            const extractPricing = getPricing(TYPES.TEXT, TYPES.TEXT)[
+              extractionModel
+            ];
             const extractCost = extractPricing
-              ? calculateTextCost({ inputTokens: approxInputTokens, outputTokens: approxOutputTokens }, extractPricing)
+              ? calculateTextCost(
+                  {
+                    inputTokens: approxInputTokens,
+                    outputTokens: approxOutputTokens,
+                  },
+                  extractPricing,
+                )
               : null;
             emit({
               type: "usage_update",
@@ -240,7 +275,9 @@ export default class MemoryExtractor {
                 estimatedCost: extractCost,
               },
             });
-          } catch { /* SSE channel may be closed */ }
+          } catch {
+            /* SSE channel may be closed */
+          }
         }
       }
 
@@ -254,11 +291,14 @@ export default class MemoryExtractor {
       const agentId = agent || "CODING";
       const stored = [];
 
-      for (const mem of memories) {
+      // @ts-ignore
+      for ( const mem of memories) {
         if (!mem.content || !mem.title) continue;
 
         // Validate type — default to "project" if unknown
-        const type = CODING_MEMORY_TYPES.includes(mem.type) ? mem.type : "project";
+        const type = CODING_MEMORY_TYPES.includes(mem.type)
+          ? mem.type
+          : "project";
 
         try {
           const result = await MemoryService.store({
@@ -284,7 +324,7 @@ export default class MemoryExtractor {
               `[MemoryExtractor] Skipped duplicate [${type}] "${mem.title.substring(0, 60)}"`,
             );
           }
-        } catch (error) {
+        } catch (error: any) {
           logger.error(`[MemoryExtractor] Storage failed: ${error.message}`);
         }
       }
@@ -301,8 +341,13 @@ export default class MemoryExtractor {
           const embedTokens = stored.length * 50; // ~50 tokens per memory title+content
           // Embedding cost: input tokens only (no output tokens)
           const embedPricing = getPricing(TYPES.TEXT, TYPES.EMBEDDING);
-          const embedModel = (await SettingsService.getSection("memory"))?.embeddingModel;
-          const embedModelPricing = embedModel ? embedPricing[embedModel] : null;
+          const embedModel = (await SettingsService.getSection("memory"))
+            ?.embeddingModel;
+          // @ts-ignore
+          const embedModelPricing = embedModel
+            // @ts-ignore
+            ? embedPricing[embedModel]
+            : null;
           const embedCost = embedModelPricing?.inputPerMillion
             ? (embedTokens / 1_000_000) * embedModelPricing.inputPerMillion
             : null;
@@ -316,11 +361,13 @@ export default class MemoryExtractor {
               estimatedCost: embedCost,
             },
           });
-        } catch { /* SSE channel may be closed */ }
+        } catch {
+          /* SSE channel may be closed */
+        }
       }
 
       return stored;
-    } catch (error) {
+    } catch (error: any) {
       logger.error(`[MemoryExtractor] Failed: ${error.message}`);
       return [];
     }
@@ -333,7 +380,7 @@ export default class MemoryExtractor {
    * @returns {Function}
    */
   static createHook() {
-    return async (ctx, { _text, messages, toolCalls }) => {
+    return async (ctx: any, { _text, messages, toolCalls }: any) => {
       // Fire-and-forget — don't block the response
       MemoryExtractor.extractAndStore({
         project: ctx.project,
@@ -347,7 +394,7 @@ export default class MemoryExtractor {
         toolCalls: toolCalls || [],
         emit: ctx.emit || null,
       })
-        .then((stored) => {
+        .then((stored: any) => {
           if (stored?.length > 0 && ctx.emit) {
             ctx.emit({
               type: "status",
@@ -358,7 +405,7 @@ export default class MemoryExtractor {
 
           // Build a broadcast callback from ctx.emit for consolidation notifications
           const broadcast = ctx.emit
-            ? (payload) => ctx.emit(payload)
+            ? (payload: any) => ctx.emit(payload)
             : undefined;
 
           // Check if consolidation should run (tracks session count)
@@ -372,8 +419,10 @@ export default class MemoryExtractor {
             agentSessionId: ctx.agentSessionId || null,
           });
         })
-        .catch((error) =>
-          logger.error(`[MemoryExtractor] Background extraction failed: ${error.message}`),
+        .catch((error: any) =>
+          logger.error(
+            `[MemoryExtractor] Background extraction failed: ${error.message}`,
+          ),
         );
     };
   }

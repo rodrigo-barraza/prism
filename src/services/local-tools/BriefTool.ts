@@ -23,7 +23,8 @@ export default {
         keyFiles: {
           type: "array",
           items: { type: "string" },
-          description: "Optional: list of key file paths relevant to the current work.",
+          description:
+            "Optional: list of key file paths relevant to the current work.",
         },
         openQuestions: {
           type: "array",
@@ -38,7 +39,7 @@ export default {
   domain: "Reasoning",
   labels: ["coding"],
 
-  async execute(args, ctx) {
+  async execute(args: any, ctx: any) {
     const { summary, keyFiles, openQuestions } = args;
     if (!summary || typeof summary !== "string") {
       return { error: "'summary' is required and must be a non-empty string" };
@@ -51,7 +52,9 @@ export default {
       timestamp: new Date().toISOString(),
     };
 
-    logger.info(`[Brief] ${summary.length} chars, ${(keyFiles || []).length} files, ${(openQuestions || []).length} questions`);
+    logger.info(
+      `[Brief] ${summary.length} chars, ${(keyFiles || []).length} files, ${(openQuestions || []).length} questions`,
+    );
 
     if (ctx._emit) {
       ctx._emit({ type: "brief_update", brief });

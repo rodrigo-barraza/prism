@@ -14,7 +14,13 @@ import logger from "./logger.js";
  * @param {object}  [opts]
  * @param {string}  [opts.collection] - Override MongoDB collection
  */
-export function markGenerating(conversationId, project, username, generating, opts) {
+export function markGenerating(
+  conversationId: any,
+  project: any,
+  username: any,
+  generating: any,
+  opts: any,
+) {
   if (!conversationId) return;
   ConversationService.setGenerating(
     conversationId,
@@ -22,7 +28,7 @@ export function markGenerating(conversationId, project, username, generating, op
     username,
     generating,
     opts,
-  ).catch((error) =>
+  ).catch((error: any) =>
     logger.error(
       `Failed to ${generating ? "set" : "clear"} isGenerating: ${error.message}`,
     ),
@@ -45,7 +51,14 @@ export function markGenerating(conversationId, project, username, generating, op
  * @param {object}  [opts]
  * @param {string}  [opts.collection] - Override MongoDB collection
  */
-export function appendAndFinalize(conversationId, project, username, messagesToAppend, meta, opts) {
+export function appendAndFinalize(
+  conversationId: any,
+  project: any,
+  username: any,
+  messagesToAppend: any,
+  meta: any,
+  opts: any,
+) {
   if (!conversationId) return;
 
   ConversationService.appendMessages(
@@ -65,10 +78,10 @@ export function appendAndFinalize(conversationId, project, username, messagesToA
         opts,
       ),
     )
-    .catch((error) => {
+    .catch((error: any) => {
       logger.error(
         `Failed to append ${messagesToAppend?.length ?? 0} messages to ${conversationId} ` +
-        `(project=${project}, collection=${opts?.collection || "conversations"}): ${error.message}`,
+          `(project=${project}, collection=${opts?.collection || "conversations"}): ${error.message}`,
       );
 
       // Always clear isGenerating even on failure — prevents sessions
@@ -79,7 +92,7 @@ export function appendAndFinalize(conversationId, project, username, messagesToA
         username,
         false,
         opts,
-      ).catch((clearErr) =>
+      ).catch((clearErr: any) =>
         logger.error(
           `Failed to clear isGenerating after append failure: ${clearErr.message}`,
         ),

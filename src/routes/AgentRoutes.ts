@@ -1,12 +1,10 @@
+// @ts-ignore
 import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
 import AgenticLoopService from "../services/AgenticLoopService.js";
 import { handleAgent } from "./ChatRoutes.js";
 import logger from "../utils/logger.js";
-import {
-  handleSseRequest,
-  handleJsonRequest,
-} from "../utils/SseUtilities.js";
+import { handleSseRequest, handleJsonRequest } from "../utils/SseUtilities.js";
 
 const router = express.Router();
 
@@ -21,32 +19,35 @@ const router = express.Router();
  * Resolves the pending approval promise in AgenticLoopService
  * so the agentic loop can continue (or abort).
  */
-router.post("/approve", asyncHandler(async (req, res) => {
-  const { agentSessionId, approved, approveAll } = req.body;
+router.post(
+  "/approve",
+  asyncHandler(async (req: any, res: any) => {
+    const { agentSessionId, approved, approveAll } = req.body;
 
-  if (!agentSessionId) {
-    return res.status(400).json({ error: "Missing agentSessionId" });
-  }
+    if (!agentSessionId) {
+      return res.status(400).json({ error: "Missing agentSessionId" });
+    }
 
-  const resolved = AgenticLoopService.resolveApproval(
-    agentSessionId,
-    approved !== false,
-    { approveAll: approveAll === true },
-  );
-
-  if (!resolved) {
-    return res.status(404).json({
-      error: "No pending approval for this agent session",
+    const resolved = AgenticLoopService.resolveApproval(
       agentSessionId,
-    });
-  }
+      approved !== false,
+      { approveAll: approveAll === true },
+    );
 
-  logger.info(
-    `[agent/approve] ${approved !== false ? "Approved" : "Rejected"}${approveAll ? " (all future)" : ""} for session ${agentSessionId}`,
-  );
+    if (!resolved) {
+      return res.status(404).json({
+        error: "No pending approval for this agent session",
+        agentSessionId,
+      });
+    }
 
-  res.json({ ok: true, approved: approved !== false });
-}));
+    logger.info(
+      `[agent/approve] ${approved !== false ? "Approved" : "Rejected"}${approveAll ? " (all future)" : ""} for session ${agentSessionId}`,
+    );
+
+    res.json({ ok: true, approved: approved !== false });
+  }),
+);
 
 // ─── resolves pending ask_user_question pauses ──────────────
 
@@ -60,39 +61,44 @@ router.post("/approve", asyncHandler(async (req, res) => {
  * Resolves the pending question promise in AgenticLoopService
  * so the agentic loop can continue with the user's answer(s).
  */
-router.post("/answer", asyncHandler(async (req, res) => {
-  const { agentSessionId, answer, answers } = req.body;
+router.post(
+  "/answer",
+  asyncHandler(async (req: any, res: any) => {
+    const { agentSessionId, answer, answers } = req.body;
 
-  if (!agentSessionId) {
-    return res.status(400).json({ error: "Missing agentSessionId" });
-  }
+    if (!agentSessionId) {
+      return res.status(400).json({ error: "Missing agentSessionId" });
+    }
 
-  // Normalize: structured answers take priority, fall back to simple string
-  let normalizedAnswers;
-  if (Array.isArray(answers) && answers.length > 0) {
-    normalizedAnswers = answers;
-  } else if (answer !== undefined && answer !== null) {
-    normalizedAnswers = [{ answer: String(answer) }];
-  } else {
-    return res.status(400).json({ error: "Missing answer or answers" });
-  }
+    // Normalize: structured answers take priority, fall back to simple string
+    let normalizedAnswers: any;
+    if (Array.isArray(answers) && answers.length > 0) {
+      normalizedAnswers = answers;
+    } else if (answer !== undefined && answer !== null) {
+      normalizedAnswers = [{ answer: String(answer) }];
+    } else {
+      return res.status(400).json({ error: "Missing answer or answers" });
+    }
 
-  const resolved = AgenticLoopService.resolveUserQuestion(
-    agentSessionId,
-    normalizedAnswers,
-  );
-
-  if (!resolved) {
-    return res.status(404).json({
-      error: "No pending question for this agent session",
+    const resolved = AgenticLoopService.resolveUserQuestion(
       agentSessionId,
-    });
-  }
+      normalizedAnswers,
+    );
 
-  logger.info(`[agent/answer] ${normalizedAnswers.length} answer(s) for session ${agentSessionId}`);
+    if (!resolved) {
+      return res.status(404).json({
+        error: "No pending question for this agent session",
+        agentSessionId,
+      });
+    }
 
-  res.json({ ok: true });
-}));
+    logger.info(
+      `[agent/answer] ${normalizedAnswers.length} answer(s) for session ${agentSessionId}`,
+    );
+
+    res.json({ ok: true });
+  }),
+);
 
 // ─── SSE streaming or JSON fallback ─────────────────────────
 
@@ -109,28 +115,31 @@ router.post("/answer", asyncHandler(async (req, res) => {
  * Body (flat, OpenAI-style):
  *   { provider, model?, messages, enabledTools?, temperature?, maxTokens?, ... }
  */
-router.post("/", asyncHandler(async (req, res, next) => {
-  // Force agentic mode — the entire point of this endpoint
-  const params = {
-    ...req.body,
-    functionCallingEnabled: true,
-    agenticLoopEnabled: true,
-    project: req.project,
-    username: req.username,
-    clientIp: req.clientIp,
-    agent: req.body.agent || req.agent || null,
-    // Multi-workspace: override the default workspace root when the user has
-    // selected a non-default workspace in the Prism Client sidebar. Sources:
-    //   1. x-workspace-root header (set by Prism Client's serviceHeaders.js)
-    //   2. body.workspaceRoot (for server-to-server / API callers)
-    workspaceRoot: req.workspaceRoot || req.body.workspaceRoot || null,
-  };
+router.post(
+  "/",
+  asyncHandler(async (req: any, res: any, next: any) => {
+    // Force agentic mode — the entire point of this endpoint
+    const params = {
+      ...req.body,
+      functionCallingEnabled: true,
+      agenticLoopEnabled: true,
+      project: req.project,
+      username: req.username,
+      clientIp: req.clientIp,
+      agent: req.body.agent || req.agent || null,
+      // Multi-workspace: override the default workspace root when the user has
+      // selected a non-default workspace in the Prism Client sidebar. Sources:
+      //   1. x-workspace-root header (set by Prism Client's serviceHeaders.js)
+      //   2. body.workspaceRoot (for server-to-server / API callers)
+      workspaceRoot: req.workspaceRoot || req.body.workspaceRoot || null,
+    };
 
-  if (req.query.stream !== "false") {
-    await handleSseRequest(req, res, params, handleAgent);
-  } else {
-    await handleJsonRequest(req, res, next, params, handleAgent);
-  }
-}));
+    if (req.query.stream !== "false") {
+      await handleSseRequest(req, res, params, handleAgent);
+    } else {
+      await handleJsonRequest(req, res, next, params, handleAgent);
+    }
+  }),
+);
 
 export default router;

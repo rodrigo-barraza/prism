@@ -52,7 +52,7 @@ const FileService = {
    *   ref is either `minio://...` or the original dataUrl.
    */
   async uploadFile(
-    dataUrl,
+    dataUrl: any,
     category = "uploads",
     project = null,
     username = null,
@@ -73,17 +73,21 @@ const FileService = {
     const contentType = match[1];
     const base64Data = match[2];
     const buffer = Buffer.from(base64Data, "base64");
+    // @ts-ignore
     const ext = MIME_TO_EXT[contentType] || "bin";
 
     // Build path: projects/{project}/{username}/{category}/{uuid}.{ext}
     // Falls back to flat {category}/{uuid}.{ext} when project/username not provided
-    let key;
+    let key: any;
     if (project && username) {
       // Sanitize: never use raw IP addresses as path segments — they cause
       // duplicate directories when the same user is later identified by name.
-      const safeUsername = /^\d{1,3}(\.\d{1,3}){3}$/.test(username) || username.includes(":")
-        ? "anonymous"
-        : username;
+      // @ts-ignore
+      const safeUsername =
+        // @ts-ignore
+        /^\d{1,3}(\.\d{1,3}){3}$/.test(username) || username.includes(":")
+          ? "anonymous"
+          : username;
       key = `projects/${project}/${safeUsername}/${category}/${crypto.randomUUID()}.${ext}`;
     } else {
       key = `${category}/${crypto.randomUUID()}.${ext}`;
@@ -106,11 +110,11 @@ const FileService = {
    * @param {string} key - The object key (without the "minio://" prefix)
    * @returns {Promise<{ stream: import('stream').Readable, contentType: string } | null>}
    */
-  async getFile(key) {
+  async getFile(key: any) {
     if (!MinioWrapper.isAvailable()) return null;
 
     // Helper to fetch stat + stream for a given key
-    const tryKey = async (k) => {
+    const tryKey = async (k: any) => {
       const stat = await MinioWrapper.stat(k);
       const stream = await MinioWrapper.get(k);
       return {
@@ -133,7 +137,7 @@ const FileService = {
    * @param {string} ref
    * @returns {boolean}
    */
-  isMinioRef(ref) {
+  isMinioRef(ref: any) {
     return typeof ref === "string" && ref.startsWith("minio://");
   },
 
@@ -142,7 +146,7 @@ const FileService = {
    * @param {string} ref - e.g. "minio://files/abc-123.png"
    * @returns {string} - e.g. "files/abc-123.png"
    */
-  extractKey(ref) {
+  extractKey(ref: any) {
     return ref.replace("minio://", "");
   },
 };

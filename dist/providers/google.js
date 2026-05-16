@@ -1,0 +1,1197 @@
+import { GoogleGenAI, Modality } from "@google/genai";
+import crypto from "crypto";
+import { Readable } from "stream";
+import { ProviderError } from "../utils/errors.js";
+import logger from "../utils/logger.js";
+// @ts-ignore
+import { GOOGLE_API_KEY, GOOGLE_TTS_MODEL, GOOGLE_EMBEDDING_MODEL,
+// @ts-ignore
+ } from "../../config.js";
+import { TYPES, MODELS, DEFAULT_VOICES, getDefaultModels } from "../config.js";
+// @ts-ignore
+let client = null;
+function getClient() {
+    // @ts-ignore
+    if (!client) {
+        if (!GOOGLE_API_KEY) {
+            throw new ProviderError("google", "GOOGLE_API_KEY is not set", 401);
+        }
+        client = new GoogleGenAI({ apiKey: GOOGLE_API_KEY });
+    }
+    return client;
+}
+/**
+ * Detect content safety block errors from the Google GenAI SDK.
+ * These occur when Gemini refuses to generate content due to content policy.
+ * Returns true for errors that should be handled gracefully (empty result)
+ * rather than propagated as 500 server errors.
+ */
+function isSafetyBlockError(error) {
+    const msg = (error?.message || "").toLowerCase();
+    return (msg.includes("prohibited_content") ||
+        msg.includes("image_safety") ||
+        msg.includes("safety") ||
+        msg.includes("blocked") ||
+        msg.includes("content filter") ||
+        msg.includes("response was blocked"));
+}
+/**
+ * Add a WAV header to raw PCM audio data.
+ */
+function addWavHeader(buffer, sampleRate = 24000, numChannels = 1) {
+    const headerLength = 44;
+    const dataLength = buffer.length;
+    const fileSize = dataLength + headerLength - 8;
+    const header = Buffer.alloc(headerLength);
+    header.write("RIFF", 0);
+    header.writeUInt32LE(fileSize, 4);
+    header.write("WAVE", 8);
+    header.write("fmt ", 12);
+    header.writeUInt32LE(16, 16);
+    header.writeUInt16LE(1, 20);
+    header.writeUInt16LE(numChannels, 22);
+    header.writeUInt32LE(sampleRate, 24);
+    header.writeUInt32LE(sampleRate * numChannels * 2, 28);
+    header.writeUInt16LE(numChannels * 2, 32);
+    header.writeUInt16LE(16, 34);
+    header.write("data", 36);
+    header.writeUInt32LE(dataLength, 40);
+    return Buffer.concat([header, buffer]);
+}
+/**
+ * Convert OpenAI-style messages to Google GenAI content format.
+ * Handles image content from base64 data URLs.
+ * Note: Images on assistant/model messages are stripped to avoid
+ * Gemini's thought_signature requirement for model-generated images.
+ */
+/**
+ * Recursively sanitize a JSON Schema object for Google's restricted format.
+ * Gemini's functionDeclarations only support a subset of JSON Schema —
+ * unsupported keywords like `const`, `$schema`, `$id`, `$ref`, `examples`,
+ * `default`, `additionalProperties` etc. cause 400 INVALID_ARGUMENT errors.
+ *
+ * Strategy:
+ *   - `const: "value"` → `enum: ["value"]` (semantically equivalent)
+ *   - Other unsupported keys → stripped entirely
+ */
+const GOOGLE_UNSUPPORTED_KEYS = new Set([
+    "$schema",
+    "$id",
+    "$ref",
+    "examples",
+    "default",
+    "additionalProperties",
+    "patternProperties",
+    "if",
+    "then",
+    "else",
+    "allOf",
+    "anyOf",
+    "oneOf",
+    "not",
+    "title",
+]);
+// @ts-ignore
+function sanitizeSchemaForGoogle(schema, isPropertyMap = false) {
+    if (!schema || typeof schema !== "object")
+        return schema;
+    // @ts-ignore
+    if (Array.isArray(schema))
+        // @ts-ignore
+        return schema.map((item) => sanitizeSchemaForGoogle(item, false));
+    const cleaned = {};
+    // @ts-ignore
+    for (const [key, value] of Object.entries(schema)) {
+        // Convert `const` → single-value `enum`
+        if (key === "const" && !isPropertyMap) {
+            // @ts-ignore
+            cleaned.enum = [value];
+            continue;
+        }
+        // Strip unsupported schema keywords — but NOT when we're iterating
+        // over a `properties` map, where keys are user-defined field names
+        // (e.g. properties.title is a field called "title", not the JSON Schema title keyword)
+        if (!isPropertyMap && GOOGLE_UNSUPPORTED_KEYS.has(key))
+            continue;
+        // When we hit a "properties" key, its children are a map of field names → schemas
+        // @ts-ignore
+        cleaned[key] = sanitizeSchemaForGoogle(value, key === "properties");
+    }
+    return cleaned;
+}
+/**
+ * Convert generic tool schemas to Google's functionDeclarations format.
+ * Input:  [{ name, description, parameters: { type, properties, required } }]
+ * Output: [{ functionDeclarations: [...] }]
+ */
+export function convertToolsToGoogle(tools) {
+    if (!tools || !Array.isArray(tools) || tools.length === 0)
+        return null;
+    return [
+        {
+            functionDeclarations: tools.map((t) => ({
+                name: t.name,
+                description: t.description || "",
+                parameters: sanitizeSchemaForGoogle(t.parameters || {}),
+            })),
+        },
+    ];
+}
+async function convertMessages(messages) {
+    const result = [];
+    for (let i = 0; i < messages.length; i++) {
+        const item = messages[i];
+        const parts = [];
+        // ── Consecutive tool result messages → single user turn ──
+        // Gemini requires ALL functionResponse parts for a model turn
+        // to be grouped in one user message.
+        if (item.role === "tool") {
+            const responseParts = [];
+            let j = i;
+            while (j < messages.length && messages[j].role === "tool") {
+                const toolMsg = messages[j];
+                responseParts.push({
+                    functionResponse: {
+                        name: toolMsg.name || "unknown",
+                        response: {
+                            result: typeof toolMsg.content === "string"
+                                ? toolMsg.content
+                                : JSON.stringify(toolMsg.content),
+                        },
+                    },
+                });
+                j++;
+            }
+            result.push({ role: "user", parts: responseParts });
+            i = j - 1; // skip merged messages (loop will i++)
+            continue;
+        }
+        // Only include media for user messages — model-generated media
+        // require a thought_signature when sent back, so we skip them.
+        if (item.role !== "assistant") {
+            // All media fields are arrays of data URLs or HTTP URLs
+            // @ts-ignore
+            for (const field of ["images", "audio", "video", "pdf"]) {
+                const arr = item[field];
+                if (arr && Array.isArray(arr)) {
+                    // @ts-ignore
+                    for (const mediaRef of arr) {
+                        const match = mediaRef.match(/^data:([\w-]+\/[\w.+-]+);base64,(.+)$/);
+                        if (match) {
+                            parts.push({
+                                inlineData: { mimeType: match[1], data: match[2] },
+                            });
+                        }
+                        else if (mediaRef.startsWith("http://") ||
+                            mediaRef.startsWith("https://")) {
+                            // HTTP URLs — fetch and convert to inline base64
+                            try {
+                                const response = await fetch(mediaRef);
+                                if (response.ok) {
+                                    const arrayBuffer = await response.arrayBuffer();
+                                    const base64Data = Buffer.from(arrayBuffer).toString("base64");
+                                    const mimeType = response.headers.get("content-type") || "image/jpeg";
+                                    parts.push({
+                                        inlineData: { mimeType, data: base64Data },
+                                    });
+                                }
+                            }
+                            catch (fetchErr) {
+                                logger.warn(`[Google] Failed to fetch media URL for inline data: ${fetchErr.message}`);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Assistant messages with tool calls — include functionCall parts
+        if (item.role === "assistant" && item.toolCalls) {
+            // @ts-ignore
+            for (const tc of item.toolCalls) {
+                const fcPart = { functionCall: { name: tc.name, args: tc.args || {} } };
+                // Preserve thoughtSignature (sibling of functionCall, required by Gemini)
+                if (tc.thoughtSignature) {
+                    // @ts-ignore
+                    fcPart.thoughtSignature = tc.thoughtSignature;
+                }
+                parts.push(fcPart);
+            }
+        }
+        if (item.content) {
+            parts.push({ text: item.content });
+        }
+        result.push({
+            role: item.role === "assistant" ? "model" : "user",
+            parts,
+        });
+    }
+    return result;
+}
+const googleProvider = {
+    name: "google",
+    async generateText(messages, 
+    // @ts-ignore
+    model = getDefaultModels(TYPES.TEXT, TYPES.TEXT).google, options = {}) {
+        logger.provider("Google", `generateText model=${model}`);
+        try {
+            const contents = await convertMessages(messages);
+            const config = {};
+            // @ts-ignore
+            if (options.temperature !== undefined) {
+                // @ts-ignore
+                config.temperature = options.temperature;
+            }
+            // @ts-ignore
+            if (options.topP !== undefined) {
+                // @ts-ignore
+                config.topP = options.topP;
+            }
+            // @ts-ignore
+            if (options.topK !== undefined) {
+                // @ts-ignore
+                config.topK = options.topK;
+            }
+            // @ts-ignore
+            if (options.presencePenalty !== undefined) {
+                // @ts-ignore
+                config.presencePenalty = options.presencePenalty;
+            }
+            // @ts-ignore
+            if (options.frequencyPenalty !== undefined) {
+                // @ts-ignore
+                config.frequencyPenalty = options.frequencyPenalty;
+            }
+            // @ts-ignore
+            if (options.stopSequences !== undefined) {
+                // @ts-ignore
+                config.stopSequences = options.stopSequences;
+            }
+            // @ts-ignore
+            if (options.maxTokens !== undefined) {
+                // @ts-ignore
+                config.maxOutputTokens = options.maxTokens;
+            }
+            // Seed for reproducibility
+            // @ts-ignore
+            if (options.seed !== undefined) {
+                // @ts-ignore
+                config.seed = parseInt(options.seed);
+            }
+            // Response format (JSON mode)
+            // @ts-ignore
+            if (options.responseFormat === "json_object") {
+                // @ts-ignore
+                config.responseMimeType = "application/json";
+            }
+            // Resolve model definition early — needed for thinking and image checks
+            const modelDef = Object.values(MODELS).find((m) => m.name === model);
+            // @ts-ignore
+            if (
+            // @ts-ignore
+            options.thinkingEnabled !== false &&
+                // @ts-ignore
+                (options.thinkingLevel || options.thinkingBudget !== undefined)) {
+                // @ts-ignore
+                config.thinkingConfig = {
+                    includeThoughts: true,
+                };
+                // Only send thinkingLevel if the model explicitly supports it
+                // (image models support thinking but reject thinkingLevel)
+                // @ts-ignore
+                if (options.thinkingLevel && modelDef?.thinkingLevels) {
+                    // @ts-ignore
+                    config.thinkingConfig.thinkingLevel = options.thinkingLevel;
+                }
+                if (
+                // @ts-ignore
+                options.thinkingBudget !== undefined &&
+                    // @ts-ignore
+                    options.thinkingBudget !== "") {
+                    // @ts-ignore
+                    config.thinkingConfig.thinkingBudgetTokens = parseInt(
+                    // @ts-ignore
+                    options.thinkingBudget);
+                }
+            }
+            // @ts-ignore
+            if (options.webSearch) {
+                // @ts-ignore
+                config.tools = [{ googleSearch: {} }];
+            }
+            // Custom function calling tools
+            // @ts-ignore
+            const customTools = convertToolsToGoogle(options.tools);
+            if (customTools) {
+                // @ts-ignore
+                config.tools = [...(config.tools || []), ...customTools];
+            }
+            // For models that output images, set responseModalities explicitly.
+            // These models REQUIRE ["TEXT", "IMAGE"] — ["TEXT"] alone returns 0 tokens.
+            if (modelDef?.outputTypes?.includes(TYPES.IMAGE)) {
+                // @ts-ignore
+                config.responseModalities = options.forceImageGeneration
+                    ? ["IMAGE"]
+                    : ["TEXT", "IMAGE"];
+            }
+            // System prompt — used by callers like CreativeRoutes to inject
+            // editing instructions for image generation with reference images.
+            // @ts-ignore
+            if (options.systemPrompt) {
+                // @ts-ignore
+                config.systemInstruction = options.systemPrompt;
+            }
+            const response = await getClient().models.generateContent({
+                model,
+                contents,
+                config,
+            });
+            // Check for function calls, images, and text in the response
+            const toolCalls = [];
+            const textParts = [];
+            const images = [];
+            // @ts-ignore
+            const maxImages = options.imageCount || 1;
+            // @ts-ignore
+            for (const part of response.candidates?.[0]?.content?.parts || []) {
+                if (part.functionCall) {
+                    toolCalls.push({
+                        id: `google-tc-${crypto.randomUUID()}`,
+                        name: part.functionCall.name,
+                        args: part.functionCall.args || {},
+                        thoughtSignature: part.thoughtSignature || undefined,
+                    });
+                }
+                else if (part.text) {
+                    textParts.push(part.text);
+                }
+                else if (part.inlineData && images.length < maxImages) {
+                    images.push({
+                        data: part.inlineData.data,
+                        mimeType: part.inlineData.mimeType || "image/png",
+                    });
+                }
+            }
+            const result = {
+                text: textParts.join("") || response.text || "",
+                usage: {
+                    inputTokens: response.usageMetadata?.promptTokenCount ?? 0,
+                    outputTokens: response.usageMetadata?.candidatesTokenCount ?? 0,
+                },
+            };
+            // @ts-ignore
+            if (toolCalls.length > 0)
+                result.toolCalls = toolCalls;
+            // @ts-ignore
+            if (images.length > 0)
+                result.images = images;
+            return result;
+        }
+        catch (error) {
+            // Content safety blocks (PROHIBITED_CONTENT, SAFETY, IMAGE_SAFETY)
+            // should return an empty result, not a 500. This lets consumers
+            // handle "no image generated" gracefully and preserves the conversation.
+            if (isSafetyBlockError(error)) {
+                logger.error(`[Google] Content safety block: ${error.message}`);
+                return {
+                    text: "",
+                    usage: { inputTokens: 0, outputTokens: 0 },
+                    safetyBlock: true,
+                };
+            }
+            throw new ProviderError("google", error.message, 500, error);
+        }
+    },
+    async *generateTextStream(messages, 
+    // @ts-ignore
+    model = getDefaultModels(TYPES.TEXT, TYPES.TEXT).google, options = {}) {
+        logger.provider("Google", `generateTextStream model=${model}`);
+        try {
+            const contents = await convertMessages(messages);
+            const config = {};
+            // @ts-ignore
+            if (options.temperature !== undefined) {
+                // @ts-ignore
+                config.temperature = options.temperature;
+            }
+            // @ts-ignore
+            if (options.topP !== undefined) {
+                // @ts-ignore
+                config.topP = options.topP;
+            }
+            // @ts-ignore
+            if (options.topK !== undefined) {
+                // @ts-ignore
+                config.topK = options.topK;
+            }
+            // @ts-ignore
+            if (options.presencePenalty !== undefined) {
+                // @ts-ignore
+                config.presencePenalty = options.presencePenalty;
+            }
+            // @ts-ignore
+            if (options.frequencyPenalty !== undefined) {
+                // @ts-ignore
+                config.frequencyPenalty = options.frequencyPenalty;
+            }
+            // @ts-ignore
+            if (options.stopSequences !== undefined) {
+                // @ts-ignore
+                config.stopSequences = options.stopSequences;
+            }
+            // @ts-ignore
+            if (options.maxTokens !== undefined) {
+                // @ts-ignore
+                config.maxOutputTokens = options.maxTokens;
+            }
+            // Seed for reproducibility
+            // @ts-ignore
+            if (options.seed !== undefined) {
+                // @ts-ignore
+                config.seed = parseInt(options.seed);
+            }
+            // Response format (JSON mode)
+            // @ts-ignore
+            if (options.responseFormat === "json_object") {
+                // @ts-ignore
+                config.responseMimeType = "application/json";
+            }
+            // Resolve model definition early — needed for thinking and image checks
+            const modelDef = Object.values(MODELS).find((m) => m.name === model);
+            // @ts-ignore
+            if (
+            // @ts-ignore
+            options.thinkingEnabled !== false &&
+                // @ts-ignore
+                (options.thinkingLevel || options.thinkingBudget !== undefined)) {
+                // @ts-ignore
+                config.thinkingConfig = {
+                    includeThoughts: true,
+                };
+                // Only send thinkingLevel if the model explicitly supports it
+                // @ts-ignore
+                if (options.thinkingLevel && modelDef?.thinkingLevels) {
+                    // @ts-ignore
+                    config.thinkingConfig.thinkingLevel = options.thinkingLevel;
+                }
+                if (
+                // @ts-ignore
+                options.thinkingBudget !== undefined &&
+                    // @ts-ignore
+                    options.thinkingBudget !== "") {
+                    // @ts-ignore
+                    config.thinkingConfig.thinkingBudgetTokens = parseInt(
+                    // @ts-ignore
+                    options.thinkingBudget);
+                }
+            }
+            // Build tools array based on enabled options
+            const tools = [];
+            // @ts-ignore
+            if (options.webSearch)
+                tools.push({ googleSearch: {} });
+            // @ts-ignore
+            if (options.codeExecution)
+                tools.push({ codeExecution: {} });
+            // @ts-ignore
+            if (options.urlContext)
+                tools.push({ urlContext: {} });
+            // Custom function calling tools
+            // @ts-ignore
+            const customTools = convertToolsToGoogle(options.tools);
+            if (customTools)
+                tools.push(...customTools);
+            // @ts-ignore
+            if (tools.length > 0)
+                config.tools = tools;
+            // For models that output images, set responseModalities explicitly.
+            // These models REQUIRE ["TEXT", "IMAGE"] — ["TEXT"] alone returns 0 tokens.
+            if (modelDef?.outputTypes?.includes(TYPES.IMAGE)) {
+                // @ts-ignore
+                config.responseModalities = options.forceImageGeneration
+                    ? ["IMAGE"]
+                    : ["TEXT", "IMAGE"];
+            }
+            const streamConfig = { ...config };
+            // @ts-ignore
+            if (options.signal) {
+                // @ts-ignore
+                streamConfig.httpOptions = { signal: options.signal };
+            }
+            const responseStream = await getClient().models.generateContentStream({
+                model,
+                contents,
+                config: streamConfig,
+            });
+            let usage = null;
+            // @ts-ignore
+            const maxImages = options.imageCount || 1;
+            let imageCount = 0;
+            // @ts-ignore
+            for await (const chunk of responseStream) {
+                // @ts-ignore
+                if (options.signal?.aborted)
+                    break;
+                // Process all parts in the chunk
+                if (chunk.candidates?.[0]?.content?.parts) {
+                    // @ts-ignore
+                    for (const part of chunk.candidates[0].content.parts) {
+                        if (part.functionCall) {
+                            yield {
+                                type: "toolCall",
+                                id: `google-tc-${crypto.randomUUID()}`,
+                                name: part.functionCall.name,
+                                args: part.functionCall.args || {},
+                                thoughtSignature: part.thoughtSignature || undefined,
+                            };
+                        }
+                        else if (part.thought && part.text) {
+                            yield { type: "thinking", content: part.text };
+                        }
+                        else if (part.text) {
+                            yield part.text;
+                        }
+                        else if (part.inlineData && imageCount < maxImages) {
+                            imageCount++;
+                            yield {
+                                type: "image",
+                                data: part.inlineData.data,
+                                mimeType: part.inlineData.mimeType || "image/png",
+                            };
+                        }
+                        else if (part.executableCode?.code) {
+                            yield {
+                                type: "executableCode",
+                                code: part.executableCode.code,
+                                language: part.executableCode.language || "python",
+                            };
+                        }
+                        else if (part.codeExecutionResult) {
+                            yield {
+                                type: "codeExecutionResult",
+                                output: part.codeExecutionResult.output || "",
+                                outcome: part.codeExecutionResult.outcome || "OK",
+                            };
+                        }
+                    }
+                }
+                else if (chunk.text) {
+                    yield chunk.text;
+                }
+                if (chunk.usageMetadata) {
+                    usage = {
+                        inputTokens: chunk.usageMetadata.promptTokenCount ?? 0,
+                        outputTokens: chunk.usageMetadata.candidatesTokenCount ?? 0,
+                    };
+                }
+            }
+            if (usage) {
+                yield { type: "usage", usage };
+            }
+            else {
+                yield { type: "usage", usage: { inputTokens: 0, outputTokens: 0 } };
+            }
+        }
+        catch (error) {
+            if (error.name === "AbortError")
+                return;
+            if (isSafetyBlockError(error)) {
+                logger.error(`[Google] Content safety block (stream): ${error.message}`);
+                yield {
+                    type: "usage",
+                    usage: { inputTokens: 0, outputTokens: 0 },
+                    safetyBlock: true,
+                };
+                return;
+            }
+            throw new ProviderError("google", error.message, 500, error);
+        }
+    },
+    /**
+     * Live API streaming — for models that only support the bidirectional
+     * WebSocket-based BidiGenerateContent method (e.g. gemini-3.1-flash-live-preview).
+     *
+     * Bridges the event-driven Live API into an async generator matching
+     * the same interface as generateTextStream().
+     */
+    async *generateTextStreamLive(messages, model, options = {}) {
+        logger.provider("Google", `generateTextStreamLive (Live API) model=${model}`);
+        let session = null;
+        try {
+            // ── Build Live API config ────────────────────────────────────
+            // This model ONLY supports AUDIO output modality.
+            // Text responses come via outputTranscription, not responseModalities.
+            const liveConfig = {
+                responseModalities: [Modality.AUDIO],
+                outputAudioTranscription: {},
+            };
+            // @ts-ignore
+            if (options.temperature !== undefined) {
+                // @ts-ignore
+                liveConfig.temperature = options.temperature;
+            }
+            // @ts-ignore
+            if (options.topP !== undefined) {
+                // @ts-ignore
+                liveConfig.topP = options.topP;
+            }
+            // @ts-ignore
+            if (options.topK !== undefined) {
+                // @ts-ignore
+                liveConfig.topK = options.topK;
+            }
+            // @ts-ignore
+            if (options.maxTokens !== undefined) {
+                // @ts-ignore
+                liveConfig.maxOutputTokens = options.maxTokens;
+            }
+            // @ts-ignore
+            if (
+            // @ts-ignore
+            options.thinkingEnabled !== false &&
+                // @ts-ignore
+                (options.thinkingLevel || options.thinkingBudget !== undefined)) {
+                // @ts-ignore
+                liveConfig.thinkingConfig = { includeThoughts: true };
+                // @ts-ignore
+                if (options.thinkingLevel) {
+                    // @ts-ignore
+                    liveConfig.thinkingConfig.thinkingLevel = options.thinkingLevel;
+                }
+                if (
+                // @ts-ignore
+                options.thinkingBudget !== undefined &&
+                    // @ts-ignore
+                    options.thinkingBudget !== "") {
+                    // @ts-ignore
+                    liveConfig.thinkingConfig.thinkingBudgetTokens = parseInt(
+                    // @ts-ignore
+                    options.thinkingBudget);
+                }
+            }
+            // Tools
+            const tools = [];
+            // @ts-ignore
+            if (options.webSearch)
+                tools.push({ googleSearch: {} });
+            // @ts-ignore
+            const customTools = convertToolsToGoogle(options.tools);
+            if (customTools)
+                tools.push(...customTools);
+            // @ts-ignore
+            if (tools.length > 0)
+                liveConfig.tools = tools;
+            // System instruction from messages[0] if role === "system"
+            const systemMsg = messages.find((m) => m.role === "system");
+            if (systemMsg?.content) {
+                // @ts-ignore
+                liveConfig.systemInstruction = systemMsg.content;
+            }
+            // ── Async queue to bridge callbacks → async generator ─────────
+            // @ts-ignore
+            const queue = [];
+            // @ts-ignore
+            let resolver = null;
+            let done = false;
+            let setupComplete = false;
+            function enqueue(item) {
+                // @ts-ignore
+                if (resolver) {
+                    const r = resolver;
+                    resolver = null;
+                    r(item);
+                }
+                else {
+                    queue.push(item);
+                }
+            }
+            function dequeue() {
+                if (queue.length > 0) {
+                    // @ts-ignore
+                    return Promise.resolve(queue.shift());
+                }
+                return new Promise((resolve) => {
+                    resolver = resolve;
+                });
+            }
+            // ── Connect to Live API ───────────────────────────────────────
+            session = await getClient().live.connect({
+                model,
+                config: liveConfig,
+                callbacks: {
+                    onopen: () => {
+                        logger.provider("Google", `Live API session opened for ${model}`);
+                    },
+                    onmessage: (msg) => {
+                        // Setup complete — signal we can send messages
+                        if (msg.setupComplete !== undefined) {
+                            setupComplete = true;
+                            enqueue({ type: "setupComplete" });
+                            return;
+                        }
+                        // Audio data from model turn (inlineData)
+                        if (msg.serverContent?.modelTurn?.parts) {
+                            // @ts-ignore
+                            for (const part of msg.serverContent.modelTurn.parts) {
+                                if (part.thought && part.text) {
+                                    enqueue({ type: "thinking", content: part.text });
+                                }
+                                else if (part.inlineData) {
+                                    // Audio chunks from the model — forward for playback
+                                    enqueue({
+                                        type: "audio",
+                                        data: part.inlineData.data,
+                                        mimeType: part.inlineData.mimeType,
+                                    });
+                                }
+                                else if (part.text) {
+                                    enqueue({ type: "text", content: part.text });
+                                }
+                                else if (part.functionCall) {
+                                    enqueue({
+                                        type: "toolCall",
+                                        id: `google-tc-${crypto.randomUUID()}`,
+                                        name: part.functionCall.name,
+                                        args: part.functionCall.args || {},
+                                        thoughtSignature: part.thoughtSignature || undefined,
+                                    });
+                                }
+                            }
+                        }
+                        // Output transcription — TEXT transcript of the audio output.
+                        // This is the primary text content for the SSE chat flow.
+                        if (msg.serverContent?.outputTranscription?.text) {
+                            enqueue({
+                                type: "text",
+                                content: msg.serverContent.outputTranscription.text,
+                            });
+                        }
+                        // Tool calls from the server
+                        if (msg.toolCall?.functionCalls) {
+                            // @ts-ignore
+                            for (const fc of msg.toolCall.functionCalls) {
+                                enqueue({
+                                    type: "toolCall",
+                                    id: `google-tc-${crypto.randomUUID()}`,
+                                    name: fc.name,
+                                    args: fc.args || {},
+                                });
+                            }
+                        }
+                        // Usage metadata
+                        if (msg.usageMetadata) {
+                            const u = msg.usageMetadata;
+                            if (u.promptTokenCount || u.candidatesTokenCount) {
+                                enqueue({
+                                    type: "usage",
+                                    usage: {
+                                        inputTokens: u.promptTokenCount ?? 0,
+                                        outputTokens: u.candidatesTokenCount ?? 0,
+                                    },
+                                });
+                            }
+                        }
+                        // Turn complete — signal we're done
+                        if (msg.serverContent?.turnComplete) {
+                            done = true;
+                            enqueue({ type: "done" });
+                        }
+                    },
+                    onerror: (e) => {
+                        logger.error(`[Google Live API] Error: ${e?.error?.message || e?.message || "unknown"}`);
+                        done = true;
+                        enqueue({
+                            type: "error",
+                            message: e?.error?.message || e?.message || "Live API error",
+                        });
+                    },
+                    onclose: () => {
+                        logger.provider("Google", "Live API session closed");
+                        done = true;
+                        enqueue({ type: "done" });
+                    },
+                },
+            });
+            // ── Wait for setupComplete before sending ─────────────────────
+            while (!setupComplete) {
+                const item = await dequeue();
+                if (item?.type === "setupComplete")
+                    break;
+                if (item?.type === "error")
+                    throw new ProviderError("google", item.message, 500);
+                if (item?.type === "done")
+                    return;
+            }
+            // ── Seed conversation history & send user message ─────────────
+            // sendClientContent works for seeding prior turns (turnComplete: false)
+            // but causes "invalid argument" when used as the final turn.
+            // So we seed history with sendClientContent, then send the last
+            // user message via sendRealtimeInput.
+            const nonSystemMessages = messages.filter((m) => m.role !== "system");
+            const lastUserMsg = nonSystemMessages[nonSystemMessages.length - 1];
+            const priorMessages = nonSystemMessages.slice(0, -1);
+            // Build Content objects for prior history turns
+            if (priorMessages.length > 0) {
+                const historyTurns = [];
+                // @ts-ignore
+                for (const msg of priorMessages) {
+                    const parts = [];
+                    if (msg.content) {
+                        parts.push({ text: msg.content });
+                    }
+                    if (parts.length > 0) {
+                        historyTurns.push({
+                            role: msg.role === "assistant" ? "model" : "user",
+                            parts,
+                        });
+                    }
+                }
+                if (historyTurns.length > 0) {
+                    session.sendClientContent({
+                        turns: historyTurns,
+                        turnComplete: false,
+                    });
+                }
+            }
+            // Send the final user message via sendRealtimeInput
+            if (lastUserMsg?.content) {
+                session.sendRealtimeInput({ text: lastUserMsg.content });
+            }
+            // ── Yield chunks from the queue ───────────────────────────────
+            while (!done || queue.length > 0) {
+                // @ts-ignore
+                if (options.signal?.aborted)
+                    break;
+                const item = await dequeue();
+                if (!item || item.type === "done")
+                    break;
+                if (item.type === "error") {
+                    throw new ProviderError("google", item.message, 500);
+                }
+                if (item.type === "text") {
+                    yield item.content;
+                }
+                else if (item.type === "thinking") {
+                    yield { type: "thinking", content: item.content };
+                }
+                else if (item.type === "toolCall") {
+                    yield {
+                        type: "toolCall",
+                        id: item.id,
+                        name: item.name,
+                        args: item.args,
+                        thoughtSignature: item.thoughtSignature,
+                    };
+                }
+                else if (item.type === "usage") {
+                    yield { type: "usage", usage: item.usage };
+                }
+                else if (item.type === "audio") {
+                    yield { type: "audio", data: item.data, mimeType: item.mimeType };
+                }
+            }
+        }
+        catch (error) {
+            if (error.name === "AbortError")
+                return;
+            if (error instanceof ProviderError)
+                throw error;
+            throw new ProviderError("google", error.message, 500, error);
+        }
+        finally {
+            if (session) {
+                try {
+                    session.close();
+                }
+                catch {
+                    /* already closed */
+                }
+            }
+        }
+    },
+    async captionImage(images, prompt = "Describe this image.", 
+    // @ts-ignore
+    model = getDefaultModels(TYPES.IMAGE, TYPES.TEXT).google, systemPrompt) {
+        logger.provider("Google", `captionImage model=${model}`);
+        try {
+            // Process each image into inline data parts
+            const imageParts = [];
+            // @ts-ignore
+            for (const imageUrlOrBase64 of images) {
+                let imageData = imageUrlOrBase64;
+                let mimeType = "image/jpeg";
+                if (imageUrlOrBase64.startsWith("http")) {
+                    const response = await fetch(imageUrlOrBase64);
+                    if (!response.ok) {
+                        throw new Error(`Failed to fetch image from URL: ${imageUrlOrBase64}`);
+                    }
+                    const arrayBuffer = await response.arrayBuffer();
+                    imageData = Buffer.from(arrayBuffer).toString("base64");
+                    mimeType = response.headers.get("content-type") || "image/jpeg";
+                }
+                else if (imageUrlOrBase64.includes(";base64,")) {
+                    const parts = imageUrlOrBase64.split(";base64,");
+                    mimeType = parts[0].split(":")[1];
+                    imageData = parts[1];
+                }
+                imageParts.push({ inlineData: { data: imageData, mimeType } });
+            }
+            const contents = [
+                {
+                    role: "user",
+                    parts: [...imageParts, { text: prompt }],
+                },
+            ];
+            const config = {};
+            if (systemPrompt) {
+                // @ts-ignore
+                config.systemInstruction = systemPrompt;
+            }
+            const response = await getClient().models.generateContent({
+                model,
+                contents,
+                config: Object.keys(config).length > 0 ? config : undefined,
+            });
+            const usage = {
+                inputTokens: response.usageMetadata?.promptTokenCount || 0,
+                outputTokens: response.usageMetadata?.candidatesTokenCount || 0,
+            };
+            return { text: response.text, usage };
+        }
+        catch (error) {
+            throw new ProviderError("google", error.message, 500, error);
+        }
+    },
+    async generateImage(prompt, images = [], model = MODELS.GEMINI_3_PRO_IMAGE.name, systemPrompt) {
+        logger.provider("Google", `generateImage model=${model}`);
+        try {
+            const config = {
+                responseModalities: ["IMAGE"],
+                imageConfig: { imageSize: "1K" },
+            };
+            if (systemPrompt) {
+                // @ts-ignore
+                config.systemInstruction = systemPrompt;
+            }
+            const parts = [{ text: prompt }];
+            if (images.length) {
+                // @ts-ignore
+                for (const image of images) {
+                    // Support both data URL strings and { imageData, mimeType } objects
+                    if (typeof image === "string") {
+                        // @ts-ignore
+                        const match = image.match(/^data:([\w-]+\/[\w.+-]+);base64,(.+)$/);
+                        if (match) {
+                            parts.push({
+                                // @ts-ignore
+                                inlineData: { mimeType: match[1], data: match[2] },
+                            });
+                        }
+                    }
+                    else {
+                        parts.push({
+                            // @ts-ignore
+                            inlineData: {
+                                // @ts-ignore
+                                data: image.imageData,
+                                // @ts-ignore
+                                mimeType: image.mimeType || "image/jpeg",
+                            },
+                        });
+                    }
+                }
+            }
+            const contents = [{ role: "user", parts }];
+            const response = await getClient().models.generateContentStream({
+                model,
+                config,
+                contents,
+            });
+            let combinedText = "";
+            // @ts-ignore
+            for await (const chunk of response) {
+                if (!chunk.candidates?.[0]?.content?.parts)
+                    continue;
+                if (chunk.candidates?.[0]?.finishReason === "PROHIBITED_CONTENT") {
+                    throw new Error("Content was flagged as prohibited by Google AI");
+                }
+                const part = chunk.candidates[0].content.parts[0];
+                if (part.inlineData) {
+                    return {
+                        imageData: part.inlineData.data,
+                        mimeType: part.inlineData.mimeType || "image/png",
+                        text: combinedText,
+                    };
+                }
+                else if (chunk.text) {
+                    combinedText += chunk.text;
+                }
+            }
+            throw new Error("No image data received from Google AI");
+        }
+        catch (error) {
+            if (error instanceof ProviderError)
+                throw error;
+            throw new ProviderError("google", error.message, 500, error);
+        }
+    },
+    async generateSpeech(text, voice = DEFAULT_VOICES.google, options = {}) {
+        logger.provider("Google", `generateSpeech voice=${voice}`);
+        try {
+            const config = {
+                temperature: 1,
+                responseModalities: ["audio"],
+                speechConfig: {
+                    voiceConfig: {
+                        prebuiltVoiceConfig: {
+                            voiceName: voice,
+                        },
+                    },
+                },
+            };
+            const response = await getClient().models.generateContent({
+                model: 
+                // @ts-ignore
+                options.model || getDefaultModels(TYPES.TEXT, TYPES.AUDIO).google,
+                contents: [
+                    {
+                        role: "user",
+                        parts: [
+                            // @ts-ignore
+                            { text: options.prompt ? `${options.prompt}\n\n${text}` : text },
+                        ],
+                    },
+                ],
+                config,
+            });
+            const candidates = response.candidates;
+            if (candidates?.[0]?.content?.parts?.[0]?.inlineData) {
+                const inlineData = candidates[0].content.parts[0].inlineData;
+                const audioBuffer = Buffer.from(inlineData.data || "", "base64");
+                if (inlineData.mimeType === "audio/mpeg" ||
+                    inlineData.mimeType === "audio/mp3") {
+                    return {
+                        stream: Readable.from(audioBuffer),
+                        contentType: "audio/mpeg",
+                    };
+                }
+                else {
+                    const wavBuffer = addWavHeader(audioBuffer);
+                    return { stream: Readable.from(wavBuffer), contentType: "audio/wav" };
+                }
+            }
+            else {
+                throw new Error("No audio content received from Google GenAI");
+            }
+        }
+        catch (error) {
+            if (error instanceof ProviderError)
+                throw error;
+            throw new ProviderError("google", error.message, 500, error);
+        }
+    },
+    async transcribeAudio(audioBuffer, mimeType, model = GOOGLE_TTS_MODEL, options = {}) {
+        logger.provider("Google", `transcribeAudio model=${model}`);
+        try {
+            const audioBase64 = audioBuffer.toString("base64");
+            const prompt = 
+            // @ts-ignore
+            options.prompt ||
+                "Transcribe the following audio accurately. Return only the transcription text, nothing else.";
+            const contents = [
+                {
+                    role: "user",
+                    parts: [
+                        { inlineData: { mimeType, data: audioBase64 } },
+                        { text: prompt },
+                    ],
+                },
+            ];
+            const config = {};
+            // @ts-ignore
+            if (options.language) {
+                // @ts-ignore
+                config.systemInstruction = `Transcribe in ${options.language}.`;
+            }
+            const response = await getClient().models.generateContent({
+                model,
+                contents,
+                config,
+            });
+            return {
+                text: response.text || "",
+                usage: {
+                    inputTokens: response.usageMetadata?.promptTokenCount ?? 0,
+                    outputTokens: response.usageMetadata?.candidatesTokenCount ?? 0,
+                },
+            };
+        }
+        catch (error) {
+            throw new ProviderError("google", error.message, 500, error);
+        }
+    },
+    async generateEmbedding(content, model, options = {}) {
+        model =
+            model ||
+                // @ts-ignore
+                getDefaultModels(TYPES.TEXT, TYPES.EMBEDDING)?.google ||
+                GOOGLE_EMBEDDING_MODEL;
+        logger.provider("Google", `generateEmbedding model=${model}`);
+        try {
+            const params = { model };
+            const config = {};
+            // Build the contents for the embedding request
+            if (typeof content === "string") {
+                // Simple text-only input
+                // @ts-ignore
+                params.contents = content;
+            }
+            else if (Array.isArray(content)) {
+                // Multimodal: wrap all parts in a single Content object.
+                // The SDK maps each top-level array item to a separate batch request,
+                // so we must bundle parts into one Content to get a single embedding.
+                // @ts-ignore
+                params.contents = { role: "user", parts: content };
+            }
+            else {
+                // @ts-ignore
+                params.contents = content;
+            }
+            // @ts-ignore
+            if (options.taskType) {
+                // @ts-ignore
+                config.taskType = options.taskType;
+            }
+            // @ts-ignore
+            if (options.dimensions) {
+                // @ts-ignore
+                config.outputDimensionality = options.dimensions;
+            }
+            if (Object.keys(config).length > 0) {
+                // @ts-ignore
+                params.config = config;
+            }
+            const response = await getClient().models.embedContent(params);
+            // embedContent returns { embeddings: [{ values: [...] }] } for batch/multimodal,
+            // or { embedding: { values: [...] } } for single text
+            let values;
+            if (response.embedding?.values) {
+                values = response.embedding.values;
+            }
+            else if (response.embeddings?.[0]?.values) {
+                values = response.embeddings[0].values;
+            }
+            else {
+                throw new Error("No embedding data in response");
+            }
+            return {
+                embedding: values,
+                dimensions: values.length,
+            };
+        }
+        catch (error) {
+            throw new ProviderError("google", error.message, error.status || 500, error);
+        }
+    },
+};
+export default googleProvider;
+//# sourceMappingURL=google.js.map

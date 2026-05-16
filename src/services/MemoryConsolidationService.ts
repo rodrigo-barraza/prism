@@ -1,9 +1,11 @@
+// @ts-ignore
 import { daysSinceIso } from "@rodrigo-barraza/utilities-library";
 import crypto from "crypto";
 import { getProvider } from "../providers/index.js";
 import MemoryService from "./MemoryService.js";
 import RequestLogger from "./RequestLogger.js";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
+// @ts-ignore
 import { MONGO_DB_NAME } from "../../config.js";
 import logger from "../utils/logger.js";
 import { cosineSimilarity } from "../utils/math.js";
@@ -11,7 +13,11 @@ import { parseJsonFromLlmResponse } from "../utils/utilities.js";
 import { COLLECTIONS } from "../constants.js";
 import AgentPersonaRegistry from "./AgentPersonaRegistry.js";
 import SettingsService from "./SettingsService.js";
-import { estimateTokens, calculateTextCost, getTotalInputTokens } from "../utils/CostCalculator.js";
+import {
+  estimateTokens,
+  calculateTextCost,
+  getTotalInputTokens,
+} from "../utils/CostCalculator.js";
 import { TYPES, getPricing } from "../config.js";
 // ─── Constants ────────────────────────────────────────────────────────────────
 /** Resolve the current consolidation provider + model from settings. */
@@ -21,7 +27,7 @@ async function getConsolidationConfig() {
 /** Cosine similarity above which two memories are clustered together */
 const CLUSTER_THRESHOLD = 0.75;
 /** Conversational agents use a higher threshold — personal facts are shorter and more distinct */
-const CONVERSATIONAL_CLUSTER_THRESHOLD = 0.80;
+const CONVERSATIONAL_CLUSTER_THRESHOLD = 0.8;
 /** Max memories per cluster sent to the LLM (avoid token blowup) */
 const MAX_CLUSTER_SIZE = 8;
 /** Memories older than this (days) with ephemeral types get flagged for staleness review */
@@ -46,7 +52,7 @@ const BATCH_INPUT_TOKEN_BUDGET = 12_000;
 const LLM_MAX_OUTPUT_TOKENS = 4096;
 const RUNS_COLLECTION = COLLECTIONS.MEMORY_CONSOLIDATION_RUNS;
 const HISTORY_COLLECTION = COLLECTIONS.MEMORY_CONSOLIDATION_HISTORY;
-function daysSince(isoDate) {
+function daysSince(isoDate: any) {
   return daysSinceIso(isoDate);
 }
 // ─── Cluster Detection ───────────────────────────────────────────────────────
@@ -54,28 +60,35 @@ function daysSince(isoDate) {
  * Find clusters of semantically similar memories using Union-Find.
  * Returns arrays of memory groups (each group has 2+ memories).
  */
-function findClusters(memories, threshold = CLUSTER_THRESHOLD) {
+function findClusters(memories: any, threshold = CLUSTER_THRESHOLD) {
   const n = memories.length;
   if (n < 2) return [];
   // Union-Find
-  const parent = Array.from({ length: n }, (_, i) => i);
+  const parent = Array.from({ length: n }, (_: any, i: any) => i);
   const rank = new Array(n).fill(0);
-  function find(x) {
+  function find(x: any) {
     if (parent[x] !== x) parent[x] = find(parent[x]);
     return parent[x];
   }
-  function union(x, y) {
-    const px = find(x), py = find(y);
+  function union(x: any, y: any) {
+    const px = find(x),
+      py = find(y);
     if (px === py) return;
     if (rank[px] < rank[py]) parent[px] = py;
     else if (rank[px] > rank[py]) parent[py] = px;
-    else { parent[py] = px; rank[px]++; }
+    else {
+      parent[py] = px;
+      rank[px]++;
+    }
   }
   // Pairwise comparison — O(n²) but fine for <500 memories
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
       if (!memories[i].embedding || !memories[j].embedding) continue;
-      const sim = cosineSimilarity(memories[i].embedding, memories[j].embedding);
+      const sim = cosineSimilarity(
+        memories[i].embedding,
+        memories[j].embedding,
+      );
       if (sim > threshold) {
         union(i, j);
       }
@@ -90,8 +103,8 @@ function findClusters(memories, threshold = CLUSTER_THRESHOLD) {
   }
   // Only return clusters with 2+ members, capped at MAX_CLUSTER_SIZE
   return [...groups.values()]
-    .filter((g) => g.length >= 2)
-    .map((g) => g.slice(0, MAX_CLUSTER_SIZE));
+    .filter((g: any) => g.length >= 2)
+    .map((g: any) => g.slice(0, MAX_CLUSTER_SIZE));
 }
 // ─── LLM Prompts ─────────────────────────────────────────────────────────────
 const CONSOLIDATION_PROMPT = `You are a memory consolidation agent. You review a set of stored memories and determine how to optimize them.
@@ -183,9 +196,10 @@ If no consolidation is needed, return: { "actions": [], "summary": "No consolida
  * Returns a Map where keys are "aboutUserId::sourceUserId" and values are
  * arrays of memory documents.
  */
-function partitionConversationalMemories(memories) {
+function partitionConversationalMemories(memories: any) {
   const partitions = new Map();
-  for (const m of memories) {
+  // @ts-ignore
+  for ( const m of memories) {
     const about = m.aboutUserId || "_unknown";
     const source = m.sourceUserId || "_unknown";
     const key = `${about}::${source}`;
@@ -199,8 +213,9 @@ function partitionConversationalMemories(memories) {
  * Identify stale conversational agent memories using type-aware thresholds.
  * Only fast-decaying categories (gaming, work, achievement) are flagged.
  */
-function findStaleConversationalMemories(memories) {
-  return memories.filter((m) => {
+function findStaleConversationalMemories(memories: any) {
+  return memories.filter((m: any) => {
+    // @ts-ignore
     const threshold = CONVERSATIONAL_STALENESS_CONFIG[m.type];
     if (!threshold) return false; // durable types (personal, preference, etc.) are never stale
     return daysSince(m.createdAt) > threshold;
@@ -211,7 +226,7 @@ function findStaleConversationalMemories(memories) {
 /**
  * Format a single coding-type memory into the text representation used in LLM input.
  */
-function formatMemoryEntry(m) {
+function formatMemoryEntry(m: any) {
   const age = daysSince(m.createdAt);
   return `- **ID**: ${m.id}\n  **Type**: ${m.type}\n  **Title**: ${m.title || (m.content ? m.content.substring(0, 60) : "untitled")}\n  **Content**: ${m.content}\n  **Age**: ${age} days`;
 }
@@ -219,7 +234,7 @@ function formatMemoryEntry(m) {
 /**
  * Format a conversational agent memory entry with source attribution.
  */
-function formatConversationalMemoryEntry(m) {
+function formatConversationalMemoryEntry(m: any) {
   const age = daysSince(m.createdAt);
   return `- **ID**: ${m.id}\n  **Category**: ${m.type}\n  **About**: ${m.aboutUsername || "unknown"} (${m.aboutUserId || "?"})\n  **Source**: ${m.sourceUsername || "unknown"} (${m.sourceUserId || "?"})\n  **Content**: ${m.content}\n  **Age**: ${age} days`;
 }
@@ -227,21 +242,31 @@ function formatConversationalMemoryEntry(m) {
 /**
  * Build the LLM input for a conversational agent batch — includes observer/subject context.
  */
-function buildConversationalBatchInput(clusterBatch, staleBatch, partitionMeta) {
+function buildConversationalBatchInput(
+  clusterBatch: any,
+  staleBatch: any,
+  partitionMeta: any,
+) {
   const sections = [];
 
   if (partitionMeta) {
     sections.push(`## Attribution Context`);
-    sections.push(`- **About user**: ${partitionMeta.aboutUsername} (ID: ${partitionMeta.aboutUserId})`);
-    sections.push(`- **Observed by**: ${partitionMeta.sourceUsername} (ID: ${partitionMeta.sourceUserId})`);
+    sections.push(
+      `- **About user**: ${partitionMeta.aboutUsername} (ID: ${partitionMeta.aboutUserId})`,
+    );
+    sections.push(
+      `- **Observed by**: ${partitionMeta.sourceUsername} (ID: ${partitionMeta.sourceUserId})`,
+    );
     sections.push("");
   }
 
   if (clusterBatch.length > 0) {
     sections.push("## Clusters of Similar Facts\n");
-    clusterBatch.forEach((cluster, i) => {
-      sections.push(`### Cluster ${i + 1} (${cluster.length} facts, likely overlap):`);
-      cluster.forEach((m) => {
+    clusterBatch.forEach((cluster: any, i: any) => {
+      sections.push(
+        `### Cluster ${i + 1} (${cluster.length} facts, likely overlap):`,
+      );
+      cluster.forEach((m: any) => {
         sections.push(formatConversationalMemoryEntry(m));
       });
       sections.push("");
@@ -249,7 +274,7 @@ function buildConversationalBatchInput(clusterBatch, staleBatch, partitionMeta) 
   }
   if (staleBatch.length > 0) {
     sections.push("## Potentially Stale Facts\n");
-    staleBatch.forEach((m) => {
+    staleBatch.forEach((m: any) => {
       sections.push(formatConversationalMemoryEntry(m));
     });
   }
@@ -263,21 +288,25 @@ function buildConversationalBatchInput(clusterBatch, staleBatch, partitionMeta) 
  * Build the LLM input for a single batch of clusters and stale memories.
  * Returns null if both arrays are empty.
  */
-function buildBatchInput(clusterBatch, staleBatch) {
+function buildBatchInput(clusterBatch: any, staleBatch: any) {
   const sections = [];
   if (clusterBatch.length > 0) {
     sections.push("## Clusters of Similar Memories\n");
-    clusterBatch.forEach((cluster, i) => {
-      sections.push(`### Cluster ${i + 1} (${cluster.length} memories, likely overlap):`);
-      cluster.forEach((m) => {
+    clusterBatch.forEach((cluster: any, i: any) => {
+      sections.push(
+        `### Cluster ${i + 1} (${cluster.length} memories, likely overlap):`,
+      );
+      cluster.forEach((m: any) => {
         sections.push(formatMemoryEntry(m));
       });
       sections.push("");
     });
   }
   if (staleBatch.length > 0) {
-    sections.push("## Potentially Stale Memories (>30 days old, ephemeral types)\n");
-    staleBatch.forEach((m) => {
+    sections.push(
+      "## Potentially Stale Memories (>30 days old, ephemeral types)\n",
+    );
+    staleBatch.forEach((m: any) => {
       sections.push(formatMemoryEntry(m));
     });
   }
@@ -292,7 +321,7 @@ function buildBatchInput(clusterBatch, staleBatch) {
  * the input token budget. Each batch gets up to BATCH_MAX_CLUSTERS
  * clusters and BATCH_MAX_STALE stale memories, with a hard token cap.
  */
-function buildBatches(clusters, staleMemories) {
+function buildBatches(clusters: any, staleMemories: any) {
   const batches = [];
 
   let clusterIdx = 0;
@@ -312,7 +341,10 @@ function buildBatches(clusters, staleMemories) {
         .join("\n");
       const clusterTokens = estimateTokens(clusterText);
 
-      if (batchTokens + clusterTokens > BATCH_INPUT_TOKEN_BUDGET && batchClusters.length > 0) {
+      if (
+        batchTokens + clusterTokens > BATCH_INPUT_TOKEN_BUDGET &&
+        batchClusters.length > 0
+      ) {
         break; // This cluster would exceed budget — start a new batch
       }
 
@@ -330,7 +362,10 @@ function buildBatches(clusters, staleMemories) {
       const entryText = formatMemoryEntry(staleMemories[staleIdx]);
       const entryTokens = estimateTokens(entryText);
 
-      if (batchTokens + entryTokens > BATCH_INPUT_TOKEN_BUDGET && batchStale.length > 0) {
+      if (
+        batchTokens + entryTokens > BATCH_INPUT_TOKEN_BUDGET &&
+        batchStale.length > 0
+      ) {
         break;
       }
 
@@ -356,7 +391,10 @@ function buildBatches(clusters, staleMemories) {
       const entryText = formatMemoryEntry(staleMemories[staleIdx]);
       const entryTokens = estimateTokens(entryText);
 
-      if (batchTokens + entryTokens > BATCH_INPUT_TOKEN_BUDGET && batchStale.length > 0) {
+      if (
+        batchTokens + entryTokens > BATCH_INPUT_TOKEN_BUDGET &&
+        batchStale.length > 0
+      ) {
         break;
       }
 
@@ -378,18 +416,32 @@ function buildBatches(clusters, staleMemories) {
  * Apply consolidation actions. For conversational agent merges, memoryLookup
  * is used to preserve source attribution metadata on the merged document.
  */
-async function applyActions(actions, agent, agentType, project, username, { traceId, endpoint, memoryLookup } = {}) {
+// @ts-ignore
+async function applyActions(
+  actions: any,
+  agent: any,
+  agentType: any,
+  project: any,
+  username: any,
+  // @ts-ignore
+  { traceId, endpoint, memoryLookup } = {},
+) {
   const results = { merged: 0, deleted: 0, errors: 0 };
   const isConversational = agentType === "conversational";
 
-  for (const action of actions) {
+  // @ts-ignore
+  for ( const action of actions) {
     try {
-      if (action.type === "merge" && action.sourceIds?.length >= 2 && action.merged) {
+      if (
+        action.type === "merge" &&
+        action.sourceIds?.length >= 2 &&
+        action.merged
+      ) {
         // Collect conversational agent metadata from source memories before deletion
         let attributionMetadata = {};
         if (isConversational && memoryLookup) {
           const sources = action.sourceIds
-            .map((id) => memoryLookup.get(id))
+            .map((id: any) => memoryLookup.get(id))
             .filter(Boolean);
 
           if (sources.length > 0) {
@@ -397,7 +449,8 @@ async function applyActions(actions, agent, agentType, project, username, { trac
             const primary = sources[0];
             // Collect all unique sources for the mergedSources attribution chain
             const uniqueSources = new Map();
-            for (const s of sources) {
+            // @ts-ignore
+            for ( const s of sources) {
               if (s.sourceUserId && !uniqueSources.has(s.sourceUserId)) {
                 uniqueSources.set(s.sourceUserId, {
                   sourceUserId: s.sourceUserId,
@@ -419,7 +472,8 @@ async function applyActions(actions, agent, agentType, project, username, { trac
         }
 
         // Delete source memories
-        for (const id of action.sourceIds) {
+        // @ts-ignore
+        for ( const id of action.sourceIds) {
           await MemoryService.remove(id);
         }
         // Store consolidated memory
@@ -446,30 +500,34 @@ async function applyActions(actions, agent, agentType, project, username, { trac
           `[MemoryConsolidation] Deleted "${action.id}" (${action.reason || ""})`,
         );
       }
-    } catch (error) {
+    } catch (error: any) {
       results.errors++;
-      logger.error(`[MemoryConsolidation] Failed to apply action: ${error.message}`);
+      logger.error(
+        `[MemoryConsolidation] Failed to apply action: ${error.message}`,
+      );
     }
   }
   return results;
 }
 // ─── Run Tracking ────────────────────────────────────────────────────────────
-async function getRunCount(project) {
+async function getRunCount(project: any) {
   const db = MongoWrapper.getDb(MONGO_DB_NAME);
   if (!db) return 0;
   const doc = await db.collection(RUNS_COLLECTION).findOne({ project });
   return doc?.sessionsSinceLastRun || 0;
 }
-async function incrementRunCount(project) {
+async function incrementRunCount(project: any) {
   const db = MongoWrapper.getDb(MONGO_DB_NAME);
   if (!db) return;
-  await db.collection(RUNS_COLLECTION).updateOne(
-    { project },
-    { $inc: { sessionsSinceLastRun: 1 } },
-    { upsert: true },
-  );
+  await db
+    .collection(RUNS_COLLECTION)
+    .updateOne(
+      { project },
+      { $inc: { sessionsSinceLastRun: 1 } },
+      { upsert: true },
+    );
 }
-async function resetRunCount(project) {
+async function resetRunCount(project: any) {
   const db = MongoWrapper.getDb(MONGO_DB_NAME);
   if (!db) return;
   await db.collection(RUNS_COLLECTION).updateOne(
@@ -487,21 +545,32 @@ async function resetRunCount(project) {
 /**
  * Record a consolidation run for audit trail.
  */
-async function recordHistory(project, trigger, memoriesBefore, actions, summary, durationMs) {
+async function recordHistory(
+  project: any,
+  trigger: any,
+  memoriesBefore: any,
+  actions: any,
+  summary: any,
+  durationMs: any,
+) {
   const db = MongoWrapper.getDb(MONGO_DB_NAME);
   if (!db) return;
-  const mergeCount = actions.filter((a) => a.type === "merge").reduce(
-    (sum, a) => sum + (a.sourceIds?.length || 0), 0,
-  );
-  const deleteCount = actions.filter((a) => a.type === "delete").length;
+  const mergeCount = actions
+    .filter((a: any) => a.type === "merge")
+    .reduce((sum: any, a: any) => sum + (a.sourceIds?.length || 0), 0);
+  const deleteCount = actions.filter((a: any) => a.type === "delete").length;
   await db.collection(HISTORY_COLLECTION).insertOne({
     project,
     runAt: new Date().toISOString(),
     trigger,
     memoriesBefore,
-    memoriesAfter: memoriesBefore - mergeCount - deleteCount + actions.filter((a) => a.type === "merge").length,
+    memoriesAfter:
+      memoriesBefore -
+      mergeCount -
+      deleteCount +
+      actions.filter((a: any) => a.type === "merge").length,
     actionsApplied: actions.length,
-    actions: actions.map((a) => ({
+    actions: actions.map((a: any) => ({
       type: a.type,
       ...(a.sourceIds && { sourceIds: a.sourceIds }),
       ...(a.merged && { mergedTitle: a.merged.title }),
@@ -516,7 +585,7 @@ async function recordHistory(project, trigger, memoriesBefore, actions, summary,
  * Check if the daily consolidation budget is exhausted.
  * Returns true if more runs are allowed.
  */
-async function canRunToday(project) {
+async function canRunToday(project: any) {
   const db = MongoWrapper.getDb(MONGO_DB_NAME);
   if (!db) return true;
   const startOfDay = new Date();
@@ -539,11 +608,26 @@ async function canRunToday(project) {
  * Run a single LLM consolidation call for one batch.
  * Returns parsed actions array, or empty array on failure.
  */
-async function processBatch(batch, batchIndex, totalBatches, {
-  provider, consolidationProvider, consolidationModel,
-  agent, project, username, trigger, endpoint, traceId, agentSessionId, broadcast,
-  systemPrompt = CONSOLIDATION_PROMPT, inputBuilder,
-}) {
+async function processBatch(
+  batch: any,
+  batchIndex: any,
+  totalBatches: any,
+  {
+    provider,
+    consolidationProvider,
+    consolidationModel,
+    agent,
+    project,
+    username,
+    trigger,
+    endpoint,
+    traceId,
+    agentSessionId,
+    broadcast,
+    systemPrompt = CONSOLIDATION_PROMPT,
+    inputBuilder,
+  }: any,
+) {
   const input = inputBuilder
     ? inputBuilder(batch.clusters, batch.stale, batch.partitionMeta)
     : buildBatchInput(batch.clusters, batch.stale);
@@ -561,7 +645,7 @@ async function processBatch(batch, batchIndex, totalBatches, {
     { role: "user", content: input },
   ];
 
-  const inputText = aiMessages.map((m) => m.content).join("\n");
+  const inputText = aiMessages.map((m: any) => m.content).join("\n");
   const approxInputTokens = estimateTokens(inputText);
   logger.info(
     `[MemoryConsolidation] ${batchLabel} Input: ~${approxInputTokens} tokens`,
@@ -571,14 +655,14 @@ async function processBatch(batch, batchIndex, totalBatches, {
   const llmStart = performance.now();
   let llmSuccess = true;
   let llmError = null;
-  let result;
+  let result: any;
 
   try {
     result = await provider.generateText(aiMessages, consolidationModel, {
       maxTokens: LLM_MAX_OUTPUT_TOKENS,
       temperature: 0.1,
     });
-  } catch (error) {
+  } catch (error: any) {
     llmSuccess = false;
     llmError = error.message;
     logger.error(
@@ -588,8 +672,14 @@ async function processBatch(batch, batchIndex, totalBatches, {
 
   // Use real API-reported usage when available; fall back to heuristic
   const realUsage = result?.usage || null;
-  const inputTokens = realUsage ? getTotalInputTokens(realUsage) : estimateTokens(inputText);
-  const outputTokens = realUsage ? (realUsage.outputTokens || 0) : (result?.text ? estimateTokens(result.text) : 0);
+  const inputTokens = realUsage
+    ? getTotalInputTokens(realUsage)
+    : estimateTokens(inputText);
+  const outputTokens = realUsage
+    ? realUsage.outputTokens || 0
+    : result?.text
+      ? estimateTokens(result.text)
+      : 0;
   RequestLogger.logBackgroundLlmCall({
     requestId: llmRequestId,
     endpoint: endpoint || null,
@@ -619,9 +709,15 @@ async function processBatch(batch, batchIndex, totalBatches, {
   // Broadcast incremental usage with cost
   if (typeof broadcast === "function" && llmSuccess) {
     try {
-      const consolidatePricing = getPricing(TYPES.TEXT, TYPES.TEXT)[consolidationModel];
+      // @ts-ignore
+      const consolidatePricing = getPricing(TYPES.TEXT, TYPES.TEXT)[
+        consolidationModel
+      ];
       const consolidateCost = consolidatePricing
-        ? calculateTextCost(realUsage || { inputTokens, outputTokens }, consolidatePricing)
+        ? calculateTextCost(
+            realUsage || { inputTokens, outputTokens },
+            consolidatePricing,
+          )
         : null;
       broadcast({
         type: "usage_update",
@@ -633,7 +729,9 @@ async function processBatch(batch, batchIndex, totalBatches, {
           estimatedCost: consolidateCost,
         },
       });
-    } catch { /* SSE channel may be closed */ }
+    } catch {
+      /* SSE channel may be closed */
+    }
   }
 
   if (!llmSuccess || !result?.text) {
@@ -645,11 +743,12 @@ async function processBatch(batch, batchIndex, totalBatches, {
   if (!parsed) {
     const responseLen = result.text?.length || 0;
     const snippet = result.text?.substring(0, 300) || "(empty)";
-    const tail = responseLen > 300 ? result.text.substring(responseLen - 200) : "";
+    const tail =
+      responseLen > 300 ? result.text.substring(responseLen - 200) : "";
     logger.warn(
       `[MemoryConsolidation] ${batchLabel} Failed to parse LLM response ` +
-      `(${responseLen} chars, ~${outputTokens} tokens). ` +
-      `Head: ${snippet}${tail ? `\n  Tail: ${tail}` : ""}`,
+        `(${responseLen} chars, ~${outputTokens} tokens). ` +
+        `Head: ${snippet}${tail ? `\n  Tail: ${tail}` : ""}`,
     );
     return [];
   }
@@ -671,13 +770,25 @@ const MemoryConsolidationService = {
    * @param {function} [params.broadcast] - Optional callback for real-time WebSocket notifications
    * @returns {Promise<object>} Consolidation results
    */
-  async consolidate({ agent = "CODING", project, username, trigger = "manual", broadcast, endpoint, traceId, agentSessionId, guildId }) {
+  async consolidate({
+    agent = "CODING",
+    project,
+    username,
+    trigger = "manual",
+    broadcast,
+    endpoint,
+    traceId,
+    agentSessionId,
+    guildId,
+  }: any) {
     const startTime = performance.now();
     const agentId = agent || "CODING";
     const persona = AgentPersonaRegistry.get(agentId);
     const agentType = persona?.type || "";
     const isConversational = agentType === "conversational";
-    logger.info(`[MemoryConsolidation] Starting ${agentType || "general"} consolidation for agent "${agentId}", project "${project}" (trigger: ${trigger})`);
+    logger.info(
+      `[MemoryConsolidation] Starting ${agentType || "general"} consolidation for agent "${agentId}", project "${project}" (trigger: ${trigger})`,
+    );
 
     // Cost guard — check daily budget
     if (!(await canRunToday(project))) {
@@ -689,11 +800,25 @@ const MemoryConsolidationService = {
     if (!db) throw new Error("Database not available");
 
     const query = { agent: agentId };
+    // @ts-ignore
     if (project) query.project = project;
+    // @ts-ignore
     if (isConversational && guildId) query.guildId = guildId;
 
     const projection = isConversational
-      ? { embedding: 1, id: 1, type: 1, title: 1, content: 1, createdAt: 1, aboutUserId: 1, aboutUsername: 1, sourceUserId: 1, sourceUsername: 1, guildId: 1 }
+      ? {
+          embedding: 1,
+          id: 1,
+          type: 1,
+          title: 1,
+          content: 1,
+          createdAt: 1,
+          aboutUserId: 1,
+          aboutUsername: 1,
+          sourceUserId: 1,
+          sourceUsername: 1,
+          guildId: 1,
+        }
       : { embedding: 1, id: 1, type: 1, title: 1, content: 1, createdAt: 1 };
 
     const allMemories = await db
@@ -703,22 +828,31 @@ const MemoryConsolidationService = {
       .toArray();
 
     if (allMemories.length < 2) {
-      logger.info(`[MemoryConsolidation] Only ${allMemories.length} memories — skipping`);
+      logger.info(
+        `[MemoryConsolidation] Only ${allMemories.length} memories — skipping`,
+      );
       await resetRunCount(project || guildId || "global");
-      return { skipped: true, reason: "insufficient memories", total: allMemories.length };
+      return {
+        skipped: true,
+        reason: "insufficient memories",
+        total: allMemories.length,
+      };
     }
 
-    logger.info(`[MemoryConsolidation] Loaded ${allMemories.length} memories for clustering`);
+    logger.info(
+      `[MemoryConsolidation] Loaded ${allMemories.length} memories for clustering`,
+    );
 
     // Resolve the consolidation model
-    const { provider: consolidationProvider, model: consolidationModel } = await getConsolidationConfig();
+    const { provider: consolidationProvider, model: consolidationModel } =
+      await getConsolidationConfig();
     const provider = getProvider(consolidationProvider);
 
     // Build a lookup map for metadata preservation during merges
-    const memoryLookup = new Map(allMemories.map((m) => [m.id, m]));
+    const memoryLookup = new Map(allMemories.map((m: any) => [m.id, m]));
 
-    let allActions;
-    let batches;
+    let allActions: any;
+    let batches: any;
 
     if (isConversational) {
       // ── Conversational Path: partition by (aboutUserId, sourceUserId) ────
@@ -728,22 +862,28 @@ const MemoryConsolidationService = {
       );
 
       batches = [];
-      for (const [key, memories] of partitions) {
+      // @ts-ignore
+      for ( const [key, memories] of partitions) {
         if (memories.length < 2) continue;
 
         // Cluster within this partition using the higher conversational threshold
-        const partitionClusters = findClusters(memories, CONVERSATIONAL_CLUSTER_THRESHOLD);
+        const partitionClusters = findClusters(
+          memories,
+          CONVERSATIONAL_CLUSTER_THRESHOLD,
+        );
         const partitionStale = findStaleConversationalMemories(memories);
 
         // ── Release embeddings after clustering ──────────────────────
         // Embeddings (1536-dim float arrays, ~12KB each) are only needed
         // for cosine similarity in findClusters(). Strip them now so
         // GC can reclaim before the LLM batch loop.
-        for (const m of memories) {
+        // @ts-ignore
+        for ( const m of memories) {
           m.embedding = null;
         }
 
-        if (partitionClusters.length === 0 && partitionStale.length === 0) continue;
+        if (partitionClusters.length === 0 && partitionStale.length === 0)
+          continue;
 
         // Extract metadata for the partition header
         const sample = memories[0];
@@ -755,8 +895,13 @@ const MemoryConsolidationService = {
         };
 
         // Build batches for this partition
-        const partitionBatches = buildBatches(partitionClusters, partitionStale);
-        for (const b of partitionBatches) {
+        const partitionBatches = buildBatches(
+          partitionClusters,
+          partitionStale,
+        );
+        // @ts-ignore
+        for ( const b of partitionBatches) {
+          // @ts-ignore
           b.partitionMeta = partitionMeta;
         }
         batches.push(...partitionBatches);
@@ -767,9 +912,15 @@ const MemoryConsolidationService = {
       }
 
       if (batches.length === 0) {
-        logger.info(`[MemoryConsolidation] Conversational (${agentId}): No consolidation candidates across partitions`);
+        logger.info(
+          `[MemoryConsolidation] Conversational (${agentId}): No consolidation candidates across partitions`,
+        );
         await resetRunCount(project || guildId || "global");
-        return { skipped: true, reason: "no candidates", total: allMemories.length };
+        return {
+          skipped: true,
+          reason: "no candidates",
+          total: allMemories.length,
+        };
       }
 
       // Process conversational batches with the conversational-specific prompt
@@ -800,7 +951,8 @@ const MemoryConsolidationService = {
       // Embeddings (1536-dim float arrays, ~12KB each) are only needed
       // for cosine similarity in findClusters(). Strip them now so
       // GC can reclaim before the LLM batch loop.
-      for (const m of allMemories) {
+      // @ts-ignore
+      for ( const m of allMemories) {
         m.embedding = null;
       }
 
@@ -808,24 +960,33 @@ const MemoryConsolidationService = {
         `[MemoryConsolidation] Found ${clusters.length} clusters from ${allMemories.length} memories`,
       );
 
-      const staleMemories = allMemories.filter((m) => {
+      const staleMemories = allMemories.filter((m: any) => {
         const age = daysSince(m.createdAt);
-        return age > STALENESS_DAYS && (m.type === "project" || m.type === "reference");
+        return (
+          age > STALENESS_DAYS &&
+          (m.type === "project" || m.type === "reference")
+        );
       });
       logger.info(
         `[MemoryConsolidation] Found ${staleMemories.length} stale memories (>${STALENESS_DAYS} days, ephemeral types)`,
       );
 
       if (clusters.length === 0 && staleMemories.length === 0) {
-        logger.info("[MemoryConsolidation] No clusters or stale memories — nothing to consolidate");
+        logger.info(
+          "[MemoryConsolidation] No clusters or stale memories — nothing to consolidate",
+        );
         await resetRunCount(project);
-        return { skipped: true, reason: "no candidates", total: allMemories.length };
+        return {
+          skipped: true,
+          reason: "no candidates",
+          total: allMemories.length,
+        };
       }
 
       batches = buildBatches(clusters, staleMemories);
       logger.info(
         `[MemoryConsolidation] Split into ${batches.length} batch(es) ` +
-        `(${clusters.length} clusters, ${staleMemories.length} stale)`,
+          `(${clusters.length} clusters, ${staleMemories.length} stale)`,
       );
 
       allActions = [];
@@ -848,25 +1009,47 @@ const MemoryConsolidationService = {
     }
 
     if (allActions.length === 0) {
-      logger.info("[MemoryConsolidation] LLM found no actions needed across all batches");
+      logger.info(
+        "[MemoryConsolidation] LLM found no actions needed across all batches",
+      );
       await resetRunCount(project || guildId || "global");
-      return { actions: 0, summary: "No consolidation needed", total: allMemories.length };
+      return {
+        actions: 0,
+        summary: "No consolidation needed",
+        total: allMemories.length,
+      };
     }
 
     // Apply all accumulated actions
     logger.info(
       `[MemoryConsolidation] Applying ${allActions.length} actions from ${batches.length} batch(es)`,
     );
-    const results = await applyActions(allActions, agentId, agentType, project, username, {
-      traceId, endpoint, memoryLookup: isConversational ? memoryLookup : undefined,
-    });
+    const results = await applyActions(
+      allActions,
+      agentId,
+      agentType,
+      project,
+      username,
+      {
+        traceId,
+        endpoint,
+        memoryLookup: isConversational ? memoryLookup : undefined,
+      },
+    );
     await resetRunCount(project || guildId || "global");
     const summary = `Merged ${results.merged}, deleted ${results.deleted} (${batches.length} batches)`;
     const durationMs = Math.round(performance.now() - startTime);
     logger.info(`[MemoryConsolidation] Complete: ${summary} (${durationMs}ms)`);
 
     // Record history for audit trail
-    await recordHistory(project || guildId || "global", trigger, allMemories.length, allActions, summary, durationMs);
+    await recordHistory(
+      project || guildId || "global",
+      trigger,
+      allMemories.length,
+      allActions,
+      summary,
+      durationMs,
+    );
     const consolidationResult = {
       ...results,
       actionsApplied: allActions.length,
@@ -884,7 +1067,7 @@ const MemoryConsolidationService = {
           project,
           ...consolidationResult,
         });
-      } catch (error) {
+      } catch (error: any) {
         logger.warn(`[MemoryConsolidation] Broadcast failed: ${error.message}`);
       }
     }
@@ -899,7 +1082,15 @@ const MemoryConsolidationService = {
    * @param {string} [params.username] - Username for attribution
    * @param {function} [params.broadcast] - Optional broadcast callback for WebSocket notifications
    */
-  async checkAndRun({ project, username, broadcast, endpoint, agent, traceId, agentSessionId }) {
+  async checkAndRun({
+    project,
+    username,
+    broadcast,
+    endpoint,
+    agent,
+    traceId,
+    agentSessionId,
+  }: any) {
     try {
       await incrementRunCount(project);
       const count = await getRunCount(project);
@@ -917,12 +1108,16 @@ const MemoryConsolidationService = {
           endpoint: endpoint || "/agent",
           traceId: traceId || null,
           agentSessionId: agentSessionId || null,
-        }).catch((error) =>
-          logger.error(`[MemoryConsolidation] Background consolidation failed: ${error.message}`),
+        }).catch((error: any) =>
+          logger.error(
+            `[MemoryConsolidation] Background consolidation failed: ${error.message}`,
+          ),
         );
       }
-    } catch (error) {
-      logger.error(`[MemoryConsolidation] checkAndRun failed: ${error.message}`);
+    } catch (error: any) {
+      logger.error(
+        `[MemoryConsolidation] checkAndRun failed: ${error.message}`,
+      );
     }
   },
   /**
@@ -932,7 +1127,7 @@ const MemoryConsolidationService = {
    * @param {number} [limit=10] - Max history entries to return
    * @returns {Promise<Array>} Consolidation history entries, newest first
    */
-  async getHistory(project, limit = 10) {
+  async getHistory(project: any, limit = 10) {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return [];
     return db

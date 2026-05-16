@@ -53,10 +53,7 @@ export const COST_SUM_EXPR = { $sum: { $ifNull: ["$estimatedCost", 0] } };
  */
 export const TOTAL_TOKENS_EXPR = {
   $sum: {
-    $add: [
-      { $ifNull: ["$inputTokens", 0] },
-      { $ifNull: ["$outputTokens", 0] },
-    ],
+    $add: [{ $ifNull: ["$inputTokens", 0] }, { $ifNull: ["$outputTokens", 0] }],
   },
 };
 

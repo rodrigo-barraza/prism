@@ -10,6 +10,7 @@ import sharp from "sharp";
 import logger from "./logger.js";
 
 // ── ffmpeg availability (cached per process) ────────────────
+// @ts-ignore
 let _ffmpegAvailable = null;
 
 /**
@@ -17,12 +18,15 @@ let _ffmpegAvailable = null;
  * @returns {Promise<boolean>}
  */
 async function isFfmpegAvailable() {
+  // @ts-ignore
   if (_ffmpegAvailable !== null) return _ffmpegAvailable;
-  return new Promise((resolve) => {
-    execFile("ffmpeg", ["-version"], { timeout: 5_000 }, (error) => {
+  return new Promise((resolve: any) => {
+    execFile("ffmpeg", ["-version"], { timeout: 5_000 }, (error: any) => {
       _ffmpegAvailable = !error;
       if (!_ffmpegAvailable) {
-        logger.warn("[media] ffmpeg not found on PATH — GIF animation and video frame extraction will be degraded");
+        logger.warn(
+          "[media] ffmpeg not found on PATH — GIF animation and video frame extraction will be degraded",
+        );
       }
       resolve(_ffmpegAvailable);
     });
@@ -55,8 +59,8 @@ const MAX_IMAGE_DIMENSION = 2000;
  * @returns {Promise<{ data: string, mediaType: string }>} Compressed base64 + updated MIME
  */
 export async function compressImageForSizeLimit(
-  base64Data,
-  mediaType,
+  base64Data: any,
+  mediaType: any,
   maxBytes = ANTHROPIC_IMAGE_MAX_BYTES,
 ) {
   // Step 0: enforce pixel dimension limits first (avoids sending oversized pixels)
@@ -98,8 +102,8 @@ export async function compressImageForSizeLimit(
  * @returns {Promise<{ data: string, mediaType: string }>} Possibly resized base64 + MIME
  */
 export async function constrainImageDimensions(
-  base64Data,
-  mediaType,
+  base64Data: any,
+  mediaType: any,
   maxDim = MAX_IMAGE_DIMENSION,
 ) {
   // GIFs are animated — skip (ffmpeg handles them in compressGifWithFfmpeg)
@@ -123,7 +127,7 @@ export async function constrainImageDimensions(
 
     logger.info(
       `[media] Image dimensions ${width}×${height} exceed ${maxDim}px limit. ` +
-      `Resizing to ${newWidth}×${newHeight}...`,
+        `Resizing to ${newWidth}×${newHeight}...`,
     );
 
     // Preserve original format when possible, fall back to JPEG
@@ -148,12 +152,14 @@ export async function constrainImageDimensions(
 
     logger.info(
       `[media] Dimension-constrained: ${width}×${height} → ${newWidth}×${newHeight} ` +
-      `(${(resizedB64.length / 1024 / 1024).toFixed(2)} MB b64)`,
+        `(${(resizedB64.length / 1024 / 1024).toFixed(2)} MB b64)`,
     );
 
     return { data: resizedB64, mediaType: outputMime };
-  } catch (error) {
-    logger.warn(`[media] Dimension check failed (${error.message}), passing through`);
+  } catch (error: any) {
+    logger.warn(
+      `[media] Dimension check failed (${error.message}), passing through`,
+    );
     return { data: base64Data, mediaType };
   }
 }
@@ -162,12 +168,14 @@ export async function constrainImageDimensions(
  * Compress an animated GIF using ffmpeg's scale filter.
  * Preserves animation — progressively halves dimensions until under limit.
  */
-async function compressGifWithFfmpeg(base64Data, maxBytes) {
+async function compressGifWithFfmpeg(base64Data: any, maxBytes: any) {
   // ── Graceful degradation: if ffmpeg is not installed, convert the
   //    first frame to a static JPEG via sharp instead of crashing.
   const hasFfmpeg = await isFfmpegAvailable();
   if (!hasFfmpeg) {
-    logger.warn("[media] ffmpeg unavailable — converting GIF to static JPEG via sharp");
+    logger.warn(
+      "[media] ffmpeg unavailable — converting GIF to static JPEG via sharp",
+    );
     return compressWithSharp(base64Data, maxBytes);
   }
 
@@ -182,23 +190,35 @@ async function compressGifWithFfmpeg(base64Data, maxBytes) {
     const scaleFactors = [0.75, 0.75, 0.75, 0.75, 0.75, 0.75];
     let cumulativeScale = 1;
 
-    for (const factor of scaleFactors) {
+    // @ts-ignore
+    for ( const factor of scaleFactors) {
       cumulativeScale *= factor;
-      const outputPath = join(tmpDir, `output_${Math.round(cumulativeScale * 100)}.gif`);
+      const outputPath = join(
+        tmpDir,
+        `output_${Math.round(cumulativeScale * 100)}.gif`,
+      );
 
-      await new Promise((resolve, reject) => {
+      await new Promise((resolve: any, reject: any) => {
         execFile(
           "ffmpeg",
           [
             "-y",
-            "-i", inputPath,
-            "-vf", `scale='iw*${cumulativeScale}:ih*${cumulativeScale}':flags=lanczos`,
-            "-gifflags", "+transdiff",
+            "-i",
+            inputPath,
+            "-vf",
+            `scale='iw*${cumulativeScale}:ih*${cumulativeScale}':flags=lanczos`,
+            "-gifflags",
+            "+transdiff",
             outputPath,
           ],
           { timeout: 30_000 },
-          (error, _stdout, stderr) => {
-            if (error) reject(new Error(`ffmpeg GIF resize failed: ${stderr?.slice(-200) || error.message}`));
+          (error: any, _stdout: any, stderr: any) => {
+            if (error)
+              reject(
+                new Error(
+                  `ffmpeg GIF resize failed: ${stderr?.slice(-200) || error.message}`,
+                ),
+              );
             else resolve();
           },
         );
@@ -209,7 +229,7 @@ async function compressGifWithFfmpeg(base64Data, maxBytes) {
       if (resultB64.length <= maxBytes) {
         logger.info(
           `[media] GIF compressed to ${(resultB64.length / 1024 / 1024).toFixed(2)} MB b64 ` +
-          `(scale=${Math.round(cumulativeScale * 100)}%)`,
+            `(scale=${Math.round(cumulativeScale * 100)}%)`,
         );
         return {
           data: resultB64,
@@ -220,19 +240,27 @@ async function compressGifWithFfmpeg(base64Data, maxBytes) {
 
     // Final fallback: tiny GIF
     const fallbackPath = join(tmpDir, "output_fallback.gif");
-    await new Promise((resolve, reject) => {
+    await new Promise((resolve: any, reject: any) => {
       execFile(
         "ffmpeg",
         [
           "-y",
-          "-i", inputPath,
-          "-vf", "scale='min(512,iw):min(512,ih)':force_original_aspect_ratio=decrease:flags=lanczos",
-          "-gifflags", "+transdiff",
+          "-i",
+          inputPath,
+          "-vf",
+          "scale='min(512,iw):min(512,ih)':force_original_aspect_ratio=decrease:flags=lanczos",
+          "-gifflags",
+          "+transdiff",
           fallbackPath,
         ],
         { timeout: 30_000 },
-        (error, _stdout, stderr) => {
-          if (error) reject(new Error(`ffmpeg GIF fallback resize failed: ${stderr?.slice(-200) || error.message}`));
+        (error: any, _stdout: any, stderr: any) => {
+          if (error)
+            reject(
+              new Error(
+                `ffmpeg GIF fallback resize failed: ${stderr?.slice(-200) || error.message}`,
+              ),
+            );
           else resolve();
         },
       );
@@ -258,12 +286,13 @@ async function compressGifWithFfmpeg(base64Data, maxBytes) {
  * Compress a non-GIF image using sharp.
  * Converts to JPEG with progressive quality + dimension reduction.
  */
-async function compressWithSharp(base64Data, maxBytes) {
+async function compressWithSharp(base64Data: any, maxBytes: any) {
   let buffer = Buffer.from(base64Data, "base64");
   const qualitySteps = [85, 70, 50];
 
   // Step 1: try quality reduction (convert to JPEG)
-  for (const quality of qualitySteps) {
+  // @ts-ignore
+  for ( const quality of qualitySteps) {
     const compressed = await sharp(buffer)
       .jpeg({ quality, mozjpeg: true })
       .toBuffer();
@@ -272,13 +301,14 @@ async function compressWithSharp(base64Data, maxBytes) {
     if (compressedB64.length <= maxBytes) {
       logger.info(
         `[media] Compressed to ${(compressedB64.length / 1024 / 1024).toFixed(2)} MB b64 ` +
-        `(JPEG q=${quality})`,
+          `(JPEG q=${quality})`,
       );
       return {
         data: compressedB64,
         mediaType: "image/jpeg",
       };
     }
+    // @ts-ignore
     buffer = compressed;
   }
 
@@ -300,7 +330,7 @@ async function compressWithSharp(base64Data, maxBytes) {
     if (resizedB64.length <= maxBytes) {
       logger.info(
         `[media] Compressed to ${(resizedB64.length / 1024 / 1024).toFixed(2)} MB b64 ` +
-        `(${width}x${height}, JPEG q=70)`,
+          `(${width}x${height}, JPEG q=70)`,
       );
       return {
         data: resizedB64,
@@ -331,7 +361,7 @@ async function compressWithSharp(base64Data, maxBytes) {
  * @param {string} dataUrl - A data: URL string
  * @returns {string|null} The MIME type (e.g. "image/png") or null
  */
-export function getDataUrlMimeType(dataUrl) {
+export function getDataUrlMimeType(dataUrl: any) {
   const match = dataUrl.match(/^data:([^;]+);base64,/);
   return match ? match[1] : null;
 }
@@ -341,7 +371,7 @@ export function getDataUrlMimeType(dataUrl) {
  * @param {string} url
  * @returns {"data"|"http"|"unknown"}
  */
-export function getUrlType(url) {
+export function getUrlType(url: any) {
   if (url.startsWith("data:")) return "data";
   if (url.startsWith("http://") || url.startsWith("https://")) return "http";
   return "unknown";
@@ -352,13 +382,17 @@ export function getUrlType(url) {
  * @param {string} url
  * @returns {"image"|"pdf"|"text"|"unknown"}
  */
-export function inferMimeFromUrl(url) {
+export function inferMimeFromUrl(url: any) {
   try {
     const pathname = new URL(url).pathname.toLowerCase();
-    if (/\.(png|jpg|jpeg|gif|webp|bmp|svg|avif)$/i.test(pathname)) return "image";
+    if (/\.(png|jpg|jpeg|gif|webp|bmp|svg|avif)$/i.test(pathname))
+      return "image";
     if (/\.pdf$/i.test(pathname)) return "pdf";
-    if (/\.(txt|md|csv|json|xml|html|css|js|ts)$/i.test(pathname)) return "text";
-  } catch { /* ignore */ }
+    if (/\.(txt|md|csv|json|xml|html|css|js|ts)$/i.test(pathname))
+      return "text";
+  } catch {
+    /* ignore */
+  }
   return "unknown";
 }
 
@@ -379,7 +413,8 @@ export function inferMimeFromUrl(url) {
  * @param {number} [options.quality=5] - JPEG quality (2=best, 31=worst)
  * @returns {Promise<string[]>} Array of data:image/jpeg;base64,... URLs
  */
-export async function extractVideoFrames(videoDataUrl, options = {}) {
+export async function extractVideoFrames(videoDataUrl: any, options = {}) {
+  // @ts-ignore
   const { fps = 1, maxFrames = 8, quality = 5 } = options;
 
   // ── Graceful degradation: fail fast if ffmpeg is not installed
@@ -387,7 +422,7 @@ export async function extractVideoFrames(videoDataUrl, options = {}) {
   if (!hasFfmpeg) {
     throw new Error(
       "ffmpeg is not installed — video frame extraction requires ffmpeg. " +
-      "Install it with: apt install ffmpeg",
+        "Install it with: apt install ffmpeg",
     );
   }
 
@@ -413,25 +448,36 @@ export async function extractVideoFrames(videoDataUrl, options = {}) {
     // Write video to temp file
     const videoBuffer = Buffer.from(base64Data, "base64");
     const fileSizeMB = (videoBuffer.length / (1024 * 1024)).toFixed(1);
-    logger.info(`[media] Writing ${fileSizeMB} MB video (${mime}) to ${inputPath}`);
+    logger.info(
+      `[media] Writing ${fileSizeMB} MB video (${mime}) to ${inputPath}`,
+    );
     await writeFile(inputPath, videoBuffer);
 
     // Extract frames with ffmpeg
-    const ffmpegStderr = await new Promise((resolve, reject) => {
+    const ffmpegStderr = await new Promise((resolve: any, reject: any) => {
       execFile(
         "ffmpeg",
         [
-          "-i", inputPath,
-          "-vf", `fps=${fps}`,
-          "-vframes", String(maxFrames),
-          "-q:v", String(quality),
-          "-f", "image2",
+          "-i",
+          inputPath,
+          "-vf",
+          `fps=${fps}`,
+          "-vframes",
+          String(maxFrames),
+          "-q:v",
+          String(quality),
+          "-f",
+          "image2",
           outputPattern,
         ],
         { timeout: 30_000 },
-        (error, _stdout, stderr) => {
+        (error: any, _stdout: any, stderr: any) => {
           if (error) {
-            reject(new Error(`ffmpeg failed (${fileSizeMB} MB ${ext}): ${stderr?.slice(-200) || error.message}`));
+            reject(
+              new Error(
+                `ffmpeg failed (${fileSizeMB} MB ${ext}): ${stderr?.slice(-200) || error.message}`,
+              ),
+            );
           } else {
             resolve(stderr);
           }
@@ -454,15 +500,18 @@ export async function extractVideoFrames(videoDataUrl, options = {}) {
 
     if (frames.length === 0) {
       // ffmpeg ran but produced no frames — extract error details
+      // @ts-ignore
       const durationMatch = ffmpegStderr?.match(/Duration: ([^,]+)/);
       const duration = durationMatch?.[1] || "unknown";
       throw new Error(
         `ffmpeg produced 0 frames from ${fileSizeMB} MB ${ext} video (duration: ${duration}). ` +
-        `The file may be corrupt, use an unsupported codec, or contain no video stream.`,
+          `The file may be corrupt, use an unsupported codec, or contain no video stream.`,
       );
     }
 
-    logger.info(`[media] Extracted ${frames.length} frames from video (${ext}, ${fileSizeMB} MB, fps=${fps})`);
+    logger.info(
+      `[media] Extracted ${frames.length} frames from video (${ext}, ${fileSizeMB} MB, fps=${fps})`,
+    );
     return frames;
   } finally {
     if (tmpDir) {
@@ -470,4 +519,3 @@ export async function extractVideoFrames(videoDataUrl, options = {}) {
     }
   }
 }
-

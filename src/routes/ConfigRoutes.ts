@@ -1,3 +1,4 @@
+// @ts-ignore
 import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
 import {
@@ -23,6 +24,7 @@ import {
   GOOGLE_API_KEY,
   ELEVENLABS_API_KEY,
   INWORLD_BASIC,
+  // @ts-ignore
 } from "../../config.js";
 
 const router = express.Router();
@@ -39,8 +41,8 @@ const CLOUD_PROVIDER_SECRETS = {
 // Cloud providers available based on API keys
 const AVAILABLE_CLOUD = new Set(
   Object.entries(CLOUD_PROVIDER_SECRETS)
-    .filter(([, secret]) => !!secret)
-    .map(([provider]) => provider),
+    .filter(([, secret]: any) => !!secret)
+    .map(([provider]: any) => provider),
 );
 
 // Local provider instances from the instance registry
@@ -49,31 +51,34 @@ const localInstances = listInstances();
 // Combined set: cloud providers + all local instance IDs
 const AVAILABLE_PROVIDERS = new Set([
   ...AVAILABLE_CLOUD,
-  ...localInstances.map((inst) => inst.id),
+  ...localInstances.map((inst: any) => inst.id),
 ]);
 
 /**
  * Resolve enabledTools entries (may contain "label:X" / "domain:X" prefixes)
  * into a flat Set of concrete tool names using client schemas.
  */
-function resolveEnabledToolsToSet(enabledTools) {
+function resolveEnabledToolsToSet(enabledTools: any) {
   if (!enabledTools || !Array.isArray(enabledTools)) return new Set();
   const hasPrefixed = enabledTools.some(
-    (e) => e.startsWith("label:") || e.startsWith("domain:"),
+    (e: any) => e.startsWith("label:") || e.startsWith("domain:"),
   );
   if (!hasPrefixed) return new Set(enabledTools);
 
   const clientSchemas = ToolOrchestratorService.getClientToolSchemas();
   const resolved = new Set();
-  for (const entry of enabledTools) {
+  // @ts-ignore
+  for ( const entry of enabledTools) {
     if (entry.startsWith("label:")) {
       const label = entry.slice(6);
-      for (const t of clientSchemas) {
+      // @ts-ignore
+      for ( const t of clientSchemas) {
         if (t.labels?.includes(label)) resolved.add(t.name);
       }
     } else if (entry.startsWith("domain:")) {
       const domain = entry.slice(7);
-      for (const t of clientSchemas) {
+      // @ts-ignore
+      for ( const t of clientSchemas) {
         if (t.domain === domain) resolved.add(t.name);
       }
     } else {
@@ -84,10 +89,12 @@ function resolveEnabledToolsToSet(enabledTools) {
 }
 
 /** Keep only available provider keys in a models map. */
-function filterByAvailableProviders(modelsMap) {
+function filterByAvailableProviders(modelsMap: any) {
   const filtered = {};
-  for (const [provider, models] of Object.entries(modelsMap)) {
+  // @ts-ignore
+  for ( const [provider, models] of Object.entries(modelsMap)) {
     if (AVAILABLE_PROVIDERS.has(provider)) {
+      // @ts-ignore
       filtered[provider] = models;
     }
   }
@@ -95,10 +102,12 @@ function filterByAvailableProviders(modelsMap) {
 }
 
 /** Filter defaults to only include available providers. */
-function filterDefaults(defaults) {
+function filterDefaults(defaults: any) {
   const filtered = {};
-  for (const [provider, model] of Object.entries(defaults)) {
+  // @ts-ignore
+  for ( const [provider, model] of Object.entries(defaults)) {
     if (AVAILABLE_PROVIDERS.has(provider)) {
+      // @ts-ignore
       filtered[provider] = model;
     }
   }
@@ -113,7 +122,7 @@ function filterDefaults(defaults) {
  *
  * Returns an arena object like { text: 1406, code: 1310, ... } or null.
  */
-function lookupArenaScores(modelName) {
+function lookupArenaScores(modelName: any) {
   const arena = {};
   const key = modelName.toLowerCase();
 
@@ -122,13 +131,15 @@ function lookupArenaScores(modelName) {
   const stripped = key.includes("/") ? key.split("/").pop() : key;
   const cleaned = stripped.includes("@") ? stripped.split("@")[0] : stripped;
 
-  for (const [category, scores] of Object.entries(ARENA_SCORES)) {
+  // @ts-ignore
+  for ( const [category, scores] of Object.entries(ARENA_SCORES)) {
     if (!scores || typeof scores !== "object") continue;
 
     let bestMatch = null;
     let bestLen = 0;
 
-    for (const [arenaName, score] of Object.entries(scores)) {
+    // @ts-ignore
+    for ( const [arenaName, score] of Object.entries(scores)) {
       const an = arenaName.toLowerCase();
 
       // Exact match on raw key or cleaned key
@@ -151,6 +162,7 @@ function lookupArenaScores(modelName) {
     }
 
     if (bestMatch !== null) {
+      // @ts-ignore
       arena[category] = bestMatch;
     }
   }
@@ -162,9 +174,11 @@ function lookupArenaScores(modelName) {
  * Enrich all models in a provider map with arena scores from ARENA_SCORES.
  * Merges with any existing arena data on the model (existing takes priority).
  */
-function enrichModelsWithArenaScores(modelsMap) {
-  for (const provider of Object.keys(modelsMap)) {
-    for (const model of modelsMap[provider]) {
+function enrichModelsWithArenaScores(modelsMap: any) {
+  // @ts-ignore
+  for ( const provider of Object.keys(modelsMap)) {
+    // @ts-ignore
+    for ( const model of modelsMap[provider]) {
       const scores = lookupArenaScores(model.name);
       if (scores) {
         // Merge: existing hardcoded arena data takes priority
@@ -184,13 +198,14 @@ function enrichModelsWithArenaScores(modelsMap) {
 // ── Local provider instance metadata ────────────────────────────
 // Built from the instance registry. Model fetching is now delegated
 // to LocalProviderGateway.discoverModels() in GET /config-local.
-const LOCAL_PROVIDERS = localInstances.map((inst) => {
+const LOCAL_PROVIDERS = localInstances.map((inst: any) => {
   const entry = {
     key: inst.id,
     type: inst.type,
     instanceNumber: inst.instanceNumber,
     concurrency: inst.concurrency,
   };
+  // @ts-ignore
   if (inst.nickname) entry.nickname = inst.nickname;
   return entry;
 });
@@ -201,35 +216,45 @@ const LOCAL_PROVIDERS = localInstances.map((inst) => {
  * Cloud providers resolve instantly; local providers are excluded here
  * and served via GET /config/local-models for progressive loading.
  */
-router.get("/", asyncHandler(async (_req, res) => {
-  // Get static model options (cloud-only — no network calls)
-  let textToTextModels = getModelOptions(TYPES.TEXT, TYPES.TEXT);
-  let textToImageModels = getModelOptions(TYPES.TEXT, TYPES.IMAGE);
+router.get(
+  "/",
+  asyncHandler(async (_req: any, res: any) => {
+    // Get static model options (cloud-only — no network calls)
+    let textToTextModels = getModelOptions(TYPES.TEXT, TYPES.TEXT);
+    let textToImageModels = getModelOptions(TYPES.TEXT, TYPES.IMAGE);
 
-  // Enrich ALL model lists with arena scores from the scraped leaderboard data
-  enrichModelsWithArenaScores(textToTextModels);
-  enrichModelsWithArenaScores(textToImageModels);
+    // Enrich ALL model lists with arena scores from the scraped leaderboard data
+    enrichModelsWithArenaScores(textToTextModels);
+    enrichModelsWithArenaScores(textToImageModels);
 
-  // Filter to only available providers
-  textToTextModels = filterByAvailableProviders(textToTextModels);
-  textToImageModels = filterByAvailableProviders(textToImageModels);
+    // Filter to only available providers
+    textToTextModels = filterByAvailableProviders(textToTextModels);
+    textToImageModels = filterByAvailableProviders(textToImageModels);
 
-  const availableProviderList = PROVIDER_LIST.filter((p) =>
-    AVAILABLE_PROVIDERS.has(p),
-  );
-  const availableProviderMap = {};
-  for (const [key, val] of Object.entries(PROVIDERS)) {
-    if (AVAILABLE_PROVIDERS.has(val)) availableProviderMap[key] = val;
-  }
+    const availableProviderList = PROVIDER_LIST.filter((p: any) =>
+      AVAILABLE_PROVIDERS.has(p),
+    );
+    const availableProviderMap = {};
+    // @ts-ignore
+    for ( const [key, val] of Object.entries(PROVIDERS)) {
+      // @ts-ignore
+      if (AVAILABLE_PROVIDERS.has(val)) availableProviderMap[key] = val;
+    }
 
-  // Build the dynamic Tool Calling system prompt
-  const schemas = ToolOrchestratorService.getToolSchemas() || [];
-  const toolNames = schemas.map(s => s.name || s.function?.name).filter(Boolean).map(name => {
-    return name.replace(/^get_/, "").replace(/_/g, " ");
-  });
-  const toolList = toolNames.length > 0 ? toolNames.join(", ") : "general web search and computation";
-  
-  const fcSystemPrompt = `You are a helpful AI assistant with access to real-time data APIs. You have tools for ${toolList}.
+    // Build the dynamic Tool Calling system prompt
+    const schemas = ToolOrchestratorService.getToolSchemas() || [];
+    const toolNames = schemas
+      .map((s: any) => s.name || s.function?.name)
+      .filter(Boolean)
+      .map((name: any) => {
+        return name.replace(/^get_/, "").replace(/_/g, " ");
+      });
+    const toolList =
+      toolNames.length > 0
+        ? toolNames.join(", ")
+        : "general web search and computation";
+
+    const fcSystemPrompt = `You are a helpful AI assistant with access to real-time data APIs. You have tools for ${toolList}.
 
 Guidelines:
 - When asked about weather, events, prices, trends, or similar data, ALWAYS use the appropriate tool to fetch real-time data. Never guess or make up data.
@@ -241,58 +266,62 @@ Guidelines:
 - For questions that don't require API data, respond naturally without tool calls.
 - The current local date/time is: {{CURRENT_DATE_TIME}}`;
 
-  // Flag which local provider instances are configured so the client knows to poll
-  const localProviders = LOCAL_PROVIDERS.map(({ key, type, instanceNumber, concurrency, nickname }) => {
-    const entry = { id: key, type, instanceNumber, concurrency };
-    if (nickname) entry.nickname = nickname;
-    return entry;
-  });
+    // Flag which local provider instances are configured so the client knows to poll
+    const localProviders = LOCAL_PROVIDERS.map(
+      ({ key, type, instanceNumber, concurrency, nickname }: any) => {
+        const entry = { id: key, type, instanceNumber, concurrency };
+        // @ts-ignore
+        if (nickname) entry.nickname = nickname;
+        return entry;
+      },
+    );
 
-  res.json({
-    // Direct MinIO URL for resolving minio:// file refs on the client
-    // e.g. "http://<host>:9000/prism"
-    fileBaseUrl: MinioWrapper.getBucketUrl() || null,
-    fcSystemPrompt,
-    providers: availableProviderMap,
-    providerList: availableProviderList,
-    availableProviders: availableProviderList,
-    localProviders,
-    textToText: {
-      models: textToTextModels,
-      defaults: filterDefaults(getDefaultModels(TYPES.TEXT, TYPES.TEXT)),
-    },
-    textToSpeech: {
-      models: filterByAvailableProviders(
-        getModelOptions(TYPES.TEXT, TYPES.AUDIO),
-      ),
-      defaults: filterDefaults(getDefaultModels(TYPES.TEXT, TYPES.AUDIO)),
-      voices: VOICES,
-      defaultVoices: DEFAULT_VOICES,
-    },
-    textToImage: {
-      models: textToImageModels,
-      defaults: filterDefaults(getDefaultModels(TYPES.TEXT, TYPES.IMAGE)),
-    },
-    imageToText: {
-      models: filterByAvailableProviders(
-        getModelOptions(TYPES.IMAGE, TYPES.TEXT),
-      ),
-      defaults: filterDefaults(getDefaultModels(TYPES.IMAGE, TYPES.TEXT)),
-    },
-    embedding: {
-      models: filterByAvailableProviders(
-        getModelOptions(TYPES.TEXT, TYPES.EMBEDDING),
-      ),
-      defaults: filterDefaults(getDefaultModels(TYPES.TEXT, TYPES.EMBEDDING)),
-    },
-    audioToText: {
-      models: filterByAvailableProviders(
-        getModelOptions(TYPES.AUDIO, TYPES.TEXT),
-      ),
-      defaults: filterDefaults(getDefaultModels(TYPES.AUDIO, TYPES.TEXT)),
-    },
-  });
-}));
+    res.json({
+      // Direct MinIO URL for resolving minio:// file refs on the client
+      // e.g. "http://<host>:9000/prism"
+      fileBaseUrl: MinioWrapper.getBucketUrl() || null,
+      fcSystemPrompt,
+      providers: availableProviderMap,
+      providerList: availableProviderList,
+      availableProviders: availableProviderList,
+      localProviders,
+      textToText: {
+        models: textToTextModels,
+        defaults: filterDefaults(getDefaultModels(TYPES.TEXT, TYPES.TEXT)),
+      },
+      textToSpeech: {
+        models: filterByAvailableProviders(
+          getModelOptions(TYPES.TEXT, TYPES.AUDIO),
+        ),
+        defaults: filterDefaults(getDefaultModels(TYPES.TEXT, TYPES.AUDIO)),
+        voices: VOICES,
+        defaultVoices: DEFAULT_VOICES,
+      },
+      textToImage: {
+        models: textToImageModels,
+        defaults: filterDefaults(getDefaultModels(TYPES.TEXT, TYPES.IMAGE)),
+      },
+      imageToText: {
+        models: filterByAvailableProviders(
+          getModelOptions(TYPES.IMAGE, TYPES.TEXT),
+        ),
+        defaults: filterDefaults(getDefaultModels(TYPES.IMAGE, TYPES.TEXT)),
+      },
+      embedding: {
+        models: filterByAvailableProviders(
+          getModelOptions(TYPES.TEXT, TYPES.EMBEDDING),
+        ),
+        defaults: filterDefaults(getDefaultModels(TYPES.TEXT, TYPES.EMBEDDING)),
+      },
+      audioToText: {
+        models: filterByAvailableProviders(
+          getModelOptions(TYPES.AUDIO, TYPES.TEXT),
+        ),
+        defaults: filterDefaults(getDefaultModels(TYPES.AUDIO, TYPES.TEXT)),
+      },
+    });
+  }),
+);
 
 /**
  * GET /config-local
@@ -306,13 +335,19 @@ Guidelines:
  * is applied here since it's a config-route concern.
  */
 const localConfigRouter = express.Router();
-localConfigRouter.get("/", async (_req, res) => {
-  const models = await LocalProviderGateway.discoverModels({ timeoutMs: 3000, enrich: true });
+localConfigRouter.get("/", async (_req: any, res: any) => {
+  const models = await LocalProviderGateway.discoverModels({
+    timeoutMs: 3000,
+    enrich: true,
+  });
 
   // Enrich each instance's models with arena scores
-  for (const key of Object.keys(models)) {
+  // @ts-ignore
+  for ( const key of Object.keys(models)) {
+    // @ts-ignore
     const wrapped = { [key]: models[key] };
     enrichModelsWithArenaScores(wrapped);
+    // @ts-ignore
     models[key] = wrapped[key];
   }
 
@@ -325,8 +360,8 @@ export { localConfigRouter };
  * GET /config/agents
  * Returns the list of registered agent personas with metadata for the frontend picker.
  */
-router.get("/agents", (_req, res) => {
-  const agents = AgentPersonaRegistry.list().map((a) => {
+router.get("/agents", (_req: any, res: any) => {
+  const agents = AgentPersonaRegistry.list().map((a: any) => {
     const persona = AgentPersonaRegistry.get(a.id);
     const resolvedTools = resolveEnabledToolsToSet(persona?.enabledTools);
     return {
@@ -352,7 +387,7 @@ router.get("/agents", (_req, res) => {
  * GET /config/tools
  * Returns tool schemas. Optionally filter by agent persona via ?agent=CODING.
  */
-router.get("/tools", (_req, res) => {
+router.get("/tools", (_req: any, res: any) => {
   const schemas = ToolOrchestratorService.getClientToolSchemas() || [];
   const agentId = _req.query.agent;
 
@@ -360,7 +395,7 @@ router.get("/tools", (_req, res) => {
     const persona = AgentPersonaRegistry.get(agentId);
     if (persona?.enabledTools) {
       const enabledSet = resolveEnabledToolsToSet(persona.enabledTools);
-      return res.json(schemas.filter((t) => enabledSet.has(t.name)));
+      return res.json(schemas.filter((t: any) => enabledSet.has(t.name)));
     }
   }
 
@@ -372,14 +407,17 @@ router.get("/tools", (_req, res) => {
  * Re-fetches tool schemas from tools-api and updates the cache.
  * Returns the updated schema count.
  */
-router.post("/tools/refresh", asyncHandler(async (_req, res) => {
-  try {
-    const count = await ToolOrchestratorService.refreshSchemas();
-    res.json({ ok: true, count });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-}));
+router.post(
+  "/tools/refresh",
+  asyncHandler(async (_req: any, res: any) => {
+    try {
+      const count = await ToolOrchestratorService.refreshSchemas();
+      res.json({ ok: true, count });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  }),
+);
 
 /**
  * GET /config/rate-limits
@@ -387,7 +425,7 @@ router.post("/tools/refresh", asyncHandler(async (_req, res) => {
  * OpenAI and Anthropic update dynamically from API response headers.
  * Google is seeded with static tier-2 limits.
  */
-router.get("/rate-limits", (_req, res) => {
+router.get("/rate-limits", (_req: any, res: any) => {
   res.json(rateLimitStore.getAll());
 });
 

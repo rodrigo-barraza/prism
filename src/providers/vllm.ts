@@ -22,248 +22,297 @@ import {
  * @param {string} [instanceId="vllm"] - Unique instance identifier
  * @returns {object} Provider object with all vLLM methods
  */
-export function createVllmProvider(baseUrl, instanceId = "vllm") {
+export function createVllmProvider(baseUrl: any, instanceId = "vllm") {
   const getBaseUrl = () => baseUrl;
 
   return {
-  name: instanceId,
+    name: instanceId,
 
-  async generateText(
-    messages,
-    model = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["vllm"],
-    options = {},
-  ) {
-    const baseUrl = getBaseUrl();
-    logger.provider("vLLM", `generateText model=${model} baseUrl=${baseUrl}`);
-    try {
-      const prepared = prepareOpenAICompatMessages(messages, {
-        mediaStrategy: MEDIA_STRATEGIES.FULL_MULTIMODAL,
-      });
+    async generateText(
+      messages: any,
+      // @ts-ignore
+      model = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["vllm"],
+      options = {},
+    ) {
+      const baseUrl = getBaseUrl();
+      logger.provider("vLLM", `generateText model=${model} baseUrl=${baseUrl}`);
+      try {
+        const prepared = prepareOpenAICompatMessages(messages, {
+          mediaStrategy: MEDIA_STRATEGIES.FULL_MULTIMODAL,
+        });
 
-      const payload = {
-        messages: prepared,
-        model,
-        ...buildPayloadParams(options),
-        // vLLM extensions: top_k, min_p, repetition_penalty
-        ...(options.topK > 0 && { top_k: options.topK }),
-        ...(options.minP !== undefined && { min_p: options.minP }),
-        ...(options.repeatPenalty !== undefined && options.repeatPenalty !== 1 && { repetition_penalty: options.repeatPenalty }),
-        stream: false,
-      };
-
-      // Function calling tools
-      const tools = convertToolsToOpenAI(options.tools);
-      if (tools) {
-        payload.tools = tools;
-        payload.tool_choice = "auto";
-      }
-
-      // Thinking hard switch — vLLM extension for Qwen3/reasoning models
-      // Uses chat_template_kwargs to control <think> token generation
-      if (options.thinkingEnabled !== undefined) {
-        payload.chat_template_kwargs = {
-          enable_thinking: options.thinkingEnabled,
-        };
-      }
-
-      const response = await fetchOpenAICompat(
-        `${baseUrl}/v1/chat/completions`,
-        payload,
-      );
-      const data = await response.json();
-      const { text, thinking, usage, toolCalls } =
-        processNonStreamingResponse(data, { thinkingEnabled: options.thinkingEnabled });
-
-      const result = { text, thinking, usage };
-      if (toolCalls) result.toolCalls = toolCalls;
-      return result;
-    } catch (error) {
-      if (error instanceof ProviderError) throw error;
-      throw new ProviderError("vllm", error.message, 500, error);
-    }
-  },
-
-  // ── Streaming Text Generation (SSE) ──────────────────────
-
-  async *generateTextStream(
-    messages,
-    model = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["vllm"],
-    options = {},
-  ) {
-    const baseUrl = getBaseUrl();
-    logger.provider(
-      "vLLM",
-      `generateTextStream model=${model} baseUrl=${baseUrl}`,
-    );
-    try {
-      const prepared = prepareOpenAICompatMessages(messages, {
-        mediaStrategy: MEDIA_STRATEGIES.FULL_MULTIMODAL,
-      });
-
-      const payload = {
-        messages: prepared,
-        model,
-        ...buildPayloadParams(options),
-        // vLLM extensions: top_k, min_p, repetition_penalty
-        ...(options.topK > 0 && { top_k: options.topK }),
-        ...(options.minP !== undefined && { min_p: options.minP }),
-        ...(options.repeatPenalty !== undefined && options.repeatPenalty !== 1 && { repetition_penalty: options.repeatPenalty }),
-        stream: true,
-        stream_options: { include_usage: true },
-      };
-
-      // Function calling tools
-      const tools = convertToolsToOpenAI(options.tools);
-      if (tools) {
-        payload.tools = tools;
-        payload.tool_choice = "auto";
-      }
-
-      // Thinking hard switch — vLLM extension for Qwen3/reasoning models
-      if (options.thinkingEnabled !== undefined) {
-        payload.chat_template_kwargs = {
-          enable_thinking: options.thinkingEnabled,
-        };
-      }
-
-      const response = await fetchOpenAICompat(
-        `${baseUrl}/v1/chat/completions`,
-        payload,
-        { signal: options.signal },
-      );
-
-      const reader = response.body.getReader();
-      yield* parseSSEStream(reader, {
-        signal: options.signal,
-        thinkingEnabled: options.thinkingEnabled,
-      });
-    } catch (error) {
-      if (error.name === "AbortError") return; // Client disconnected
-      if (error instanceof ProviderError) throw error;
-      throw new ProviderError("vllm", error.message, 500, error);
-    }
-  },
-
-  async captionImage(
-    images,
-    prompt = "Describe this image.",
-    model = getDefaultModels(TYPES.IMAGE, TYPES.TEXT)["vllm"],
-    systemPrompt,
-  ) {
-    const baseUrl = getBaseUrl();
-    logger.provider("vLLM", `captionImage model=${model} baseUrl=${baseUrl}`);
-    try {
-      const content = [
-        { type: "text", text: prompt },
-        ...images.map((img) => ({
-          type: "image_url",
-          image_url: { url: img },
-        })),
-      ];
-      const messages = [];
-      if (systemPrompt) {
-        messages.push({ role: "system", content: systemPrompt });
-      }
-      messages.push({ role: "user", content });
-
-      const response = await fetchOpenAICompat(
-        `${baseUrl}/v1/chat/completions`,
-        {
-          messages,
+        const payload = {
+          messages: prepared,
           model,
-          temperature: 0.7,
-          max_tokens: -1,
+          ...buildPayloadParams(options),
+          // vLLM extensions: top_k, min_p, repetition_penalty
+          // @ts-ignore
+          ...(options.topK > 0 && { top_k: options.topK }),
+          // @ts-ignore
+          ...(options.minP !== undefined && { min_p: options.minP }),
+          // @ts-ignore
+          ...(options.repeatPenalty !== undefined &&
+            // @ts-ignore
+            options.repeatPenalty !== 1 && {
+              // @ts-ignore
+              repetition_penalty: options.repeatPenalty,
+            }),
           stream: false,
-        },
-      );
+        };
 
-      const data = await response.json();
-      const text = data.choices?.[0]?.message?.content || "";
-      const usage = {
-        inputTokens: data.usage?.prompt_tokens || 0,
-        outputTokens: data.usage?.completion_tokens || 0,
-      };
-      return { text, usage };
-    } catch (error) {
-      if (error instanceof ProviderError) throw error;
-      throw new ProviderError("vllm", error.message, 500, error);
-    }
-  },
+        // Function calling tools
+        // @ts-ignore
+        const tools = convertToolsToOpenAI(options.tools);
+        if (tools) {
+          // @ts-ignore
+          payload.tools = tools;
+          // @ts-ignore
+          payload.tool_choice = "auto";
+        }
 
-  // ── Embedding Generation ─────────────────────────────────
+        // Thinking hard switch — vLLM extension for Qwen3/reasoning models
+        // Uses chat_template_kwargs to control <think> token generation
+        // @ts-ignore
+        if (options.thinkingEnabled !== undefined) {
+          // @ts-ignore
+          payload.chat_template_kwargs = {
+            // @ts-ignore
+            enable_thinking: options.thinkingEnabled,
+          };
+        }
 
-  /**
-   * Generate an embedding via the OpenAI-compatible /v1/embeddings endpoint.
-   * vLLM also exposes /v2/embed, but /v1/embeddings keeps the response
-   * contract identical to the OpenAI provider.
-   *
-   * @param {string} content - Text to embed
-   * @param {string} model - Embedding model name
-   * @param {object} [options] - Optional { dimensions }
-   * @returns {Promise<{ embedding: number[], dimensions: number }>}
-   */
-  async generateEmbedding(content, model, options = {}) {
-    const baseUrl = getBaseUrl();
-    logger.provider("vLLM", `generateEmbedding model=${model} baseUrl=${baseUrl}`);
-    try {
-      const payload = {
-        model,
-        input: content,
-      };
-      if (options.dimensions) payload.dimensions = options.dimensions;
+        const response = await fetchOpenAICompat(
+          `${baseUrl}/v1/chat/completions`,
+          payload,
+        );
+        const data = await response.json();
+        const { text, thinking, usage, toolCalls } =
+          // @ts-ignore
+          processNonStreamingResponse(data, {
+            // @ts-ignore
+            thinkingEnabled: options.thinkingEnabled,
+          });
 
-      const response = await fetchOpenAICompat(
-        `${baseUrl}/v1/embeddings`,
-        payload,
-      );
-      const data = await response.json();
-
-      const embedding = data.data?.[0]?.embedding;
-      if (!embedding) {
-        throw new Error("No embedding data in vLLM response");
+        const result = { text, thinking, usage };
+        // @ts-ignore
+        if (toolCalls) result.toolCalls = toolCalls;
+        return result;
+      } catch (error: any) {
+        if (error instanceof ProviderError) throw error;
+        throw new ProviderError("vllm", error.message, 500, error);
       }
+    },
 
-      return {
-        embedding,
-        dimensions: embedding.length,
-      };
-    } catch (error) {
-      if (error instanceof ProviderError) throw error;
-      throw new ProviderError("vllm", error.message, 500, error);
-    }
-  },
+    // ── Streaming Text Generation (SSE) ──────────────────────
 
-  // ── Model Listing ────────────────────────────────────────
+    async *generateTextStream(
+      messages: any,
+      // @ts-ignore
+      model = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["vllm"],
+      options = {},
+    ) {
+      const baseUrl = getBaseUrl();
+      logger.provider(
+        "vLLM",
+        `generateTextStream model=${model} baseUrl=${baseUrl}`,
+      );
+      try {
+        const prepared = prepareOpenAICompatMessages(messages, {
+          mediaStrategy: MEDIA_STRATEGIES.FULL_MULTIMODAL,
+        });
 
-  /**
-   * List all models available from the vLLM server.
-   * Uses the OpenAI-standard GET /v1/models endpoint.
-   * Returns { models: [...] } normalized format.
-   */
-  async listModels() {
-    const baseUrl = getBaseUrl();
-    logger.provider("vLLM", "listModels");
-    try {
-      const response = await fetch(`${baseUrl}/v1/models`, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`API error: ${response.status} ${errorText}`);
+        const payload = {
+          messages: prepared,
+          model,
+          ...buildPayloadParams(options),
+          // vLLM extensions: top_k, min_p, repetition_penalty
+          // @ts-ignore
+          ...(options.topK > 0 && { top_k: options.topK }),
+          // @ts-ignore
+          ...(options.minP !== undefined && { min_p: options.minP }),
+          // @ts-ignore
+          ...(options.repeatPenalty !== undefined &&
+            // @ts-ignore
+            options.repeatPenalty !== 1 && {
+              // @ts-ignore
+              repetition_penalty: options.repeatPenalty,
+            }),
+          stream: true,
+          stream_options: { include_usage: true },
+        };
+
+        // Function calling tools
+        // @ts-ignore
+        const tools = convertToolsToOpenAI(options.tools);
+        if (tools) {
+          // @ts-ignore
+          payload.tools = tools;
+          // @ts-ignore
+          payload.tool_choice = "auto";
+        }
+
+        // Thinking hard switch — vLLM extension for Qwen3/reasoning models
+        // @ts-ignore
+        if (options.thinkingEnabled !== undefined) {
+          // @ts-ignore
+          payload.chat_template_kwargs = {
+            // @ts-ignore
+            enable_thinking: options.thinkingEnabled,
+          };
+        }
+
+        const response = await fetchOpenAICompat(
+          `${baseUrl}/v1/chat/completions`,
+          payload,
+          // @ts-ignore
+          { signal: options.signal },
+        );
+
+        // @ts-ignore
+        const reader = response.body.getReader();
+        yield* parseSSEStream(reader, {
+          // @ts-ignore
+          signal: options.signal,
+          // @ts-ignore
+          thinkingEnabled: options.thinkingEnabled,
+        });
+      } catch (error: any) {
+        if (error.name === "AbortError") return; // Client disconnected
+        if (error instanceof ProviderError) throw error;
+        throw new ProviderError("vllm", error.message, 500, error);
       }
-      const data = await response.json();
-      const models = (data.data || []).map((m) => ({
-        key: m.id,
-        display_name: m.id,
-        type: "llm",
-        loaded_instances: [{ id: m.id }], // vLLM models are always loaded
-      }));
-      return { models };
-    } catch (error) {
-      if (error instanceof ProviderError) throw error;
-      throw new ProviderError("vllm", error.message, 500, error);
-    }
-  },
-};
+    },
+
+    async captionImage(
+      images: any,
+      prompt = "Describe this image.",
+      // @ts-ignore
+      model = getDefaultModels(TYPES.IMAGE, TYPES.TEXT)["vllm"],
+      systemPrompt: any,
+    ) {
+      const baseUrl = getBaseUrl();
+      logger.provider("vLLM", `captionImage model=${model} baseUrl=${baseUrl}`);
+      try {
+        const content = [
+          { type: "text", text: prompt },
+          ...images.map((img: any) => ({
+            type: "image_url",
+            image_url: { url: img },
+          })),
+        ];
+        const messages = [];
+        if (systemPrompt) {
+          messages.push({ role: "system", content: systemPrompt });
+        }
+        messages.push({ role: "user", content });
+
+        const response = await fetchOpenAICompat(
+          `${baseUrl}/v1/chat/completions`,
+          {
+            messages,
+            model,
+            temperature: 0.7,
+            max_tokens: -1,
+            stream: false,
+          },
+        );
+
+        const data = await response.json();
+        // @ts-ignore
+        const text = data.choices?.[0]?.message?.content || "";
+        const usage = {
+          // @ts-ignore
+          inputTokens: data.usage?.prompt_tokens || 0,
+          // @ts-ignore
+          outputTokens: data.usage?.completion_tokens || 0,
+        };
+        return { text, usage };
+      } catch (error: any) {
+        if (error instanceof ProviderError) throw error;
+        throw new ProviderError("vllm", error.message, 500, error);
+      }
+    },
+
+    // ── Embedding Generation ─────────────────────────────────
+
+    /**
+     * Generate an embedding via the OpenAI-compatible /v1/embeddings endpoint.
+     * vLLM also exposes /v2/embed, but /v1/embeddings keeps the response
+     * contract identical to the OpenAI provider.
+     *
+     * @param {string} content - Text to embed
+     * @param {string} model - Embedding model name
+     * @param {object} [options] - Optional { dimensions }
+     * @returns {Promise<{ embedding: number[], dimensions: number }>}
+     */
+    async generateEmbedding(content: any, model: any, options = {}) {
+      const baseUrl = getBaseUrl();
+      logger.provider(
+        "vLLM",
+        `generateEmbedding model=${model} baseUrl=${baseUrl}`,
+      );
+      try {
+        const payload = {
+          model,
+          input: content,
+        };
+        // @ts-ignore
+        if (options.dimensions) payload.dimensions = options.dimensions;
+
+        const response = await fetchOpenAICompat(
+          `${baseUrl}/v1/embeddings`,
+          payload,
+        );
+        const data = await response.json();
+
+        // @ts-ignore
+        const embedding = data.data?.[0]?.embedding;
+        if (!embedding) {
+          throw new Error("No embedding data in vLLM response");
+        }
+
+        return {
+          embedding,
+          dimensions: embedding.length,
+        };
+      } catch (error: any) {
+        if (error instanceof ProviderError) throw error;
+        throw new ProviderError("vllm", error.message, 500, error);
+      }
+    },
+
+    // ── Model Listing ────────────────────────────────────────
+
+    /**
+     * List all models available from the vLLM server.
+     * Uses the OpenAI-standard GET /v1/models endpoint.
+     * Returns { models: [...] } normalized format.
+     */
+    async listModels() {
+      const baseUrl = getBaseUrl();
+      logger.provider("vLLM", "listModels");
+      try {
+        const response = await fetch(`${baseUrl}/v1/models`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`API error: ${response.status} ${errorText}`);
+        }
+        const data = await response.json();
+        // @ts-ignore
+        const models = (data.data || []).map((m: any) => ({
+          key: m.id,
+          display_name: m.id,
+          type: "llm",
+          loaded_instances: [{ id: m.id }], // vLLM models are always loaded
+        }));
+        return { models };
+      } catch (error: any) {
+        if (error instanceof ProviderError) throw error;
+        throw new ProviderError("vllm", error.message, 500, error);
+      }
+    },
+  };
 }

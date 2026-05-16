@@ -19,6 +19,7 @@ import {
   MINIO_ACCESS_KEY,
   MINIO_SECRET_KEY,
   MINIO_BUCKET_NAME,
+  // @ts-ignore
 } from "../config.js";
 import MongoWrapper from "./wrappers/MongoWrapper.js";
 import MinioWrapper from "./wrappers/MinioWrapper.js";
@@ -64,20 +65,22 @@ const app = express();
 const server = http.createServer(app);
 
 // Middleware
-app.use(cors({
-  origin: true,                           // reflect request origin (equivalent to *)
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: [
-    "Content-Type",
-    "x-project",
-    "x-username",
-    "x-workspace-id",
-    "x-workspace-root",
-    "x-api-secret",
-    "x-admin-secret",
-  ],
-  maxAge: CORS_MAX_AGE_SECONDS,          // cache preflight for 24h — eliminates burst OPTIONS storms
-}));
+app.use(
+  cors({
+    origin: true, // reflect request origin (equivalent to *)
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "x-project",
+      "x-username",
+      "x-workspace-id",
+      "x-workspace-root",
+      "x-api-secret",
+      "x-admin-secret",
+    ],
+    maxAge: CORS_MAX_AGE_SECONDS, // cache preflight for 24h — eliminates burst OPTIONS storms
+  }),
+);
 app.use(express.json({ limit: "50mb" }));
 app.use(requestLoggerMiddleware);
 
@@ -119,7 +122,7 @@ const ENDPOINTS = {
 };
 
 // Health check (public — no auth required)
-app.get("/", (_req, res) => {
+app.get("/", (_req: any, res: any) => {
   res.json({
     name: "Prism the AI Gateway",
     version: "1.0.0",
@@ -129,7 +132,7 @@ app.get("/", (_req, res) => {
 });
 
 // Health check (public — standard path for Docker, load balancers, portal)
-app.get("/health", (_req, res) => {
+app.get("/health", (_req: any, res: any) => {
   res.json({ status: "ok" });
 });
 
@@ -192,7 +195,9 @@ setupWebSocket(wss);
     if (db) {
       await Promise.all([
         // requests — primary lookup by requestId (admin detail view)
-        db.collection("requests").createIndex({ requestId: 1 }, { unique: true }),
+        db
+          .collection("requests")
+          .createIndex({ requestId: 1 }, { unique: true }),
         // requests — used by $lookup from conversations and session joins
         db.collection("requests").createIndex({ conversationId: 1 }),
         db.collection("requests").createIndex({ traceId: 1 }),
@@ -211,24 +216,36 @@ setupWebSocket(wss);
         // conversations — used by findOne lookups and list queries
         db.collection("conversations").createIndex({ id: 1 }, { unique: true }),
         db.collection("conversations").createIndex({ updatedAt: -1 }),
-        db.collection("conversations").createIndex({ project: 1, username: 1, updatedAt: -1 }),
+        db
+          .collection("conversations")
+          .createIndex({ project: 1, username: 1, updatedAt: -1 }),
         db.collection("conversations").createIndex({ traceId: 1 }),
 
         // agent_sessions — same indexes as conversations
-        db.collection("agent_sessions").createIndex({ id: 1 }, { unique: true }),
+        db
+          .collection("agent_sessions")
+          .createIndex({ id: 1 }, { unique: true }),
         db.collection("agent_sessions").createIndex({ updatedAt: -1 }),
-        db.collection("agent_sessions").createIndex({ project: 1, username: 1, updatedAt: -1 }),
+        db
+          .collection("agent_sessions")
+          .createIndex({ project: 1, username: 1, updatedAt: -1 }),
 
         // workflows — used by conversationIds lookup
         db.collection("workflows").createIndex({ id: 1 }, { unique: true }),
         // benchmarks
         db.collection("benchmarks").createIndex({ id: 1 }, { unique: true }),
         db.collection("benchmarks").createIndex({ project: 1, updatedAt: -1 }),
-        db.collection("benchmark_runs").createIndex({ id: 1 }, { unique: true }),
-        db.collection("benchmark_runs").createIndex({ benchmarkId: 1, project: 1, startedAt: -1 }),
+        db
+          .collection("benchmark_runs")
+          .createIndex({ id: 1 }, { unique: true }),
+        db
+          .collection("benchmark_runs")
+          .createIndex({ benchmarkId: 1, project: 1, startedAt: -1 }),
         // synthesis
         db.collection("synthesis").createIndex({ id: 1 }, { unique: true }),
-        db.collection("synthesis").createIndex({ project: 1, username: 1, updatedAt: -1 }),
+        db
+          .collection("synthesis")
+          .createIndex({ project: 1, username: 1, updatedAt: -1 }),
         // agent_skills
         db.collection("agent_skills").createIndex({ project: 1, username: 1 }),
         // mcp_servers
@@ -239,7 +256,7 @@ setupWebSocket(wss);
       ]);
       logger.success("Database indexes ensured");
     }
-  } catch (error) {
+  } catch (error: any) {
     logger.error(`Failed to ensure indexes: ${error.message}`);
   }
 
@@ -251,51 +268,67 @@ setupWebSocket(wss);
         .collection("conversations")
         .updateMany({ isGenerating: true }, { $set: { isGenerating: false } });
       if (modifiedCount > 0) {
-        logger.info(`Cleared ${modifiedCount} stale isGenerating flag(s) in conversations`);
+        logger.info(
+          `Cleared ${modifiedCount} stale isGenerating flag(s) in conversations`,
+        );
       }
       // Also clear in agent_sessions
       const { modifiedCount: agentCleared } = await db
         .collection("agent_sessions")
         .updateMany({ isGenerating: true }, { $set: { isGenerating: false } });
       if (agentCleared > 0) {
-        logger.info(`Cleared ${agentCleared} stale isGenerating flag(s) in agent_sessions`);
+        logger.info(
+          `Cleared ${agentCleared} stale isGenerating flag(s) in agent_sessions`,
+        );
       }
     }
-  } catch (error) {
+  } catch (error: any) {
     logger.error(`Failed to clear stale isGenerating flags: ${error.message}`);
   }
 
   // ── One-time migration: conversations → agent_sessions ──────────
   // Move any existing agent project conversations to the new collection.
   try {
-    const { default: AgentPersonaRegistry } = await import("./services/AgentPersonaRegistry.js");
-    const agentProjects = AgentPersonaRegistry.list().map((p) => {
-      const persona = AgentPersonaRegistry.get(p.id);
-      return persona?.project;
-    }).filter(Boolean);
+    const { default: AgentPersonaRegistry } =
+      await import("./services/AgentPersonaRegistry.js");
+    const agentProjects = AgentPersonaRegistry.list()
+      .map((p: any) => {
+        const persona = AgentPersonaRegistry.get(p.id);
+        return persona?.project;
+      })
+      .filter(Boolean);
 
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (db && agentProjects.length > 0) {
-      const agentConvs = await db.collection("conversations")
+      const agentConvs = await db
+        .collection("conversations")
         .find({ project: { $in: agentProjects } })
         .toArray();
       if (agentConvs.length > 0) {
         // Strip _id to avoid duplicate key errors on insert
-        const docs = agentConvs.map(({ _id, ...rest }) => rest);
-        await db.collection("agent_sessions").insertMany(docs, { ordered: false }).catch(() => {});
-        await db.collection("conversations").deleteMany({ project: { $in: agentProjects } });
-        logger.info(`Migrated ${agentConvs.length} agent conversation(s) → agent_sessions`);
+        const docs = agentConvs.map(({ _id, ...rest }: any) => rest);
+        await db
+          .collection("agent_sessions")
+          .insertMany(docs, { ordered: false })
+          .catch(() => {});
+        await db
+          .collection("conversations")
+          .deleteMany({ project: { $in: agentProjects } });
+        logger.info(
+          `Migrated ${agentConvs.length} agent conversation(s) → agent_sessions`,
+        );
       }
     }
-  } catch (error) {
+  } catch (error: any) {
     logger.error(`Agent session migration failed: ${error.message}`);
   }
 
   // Load custom agents from database into the persona registry
   try {
-    const { default: AgentPersonaRegistryCustom } = await import("./services/AgentPersonaRegistry.js");
+    const { default: AgentPersonaRegistryCustom } =
+      await import("./services/AgentPersonaRegistry.js");
     await AgentPersonaRegistryCustom.loadCustomAgents();
-  } catch (error) {
+  } catch (error: any) {
     logger.warn(`Custom agent loading failed: ${error.message}`);
   }
 
@@ -304,19 +337,23 @@ setupWebSocket(wss);
 
   // Auto-connect enabled MCP servers
   try {
-    const { default: MCPClientService } = await import("./services/MCPClientService.js");
-    const { default: AgentPersonaRegistryMCP } = await import("./services/AgentPersonaRegistry.js");
+    const { default: MCPClientService } =
+      await import("./services/MCPClientService.js");
+    const { default: AgentPersonaRegistryMCP } =
+      await import("./services/AgentPersonaRegistry.js");
     const mcpDb = MongoWrapper.getDb(MONGO_DB_NAME);
-    const codingProject = AgentPersonaRegistryMCP.get("CODING")?.project || "coding";
+    const codingProject =
+      AgentPersonaRegistryMCP.get("CODING")?.project || "coding";
     if (mcpDb) {
       await MCPClientService.connectAllFromDB(mcpDb, codingProject, "admin");
     }
-  } catch (error) {
+  } catch (error: any) {
     logger.warn(`MCP auto-connect failed: ${error.message}`);
   }
 
   // ── Scheduled Memory Consolidation ─────────────────
   // Runs every 24 hours, consolidates memories for all active projects and agents.
+  // @ts-ignore
   const { hours } = await import("@rodrigo-barraza/utilities-library");
   const CONSOLIDATION_INTERVAL_MS = hours(24);
   setInterval(async () => {
@@ -330,16 +367,24 @@ setupWebSocket(wss);
       // Process projects sequentially — each consolidation loads the full
       // memory corpus with embeddings (~12KB/memory). Running them concurrently
       // compounds heap usage and can cause OOM on large collections.
-      for (const project of projects) {
+      // @ts-ignore
+      for ( const project of projects) {
         // Find all distinct agents within this project
-        const agents = await db.collection("memories").distinct("agent", { project });
+        const agents = await db
+          .collection("memories")
+          .distinct("agent", { project });
         if (!agents.length) continue;
 
-        for (const agent of agents) {
-          const count = await db.collection("memories").countDocuments({ project, agent });
+        // @ts-ignore
+        for ( const agent of agents) {
+          const count = await db
+            .collection("memories")
+            .countDocuments({ project, agent });
           if (count < 10) continue; // Skip agent/project combos with few memories
 
-          logger.info(`[AutoDream] Scheduled consolidation for agent "${agent}", project "${project}" (${count} memories)`);
+          logger.info(
+            `[AutoDream] Scheduled consolidation for agent "${agent}", project "${project}" (${count} memories)`,
+          );
           try {
             await MemoryConsolidationService.consolidate({
               agent,
@@ -347,31 +392,40 @@ setupWebSocket(wss);
               username: "system",
               trigger: "scheduled",
             });
-          } catch (error) {
-            logger.error(`[AutoDream] Scheduled consolidation failed for "${agent}/${project}": ${error.message}`);
+          } catch (error: any) {
+            logger.error(
+              `[AutoDream] Scheduled consolidation failed for "${agent}/${project}": ${error.message}`,
+            );
           }
         }
       }
-    } catch (error) {
-      logger.error(`[AutoDream] Scheduled consolidation sweep failed: ${error.message}`);
+    } catch (error: any) {
+      logger.error(
+        `[AutoDream] Scheduled consolidation sweep failed: ${error.message}`,
+      );
     }
   }, CONSOLIDATION_INTERVAL_MS);
-  logger.info(`[AutoDream] Scheduled consolidation every ${CONSOLIDATION_INTERVAL_MS / 3_600_000}h`);
+  logger.info(
+    `[AutoDream] Scheduled consolidation every ${CONSOLIDATION_INTERVAL_MS / 3_600_000}h`,
+  );
 
   // ── Background Housekeeping ────────────────────────────────
   // Boot-time run: clean up orphans from previous crashes
-  BackgroundHousekeepingService.run({ trigger: "boot" }).catch((error) =>
+  BackgroundHousekeepingService.run({ trigger: "boot" }).catch((error: any) =>
     logger.error(`[Housekeeping] Boot-time run failed: ${error.message}`),
   );
 
   // Scheduled run: every 6h (independent of consolidation interval)
   const HOUSEKEEPING_INTERVAL_MS = hours(6);
   setInterval(() => {
-    BackgroundHousekeepingService.run({ trigger: "scheduled" }).catch((error) =>
-      logger.error(`[Housekeeping] Scheduled run failed: ${error.message}`),
+    BackgroundHousekeepingService.run({ trigger: "scheduled" }).catch(
+      (error: any) =>
+        logger.error(`[Housekeeping] Scheduled run failed: ${error.message}`),
     );
   }, HOUSEKEEPING_INTERVAL_MS);
-  logger.info(`[Housekeeping] Scheduled cleanup every ${HOUSEKEEPING_INTERVAL_MS / 3_600_000}h`);
+  logger.info(
+    `[Housekeeping] Scheduled cleanup every ${HOUSEKEEPING_INTERVAL_MS / 3_600_000}h`,
+  );
 
   // Initialize MinIO if all secrets are configured
   if (
@@ -405,16 +459,17 @@ setupWebSocket(wss);
       embedding: [6, 182, 212], // #06b6d4 — cyan
     };
     const coloredModalities = Object.values(TYPES)
-      .map((t) => {
+      .map((t: any) => {
+        // @ts-ignore
         const [r, g, b] = MODALITY_COLORS[t] || [255, 255, 255];
         return `\x1b[38;2;${r};${g};${b}m${t}\x1b[0m`;
       })
       .join(", ");
     logger.info("Available modalities:", coloredModalities);
-    ENDPOINTS.rest.forEach((ep) =>
+    ENDPOINTS.rest.forEach((ep: any) =>
       logger.info(`  REST  →  http://localhost:${PORT}${ep}`),
     );
-    ENDPOINTS.websocket.forEach((ep) =>
+    ENDPOINTS.websocket.forEach((ep: any) =>
       logger.info(`  WS    →  ws://localhost:${PORT}${ep}`),
     );
   });

@@ -4,13 +4,15 @@ import { requestContext } from "../utils/RequestContext.js";
  * Express middleware that attaches x-project, x-username, and x-workspace-id
  * headers to the request object for downstream route handlers.
  */
-export function authMiddleware(req, res, next) {
+export function authMiddleware(req: any, res: any, next: any) {
   // Single source of truth for project resolution.
   // Priority: query param → body → x-project header → "default"
   req.project =
-    req.query?.project || req.body?.project || req.headers["x-project"] || "default";
-  const rawIp =
-    req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.ip;
+    req.query?.project ||
+    req.body?.project ||
+    req.headers["x-project"] ||
+    "default";
+  const rawIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.ip;
   // Normalize IPv4-mapped IPv6 addresses (::ffff:127.0.0.1 → 127.0.0.1)
   req.clientIp = rawIp?.replace(/^::ffff:/, "") || rawIp;
   // Use x-username header when provided; otherwise fall back to "anonymous".
@@ -27,10 +29,15 @@ export function authMiddleware(req, res, next) {
   // Update AsyncLocalStorage context with auth-resolved values
   const store = requestContext.getStore();
   if (store) {
+    // @ts-ignore
     store.project = req.project;
+    // @ts-ignore
     store.username = req.username;
+    // @ts-ignore
     store.clientIp = req.clientIp;
+    // @ts-ignore
     store.workspaceId = req.workspaceId;
+    // @ts-ignore
     store.workspaceRoot = req.workspaceRoot;
   }
 

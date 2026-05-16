@@ -16,23 +16,27 @@ export default {
         // ── Single question (simple) ───────────────────
         question: {
           type: "string",
-          description: "The question to present to the user. For a single question, use this directly. For multiple questions, use the 'questions' array instead.",
+          description:
+            "The question to present to the user. For a single question, use this directly. For multiple questions, use the 'questions' array instead.",
         },
         choices: {
           type: "array",
           items: { type: "string" },
-          description: "Optional: predefined answer choices for a single question.",
+          description:
+            "Optional: predefined answer choices for a single question.",
         },
         context: {
           type: "string",
-          description: "Optional: additional context shown below a single question.",
+          description:
+            "Optional: additional context shown below a single question.",
         },
 
         // ── Multi-question batch ───────────────────────
         questions: {
           type: "array",
           maxItems: 4,
-          description: "Optional: batch multiple related questions in one call (up to 4). Each item is a question object.",
+          description:
+            "Optional: batch multiple related questions in one call (up to 4). Each item is a question object.",
           items: {
             type: "object",
             properties: {
@@ -43,7 +47,8 @@ export default {
               header: {
                 type: "string",
                 maxLength: 16,
-                description: "Optional: short label chip displayed as a tag (e.g. 'Auth method', 'Database'). Max 16 chars.",
+                description:
+                  "Optional: short label chip displayed as a tag (e.g. 'Auth method', 'Database'). Max 16 chars.",
               },
               options: {
                 type: "array",
@@ -58,7 +63,8 @@ export default {
                     },
                     preview: {
                       type: "string",
-                      description: "Optional: markdown or code preview content shown when this option is focused/hovered.",
+                      description:
+                        "Optional: markdown or code preview content shown when this option is focused/hovered.",
                     },
                   },
                   required: ["label"],
@@ -66,7 +72,8 @@ export default {
               },
               multiSelect: {
                 type: "boolean",
-                description: "Optional: if true, the user can select multiple options (checkboxes). Default: false (single select).",
+                description:
+                  "Optional: if true, the user can select multiple options (checkboxes). Default: false (single select).",
               },
             },
             required: ["question"],
@@ -79,28 +86,37 @@ export default {
   domain: "Agentic: Control Flow",
   labels: ["coding"],
 
-  async execute(args, ctx) {
+  async execute(args: any, ctx: any) {
     const { question, choices, context: questionContext, questions } = args;
 
     // ── Normalize into questions array ─────────────────
-    let normalizedQuestions;
+    let normalizedQuestions: any;
     if (questions && Array.isArray(questions) && questions.length > 0) {
       // Multi-question mode — validate uniqueness
       const seen = new Set();
-      for (const q of questions) {
+      // @ts-ignore
+      for ( const q of questions) {
         if (!q.question || typeof q.question !== "string") {
-          return { error: "Each question in the 'questions' array must have a non-empty 'question' string" };
+          return {
+            error:
+              "Each question in the 'questions' array must have a non-empty 'question' string",
+          };
         }
         if (seen.has(q.question)) {
-          return { error: `Duplicate question text: "${q.question.slice(0, 60)}"` };
+          return {
+            error: `Duplicate question text: "${q.question.slice(0, 60)}"`,
+          };
         }
         seen.add(q.question);
         // Validate option label uniqueness within each question
         if (q.options?.length > 0) {
           const labelsSeen = new Set();
-          for (const opt of q.options) {
+          // @ts-ignore
+          for ( const opt of q.options) {
             if (labelsSeen.has(opt.label)) {
-              return { error: `Duplicate option label "${opt.label}" in question "${q.question.slice(0, 40)}"` };
+              return {
+                error: `Duplicate option label "${opt.label}" in question "${q.question.slice(0, 40)}"`,
+              };
             }
             labelsSeen.add(opt.label);
           }
@@ -109,10 +125,10 @@ export default {
       if (questions.length > 4) {
         return { error: "Maximum 4 questions per call" };
       }
-      normalizedQuestions = questions.map((q) => ({
+      normalizedQuestions = questions.map((q: any) => ({
         question: q.question,
         header: q.header?.slice(0, 16) || null,
-        options: (q.options || []).slice(0, 6).map((o) => ({
+        options: (q.options || []).slice(0, 6).map((o: any) => ({
           label: o.label,
           preview: o.preview || null,
         })),
@@ -120,26 +136,39 @@ export default {
       }));
     } else if (question && typeof question === "string") {
       // Single question mode — backward-compatible
-      normalizedQuestions = [{
-        question,
-        header: null,
-        options: (choices || []).map((c) => ({ label: c, preview: null })),
-        multiSelect: false,
-      }];
+      normalizedQuestions = [
+        {
+          question,
+          header: null,
+          options: (choices || []).map((c: any) => ({
+            label: c,
+            preview: null,
+          })),
+          multiSelect: false,
+        },
+      ];
     } else {
-      return { error: "Either 'question' (string) or 'questions' (array) is required" };
+      return {
+        error: "Either 'question' (string) or 'questions' (array) is required",
+      };
     }
 
     const sessionId = ctx.agentSessionId;
     if (!sessionId) {
-      return { error: "No agent session — ask_user_question requires an active session" };
+      return {
+        error:
+          "No agent session — ask_user_question requires an active session",
+      };
     }
 
-    const totalOptions = normalizedQuestions.reduce((sum, q) => sum + q.options.length, 0);
+    const totalOptions = normalizedQuestions.reduce(
+      (sum: any, q: any) => sum + q.options.length,
+      0,
+    );
     logger.info(
       `[AskUserQuestion] ${normalizedQuestions.length} question(s), ` +
-      `${totalOptions} total options — ` +
-      `"${normalizedQuestions[0].question.slice(0, 60)}${normalizedQuestions[0].question.length > 60 ? "..." : ""}"`,
+        `${totalOptions} total options — ` +
+        `"${normalizedQuestions[0].question.slice(0, 60)}${normalizedQuestions[0].question.length > 60 ? "..." : ""}"`,
     );
 
     // Emit the SSE event with the full questions array
@@ -150,33 +179,55 @@ export default {
         questions: normalizedQuestions,
         // Backward-compat fields for simple consumers
         question: normalizedQuestions[0].question,
-        choices: normalizedQuestions[0].options.map((o) => o.label),
+        choices: normalizedQuestions[0].options.map((o: any) => o.label),
         context: questionContext || null,
       });
     }
 
-    const { default: AgenticLoopService } = await import("../AgenticLoopService.js");
-    const result = await new Promise((resolve) => {
-      const timeoutId = setTimeout(() => resolve({ answers: null, timedOut: true }), 300_000);
+    const { default: AgenticLoopService } =
+      await import("../AgenticLoopService.js");
+    const result = await new Promise((resolve: any) => {
+      const timeoutId = setTimeout(
+        () => resolve({ answers: null, timedOut: true }),
+        300_000,
+      );
       AgenticLoopService._setPendingQuestion(sessionId, {
-        resolve: (val) => { clearTimeout(timeoutId); resolve(val); },
+        resolve: (val: any) => {
+          clearTimeout(timeoutId);
+          resolve(val);
+        },
         questions: normalizedQuestions,
       });
     });
 
+    // @ts-ignore
     if (result.timedOut) {
       logger.warn(`[AskUserQuestion] Timed out after 5 minutes`);
-      return { answers: null, timedOut: true, message: "The user did not respond within 5 minutes." };
+      return {
+        answers: null,
+        timedOut: true,
+        message: "The user did not respond within 5 minutes.",
+      };
     }
 
-    logger.info(`[AskUserQuestion] Answered: ${JSON.stringify(result.answers).slice(0, 200)}`);
+    // @ts-ignore
+    logger.info(
+      // @ts-ignore
+      `[AskUserQuestion] Answered: ${JSON.stringify(result.answers).slice(0, 200)}`,
+    );
 
     // Return structured response
     return {
-      questions: normalizedQuestions.map((q) => q.question),
+      questions: normalizedQuestions.map((q: any) => q.question),
+      // @ts-ignore
       answers: result.answers,
       // Backward-compat for simple single-question consumers
-      answer: Array.isArray(result.answers) ? result.answers[0]?.answer : result.answers,
+      // @ts-ignore
+      answer: Array.isArray(result.answers)
+        // @ts-ignore
+        ? result.answers[0]?.answer
+        // @ts-ignore
+        : result.answers,
     };
   },
 };

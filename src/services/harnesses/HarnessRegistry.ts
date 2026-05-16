@@ -12,7 +12,7 @@ import StandardAgenticHarness from "./StandardAgenticHarness.js";
 /** @type {Map<string, typeof BaseAgenticHarness>} */
 const registry = new Map();
 
-function register(HarnessClass) {
+function register(HarnessClass: any) {
   registry.set(HarnessClass.id, HarnessClass);
 }
 
@@ -29,7 +29,7 @@ const HarnessRegistry = {
    * @param {string} id
    * @returns {typeof BaseAgenticHarness}
    */
-  get(id) {
+  get(id: any) {
     return registry.get(id) || registry.get("standard");
   },
 
@@ -38,7 +38,7 @@ const HarnessRegistry = {
    * @returns {Array<{ id: string, label: string, description: string }>}
    */
   list() {
-    return [...registry.values()].map((H) => ({
+    return [...registry.values()].map((H: any) => ({
       id: H.id,
       label: H.label,
       description: H.description,
@@ -50,7 +50,7 @@ const HarnessRegistry = {
    * @param {string} id
    * @returns {boolean}
    */
-  has(id) {
+  has(id: any) {
     return registry.has(id);
   },
 };

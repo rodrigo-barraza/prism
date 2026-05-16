@@ -18,43 +18,72 @@ class InstanceQueue {
    * @param {string} instanceId
    * @param {number} maxConcurrency
    */
-  constructor(instanceId, maxConcurrency) {
+  constructor(instanceId: any, maxConcurrency: any) {
+    // @ts-ignore
     this.instanceId = instanceId;
+    // @ts-ignore
     this.maxConcurrency = maxConcurrency;
     /** @type {Array<() => void>} FIFO queue of pending resolve callbacks */
+    // @ts-ignore
     this._queue = [];
+    // @ts-ignore
     this._activeCount = 0;
+    // @ts-ignore
     this._totalProcessed = 0;
   }
 
   acquire() {
-    return new Promise((resolve) => {
+    return new Promise((resolve: any) => {
       const release = () => {
+        // @ts-ignore
         this._activeCount--;
+        // @ts-ignore
         this._totalProcessed++;
+        // @ts-ignore
         const next = this._queue.shift();
         if (next) {
+          // @ts-ignore
           this._activeCount++;
           next();
         }
       };
 
+      // @ts-ignore
       if (this._activeCount < this.maxConcurrency) {
+        // @ts-ignore
         this._activeCount++;
         resolve(release);
       } else {
+        // @ts-ignore
         this._queue.push(() => resolve(release));
         logger.info(
+          // @ts-ignore
           `[LocalModelQueue:${this.instanceId}] Queued request (${this._queue.length} waiting, ${this._activeCount}/${this.maxConcurrency} active)`,
         );
       }
     });
   }
 
-  get pending() { return this._queue.length; }
-  get busy() { return this._activeCount >= this.maxConcurrency; }
-  get activeCount() { return this._activeCount; }
-  get totalProcessed() { return this._totalProcessed; }
+  // @ts-ignore
+  get pending() {
+    // @ts-ignore
+    return this._queue.length;
+  }
+  // @ts-ignore
+  get busy() {
+    // @ts-ignore
+    return this._activeCount >= this.maxConcurrency;
+  }
+  // @ts-ignore
+  get activeCount() {
+    // @ts-ignore
+    return this._activeCount;
+  }
+  // @ts-ignore
+  get totalProcessed() {
+    // @ts-ignore
+    return this._totalProcessed;
+  }
 }
 
 class LocalModelQueue {
@@ -70,7 +99,7 @@ class LocalModelQueue {
    * @param {string} provider
    * @returns {boolean}
    */
-  isLocal(provider) {
+  isLocal(provider: any) {
     if (LOCAL_PROVIDERS.has(provider)) return true;
     // Check if it's a multi-instance ID (e.g. "lm-studio-2")
     if (isInstance(provider)) return true;
@@ -82,7 +111,7 @@ class LocalModelQueue {
    * @param {string} instanceId
    * @returns {InstanceQueue}
    */
-  _getQueue(instanceId) {
+  _getQueue(instanceId: any) {
     if (queues.has(instanceId)) return queues.get(instanceId);
 
     // Look up concurrency from instance registry
@@ -123,7 +152,8 @@ class LocalModelQueue {
   /** Number of active slots for a specific instance. */
   get activeCount() {
     let total = 0;
-    for (const q of queues.values()) total += q.activeCount;
+    // @ts-ignore
+    for ( const q of queues.values()) total += q.activeCount;
     return total;
   }
 
@@ -135,7 +165,8 @@ class LocalModelQueue {
   /** Total requests processed across all instances. */
   get totalProcessed() {
     let total = 0;
-    for (const q of queues.values()) total += q.totalProcessed;
+    // @ts-ignore
+    for ( const q of queues.values()) total += q.totalProcessed;
     return total;
   }
 }

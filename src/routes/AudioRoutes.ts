@@ -1,4 +1,6 @@
+// @ts-ignore
 import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
+// @ts-ignore
 import { formatCostTag, roundMs } from "@rodrigo-barraza/utilities-library";
 import express from "express";
 import crypto from "crypto";
@@ -10,7 +12,7 @@ import ConversationService from "../services/ConversationService.js";
 import FileService from "../services/FileService.js";
 import logger from "../utils/logger.js";
 import RequestLogger from "../services/RequestLogger.js";
-import {  } from "../utils/utilities.js";
+import {} from "../utils/utilities.js";
 const router = express.Router();
 // ─── used by both REST and WebSocket ────────────────────────
 /**
@@ -31,7 +33,7 @@ const router = express.Router();
  * @param {Function} emitJSON            Callback for JSON events: emitJSON({ type, ...data })
  * @returns {Promise<string>}            Content type of the audio
  */
-export async function handleVoice(params, emitBinary, emitJSON) {
+export async function handleVoice(params: any, emitBinary: any, emitJSON: any) {
   const requestId = crypto.randomUUID();
   const requestStart = performance.now();
   const {
@@ -92,7 +94,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
         project,
         username,
         true,
-      ).catch((error) =>
+      ).catch((error: any) =>
         logger.error(`Failed to set isGenerating: ${error.message}`),
       );
     }
@@ -105,9 +107,11 @@ export async function handleVoice(params, emitBinary, emitJSON) {
     if (result.stream.pipe) {
       // Node.js readable stream
       if (audioChunks) {
-        result.stream.on("data", (chunk) => audioChunks.push(chunk));
+        // @ts-ignore
+        result.stream.on("data", (chunk: any) => audioChunks.push(chunk));
       }
-      for await (const chunk of result.stream) {
+      // @ts-ignore
+      for await ( const chunk of result.stream) {
         emitBinary(chunk);
       }
     } else {
@@ -116,6 +120,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+        // @ts-ignore
         if (audioChunks) audioChunks.push(Buffer.from(value));
         emitBinary(value);
       }
@@ -155,7 +160,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
           username,
         );
         audioRef = ref;
-      } catch (error) {
+      } catch (error: any) {
         logger.error(`Failed to upload TTS audio: ${error.message}`);
       }
       const messagesToAppend = [];
@@ -193,14 +198,14 @@ export async function handleVoice(params, emitBinary, emitJSON) {
             false,
           ),
         )
-        .catch((error) =>
+        .catch((error: any) =>
           logger.error(
             `Failed to append messages to conversation ${conversationId}: ${error.message}`,
           ),
         );
     }
     return contentType;
-  } catch (error) {
+  } catch (error: any) {
     // Clear isGenerating flag on error
     if (conversationId) {
       ConversationService.setGenerating(
@@ -208,7 +213,7 @@ export async function handleVoice(params, emitBinary, emitJSON) {
         project,
         username,
         false,
-      ).catch((error) =>
+      ).catch((error: any) =>
         logger.error(`Failed to clear isGenerating on error: ${error.message}`),
       );
     }
@@ -238,13 +243,35 @@ export async function handleVoice(params, emitBinary, emitJSON) {
  * Default:          Binary audio stream with content-type header
  * ?format=dataUrl:  JSON response { audioDataUrl, contentType }
  */
-router.post("/", asyncHandler(async (req, res, next) => {
-  // Skip TTS handler when mounted at /audio-to-text
-  if (req.baseUrl.includes("audio-to-text")) return next();
-  try {
-    // ── Data URL format: collect chunks → base64-encode → return JSON ──
-    if (req.query.format === "dataUrl") {
-      const audioChunks = [];
+router.post(
+  "/",
+  asyncHandler(async (req: any, res: any, next: any) => {
+    // Skip TTS handler when mounted at /audio-to-text
+    if (req.baseUrl.includes("audio-to-text")) return next();
+    try {
+      // ── Data URL format: collect chunks → base64-encode → return JSON ──
+      if (req.query.format === "dataUrl") {
+        // @ts-ignore
+        const audioChunks = [];
+        const resultContentType = await handleVoice(
+          {
+            ...req.body,
+            project: req.project,
+            username: req.username,
+            clientIp: req.clientIp,
+          },
+          (chunk: any) => audioChunks.push(Buffer.from(chunk)),
+          (_event: any) => {
+            /* JSON events not needed for dataUrl format */
+          },
+        );
+        const ct = resultContentType || "audio/mpeg";
+        // @ts-ignore
+        const audioDataUrl = `data:${ct};base64,${Buffer.concat(audioChunks).toString("base64")}`;
+        return res.json({ audioDataUrl, contentType: ct });
+      }
+      // ── Default: stream binary audio chunks ──
+      let contentType = "audio/mpeg";
       const resultContentType = await handleVoice(
         {
           ...req.body,
@@ -252,258 +279,256 @@ router.post("/", asyncHandler(async (req, res, next) => {
           username: req.username,
           clientIp: req.clientIp,
         },
-        (chunk) => audioChunks.push(Buffer.from(chunk)),
-        (_event) => { /* JSON events not needed for dataUrl format */ },
+        (chunk: any) => {
+          // Set headers on first chunk
+          if (!res.headersSent) {
+            res.setHeader("Content-Type", contentType);
+            res.setHeader("Transfer-Encoding", "chunked");
+          }
+          res.write(chunk);
+        },
+        (_event: any) => {
+          /* REST doesn't send JSON events to client */
+        },
       );
-      const ct = resultContentType || "audio/mpeg";
-      const audioDataUrl = `data:${ct};base64,${Buffer.concat(audioChunks).toString("base64")}`;
-      return res.json({ audioDataUrl, contentType: ct });
+      if (resultContentType) {
+        contentType = resultContentType;
+      }
+      res.end();
+    } catch (error: any) {
+      if (!res.headersSent) {
+        next(error);
+      }
     }
-    // ── Default: stream binary audio chunks ──
-    let contentType = "audio/mpeg";
-    const resultContentType = await handleVoice(
-      {
-        ...req.body,
-        project: req.project,
-        username: req.username,
-        clientIp: req.clientIp,
-      },
-      (chunk) => {
-        // Set headers on first chunk
-        if (!res.headersSent) {
-          res.setHeader("Content-Type", contentType);
-          res.setHeader("Transfer-Encoding", "chunked");
-        }
-        res.write(chunk);
-      },
-      (_event) => {
-        /* REST doesn't send JSON events to client */
-      },
-    );
-    if (resultContentType) {
-      contentType = resultContentType;
-    }
-    res.end();
-  } catch (error) {
-    if (!res.headersSent) {
-      next(error);
-    }
-  }
-}));
+  }),
+);
 // ─── audio transcription (speech-to-text) ───────────────────
 /**
  * POST /audio-to-text
  * Body: { provider, audio (base64 string or data URL), model?, language?, prompt? }
  * Response: { text, usage? }
  */
-router.post("/", asyncHandler(async (req, res, next) => {
-  const requestId = crypto.randomUUID();
-  const requestStart = performance.now();
-  const {
-    provider: providerName,
-    audio,
-    model,
-    language,
-    prompt: transcriptionPrompt,
-    conversationId: incomingConversationId,
-    conversationMeta: incomingConversationMeta,
-    traceId: incomingTraceId,
-    skipConversation,
-  } = req.body;
-  // Auto-generate conversationId when caller omits it (mirrors chat route)
-  let conversationId = skipConversation ? null : (incomingConversationId || null);
-  let conversationMeta = skipConversation ? null : (incomingConversationMeta || null);
-  if (!skipConversation && !conversationId) {
-    conversationId = crypto.randomUUID();
-    conversationMeta = conversationMeta || { title: "Audio Transcription" };
-  }
-  // ── Trace: passthrough ────────────────────────────────────
-  // TraceId is generated client-side and passed on every request.
-  const traceId = incomingTraceId || null;
-  // Inject traceId into conversationMeta for storage
-  if (traceId && conversationMeta) {
-    conversationMeta.traceId = traceId;
-  } else if (traceId) {
-    conversationMeta = { traceId };
-  }
-  try {
-    if (!providerName) {
-      throw new ProviderError(
-        "server",
-        "Missing required field: provider",
-        400,
-      );
-    }
-    if (!audio) {
-      throw new ProviderError("server", "Missing required field: audio", 400);
-    }
-    // Mark conversation as generating (creates a stub doc via upsert)
-    // so the frontend can fetch the conversation by ID immediately.
-    if (conversationId) {
-      ConversationService.setGenerating(
-        conversationId,
-        req.project,
-        req.username,
-        true,
-      ).catch((error) =>
-        logger.error(`Failed to set isGenerating: ${error.message}`),
-      );
-    }
-    const provider = getProvider(providerName);
-    if (!provider.transcribeAudio) {
-      throw new ProviderError(
-        providerName,
-        `Provider "${providerName}" does not support audio transcription`,
-        400,
-      );
-    }
-    // Parse audio — accept either data URL or raw base64
-    let audioBuffer;
-    let mimeType = "audio/mpeg";
-    const dataUrlMatch = audio.match(/^data:([^;]+);base64,(.+)$/);
-    if (dataUrlMatch) {
-      mimeType = dataUrlMatch[1];
-      audioBuffer = Buffer.from(dataUrlMatch[2], "base64");
-    } else {
-      audioBuffer = Buffer.from(audio, "base64");
-    }
-    const options = {};
-    if (language) options.language = language;
-    if (transcriptionPrompt) options.prompt = transcriptionPrompt;
-    const result = await provider.transcribeAudio(
-      audioBuffer,
-      mimeType,
-      model,
-      options,
-    );
-    const totalSec = (performance.now() - requestStart) / 1000;
-    // ── Cost estimation ─────────────────────────────────────────
-    const modelDef = getModelByName(model);
-    const pricing =
-      modelDef?.pricing ||
-      getPricing(TYPES.AUDIO, TYPES.TEXT)[model] ||
-      null;
-    const estimatedCost = calculateAudioCost(result.usage, pricing);
-    // ── Logging ────────────────────────────────────────────────
-    const costStr = formatCostTag(estimatedCost);
-    logger.request(
-      req.project,
-      req.username,
-      req.clientIp,
-      `[audio/transcribe] ${providerName} model=${model || "default"} — ` +
-        `total: ${totalSec.toFixed(2)}s${costStr}`,
-    );
-    RequestLogger.log({
-      requestId,
-      endpoint: "audio-to-text",
-      project: req.project,
-      username: req.username,
-      clientIp: req.clientIp,
+router.post(
+  "/",
+  asyncHandler(async (req: any, res: any, next: any) => {
+    const requestId = crypto.randomUUID();
+    const requestStart = performance.now();
+    const {
       provider: providerName,
-      model: model || null,
-      conversationId,
-      traceId: traceId || null,
-      success: true,
-      inputTokens: result.usage?.inputTokens || 0,
-      outputTokens: result.usage?.outputTokens || 0,
-      estimatedCost,
-      totalTime: roundMs(totalSec),
-    });
-    // ── Conversation persistence ────────────────────────────────
-    if (conversationId) {
-      // Upload audio to MinIO for storage
-      let audioRef = audio;
-      try {
-        const { ref } = await FileService.uploadFile(
-          audio,
-          "uploads",
+      audio,
+      model,
+      language,
+      prompt: transcriptionPrompt,
+      conversationId: incomingConversationId,
+      conversationMeta: incomingConversationMeta,
+      traceId: incomingTraceId,
+      skipConversation,
+    } = req.body;
+    // Auto-generate conversationId when caller omits it (mirrors chat route)
+    let conversationId = skipConversation
+      ? null
+      : incomingConversationId || null;
+    let conversationMeta = skipConversation
+      ? null
+      : incomingConversationMeta || null;
+    if (!skipConversation && !conversationId) {
+      conversationId = crypto.randomUUID();
+      conversationMeta = conversationMeta || { title: "Audio Transcription" };
+    }
+    // ── Trace: passthrough ────────────────────────────────────
+    // TraceId is generated client-side and passed on every request.
+    const traceId = incomingTraceId || null;
+    // Inject traceId into conversationMeta for storage
+    if (traceId && conversationMeta) {
+      conversationMeta.traceId = traceId;
+    } else if (traceId) {
+      conversationMeta = { traceId };
+    }
+    try {
+      if (!providerName) {
+        throw new ProviderError(
+          "server",
+          "Missing required field: provider",
+          400,
+        );
+      }
+      if (!audio) {
+        throw new ProviderError("server", "Missing required field: audio", 400);
+      }
+      // Mark conversation as generating (creates a stub doc via upsert)
+      // so the frontend can fetch the conversation by ID immediately.
+      if (conversationId) {
+        ConversationService.setGenerating(
+          conversationId,
           req.project,
           req.username,
+          true,
+        ).catch((error: any) =>
+          logger.error(`Failed to set isGenerating: ${error.message}`),
         );
-        audioRef = ref;
-      } catch (error) {
-        logger.error(`Failed to upload STT audio: ${error.message}`);
       }
-      const messagesToAppend = [
-        {
-          role: "user",
-          content: transcriptionPrompt || "Transcribe this audio",
-          images: [audioRef],
-          timestamp: new Date().toISOString(),
-        },
-        {
-          role: "assistant",
-          content: result.text || "",
-          model: model || undefined,
-          provider: providerName,
-          timestamp: new Date().toISOString(),
-          totalTime: roundMs(totalSec),
-          estimatedCost,
-          usage: result.usage || undefined,
-        },
-      ];
-      const meta = conversationMeta
-        ? {
-            ...conversationMeta,
-            settings: { provider: providerName, model },
-          }
-        : undefined;
-      ConversationService.appendMessages(
-        conversationId,
+      const provider = getProvider(providerName);
+      if (!provider.transcribeAudio) {
+        throw new ProviderError(
+          providerName,
+          `Provider "${providerName}" does not support audio transcription`,
+          400,
+        );
+      }
+      // Parse audio — accept either data URL or raw base64
+      let audioBuffer: any;
+      let mimeType = "audio/mpeg";
+      const dataUrlMatch = audio.match(/^data:([^;]+);base64,(.+)$/);
+      if (dataUrlMatch) {
+        mimeType = dataUrlMatch[1];
+        audioBuffer = Buffer.from(dataUrlMatch[2], "base64");
+      } else {
+        audioBuffer = Buffer.from(audio, "base64");
+      }
+      const options = {};
+      // @ts-ignore
+      if (language) options.language = language;
+      // @ts-ignore
+      if (transcriptionPrompt) options.prompt = transcriptionPrompt;
+      const result = await provider.transcribeAudio(
+        audioBuffer,
+        mimeType,
+        model,
+        options,
+      );
+      const totalSec = (performance.now() - requestStart) / 1000;
+      // ── Cost estimation ─────────────────────────────────────────
+      const modelDef = getModelByName(model);
+      const pricing =
+        // @ts-ignore
+        modelDef?.pricing ||
+        // @ts-ignore
+        getPricing(TYPES.AUDIO, TYPES.TEXT)[model] ||
+        null;
+      const estimatedCost = calculateAudioCost(result.usage, pricing);
+      // ── Logging ────────────────────────────────────────────────
+      const costStr = formatCostTag(estimatedCost);
+      logger.request(
         req.project,
         req.username,
-        messagesToAppend,
-        meta,
-      )
-        .then(() =>
-          ConversationService.setGenerating(
-            conversationId,
+        req.clientIp,
+        `[audio/transcribe] ${providerName} model=${model || "default"} — ` +
+          `total: ${totalSec.toFixed(2)}s${costStr}`,
+      );
+      RequestLogger.log({
+        requestId,
+        endpoint: "audio-to-text",
+        project: req.project,
+        username: req.username,
+        clientIp: req.clientIp,
+        provider: providerName,
+        model: model || null,
+        conversationId,
+        traceId: traceId || null,
+        success: true,
+        inputTokens: result.usage?.inputTokens || 0,
+        outputTokens: result.usage?.outputTokens || 0,
+        estimatedCost,
+        totalTime: roundMs(totalSec),
+      });
+      // ── Conversation persistence ────────────────────────────────
+      if (conversationId) {
+        // Upload audio to MinIO for storage
+        let audioRef = audio;
+        try {
+          const { ref } = await FileService.uploadFile(
+            audio,
+            "uploads",
             req.project,
             req.username,
-            false,
-          ),
+          );
+          audioRef = ref;
+        } catch (error: any) {
+          logger.error(`Failed to upload STT audio: ${error.message}`);
+        }
+        const messagesToAppend = [
+          {
+            role: "user",
+            content: transcriptionPrompt || "Transcribe this audio",
+            images: [audioRef],
+            timestamp: new Date().toISOString(),
+          },
+          {
+            role: "assistant",
+            content: result.text || "",
+            model: model || undefined,
+            provider: providerName,
+            timestamp: new Date().toISOString(),
+            totalTime: roundMs(totalSec),
+            estimatedCost,
+            usage: result.usage || undefined,
+          },
+        ];
+        const meta = conversationMeta
+          ? {
+              ...conversationMeta,
+              settings: { provider: providerName, model },
+            }
+          : undefined;
+        ConversationService.appendMessages(
+          conversationId,
+          req.project,
+          req.username,
+          messagesToAppend,
+          meta,
         )
-        .catch((error) =>
+          .then(() =>
+            ConversationService.setGenerating(
+              conversationId,
+              req.project,
+              req.username,
+              false,
+            ),
+          )
+          .catch((error: any) =>
+            logger.error(
+              `Failed to append messages to conversation ${conversationId}: ${error.message}`,
+            ),
+          );
+      }
+      res.json({
+        text: result.text,
+        usage: result.usage || {},
+        estimatedCost,
+        totalTime: roundMs(totalSec),
+        ...(traceId && { traceId }),
+      });
+    } catch (error: any) {
+      // Clear isGenerating flag on error
+      if (conversationId) {
+        ConversationService.setGenerating(
+          conversationId,
+          req.project,
+          req.username,
+          false,
+        ).catch((error: any) =>
           logger.error(
-            `Failed to append messages to conversation ${conversationId}: ${error.message}`,
+            `Failed to clear isGenerating on error: ${error.message}`,
           ),
         );
-    }
-    res.json({
-      text: result.text,
-      usage: result.usage || {},
-      estimatedCost,
-      totalTime: roundMs(totalSec),
-      ...(traceId && { traceId }),
-    });
-  } catch (error) {
-    // Clear isGenerating flag on error
-    if (conversationId) {
-      ConversationService.setGenerating(
+      }
+      const totalSec = (performance.now() - requestStart) / 1000;
+      RequestLogger.log({
+        requestId,
+        endpoint: "audio-to-text",
+        project: req.project,
+        username: req.username,
+        clientIp: req.clientIp,
+        provider: providerName,
+        model: model || null,
         conversationId,
-        req.project,
-        req.username,
-        false,
-      ).catch((error) =>
-        logger.error(`Failed to clear isGenerating on error: ${error.message}`),
-      );
+        traceId: traceId || null,
+        success: false,
+        errorMessage: error.message,
+        totalTime: totalSec,
+      });
+      next(error);
     }
-    const totalSec = (performance.now() - requestStart) / 1000;
-    RequestLogger.log({
-      requestId,
-      endpoint: "audio-to-text",
-      project: req.project,
-      username: req.username,
-      clientIp: req.clientIp,
-      provider: providerName,
-      model: model || null,
-      conversationId,
-      traceId: traceId || null,
-      success: false,
-      errorMessage: error.message,
-      totalTime: totalSec,
-    });
-    next(error);
-  }
-}));
+  }),
+);
 export default router;

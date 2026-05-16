@@ -25,15 +25,18 @@ const TRACKED_PREFIXES = ["generate", "transcribe"];
 /**
  * Check if a method name represents a tracked provider call.
  */
-function isTrackedMethod(name) {
-  return typeof name === "string" && TRACKED_PREFIXES.some((p) => name.startsWith(p));
+function isTrackedMethod(name: any) {
+  return (
+    typeof name === "string" &&
+    TRACKED_PREFIXES.some((p: any) => name.startsWith(p))
+  );
 }
 
 /**
  * Wrap an async generator (generateTextStream, generateTextStreamLive)
  * so the tracker stays incremented for the entire iteration lifetime.
  */
-async function* wrapAsyncGenerator(gen) {
+async function* wrapAsyncGenerator(gen: any) {
   try {
     yield* gen;
   } finally {
@@ -48,21 +51,21 @@ async function* wrapAsyncGenerator(gen) {
  * - Async generators (streams): decrement when the iterator finishes/returns
  * - Promises (generateText, generateImage, etc.): decrement on settle
  */
-function wrapProvider(provider) {
+function wrapProvider(provider: any) {
   return new Proxy(provider, {
-    get(target, prop, receiver) {
+    get(target: any, prop: any, receiver: any) {
       const value = Reflect.get(target, prop, receiver);
       if (typeof value !== "function" || !isTrackedMethod(prop)) {
         return value;
       }
 
       // Return a wrapper that tracks the call
-      return function trackedProviderCall(...args) {
+      return function trackedProviderCall(...args: any) {
         ActiveGenerationTracker.increment();
-        let result;
+        let result: any;
         try {
           result = value.apply(target, args);
-        } catch (error) {
+        } catch (error: any) {
           // Synchronous throw (rare but possible)
           ActiveGenerationTracker.decrement();
           throw error;
@@ -93,7 +96,7 @@ function wrapProvider(provider) {
 /** Per-name proxy cache so we don't create a new Proxy on every getProvider call. */
 const wrappedCache = new Map();
 
-export function getProvider(name) {
+export function getProvider(name: any) {
   // Check instance registry first (local providers + multi-instance)
   if (isInstance(name)) {
     if (wrappedCache.has(name)) return wrappedCache.get(name);
@@ -104,9 +107,12 @@ export function getProvider(name) {
   }
 
   // Fall through to static cloud providers
+  // @ts-ignore
   const provider = providers[name];
   if (!provider) {
-    const available = [...Object.keys(providers), "(+ local instances)"].join(", ");
+    const available = [...Object.keys(providers), "(+ local instances)"].join(
+      ", ",
+    );
     throw new Error(`Unknown provider "${name}". Available: ${available}`);
   }
 

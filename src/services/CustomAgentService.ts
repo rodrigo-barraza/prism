@@ -1,5 +1,6 @@
 import { ObjectId } from "mongodb";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
+// @ts-ignore
 import { MONGO_DB_NAME } from "../../config.js";
 import { COLLECTIONS } from "../constants.js";
 import logger from "../utils/logger.js";
@@ -18,7 +19,7 @@ import logger from "../utils/logger.js";
  * @param {string} name
  * @returns {string}
  */
-function deriveAgentId(name) {
+function deriveAgentId(name: any) {
   const slug = name
     .toUpperCase()
     .replace(/[^A-Z0-9]+/g, "_")
@@ -47,7 +48,7 @@ const CustomAgentService = {
    * @param {string} id
    * @returns {Promise<object|null>}
    */
-  async get(id) {
+  async get(id: any) {
     const col = getCollection();
     if (!col) return null;
     return col.findOne({ _id: new ObjectId(id) });
@@ -58,7 +59,7 @@ const CustomAgentService = {
    * @param {string} agentId - e.g. "CUSTOM_MY_AGENT"
    * @returns {Promise<object|null>}
    */
-  async getByAgentId(agentId) {
+  async getByAgentId(agentId: any) {
     const col = getCollection();
     if (!col) return null;
     return col.findOne({ agentId });
@@ -69,7 +70,7 @@ const CustomAgentService = {
    * @param {object} data - { name, description?, project?, identity, guidelines?, toolPolicy?, enabledTools?, usesDirectoryTree?, usesCodingGuidelines? }
    * @returns {Promise<object>} The created document
    */
-  async create(data) {
+  async create(data: any) {
     const col = getCollection();
     if (!col) throw new Error("Database not available");
 
@@ -101,7 +102,9 @@ const CustomAgentService = {
     };
 
     const result = await col.insertOne(doc);
-    logger.info(`[CustomAgentService] Created agent "${doc.name}" (${doc.agentId})`);
+    logger.info(
+      `[CustomAgentService] Created agent "${doc.name}" (${doc.agentId})`,
+    );
     return { ...doc, _id: result.insertedId };
   },
 
@@ -111,7 +114,7 @@ const CustomAgentService = {
    * @param {object} updates - Partial fields to update
    * @returns {Promise<object>} The updated document
    */
-  async update(id, updates) {
+  async update(id: any, updates: any) {
     const col = getCollection();
     if (!col) throw new Error("Database not available");
 
@@ -124,13 +127,12 @@ const CustomAgentService = {
     // Remove _id from $set if present
     delete setFields._id;
 
-    await col.updateOne(
-      { _id: new ObjectId(id) },
-      { $set: setFields },
-    );
+    await col.updateOne({ _id: new ObjectId(id) }, { $set: setFields });
 
     const updated = await col.findOne({ _id: new ObjectId(id) });
-    logger.info(`[CustomAgentService] Updated agent "${updated?.name}" (${updated?.agentId})`);
+    logger.info(
+      `[CustomAgentService] Updated agent "${updated?.name}" (${updated?.agentId})`,
+    );
     return updated;
   },
 
@@ -139,14 +141,16 @@ const CustomAgentService = {
    * @param {string} id - MongoDB _id
    * @returns {Promise<boolean>}
    */
-  async delete(id) {
+  async delete(id: any) {
     const col = getCollection();
     if (!col) throw new Error("Database not available");
 
     const doc = await col.findOne({ _id: new ObjectId(id) });
     const result = await col.deleteOne({ _id: new ObjectId(id) });
     if (doc) {
-      logger.info(`[CustomAgentService] Deleted agent "${doc.name}" (${doc.agentId})`);
+      logger.info(
+        `[CustomAgentService] Deleted agent "${doc.name}" (${doc.agentId})`,
+      );
     }
     return result.deletedCount > 0;
   },

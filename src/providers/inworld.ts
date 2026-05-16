@@ -1,6 +1,7 @@
 import { Readable } from "stream";
 import { ProviderError } from "../utils/errors.js";
 import logger from "../utils/logger.js";
+// @ts-ignore
 import { INWORLD_BASIC } from "../../config.js";
 import { DEFAULT_VOICES, getDefaultModels, TYPES } from "../config.js";
 
@@ -18,7 +19,7 @@ function getApiKey() {
  * Each line is a JSON object with `result.audioContent` (base64) and
  * optionally `result.timestampInfo`.
  */
-async function* parseNdjsonStream(body) {
+async function* parseNdjsonStream(body: any) {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -32,14 +33,15 @@ async function* parseNdjsonStream(body) {
       const lines = buffer.split("\n");
       buffer = lines.pop() || "";
 
-      for (const line of lines) {
+      // @ts-ignore
+      for ( const line of lines) {
         if (!line.trim()) continue;
         try {
           const chunk = JSON.parse(line);
           if (chunk.result) {
             yield chunk.result;
           }
-        } catch (error) {
+        } catch (error: any) {
           logger.warn(`[Inworld] NDJSON parse error: ${error.message}`);
         }
       }
@@ -61,12 +63,17 @@ const inworldProvider = {
    * @param {object} options - Extra options (model, temperature).
    * @returns {{ stream: Readable, contentType: string }}
    */
-  async generateSpeech(text, voice = DEFAULT_VOICES.inworld, options = {}) {
+  async generateSpeech(
+    text: any,
+    voice = DEFAULT_VOICES.inworld,
+    options = {},
+  ) {
     logger.provider("Inworld", `generateSpeech voice=${voice}`);
 
     try {
       const apiKey = getApiKey();
       const model =
+        // @ts-ignore
         options.model || getDefaultModels(TYPES.TEXT, TYPES.AUDIO).inworld;
 
       const response = await fetch(INWORLD_TTS_URL, {
@@ -82,6 +89,7 @@ const inworldProvider = {
             audio_encoding: "MP3",
             sample_rate_hertz: 24000,
           },
+          // @ts-ignore
           temperature: options.temperature ?? 1.1,
           model_id: model,
         }),
@@ -96,7 +104,8 @@ const inworldProvider = {
 
       // Collect base64 audio chunks from the NDJSON stream into a Node Readable
       async function* audioChunks() {
-        for await (const result of parseNdjsonStream(response.body)) {
+        // @ts-ignore
+        for await ( const result of parseNdjsonStream(response.body)) {
           if (result.audioContent) {
             yield Buffer.from(result.audioContent, "base64");
           }
@@ -105,7 +114,7 @@ const inworldProvider = {
 
       const stream = Readable.from(audioChunks());
       return { stream, contentType: "audio/mpeg" };
-    } catch (error) {
+    } catch (error: any) {
       if (error instanceof ProviderError) throw error;
       throw new ProviderError("inworld", error.message, 500, error);
     }
@@ -122,7 +131,7 @@ const inworldProvider = {
    * @yields {Buffer} PCM audio chunks.
    */
   async *generateSpeechStream(
-    textStream,
+    textStream: any,
     voice = DEFAULT_VOICES.inworld,
     options = {},
   ) {
@@ -130,12 +139,14 @@ const inworldProvider = {
 
     const apiKey = getApiKey();
     const model =
+      // @ts-ignore
       options.model || getDefaultModels(TYPES.TEXT, TYPES.AUDIO).inworld;
 
     // Accumulate all text from the async iterator first, since
     // Inworld's API is request-level streaming (not input-level).
     let fullText = "";
-    for await (const chunk of textStream) {
+    // @ts-ignore
+    for await ( const chunk of textStream) {
       fullText += chunk;
     }
 
@@ -159,6 +170,7 @@ const inworldProvider = {
             audio_encoding: "LINEAR16",
             sample_rate_hertz: 24000,
           },
+          // @ts-ignore
           temperature: options.temperature ?? 1.1,
           model_id: model,
           timestampType: "WORD",
@@ -173,12 +185,13 @@ const inworldProvider = {
         );
       }
 
-      for await (const result of parseNdjsonStream(response.body)) {
+      // @ts-ignore
+      for await ( const result of parseNdjsonStream(response.body)) {
         if (result.audioContent) {
           yield Buffer.from(result.audioContent, "base64");
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       if (error.name === "AbortError") return;
       if (error instanceof ProviderError) throw error;
       throw new ProviderError("inworld", error.message, 500, error);

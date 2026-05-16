@@ -15,19 +15,29 @@ const GOOGLE_STATIC_LIMITS = {
   note: "Static tier-2 limits from Google AI Studio. Not dynamically updated.",
   models: {
     "gemini-3-flash": {
-      rpm: 2000, tpm: 3_000_000, rpd: 100_000,
+      rpm: 2000,
+      tpm: 3_000_000,
+      rpd: 100_000,
     },
     "gemini-3.1-pro": {
-      rpm: 1000, tpm: 5_000_000, rpd: 50_000,
+      rpm: 1000,
+      tpm: 5_000_000,
+      rpd: 50_000,
     },
     "gemini-2.5-flash": {
-      rpm: 2000, tpm: 3_000_000, rpd: 100_000,
+      rpm: 2000,
+      tpm: 3_000_000,
+      rpd: 100_000,
     },
     "gemini-2.5-pro": {
-      rpm: 1000, tpm: 5_000_000, rpd: 50_000,
+      rpm: 1000,
+      tpm: 5_000_000,
+      rpd: 50_000,
     },
     "gemini-2-flash": {
-      rpm: 10_000, tpm: 10_000_000, rpd: null,
+      rpm: 10_000,
+      tpm: 10_000_000,
+      rpd: null,
     },
   },
 };
@@ -39,9 +49,11 @@ class RateLimitStore {
      * Key: `${provider}::${model}` → { rateLimits, updatedAt }
      * @type {Map<string, { rateLimits: object, updatedAt: string }>}
      */
+    // @ts-ignore
     this._models = new Map();
 
     /** Static Google limits (separate shape — not per-response). */
+    // @ts-ignore
     this._google = GOOGLE_STATIC_LIMITS;
   }
 
@@ -53,10 +65,11 @@ class RateLimitStore {
    * @param {string} model - Model name from the API call
    * @param {object} rateLimits - Parsed rate-limit data from extractXxxRateLimits()
    */
-  update(providerName, model, rateLimits) {
+  update(providerName: any, model: any, rateLimits: any) {
     if (!rateLimits || !providerName || !model) return;
 
     const key = `${providerName}::${model}`;
+    // @ts-ignore
     this._models.set(key, {
       rateLimits,
       updatedAt: new Date().toISOString(),
@@ -77,18 +90,25 @@ class RateLimitStore {
     const result = {};
 
     // Group dynamic models by provider
-    for (const [key, val] of this._models) {
+    // @ts-ignore
+    for ( const [key, val] of this._models) {
       const [provider, model] = key.split("::");
+      // @ts-ignore
       if (!result[provider]) {
+        // @ts-ignore
         result[provider] = { dynamic: true, models: {} };
       }
+      // @ts-ignore
       result[provider].models[model] = val;
     }
 
     // Add Google static limits
+    // @ts-ignore
     result.google = {
       dynamic: false,
+      // @ts-ignore
       note: this._google.note,
+      // @ts-ignore
       models: this._google.models,
     };
 

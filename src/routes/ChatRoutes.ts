@@ -1,4 +1,6 @@
+// @ts-ignore
 import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
+// @ts-ignore
 import { formatCostTag, roundMs } from "@rodrigo-barraza/utilities-library";
 import express from "express";
 import crypto from "crypto";
@@ -20,10 +22,16 @@ import {
 import logger from "../utils/logger.js";
 import RequestLogger from "../services/RequestLogger.js";
 import FileService from "../services/FileService.js";
-import { createStreamState, dispatchChunk } from "../utils/StreamChunkDispatcher.js";
+import {
+  createStreamState,
+  dispatchChunk,
+} from "../utils/StreamChunkDispatcher.js";
 import { calculateTokensPerSec } from "../utils/math.js";
-import { compressImageForSizeLimit, constrainImageDimensions } from "../utils/media.js";
-import {  } from "../utils/utilities.js";
+import {
+  compressImageForSizeLimit,
+  constrainImageDimensions,
+} from "../utils/media.js";
+import {} from "../utils/utilities.js";
 import SessionGenerationTracker from "../services/SessionGenerationTracker.js";
 import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
 import localModelQueue from "../services/LocalModelQueue.js";
@@ -34,10 +42,7 @@ import {
   markGenerating,
   appendAndFinalize,
 } from "../utils/ConversationUtilities.js";
-import {
-  handleSseRequest,
-  handleJsonRequest,
-} from "../utils/SseUtilities.js";
+import { handleSseRequest, handleJsonRequest } from "../utils/SseUtilities.js";
 import { COLLECTIONS } from "../constants.js";
 import AgentPersonaRegistry from "../services/AgentPersonaRegistry.js";
 const router = express.Router();
@@ -45,7 +50,7 @@ const router = express.Router();
  * Resolve the MongoDB collection for conversation persistence.
  * Agent projects go to agent_sessions; everything else to conversations.
  */
-function getCollectionOpts(project) {
+function getCollectionOpts(project: any) {
   if (AgentPersonaRegistry.isAgentProject(project)) {
     return { collection: COLLECTIONS.AGENT_SESSIONS };
   }
@@ -64,25 +69,30 @@ function getCollectionOpts(project) {
  *  - minio://...       → download from MinIO (original unchanged), provider gets data URL
  *  - http(s)://...     → fetch (original unchanged), provider gets data URL
  */
-async function resolveImageRefs(messages, project, username) {
+async function resolveImageRefs(messages: any, project: any, username: any) {
   // Deep copy for the provider — images will be data URLs
-  const providerMessages = messages.map((m) => ({ ...m }));
+  const providerMessages = messages.map((m: any) => ({ ...m }));
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
     // ── Resolve media array fields: images, audio, video, pdf ──
-    for (const field of ["images", "audio", "video", "pdf"]) {
+    // @ts-ignore
+    for ( const field of ["images", "audio", "video", "pdf"]) {
       const arr = msg[field];
       if (arr && Array.isArray(arr) && arr.length > 0) {
+        // @ts-ignore
         const providerArr = [];
+        // @ts-ignore
         const storageArr = [];
         await Promise.all(
-          arr.map(async (ref, j) => {
+          arr.map(async (ref: any, j: any) => {
             const resolved = await resolveMediaRef(ref, project, username);
             providerArr[j] = resolved.providerRef;
             storageArr[j] = resolved.storageRef;
           }),
         );
+        // @ts-ignore
         providerMessages[i][field] = providerArr;
+        // @ts-ignore
         messages[i][field] = storageArr;
       }
     }
@@ -96,7 +106,7 @@ async function resolveImageRefs(messages, project, username) {
  * @param {string} dataUrl - Full data URL (data:<mime>;base64,<data>)
  * @returns {Promise<string>} - Possibly compressed data URL
  */
-async function compressDataUrlIfOversized(dataUrl) {
+async function compressDataUrlIfOversized(dataUrl: any) {
   const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
   if (!match) return dataUrl;
   let mimeType = match[1];
@@ -112,7 +122,7 @@ async function compressDataUrlIfOversized(dataUrl) {
         `[chat] Dimension-constrained image: now ${(base64Data.length / 1024 / 1024).toFixed(2)} MB b64 (${mimeType})`,
       );
     }
-  } catch (error) {
+  } catch (error: any) {
     logger.warn(`[chat] Dimension constraint failed: ${error.message}`);
   }
   // Step 2: enforce byte-size limit
@@ -133,8 +143,10 @@ async function compressDataUrlIfOversized(dataUrl) {
       `[chat] Compressed: ${(b64Len / 1024 / 1024).toFixed(2)} MB → ${(newLen / 1024 / 1024).toFixed(2)} MB b64 (${result.mediaType})`,
     );
     return newUrl;
-  } catch (error) {
-    logger.error(`[chat] Image compression failed: ${error.message}. Sending original.`);
+  } catch (error: any) {
+    logger.error(
+      `[chat] Image compression failed: ${error.message}. Sending original.`,
+    );
     return `data:${mimeType};base64,${base64Data}`;
   }
 }
@@ -142,7 +154,7 @@ async function compressDataUrlIfOversized(dataUrl) {
  * Resolve a single media reference for both provider and storage use.
  * @returns {{ providerRef: string, storageRef: string }}
  */
-async function resolveMediaRef(ref, project, username) {
+async function resolveMediaRef(ref: any, project: any, username: any) {
   // Already a base64 data URL — compress if oversized, upload to MinIO for storage
   if (ref.startsWith("data:")) {
     let providerRef = ref;
@@ -157,7 +169,7 @@ async function resolveMediaRef(ref, project, username) {
         username,
       );
       storageRef = minioRef;
-    } catch (error) {
+    } catch (error: any) {
       logger.error(`[chat] Failed to upload media to MinIO: ${error.message}`);
     }
     return { providerRef, storageRef };
@@ -172,7 +184,8 @@ async function resolveMediaRef(ref, project, username) {
         return { providerRef: ref, storageRef: ref };
       }
       const chunks = [];
-      for await (const chunk of file.stream) {
+      // @ts-ignore
+      for await ( const chunk of file.stream) {
         chunks.push(chunk);
       }
       const buffer = Buffer.concat(chunks);
@@ -184,8 +197,10 @@ async function resolveMediaRef(ref, project, username) {
         providerRef,
         storageRef: ref,
       };
-    } catch (error) {
-      logger.error(`[chat] Failed to resolve MinIO ref ${ref}: ${error.message}`);
+    } catch (error: any) {
+      logger.error(
+        `[chat] Failed to resolve MinIO ref ${ref}: ${error.message}`,
+      );
       return { providerRef: ref, storageRef: ref };
     }
   }
@@ -210,7 +225,7 @@ async function resolveMediaRef(ref, project, username) {
         providerRef,
         storageRef: ref,
       };
-    } catch (error) {
+    } catch (error: any) {
       logger.error(`[chat] Failed to fetch media URL ${ref}: ${error.message}`);
       return { providerRef: ref, storageRef: ref };
     }
@@ -232,7 +247,13 @@ async function resolveMediaRef(ref, project, username) {
  * @param {AbortSignal} [opts.signal]
  * @returns {Promise<Object>} Prepared generation context
  */
-async function prepareGenerationContext(params, emit, { signal } = {}) {
+// @ts-ignore
+async function prepareGenerationContext(
+  params: any,
+  emit: any,
+  // @ts-ignore
+  { signal } = {},
+) {
   const requestStart = performance.now();
   const requestId = crypto.randomUUID();
   const {
@@ -340,14 +361,12 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
   // thinkingEnabled ON only when the client didn't send a value (undefined).
   // When the client explicitly sends false (thinking toggle off), respect it
   // — models can use tools without thinking.
-  LocalProviderGateway.applyLocalDefaults(providerName, options, { thinkingEnabled });
+  LocalProviderGateway.applyLocalDefaults(providerName, options, {
+    thinkingEnabled,
+  });
   // ── Validation ──────────────────────────────────────────────
   if (!providerName) {
-    throw new ProviderError(
-      "server",
-      "Missing required field: provider",
-      400,
-    );
+    throw new ProviderError("server", "Missing required field: provider", 400);
   }
   if (!messages || !Array.isArray(messages)) {
     throw new ProviderError(
@@ -357,7 +376,7 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
     );
   }
   // ── Strip soft-deleted messages ──────────────────────────────
-  const activeMessages = messages.filter((m) => !m.deleted);
+  const activeMessages = messages.filter((m: any) => !m.deleted);
   // ── Resolve image refs ─────────────────────────────────────
   const providerMessages = await resolveImageRefs(
     activeMessages,
@@ -370,6 +389,7 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
   // each instance (with quant-level fallback) and pick the least-busy
   // usable instance. Same model resolution logic as CoordinatorService.
   let resolvedModel =
+    // @ts-ignore
     requestedModel || getDefaultModels(TYPES.TEXT, TYPES.TEXT)[providerName];
   if (localModelQueue.isLocal(providerName)) {
     let siblings = getInstancesByType(providerName);
@@ -377,7 +397,10 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
     // Resolve model availability across instances with quant-level
     // fallback. Also handles @quant syntax (e.g. "qwen3-32b@q4_k_m")
     // by mapping it to the actual LM Studio model key.
-    const { usable, modelOverrides } = await resolveModelForInstances(resolvedModel, siblings);
+    const { usable, modelOverrides } = await resolveModelForInstances(
+      resolvedModel,
+      siblings,
+    );
     if (usable.length > 0) {
       siblings = usable;
       // For single instance, apply model override directly
@@ -385,18 +408,23 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
         const override = modelOverrides.get(siblings[0].id);
         if (override) {
           resolvedModel = override;
-          logger.info(`[chat] Model resolved: "${requestedModel}" → "${resolvedModel}" (single instance)`);
+          logger.info(
+            `[chat] Model resolved: "${requestedModel}" → "${resolvedModel}" (single instance)`,
+          );
         }
       }
     } else {
-      logger.warn(`[chat] Model "${resolvedModel}" not available on any ${providerName} instance — falling back to first`);
+      logger.warn(
+        `[chat] Model "${resolvedModel}" not available on any ${providerName} instance — falling back to first`,
+      );
     }
     // ── Multi-instance load balancing ──────────────────────────
     if (siblings.length > 1) {
       // Least-busy: pick the instance with the most available slots
       let bestId = providerName;
       let bestAvailable = -Infinity;
-      for (const inst of siblings) {
+      // @ts-ignore
+      for ( const inst of siblings) {
         const q = localModelQueue._getQueue(inst.id);
         const available = inst.concurrency - q.activeCount;
         if (available > bestAvailable) {
@@ -412,7 +440,7 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
         }
         logger.info(
           `[chat] ⚖️ Load balance: ${providerName} → ${bestId} ` +
-          `(model="${resolvedModel}", ${siblings.map(s => `${s.id}:${s.concurrency - localModelQueue._getQueue(s.id).activeCount}free`).join(", ")})`,
+            `(model="${resolvedModel}", ${siblings.map((s: any) => `${s.id}:${s.concurrency - localModelQueue._getQueue(s.id).activeCount}free`).join(", ")})`,
         );
         providerName = bestId;
       }
@@ -423,20 +451,22 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
   // resolvedModel is set earlier (before load balancing) and may have
   // been updated to a quant variant by the model availability check.
   const modelDef = getModelByName(resolvedModel);
+  // @ts-ignore
   const isImageAPIModel = modelDef?.imageAPI && provider.generateImage;
   // ── Local GPU mutex ──────────────────────────────────────
-  let localRelease;
+  let localRelease: any;
   if (localModelQueue.isLocal(providerName)) {
     localRelease = await localModelQueue.acquire(providerName);
     const q = localModelQueue._getQueue(providerName);
     logger.info(
       `[chat] 🔒 Acquired local GPU slot for ${resolvedModel} (${providerName}) ` +
-      `(${q.activeCount}/${q.maxConcurrency} active` +
-      (q.pending > 0 ? `, ${q.pending} queued)` : ")"),
+        `(${q.activeCount}/${q.maxConcurrency} active` +
+        (q.pending > 0 ? `, ${q.pending} queued)` : ")"),
     );
   }
   // Derive userMessage from the last user message
-  const userMessage = messages?.filter((m) => m.role === "user").pop() || null;
+  const userMessage =
+    messages?.filter((m: any) => m.role === "user").pop() || null;
   return {
     provider,
     providerName,
@@ -477,26 +507,44 @@ async function prepareGenerationContext(params, emit, { signal } = {}) {
  *
  * Used by the /chat route and any non-agent callers.
  */
-export async function handleConversation(params, emit, { signal } = {}) {
-  let ctx;
+// @ts-ignore
+export async function handleConversation(
+  params: any,
+  emit: any,
+  // @ts-ignore
+  { signal } = {},
+) {
+  let ctx: any;
   try {
     ctx = await prepareGenerationContext(params, emit, { signal });
-  } catch (error) {
+  } catch (error: any) {
     emit({ type: "error", message: error.message });
     return;
   }
   const {
-    providerName, resolvedModel, requestedModel, options,
-    incomingConversationId, incomingConversationMeta, incomingTraceId,
-    skipConversation, project, username, clientIp,
-    requestStart, requestId, localRelease,
+    providerName,
+    resolvedModel,
+    requestedModel,
+    options,
+    incomingConversationId,
+    incomingConversationMeta,
+    incomingTraceId,
+    skipConversation,
+    project,
+    username,
+    clientIp,
+    requestStart,
+    requestId,
+    localRelease,
   } = ctx;
   // ── Conversation identity ──────────────────────────────────
   let conversationId = skipConversation ? null : incomingConversationId;
   let conversationMeta = skipConversation ? null : incomingConversationMeta;
   if (!skipConversation && !conversationId) {
     conversationId = crypto.randomUUID();
-    const firstUserMsg = ctx.rawMessages?.filter((m) => m.role === "user").pop();
+    const firstUserMsg = ctx.rawMessages
+      ?.filter((m: any) => m.role === "user")
+      .pop();
     const titleSnippet =
       (firstUserMsg?.content || "").slice(0, 100).trim() || "New Conversation";
     conversationMeta = conversationMeta || { title: titleSnippet };
@@ -523,42 +571,59 @@ export async function handleConversation(params, emit, { signal } = {}) {
         );
       }
       const useStreaming =
-        ctx.provider.generateTextStream &&
-        ctx.modelDef?.streaming !== false;
+        ctx.provider.generateTextStream && ctx.modelDef?.streaming !== false;
       if (useStreaming) {
         // Native MCP tool execution — provider handles tool calling internally
-        const useNativeMcp = LocalProviderGateway.isNativeMCP(providerName) && !options.agenticLoopEnabled;
+        const useNativeMcp =
+          LocalProviderGateway.isNativeMCP(providerName) &&
+          !options.agenticLoopEnabled;
         if (useNativeMcp && options.functionCallingEnabled) {
           const builtInTools = ToolOrchestratorService.getToolSchemas();
           let tools = builtInTools;
           if (options.enabledTools && Array.isArray(options.enabledTools)) {
             const enabledSet = new Set(options.enabledTools);
-            tools = tools.filter((t) => enabledSet.has(t.name));
-          } else if (options.disabledBuiltIns && Array.isArray(options.disabledBuiltIns)) {
+            tools = tools.filter((t: any) => enabledSet.has(t.name));
+          } else if (
+            options.disabledBuiltIns &&
+            Array.isArray(options.disabledBuiltIns)
+          ) {
             const disabledSet = new Set(options.disabledBuiltIns);
-            tools = tools.filter((t) => !disabledSet.has(t.name));
+            tools = tools.filter((t: any) => !disabledSet.has(t.name));
           }
           options.tools = tools;
           if (ctx.modelDef?.contextLength) {
             options.contextLength = ctx.modelDef.contextLength;
           }
-          logger.info(`[chat] Native MCP (${providerName}): ${tools.length} tools enabled, enabledTools=${(options.enabledTools || []).length}, builtIn=${builtInTools.length}, contextLength=${options.contextLength || 'unset'}`);
+          logger.info(
+            `[chat] Native MCP (${providerName}): ${tools.length} tools enabled, enabledTools=${(options.enabledTools || []).length}, builtIn=${builtInTools.length}, contextLength=${options.contextLength || "unset"}`,
+          );
         } else if (useNativeMcp) {
-          logger.warn(`[chat] Native MCP SKIPPED (${providerName}): functionCallingEnabled=${options.functionCallingEnabled}, useNativeMcp=${useNativeMcp}`);
+          logger.warn(
+            `[chat] Native MCP SKIPPED (${providerName}): functionCallingEnabled=${options.functionCallingEnabled}, useNativeMcp=${useNativeMcp}`,
+          );
         }
         // Non-LM-Studio FC on /chat path
-        if (!useNativeMcp && !options.agenticLoopEnabled && options.functionCallingEnabled) {
+        if (
+          !useNativeMcp &&
+          !options.agenticLoopEnabled &&
+          options.functionCallingEnabled
+        ) {
           const builtInTools = ToolOrchestratorService.getToolSchemas();
           let tools = builtInTools;
           if (options.enabledTools && Array.isArray(options.enabledTools)) {
             const enabledSet = new Set(options.enabledTools);
-            tools = tools.filter((t) => enabledSet.has(t.name));
-          } else if (options.disabledBuiltIns && Array.isArray(options.disabledBuiltIns)) {
+            tools = tools.filter((t: any) => enabledSet.has(t.name));
+          } else if (
+            options.disabledBuiltIns &&
+            Array.isArray(options.disabledBuiltIns)
+          ) {
             const disabledSet = new Set(options.disabledBuiltIns);
-            tools = tools.filter((t) => !disabledSet.has(t.name));
+            tools = tools.filter((t: any) => !disabledSet.has(t.name));
           }
           options.tools = tools;
-          logger.info(`[chat] FC tools injected: ${tools.length} tools enabled for ${providerName} ${resolvedModel}`);
+          logger.info(
+            `[chat] FC tools injected: ${tools.length} tools enabled for ${providerName} ${resolvedModel}`,
+          );
         }
         await handleStreamingText(fullCtx);
       } else {
@@ -570,8 +635,14 @@ export async function handleConversation(params, emit, { signal } = {}) {
         logger.info(`[chat] 🔓 Released local GPU lock for ${resolvedModel}`);
       }
     }
-  } catch (error) {
-    markGenerating(conversationId, project, username, false, getCollectionOpts(project));
+  } catch (error: any) {
+    markGenerating(
+      conversationId,
+      project,
+      username,
+      false,
+      getCollectionOpts(project),
+    );
     const totalSec = (performance.now() - requestStart) / 1000;
     RequestLogger.logChatGeneration({
       requestId,
@@ -600,29 +671,48 @@ export async function handleConversation(params, emit, { signal } = {}) {
  *
  * Used exclusively by the /agent route.
  */
-export async function handleAgent(params, emit, { signal } = {}) {
-  let ctx;
+// @ts-ignore
+export async function handleAgent(params: any, emit: any, { signal } = {}) {
+  let ctx: any;
   try {
     ctx = await prepareGenerationContext(params, emit, { signal });
-  } catch (error) {
+  } catch (error: any) {
     emit({ type: "error", message: error.message });
     return;
   }
   const {
-    providerName, resolvedModel, requestedModel, options,
-    incomingConversationId, incomingAgentSessionId, incomingConversationMeta, incomingTraceId,
-    project, username, clientIp, agent,
-    requestStart, requestId, localRelease,
+    providerName,
+    resolvedModel,
+    requestedModel,
+    options,
+    incomingConversationId,
+    incomingAgentSessionId,
+    incomingConversationMeta,
+    incomingTraceId,
+    project,
+    username,
+    clientIp,
+    agent,
+    requestStart,
+    requestId,
+    localRelease,
   } = ctx;
   // ── Agent session identity ─────────────────────────────────
-  const agentSessionId = incomingAgentSessionId || incomingConversationId || crypto.randomUUID();
+  const agentSessionId =
+    incomingAgentSessionId || incomingConversationId || crypto.randomUUID();
   const traceId = incomingTraceId || null;
   const conversationMeta = incomingConversationMeta || null;
   // ── Eager session stub ───────────────────────────────────────
   // Create the session document immediately via upsert so that
   // GET /agent-sessions/:id never 404s while the loop is running
   // (e.g. when the user switches away and back during generation).
-  markGenerating(agentSessionId, project, username, true, getCollectionOpts(project));
+  markGenerating(
+    agentSessionId,
+    project,
+    username,
+    true,
+    getCollectionOpts(project),
+  );
   try {
     try {
       if (!ctx.provider.generateTextStream && !ctx.provider.generateText) {
@@ -632,7 +722,8 @@ export async function handleAgent(params, emit, { signal } = {}) {
           400,
         );
       }
-      const { default: AgenticLoopService } = await import("../services/AgenticLoopService.js");
+      const { default: AgenticLoopService } =
+        await import("../services/AgenticLoopService.js");
       await AgenticLoopService.runAgenticLoop({
         provider: ctx.provider,
         providerName,
@@ -664,15 +755,22 @@ export async function handleAgent(params, emit, { signal } = {}) {
       // spawned workers that are still running under this coordinator session.
       if (signal?.aborted) {
         try {
-          const { default: CoordinatorService } = await import("../services/CoordinatorService.js");
+          const { default: CoordinatorService } =
+            await import("../services/CoordinatorService.js");
           await CoordinatorService.abortWorkersBySession(agentSessionId);
-        } catch (cleanupErr) {
+        } catch (cleanupErr: any) {
           logger.warn(`[agent] Worker cleanup failed: ${cleanupErr.message}`);
         }
       }
     }
-  } catch (error) {
-    markGenerating(agentSessionId, project, username, false, getCollectionOpts(project));
+  } catch (error: any) {
+    markGenerating(
+      agentSessionId,
+      project,
+      username,
+      false,
+      getCollectionOpts(project),
+    );
     const totalSec = (performance.now() - requestStart) / 1000;
     RequestLogger.logChatGeneration({
       requestId,
@@ -695,7 +793,7 @@ export async function handleAgent(params, emit, { signal } = {}) {
   }
 }
 // ─── Dispatch: Image API models (e.g. GPT Image 1.5, OpenAI images) ─
-async function handleImageAPIModel(ctx) {
+async function handleImageAPIModel(ctx: any) {
   const {
     provider,
     providerName,
@@ -715,12 +813,19 @@ async function handleImageAPIModel(ctx) {
     emit,
   } = ctx;
   // Mark conversation as generating
-  markGenerating(conversationId, project, username, true, getCollectionOpts(project));
-  const lastUserMsg = messages.filter((m) => m.role === "user").pop();
+  markGenerating(
+    conversationId,
+    project,
+    username,
+    true,
+    getCollectionOpts(project),
+  );
+  const lastUserMsg = messages.filter((m: any) => m.role === "user").pop();
   const prompt = lastUserMsg?.content || "";
   // Collect all images from the conversation
   const allImages = [];
-  for (const msg of messages) {
+  // @ts-ignore
+  for ( const msg of messages) {
     if (msg.images && msg.images.length > 0) {
       allImages.push(...msg.images);
     }
@@ -734,8 +839,10 @@ async function handleImageAPIModel(ctx) {
   const totalSec = (performance.now() - requestStart) / 1000;
   // Cost calculation
   const imgPricing =
+    // @ts-ignore
     getPricing(TYPES.TEXT, TYPES.IMAGE)[resolvedModel] || modelDef?.pricing;
-  const outputImgTokens = modelDef?.imageTokensPerImage || (providerName === "openai" ? 1056 : 1120);
+  const outputImgTokens =
+    modelDef?.imageTokensPerImage || (providerName === "openai" ? 1056 : 1120);
   const estimatedCost = calculateImageCost(
     prompt,
     imgPricing,
@@ -763,7 +870,7 @@ async function handleImageAPIModel(ctx) {
         username,
       );
       minioRef = ref;
-    } catch (uploadErr) {
+    } catch (uploadErr: any) {
       logger.error(
         `[chat/image-api] MinIO upload failed: ${uploadErr.message}`,
       );
@@ -771,7 +878,8 @@ async function handleImageAPIModel(ctx) {
   }
   // Estimate token counts for tracking
   const estimatedInputTokens =
-    estimateTokens(prompt) + allImages.length * (modelDef?.imageTokensPerImage || 1120);
+    estimateTokens(prompt) +
+    allImages.length * (modelDef?.imageTokensPerImage || 1120);
   RequestLogger.log({
     requestId,
     endpoint: "/chat",
@@ -841,12 +949,19 @@ async function handleImageAPIModel(ctx) {
           settings: { provider: providerName, model: resolvedModel },
         }
       : undefined;
-    appendAndFinalize(conversationId, project, username, messagesToAppend, meta, getCollectionOpts(project));
+    appendAndFinalize(
+      conversationId,
+      project,
+      username,
+      messagesToAppend,
+      meta,
+      getCollectionOpts(project),
+    );
   }
 }
 // ─── Shared: Post-generation finalization ───────────────────
 export async function finalizeTextGeneration(
-  ctx,
+  ctx: any,
   {
     text,
     thinking,
@@ -865,7 +980,7 @@ export async function finalizeTextGeneration(
     contentSegments,
     textFragments,
     thinkingFragments,
-  },
+  }: any,
   overrideMessagesToAppend = null,
 ) {
   const {
@@ -899,6 +1014,7 @@ export async function finalizeTextGeneration(
     const imageCount = images.length;
     if (imageCount > 0) {
       const imgPricing =
+        // @ts-ignore
         getPricing(TYPES.TEXT, TYPES.IMAGE)[resolvedModel] || modelDef?.pricing;
       if (imgPricing?.imageOutputPerMillion) {
         // Derive image tokens dynamically from the API-reported total.
@@ -907,7 +1023,10 @@ export async function finalizeTextGeneration(
         // and attribute the remainder to images. This adapts to any resolution
         // (512px≈747tok, 1024px≈1120tok, 2048px≈1680tok, 4096px≈2520tok).
         const estimatedTextOutputTokens = Math.ceil((text?.length || 0) / 4);
-        const imageTokens = Math.max(0, usage.outputTokens - estimatedTextOutputTokens);
+        const imageTokens = Math.max(
+          0,
+          usage.outputTokens - estimatedTextOutputTokens,
+        );
         const textOutputTokens = Math.max(0, usage.outputTokens - imageTokens);
         const inputCost =
           (usage.inputTokens / 1_000_000) * (imgPricing.inputPerMillion || 0);
@@ -919,10 +1038,12 @@ export async function finalizeTextGeneration(
           (inputCost + textOutCost + imageOutCost).toFixed(8),
         );
       } else {
+        // @ts-ignore
         const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[resolvedModel];
         estimatedCost = calculateTextCost(usage, pricing);
       }
     } else {
+      // @ts-ignore
       const pricing = getPricing(TYPES.TEXT, TYPES.TEXT)[resolvedModel];
       estimatedCost = calculateTextCost(usage, pricing);
     }
@@ -956,7 +1077,7 @@ export async function finalizeTextGeneration(
   let audioRef = null;
   if (audioChunks.length > 0) {
     try {
-      const pcmBuffers = audioChunks.map((b64) =>
+      const pcmBuffers = audioChunks.map((b64: any) =>
         Buffer.from(b64, "base64"),
       );
       const pcmData = Buffer.concat(pcmBuffers);
@@ -987,7 +1108,7 @@ export async function finalizeTextGeneration(
         username,
       );
       audioRef = ref;
-    } catch (error) {
+    } catch (error: any) {
       logger.error(
         `[chat] Failed to build/upload Live API audio WAV: ${error.message}`,
       );
@@ -1042,11 +1163,8 @@ export async function finalizeTextGeneration(
       tokensPerSec,
       ...(audioRef ? { audioRef } : {}),
       timeToGeneration:
-        timeToGenerationSec !== null
-          ? roundMs(timeToGenerationSec)
-          : null,
-      generationTime:
-        generationSec !== null ? roundMs(generationSec) : null,
+        timeToGenerationSec !== null ? roundMs(timeToGenerationSec) : null,
+      generationTime: generationSec !== null ? roundMs(generationSec) : null,
       totalTime: roundMs(totalSec),
       ...(traceId && { traceId }),
       ...(conversationId && { conversationId }),
@@ -1066,10 +1184,12 @@ export async function finalizeTextGeneration(
       // Only include segments on single-iteration turns where the final
       // message is the sole assistant message — segments preserve the
       // thinking ↔ tools ↔ text interleaving for that case.
+      // @ts-ignore
       const hasIntermediateToolMessages = overrideMessagesToAppend.some(
-        (m) => m.role === "assistant" && m.toolCalls?.length > 0,
+        (m: any) => m.role === "assistant" && m.toolCalls?.length > 0,
       );
       // Append the final LLM response block (contains telemetry and final text step)
+      // @ts-ignore
       messagesToAppend.push({
         role: "assistant",
         content: text,
@@ -1095,16 +1215,23 @@ export async function finalizeTextGeneration(
         // Only attach when there are NO intermediate tool-calling messages;
         // otherwise intermediate messages already carry their own content and
         // the segments would cause duplicate rendering on page refresh.
-        ...(!hasIntermediateToolMessages && contentSegments?.length > 0 && { contentSegments }),
-        ...(!hasIntermediateToolMessages && textFragments?.length > 0 && { textFragments }),
-        ...(!hasIntermediateToolMessages && thinkingFragments?.length > 0 && { thinkingFragments }),
+        ...(!hasIntermediateToolMessages &&
+          contentSegments?.length > 0 && { contentSegments }),
+        ...(!hasIntermediateToolMessages &&
+          textFragments?.length > 0 && { textFragments }),
+        ...(!hasIntermediateToolMessages &&
+          thinkingFragments?.length > 0 && { thinkingFragments }),
         // Generation settings — source of truth per request
         generationSettings: {
           temperature: options.temperature,
           maxTokens: options.maxTokens,
           thinkingEnabled: options.thinkingEnabled || false,
-          ...(options.reasoningEffort && { reasoningEffort: options.reasoningEffort }),
-          ...(options.thinkingBudget && { thinkingBudget: options.thinkingBudget }),
+          ...(options.reasoningEffort && {
+            reasoningEffort: options.reasoningEffort,
+          }),
+          ...(options.thinkingBudget && {
+            thinkingBudget: options.thinkingBudget,
+          }),
         },
       });
     } else {
@@ -1139,8 +1266,12 @@ export async function finalizeTextGeneration(
           temperature: options.temperature,
           maxTokens: options.maxTokens,
           thinkingEnabled: options.thinkingEnabled || false,
-          ...(options.reasoningEffort && { reasoningEffort: options.reasoningEffort }),
-          ...(options.thinkingBudget && { thinkingBudget: options.thinkingBudget }),
+          ...(options.reasoningEffort && {
+            reasoningEffort: options.reasoningEffort,
+          }),
+          ...(options.thinkingBudget && {
+            thinkingBudget: options.thinkingBudget,
+          }),
         },
       });
     }
@@ -1158,11 +1289,18 @@ export async function finalizeTextGeneration(
     if (workspaceRoot) {
       finalMeta = { ...(finalMeta || {}), workspaceRoot };
     }
-    appendAndFinalize(conversationId, project, username, messagesToAppend, finalMeta, getCollectionOpts(project));
+    appendAndFinalize(
+      conversationId,
+      project,
+      username,
+      messagesToAppend,
+      finalMeta,
+      getCollectionOpts(project),
+    );
   }
 }
 // ─── Dispatch: Streaming text/multimodal generation ─────────
-async function handleStreamingText(ctx) {
+async function handleStreamingText(ctx: any) {
   const {
     provider,
     providerName,
@@ -1178,7 +1316,13 @@ async function handleStreamingText(ctx) {
     signal,
   } = ctx;
   // Mark conversation as generating
-  markGenerating(conversationId, project, username, true, getCollectionOpts(project));
+  markGenerating(
+    conversationId,
+    project,
+    username,
+    true,
+    getCollectionOpts(project),
+  );
   const stream =
     modelDef?.liveAPI && provider.generateTextStreamLive
       ? provider.generateTextStreamLive(messages, resolvedModel, {
@@ -1191,7 +1335,8 @@ async function handleStreamingText(ctx) {
         });
   const ss = createStreamState();
   ss.requestStart = requestStart;
-  for await (const chunk of stream) {
+  // @ts-ignore
+  for await ( const chunk of stream) {
     // Client disconnected — abort the upstream provider stream
     if (signal?.aborted) {
       if (typeof stream.return === "function") stream.return();
@@ -1200,7 +1345,12 @@ async function handleStreamingText(ctx) {
       );
       break;
     }
-    await dispatchChunk(chunk, ss, { emit, project, username }, { logPrefix: "chat/stream" });
+    await dispatchChunk(
+      chunk,
+      ss,
+      { emit, project, username },
+      { logPrefix: "chat/stream" },
+    );
   }
   // ── FC tool execution loop ─────────────────────────────────
   // When functionCallingEnabled is set on /chat (not the agentic loop),
@@ -1212,49 +1362,102 @@ async function handleStreamingText(ctx) {
   while (
     options.functionCallingEnabled &&
     ss.toolCalls.length > 0 &&
-    ss.toolCalls.some((tc) => !tc.result && tc.status !== "done" && tc.status !== "error") &&
+    ss.toolCalls.some(
+      (tc: any) => !tc.result && tc.status !== "done" && tc.status !== "error",
+    ) &&
     fcIteration < MAX_FC_ITERATIONS &&
     !signal?.aborted
   ) {
     fcIteration++;
     const pendingCalls = ss.toolCalls.filter(
-      (tc) => !tc.result && tc.status !== "done" && tc.status !== "error",
+      (tc: any) => !tc.result && tc.status !== "done" && tc.status !== "error",
     );
     if (pendingCalls.length === 0) break;
-    logger.info(`[chat/FC] Iteration ${fcIteration}: executing ${pendingCalls.length} tool call(s)`);
+    logger.info(
+      `[chat/FC] Iteration ${fcIteration}: executing ${pendingCalls.length} tool call(s)`,
+    );
     // Execute all pending tool calls
-    for (const tc of pendingCalls) {
-      emit({ type: "toolCall", id: tc.id, name: tc.name, args: tc.args, status: "calling" });
+    // @ts-ignore
+    for ( const tc of pendingCalls) {
+      // @ts-ignore
+      emit({
+        type: "toolCall",
+        // @ts-ignore
+        id: tc.id,
+        // @ts-ignore
+        name: tc.name,
+        // @ts-ignore
+        args: tc.args,
+        status: "calling",
+      });
       try {
-        const result = await ToolOrchestratorService.executeTool(tc.name, tc.args, { project, username });
+        // @ts-ignore
+        const result = await ToolOrchestratorService.executeTool(
+          // @ts-ignore
+          tc.name,
+          // @ts-ignore
+          tc.args,
+          { project, username },
+        );
+        // @ts-ignore
         tc.result = result;
+        // @ts-ignore
         tc.status = result?.error ? "error" : "done";
-        emit({ type: "toolCall", id: tc.id, name: tc.name, args: tc.args, result, status: tc.status });
-      } catch (error) {
+        // @ts-ignore
+        emit({
+          type: "toolCall",
+          // @ts-ignore
+          id: tc.id,
+          // @ts-ignore
+          name: tc.name,
+          // @ts-ignore
+          args: tc.args,
+          result,
+          // @ts-ignore
+          status: tc.status,
+        });
+      } catch (error: any) {
+        // @ts-ignore
         tc.result = { error: error.message };
+        // @ts-ignore
         tc.status = "error";
-        emit({ type: "toolCall", id: tc.id, name: tc.name, args: tc.args, result: tc.result, status: "error" });
+        // @ts-ignore
+        emit({
+          type: "toolCall",
+          // @ts-ignore
+          id: tc.id,
+          // @ts-ignore
+          name: tc.name,
+          // @ts-ignore
+          args: tc.args,
+          // @ts-ignore
+          result: tc.result,
+          status: "error",
+        });
       }
     }
     // Build tool result messages for the provider
     const assistantToolMsg = {
       role: "assistant",
       content: ss.text || "",
-      toolCalls: ss.toolCalls.map((tc) => ({
+      toolCalls: ss.toolCalls.map((tc: any) => ({
         id: tc.id,
         name: tc.name,
         args: tc.args,
       })),
       ...(ss.thinking ? { thinking: ss.thinking } : {}),
-      ...(ss.thinkingSignature ? { thinkingSignature: ss.thinkingSignature } : {}),
+      ...(ss.thinkingSignature
+        ? { thinkingSignature: ss.thinkingSignature }
+        : {}),
     };
     const toolResultMsgs = ss.toolCalls
-      .filter((tc) => tc.result)
-      .map((tc) => ({
+      .filter((tc: any) => tc.result)
+      .map((tc: any) => ({
         role: "tool",
         tool_call_id: tc.id,
         name: tc.name,
-        content: typeof tc.result === "string" ? tc.result : JSON.stringify(tc.result),
+        content:
+          typeof tc.result === "string" ? tc.result : JSON.stringify(tc.result),
       }));
     // Re-call provider with tool results appended
     const updatedMessages = [...messages, assistantToolMsg, ...toolResultMsgs];
@@ -1263,30 +1466,42 @@ async function handleStreamingText(ctx) {
     ss.thinking = "";
     ss.thinkingSignature = "";
     ss.toolCalls.length = 0;
-    const followUpStream = provider.generateTextStream(updatedMessages, resolvedModel, {
-      ...options,
-      signal,
-    });
+    const followUpStream = provider.generateTextStream(
+      updatedMessages,
+      resolvedModel,
+      {
+        ...options,
+        signal,
+      },
+    );
     // Use dispatchChunk with a custom usage merger for follow-up iteration
-    const usageMerger = (followUpUsage) => {
+    const usageMerger = (followUpUsage: any) => {
       if (ss.usage) {
         mergeUsage(ss.usage, followUpUsage);
       } else {
         ss.usage = followUpUsage;
       }
     };
-    for await (const chunk of followUpStream) {
+    // @ts-ignore
+    for await ( const chunk of followUpStream) {
       if (signal?.aborted) {
-        if (typeof followUpStream.return === "function") followUpStream.return();
+        if (typeof followUpStream.return === "function")
+          followUpStream.return();
         break;
       }
-      await dispatchChunk(chunk, ss, { emit, project, username }, { onUsage: usageMerger, logPrefix: "chat/FC" });
+      await dispatchChunk(
+        chunk,
+        ss,
+        { emit, project, username },
+        { onUsage: usageMerger, logPrefix: "chat/FC" },
+      );
     }
     // Emit intermediate usage update so the frontend has authoritative
     // per-iteration token counts instead of relying on chunk heuristics
     if (ss.usage) {
       emit({
         type: "usage_update",
+        // @ts-ignore
         usage: { ...ss.usage, requests: fcIteration + 1 },
       });
     }
@@ -1317,7 +1532,7 @@ async function handleStreamingText(ctx) {
   });
 }
 // ─── Dispatch: Non-streaming text generation (fallback) ─────
-async function handleNonStreamingText(ctx) {
+async function handleNonStreamingText(ctx: any) {
   const {
     provider,
     resolvedModel,
@@ -1330,7 +1545,13 @@ async function handleNonStreamingText(ctx) {
     emit,
   } = ctx;
   // Mark conversation as generating
-  markGenerating(conversationId, project, username, true, getCollectionOpts(project));
+  markGenerating(
+    conversationId,
+    project,
+    username,
+    true,
+    getCollectionOpts(project),
+  );
   // Track this sub-request in SessionGenerationTracker if it belongs
   // to an active agent session (e.g., tools-api calling /chat?stream=false
   // for generate_image prompt-softening or describe_image).
@@ -1339,6 +1560,7 @@ async function handleNonStreamingText(ctx) {
     : null;
   if (subRequestId && ctx.agentSessionId) {
     SessionGenerationTracker.register(ctx.agentSessionId, subRequestId, {
+      // @ts-ignore
       provider: ctx.providerName,
       model: resolvedModel,
       source: "tool-sub-request",
@@ -1355,7 +1577,9 @@ async function handleNonStreamingText(ctx) {
   if (subRequestId && ctx.agentSessionId) {
     const outTokens = genResult.usage?.outputTokens || 0;
     if (outTokens > 0) {
-      SessionGenerationTracker.update(subRequestId, { outputTokens: outTokens });
+      SessionGenerationTracker.update(subRequestId, {
+        outputTokens: outTokens,
+      });
     }
     SessionGenerationTracker.complete(subRequestId);
   }
@@ -1367,7 +1591,8 @@ async function handleNonStreamingText(ctx) {
     emit({ type: "thinking", content: genResult.thinking });
   }
   if (genResult.toolCalls && genResult.toolCalls.length > 0) {
-    for (const tc of genResult.toolCalls) {
+    // @ts-ignore
+    for ( const tc of genResult.toolCalls) {
       emit({
         type: "toolCall",
         id: tc.id || null,
@@ -1380,7 +1605,8 @@ async function handleNonStreamingText(ctx) {
   // Handle images from the generation result (e.g. Gemini image models)
   const images = [];
   if (genResult.images && genResult.images.length > 0) {
-    for (const img of genResult.images) {
+    // @ts-ignore
+    for ( const img of genResult.images) {
       let minioRef = null;
       if (img.data) {
         try {
@@ -1393,14 +1619,13 @@ async function handleNonStreamingText(ctx) {
             username,
           );
           minioRef = ref;
-        } catch (uploadErr) {
+        } catch (uploadErr: any) {
           logger.error(
             `[chat/non-stream] MinIO upload failed: ${uploadErr.message}`,
           );
         }
         images.push(
-          minioRef ||
-            `data:${img.mimeType || "image/png"};base64,${img.data}`,
+          minioRef || `data:${img.mimeType || "image/png"};base64,${img.data}`,
         );
       }
       emit({
@@ -1417,7 +1642,7 @@ async function handleNonStreamingText(ctx) {
     thinking: genResult.thinking || "",
     images,
     toolCalls:
-      genResult.toolCalls?.map((tc) => ({
+      genResult.toolCalls?.map((tc: any) => ({
         id: tc.id || null,
         name: tc.name,
         args: tc.args || {},
@@ -1443,17 +1668,20 @@ async function handleNonStreamingText(ctx) {
  * Body (flat, OpenAI-style):
  *   { provider, model?, messages, tools?, temperature?, maxTokens?, ... }
  */
-router.post("/", asyncHandler(async (req, res, next) => {
-  const params = {
-    ...req.body,
-    project: req.project,
-    username: req.username,
-    clientIp: req.clientIp,
-  };
-  if (req.query.stream !== "false") {
-    await handleSseRequest(req, res, params);
-  } else {
-    await handleJsonRequest(req, res, next, params);
-  }
-}));
+router.post(
+  "/",
+  asyncHandler(async (req: any, res: any, next: any) => {
+    const params = {
+      ...req.body,
+      project: req.project,
+      username: req.username,
+      clientIp: req.clientIp,
+    };
+    if (req.query.stream !== "false") {
+      await handleSseRequest(req, res, params);
+    } else {
+      await handleJsonRequest(req, res, next, params);
+    }
+  }),
+);
 export default router;

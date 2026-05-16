@@ -5,7 +5,7 @@
  * @param {string} text
  * @returns {number}
  */
-export function estimateTokens(text) {
+export function estimateTokens(text: any) {
   if (!text) return 0;
   return Math.ceil(text.length / 4);
 }
@@ -18,7 +18,7 @@ export function estimateTokens(text) {
  * @param {{ inputTokens?: number, cacheReadInputTokens?: number, cacheCreationInputTokens?: number }} usage
  * @returns {number}
  */
-export function getTotalInputTokens(usage) {
+export function getTotalInputTokens(usage: any) {
   if (!usage) return 0;
   return (
     (usage.inputTokens || 0) +
@@ -50,7 +50,7 @@ export function createUsageAccumulator() {
  * @param {object} source - The usage object from a provider chunk
  * @returns {object} The target accumulator (for chaining)
  */
-export function mergeUsage(target, source) {
+export function mergeUsage(target: any, source: any) {
   if (!source) return target;
   target.inputTokens += source.inputTokens || 0;
   target.outputTokens += source.outputTokens || 0;
@@ -69,7 +69,7 @@ export function mergeUsage(target, source) {
  * @param {{ inputPerMillion: number, outputPerMillion: number, cachedInputPerMillion?: number, cacheWriteInputPerMillion?: number }} pricing
  * @returns {number|null} Cost in USD, or null if pricing is unavailable.
  */
-export function calculateTextCost(usage, pricing) {
+export function calculateTextCost(usage: any, pricing: any) {
   if (!pricing || !usage) return null;
 
   let cost =
@@ -79,8 +79,7 @@ export function calculateTextCost(usage, pricing) {
   // Cache read tokens (Anthropic: 0.1x base rate)
   if (usage.cacheReadInputTokens && pricing.cachedInputPerMillion) {
     cost +=
-      (usage.cacheReadInputTokens / 1_000_000) *
-      pricing.cachedInputPerMillion;
+      (usage.cacheReadInputTokens / 1_000_000) * pricing.cachedInputPerMillion;
   }
 
   // Cache write tokens (Anthropic: 1.25x base rate)
@@ -101,7 +100,7 @@ export function calculateTextCost(usage, pricing) {
  * @param {{ perMinute?: number, audioInputPerMillion?: number, outputPerMillion?: number }} pricing
  * @returns {number|null} Cost in USD, or null if pricing is unavailable.
  */
-export function calculateAudioCost(usage, pricing) {
+export function calculateAudioCost(usage: any, pricing: any) {
   if (!pricing || !usage) return null;
 
   // Strategy 1: per-minute pricing
@@ -135,7 +134,7 @@ export function calculateAudioCost(usage, pricing) {
  * @param {{ inputPerMillion?: number, audioInputPerMillion?: number, outputPerMillion?: number, audioOutputPerMillion?: number }} pricing
  * @returns {number|null} Cost in USD, or null if pricing is unavailable.
  */
-export function calculateLiveCost(usage, pricing) {
+export function calculateLiveCost(usage: any, pricing: any) {
   if (!pricing || !usage) return null;
 
   const inputRate =
@@ -165,8 +164,8 @@ export function calculateLiveCost(usage, pricing) {
  * @returns {number|null} Cost in USD, or null if pricing is unavailable.
  */
 export function calculateImageCost(
-  prompt,
-  pricing,
+  prompt: any,
+  pricing: any,
   inputImages = 0,
   outputImageTokens = 1120,
 ) {

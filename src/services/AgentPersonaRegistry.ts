@@ -284,9 +284,7 @@ const PERSONAS = new Map();
 // adds compute/utility tools (unit conversion, CSV, diagrams, etc.).
 // Coordinator tools (team_create, etc.) and Prism-local tools (think,
 // sleep, skills, etc.) bypass the enabledTools filter entirely.
-const CODING_ENABLED_TOOLS = [
-  L.CODING,
-];
+const CODING_ENABLED_TOOLS = [L.CODING];
 
 // ── CODING Agent (Prism Client) ────────────────────────────────────────
 // This is the existing behavior — SystemPromptAssembler's default.
@@ -305,22 +303,30 @@ PERSONAS.set("CODING", {
 - After making changes, verify them by reading the modified section
 - Keep your explanations concise and technical`,
   interactionRules: "",
-  toolPolicy: (ctx) => {
+  toolPolicy: (ctx: any) => {
     const enabled = new Set(ctx.enabledTools || []);
     const tips = [];
 
     // ── File editing tips ──
     if (enabled.has("multi_file_read")) {
-      tips.push("- Use multi_file_read when you need to inspect several files at once");
+      tips.push(
+        "- Use multi_file_read when you need to inspect several files at once",
+      );
     }
     if (enabled.has("project_summary")) {
-      tips.push("- Use project_summary to understand unfamiliar codebases before diving in");
+      tips.push(
+        "- Use project_summary to understand unfamiliar codebases before diving in",
+      );
     }
     if (enabled.has("git")) {
-      tips.push("- Check git status before and after edits to track your changes");
+      tips.push(
+        "- Check git status before and after edits to track your changes",
+      );
     }
     if (enabled.has("grep_search")) {
-      tips.push('- When searching, use includes filters to narrow results (e.g. [".js", ".ts"])');
+      tips.push(
+        '- When searching, use includes filters to narrow results (e.g. [".js", ".ts"])',
+      );
     }
 
     const sections = [];
@@ -329,7 +335,11 @@ PERSONAS.set("CODING", {
     }
 
     // ── Task management ──
-    if (enabled.has("task_create") || enabled.has("task_list") || enabled.has("task_update")) {
+    if (
+      enabled.has("task_create") ||
+      enabled.has("task_list") ||
+      enabled.has("task_update")
+    ) {
       sections.push(`## Task Management
 You have persistent task tools (task_create, task_list, task_update) that survive across conversations.
 Use them proactively:
@@ -370,15 +380,19 @@ PERSONAS.set("LUPOS", {
   name: "Lupos",
   type: "conversational",
   project: "lupos",
-  identity: (ctx) => {
+  identity: (ctx: any) => {
     const aprilFools = ctx?.agentContext?.aprilFoolsMode === true;
     const isClockCrew = ctx?.agentContext?.guildId === "249010731910037507";
 
-    let personality;
+    let personality: any;
     if (isClockCrew) {
-      personality = aprilFools ? LUPOS_APRIL_FOOLS_CLOCK_CREW_CORE : LUPOS_CLOCK_CREW_CORE_PERSONALITY;
+      personality = aprilFools
+        ? LUPOS_APRIL_FOOLS_CLOCK_CREW_CORE
+        : LUPOS_CLOCK_CREW_CORE_PERSONALITY;
     } else {
-      personality = aprilFools ? LUPOS_APRIL_FOOLS_CORE : LUPOS_CORE_PERSONALITY;
+      personality = aprilFools
+        ? LUPOS_APRIL_FOOLS_CORE
+        : LUPOS_CORE_PERSONALITY;
     }
 
     const responseGuidelines = aprilFools
@@ -533,10 +547,7 @@ const STICKERS_TOOL_POLICY = `# Tool Use Policy
 - Always generate sticker-appropriate images: vibrant colors, clean lines, suitable for 4x6 inch printing.
 - If the image generation tool fails due to content safety, try rephrasing the prompt creatively.`;
 
-const STICKERS_ENABLED_TOOLS = [
-  L.CREATIVE,
-  L.WEB,
-];
+const STICKERS_ENABLED_TOOLS = [L.CREATIVE, L.WEB];
 
 // ── STICKERS Agent (Clankerbox Kiosk) ────────────────────────────
 PERSONAS.set("STICKERS", {
@@ -544,7 +555,7 @@ PERSONAS.set("STICKERS", {
   name: "Clankerbox",
   type: "",
   project: "stickers",
-  identity: (_ctx) => {
+  identity: (_ctx: any) => {
     const sections = [
       STICKERS_CORE_PERSONALITY,
       STICKERS_PHYSICAL_DESCRIPTION,
@@ -651,7 +662,7 @@ PERSONAS.set("LIGHTS", {
   name: "Lights",
   type: "",
   project: "lights",
-  identity: (_ctx) => {
+  identity: (_ctx: any) => {
     const sections = [
       LIGHTS_CORE_IDENTITY,
       LIGHTS_COLOR_REFERENCE,
@@ -752,21 +763,27 @@ PERSONAS.set("OOG", {
   },
   guidelines: "",
   interactionRules: "",
-  toolPolicy: (ctx) => {
+  toolPolicy: (ctx: any) => {
     const enabled = new Set(ctx.enabledTools || []);
     const tips = [];
 
     if (enabled.has("str_replace_file") && enabled.has("write_file")) {
-      tips.push("- oog prefer str_replace_file over write_file for edit. safer. preserve what not need change");
+      tips.push(
+        "- oog prefer str_replace_file over write_file for edit. safer. preserve what not need change",
+      );
     }
     if (enabled.has("grep_search")) {
-      tips.push("- oog use grep_search to find all repeat pattern before consolidate. no surprise");
+      tips.push(
+        "- oog use grep_search to find all repeat pattern before consolidate. no surprise",
+      );
     }
     if (enabled.has("git")) {
       tips.push("- oog check git status before and after. responsible caveman");
     }
     if (enabled.has("project_summary")) {
-      tips.push("- oog use project_summary to understand lay of land before swing club");
+      tips.push(
+        "- oog use project_summary to understand lay of land before swing club",
+      );
     }
 
     const sections = [OOG_TOOL_POLICY_OVERRIDE];
@@ -775,7 +792,11 @@ PERSONAS.set("OOG", {
     }
 
     // ── Task management ──
-    if (enabled.has("task_create") || enabled.has("task_list") || enabled.has("task_update")) {
+    if (
+      enabled.has("task_create") ||
+      enabled.has("task_list") ||
+      enabled.has("task_update")
+    ) {
       sections.push(`## Task Management — Oog Way
 oog have task tool (task_create, task_list, task_update) that survive across cave session.
 - at START of session, oog call task_list to check for work left from last time
@@ -889,7 +910,7 @@ PERSONAS.set("DIGEST", {
   name: "Digest",
   type: "",
   project: "digest",
-  identity: (_ctx) => {
+  identity: (_ctx: any) => {
     const sections = [
       DIGEST_CORE_PERSONALITY,
       DIGEST_CAPABILITIES,
@@ -985,7 +1006,7 @@ PERSONAS.set("AGENT_CREATOR", {
   name: "Agent Creator",
   type: "",
   project: "coding",
-  identity: (_ctx) => {
+  identity: (_ctx: any) => {
     const sections = [
       AGENT_CREATOR_CORE_IDENTITY,
       AGENT_CREATOR_CAPABILITIES,
@@ -1043,7 +1064,7 @@ PERSONAS.set("MEEPO", {
   name: "Meepo",
   type: "conversational",
   project: "chat",
-  identity: (_ctx) => {
+  identity: (_ctx: any) => {
     const sections = [
       MEEPO_CORE_PERSONALITY,
       MEEPO_RESPONSE_GUIDELINES,
@@ -1069,7 +1090,7 @@ const AgentPersonaRegistry = {
    * @param {string} agentId - e.g. "LUPOS", "CODING"
    * @returns {AgentPersona|null}
    */
-  get(agentId) {
+  get(agentId: any) {
     if (!agentId) return null;
     const persona = PERSONAS.get(agentId.toUpperCase());
     if (!persona) {
@@ -1084,7 +1105,7 @@ const AgentPersonaRegistry = {
    * @returns {Array<{ id: string, name: string, custom?: boolean }>}
    */
   list() {
-    return [...PERSONAS.values()].map((p) => ({
+    return [...PERSONAS.values()].map((p: any) => ({
       id: p.id,
       name: p.name,
       type: p.type || "",
@@ -1097,7 +1118,7 @@ const AgentPersonaRegistry = {
    * @param {string} agentId
    * @returns {boolean}
    */
-  has(agentId) {
+  has(agentId: any) {
     return PERSONAS.has((agentId || "").toUpperCase());
   },
 
@@ -1106,9 +1127,10 @@ const AgentPersonaRegistry = {
    * @param {string} project
    * @returns {boolean}
    */
-  isAgentProject(project) {
+  isAgentProject(project: any) {
     if (!project) return false;
-    for (const persona of PERSONAS.values()) {
+    // @ts-ignore
+    for ( const persona of PERSONAS.values()) {
       if (persona.project === project) return true;
     }
     return false;
@@ -1121,7 +1143,7 @@ const AgentPersonaRegistry = {
    *
    * @param {object} doc - Custom agent document from CustomAgentService
    */
-  registerCustom(doc) {
+  registerCustom(doc: any) {
     if (!doc?.agentId) return;
 
     const persona = {
@@ -1145,14 +1167,16 @@ const AgentPersonaRegistry = {
     };
 
     PERSONAS.set(doc.agentId, persona);
-    logger.info(`[AgentPersonaRegistry] Registered custom agent: "${doc.name}" (${doc.agentId}) with ${persona.enabledTools.length} tools`);
+    logger.info(
+      `[AgentPersonaRegistry] Registered custom agent: "${doc.name}" (${doc.agentId}) with ${persona.enabledTools.length} tools`,
+    );
   },
 
   /**
    * Unregister a persona by agent ID (only custom agents should be removed).
    * @param {string} agentId
    */
-  unregister(agentId) {
+  unregister(agentId: any) {
     if (!agentId) return;
     const key = agentId.toUpperCase();
     const persona = PERSONAS.get(key);
@@ -1168,21 +1192,28 @@ const AgentPersonaRegistry = {
    */
   async loadCustomAgents() {
     try {
-      const { default: CustomAgentService } = await import("./CustomAgentService.js");
+      const { default: CustomAgentService } =
+        await import("./CustomAgentService.js");
       const agents = await CustomAgentService.list();
 
       // Clear existing custom agents first
-      for (const [key, persona] of PERSONAS) {
+      // @ts-ignore
+      for ( const [key, persona] of PERSONAS) {
         if (persona.custom) PERSONAS.delete(key);
       }
 
-      for (const doc of agents) {
+      // @ts-ignore
+      for ( const doc of agents) {
         this.registerCustom(doc);
       }
 
-      logger.info(`[AgentPersonaRegistry] Loaded ${agents.length} custom agent(s) from database`);
-    } catch (error) {
-      logger.warn(`[AgentPersonaRegistry] Failed to load custom agents: ${error.message}`);
+      logger.info(
+        `[AgentPersonaRegistry] Loaded ${agents.length} custom agent(s) from database`,
+      );
+    } catch (error: any) {
+      logger.warn(
+        `[AgentPersonaRegistry] Failed to load custom agents: ${error.message}`,
+      );
     }
   },
 };

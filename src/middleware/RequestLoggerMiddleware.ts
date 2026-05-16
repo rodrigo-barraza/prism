@@ -1,8 +1,9 @@
+// @ts-ignore
 import { formatFileSize } from "@rodrigo-barraza/utilities-library";
 import logger from "../utils/logger.js";
 import { requestContext } from "../utils/RequestContext.js";
 
-const formatBytes = (bytes) => formatFileSize(bytes, { compact: true });
+const formatBytes = (bytes: any) => formatFileSize(bytes, { compact: true });
 
 /**
  * Express middleware that:
@@ -11,7 +12,7 @@ const formatBytes = (bytes) => formatFileSize(bytes, { compact: true });
  *   2. Logs every completed request with identity, IP, method, path,
  *      status, timing, and transfer sizes.
  */
-export function requestLoggerMiddleware(req, res, next) {
+export function requestLoggerMiddleware(req: any, res: any, next: any) {
   const start = performance.now();
 
   // Resolve identity + IP early (before authMiddleware for admin/files routes)

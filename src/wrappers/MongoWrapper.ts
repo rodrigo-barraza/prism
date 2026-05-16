@@ -12,14 +12,21 @@
 //   closeClient(name)       → MongoManager.disconnect(name)
 // ─────────────────────────────────────────────────────────────────────
 
-import { connectDB, getDB, getCollection, disconnectDB } from "@rodrigo-barraza/service-library/mongo";
+// @ts-ignore
+import {
+  connectDB,
+  getDB,
+  getCollection,
+  disconnectDB,
+// @ts-ignore
+} from "@rodrigo-barraza/service-library/mongo";
 import logger from "../utils/logger.js";
 
 const MongoWrapper = {
-  async createClient(name, uri) {
+  async createClient(name: any, uri: any) {
     return connectDB(uri, { name, dbName: name, logger });
   },
-  getClient(_name) {
+  getClient(_name: any) {
     // Deprecated — getClient returns the raw MongoClient, which is no
     // longer exposed by MongoManager. Use getDb() instead.
     // Callers that used getClient(name).db(name) should use getDb(name).
@@ -27,14 +34,14 @@ const MongoWrapper = {
       "MongoWrapper.getClient() is deprecated — use MongoWrapper.getDb() instead",
     );
   },
-  getDb(name) {
+  getDb(name: any) {
     return getDB(name);
   },
-  getCollection(dbName, collectionName) {
+  getCollection(dbName: any, collectionName: any) {
     // Note: service-library uses (collectionName, dbName) — reversed order
     return getCollection(collectionName, dbName);
   },
-  closeClient(name) {
+  closeClient(name: any) {
     return disconnectDB(name);
   },
 };

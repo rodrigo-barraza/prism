@@ -106,7 +106,7 @@ const MODELS = {
     pricing: {
       inputPerMillion: 0.05,
       cachedInputPerMillion: 0.005,
-      outputPerMillion: 0.40,
+      outputPerMillion: 0.4,
       webSearchPer1kCalls: 25.0,
     },
     maxInputTokens: 400_000,
@@ -248,7 +248,7 @@ const MODELS = {
     defaultTemperature: 1.0,
     arena: { text: 1479 },
     pricing: {
-      inputPerMillion: 2.50,
+      inputPerMillion: 2.5,
       cachedInputPerMillion: 0.25,
       outputPerMillion: 15.0,
       inputOver272kPerMillion: 5.0,
@@ -347,7 +347,7 @@ const MODELS = {
     year: 2026,
     defaultTemperature: 1.0,
     pricing: {
-      inputPerMillion: 0.20,
+      inputPerMillion: 0.2,
       cachedInputPerMillion: 0.02,
       outputPerMillion: 1.25,
       webSearchPer1kCalls: 25.0,
@@ -1015,9 +1015,9 @@ const MODELS = {
  * Get all models whose inputTypes includes `inputType`
  * and whose outputTypes includes `outputType`.
  */
-function getModels(inputType, outputType) {
+function getModels(inputType: any, outputType: any) {
   return Object.values(MODELS).filter(
-    (m) =>
+    (m: any) =>
       m.inputTypes.includes(inputType) && m.outputTypes.includes(outputType),
   );
 }
@@ -1027,48 +1027,80 @@ function getModels(inputType, outputType) {
  * for a given input→output type combination.
  * Returns: { [provider]: [{ name, label }, ...] }
  */
-function getModelOptions(inputType, outputType) {
+function getModelOptions(inputType: any, outputType: any) {
   const opts = {};
-  for (const m of getModels(inputType, outputType)) {
+  // @ts-ignore
+  for ( const m of getModels(inputType, outputType)) {
+    // @ts-ignore
     if (m.listed !== false) {
       const entry = { name: m.name, label: m.label };
+      // @ts-ignore
       if (m.thinking) entry.thinking = true;
+      // @ts-ignore
       if (m.inputTypes?.includes(TYPES.IMAGE)) entry.vision = true;
+      // @ts-ignore
       if (m.webSearch) entry.webSearch = m.webSearch;
+      // @ts-ignore
       if (m.inputTypes) entry.inputTypes = m.inputTypes;
+      // @ts-ignore
       if (m.outputTypes) entry.outputTypes = m.outputTypes;
+      // @ts-ignore
       if (m.tools) entry.tools = m.tools;
+      // @ts-ignore
       if (m.pricing) entry.pricing = m.pricing;
+      // @ts-ignore
       if (m.arena) entry.arena = m.arena;
+      // @ts-ignore
       if (m.maxInputTokens) entry.contextLength = m.maxInputTokens;
+      // @ts-ignore
       if (m.maxOutputTokens) entry.maxOutputTokens = m.maxOutputTokens;
+      // @ts-ignore
       if (m.assistantImages === false) entry.assistantImages = false;
       // JSON mode: OpenAI + Google support response_format / responseMimeType
       if (
         m.modelType === MODEL_TYPES.CONVERSATION &&
         [PROVIDERS.OPENAI, PROVIDERS.GOOGLE].includes(m.provider)
       ) {
+        // @ts-ignore
         entry.jsonMode = true;
       }
+      // @ts-ignore
       if (m.codeExecution) entry.codeExecution = true;
+      // @ts-ignore
       if (m.webFetch) entry.webFetch = true;
+      // @ts-ignore
       if (m.urlContext) entry.urlContext = true;
+      // @ts-ignore
       if (m.defaultTemperature !== undefined)
+        // @ts-ignore
         entry.defaultTemperature = m.defaultTemperature;
+      // @ts-ignore
       if (m.verbosity) entry.verbosity = true;
+      // @ts-ignore
       if (m.reasoningSummary) entry.reasoningSummary = true;
+      // @ts-ignore
       if (m.responsesAPI) entry.responsesAPI = true;
+      // @ts-ignore
       if (m.size) entry.size = m.size;
+      // @ts-ignore
       if (m.modelType) entry.modelType = m.modelType;
+      // @ts-ignore
       if (m.liveAPI) entry.liveAPI = true;
+      // @ts-ignore
       if (m.thinkingLevels) entry.thinkingLevels = m.thinkingLevels;
+      // @ts-ignore
       if (m.mediaLimits) entry.mediaLimits = m.mediaLimits;
+      // @ts-ignore
       if (m.year) entry.year = m.year;
       // System prompt support: true for chat models, false for image-only/TTS/embedding APIs
+      // @ts-ignore
       entry.supportsSystemPrompt =
+        // @ts-ignore
         m.supportsSystemPrompt !== undefined
-          ? m.supportsSystemPrompt
+          ? // @ts-ignore
+            m.supportsSystemPrompt
           : m.outputTypes.includes(TYPES.TEXT);
+      // @ts-ignore
       (opts[m.provider] ??= []).push(entry);
     }
   }
@@ -1080,10 +1112,13 @@ function getModelOptions(inputType, outputType) {
  * for a given input→output type combination.
  * Returns: { [provider]: modelName }
  */
-function getDefaultModels(inputType, outputType) {
+function getDefaultModels(inputType: any, outputType: any) {
   const defaults = {};
-  for (const m of getModels(inputType, outputType)) {
+  // @ts-ignore
+  for ( const m of getModels(inputType, outputType)) {
+    // @ts-ignore
     if (m.default) {
+      // @ts-ignore
       defaults[m.provider] = m.name;
     }
   }
@@ -1094,10 +1129,13 @@ function getDefaultModels(inputType, outputType) {
  * Get pricing map for a given input→output type combination.
  * Returns: { [modelName]: { inputPerMillion, outputPerMillion } }
  */
-function getPricing(inputType, outputType) {
+function getPricing(inputType: any, outputType: any) {
   const pricing = {};
-  for (const m of getModels(inputType, outputType)) {
+  // @ts-ignore
+  for ( const m of getModels(inputType, outputType)) {
+    // @ts-ignore
     if (m.pricing) {
+      // @ts-ignore
       pricing[m.name] = m.pricing;
     }
   }
@@ -1108,8 +1146,8 @@ function getPricing(inputType, outputType) {
  * Find a single model object by its API name.
  * Returns the model object or null.
  */
-function getModelByName(name) {
-  return Object.values(MODELS).find((m) => m.name === name) || null;
+function getModelByName(name: any) {
+  return Object.values(MODELS).find((m: any) => m.name === name) || null;
 }
 
 // ─── VOICES (per provider — applies to TEXT → AUDIO models) ─

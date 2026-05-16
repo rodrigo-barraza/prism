@@ -24,7 +24,7 @@ import rateLimitStore from "../services/RateLimitStore.js";
  * @param {string} [model] - Model name for per-model rate-limit tracking
  * @returns {object|null} Parsed rate-limit data, or null if unavailable
  */
-export function extractOpenAIRateLimits(response, model) {
+export function extractOpenAIRateLimits(response: any, model: any) {
   if (!response?.headers) return null;
   const h = response.headers;
 
@@ -72,7 +72,7 @@ export function extractOpenAIRateLimits(response, model) {
  * @param {string} [model] - Model name for per-model rate-limit tracking
  * @returns {object|null} Parsed rate-limit data, or null if unavailable
  */
-export function extractAnthropicRateLimits(response, model) {
+export function extractAnthropicRateLimits(response: any, model: any) {
   if (!response?.headers) return null;
   const h = response.headers;
 
@@ -115,7 +115,7 @@ export function extractAnthropicRateLimits(response, model) {
 /**
  * Safely parse a string to an integer, returning null on failure.
  */
-function safeInt(val) {
+function safeInt(val: any) {
   if (val == null) return null;
   const parsed = parseInt(val, 10);
   return Number.isNaN(parsed) ? null : parsed;

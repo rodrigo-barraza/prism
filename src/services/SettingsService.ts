@@ -1,5 +1,7 @@
 import MongoWrapper from "../wrappers/MongoWrapper.js";
+// @ts-ignore
 import { deepMerge } from "@rodrigo-barraza/utilities-library";
+// @ts-ignore
 import { MONGO_DB_NAME } from "../../config.js";
 import { COLLECTIONS } from "../constants.js";
 import logger from "../utils/logger.js";
@@ -26,6 +28,7 @@ const DEFAULTS = {
 // Hot path: MemoryService + EmbeddingService read these on every call.
 // Cache is invalidated on update() and lazily populated on first get().
 
+// @ts-ignore
 let _cache = null;
 
 // ─── Service ──────────────────────────────────────────────────────────────────
@@ -43,9 +46,13 @@ const SettingsService = {
    * @returns {Promise<object>}
    */
   async get() {
+    // @ts-ignore
     if (_cache) return _cache;
 
-    const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTIONS.SETTINGS);
+    const collection = MongoWrapper.getCollection(
+      MONGO_DB_NAME,
+      COLLECTIONS.SETTINGS,
+    );
     if (!collection) return { ...DEFAULTS };
 
     const doc = await collection.findOne({ _key: "global" });
@@ -64,8 +71,9 @@ const SettingsService = {
    * @param {string} section
    * @returns {Promise<object>}
    */
-  async getSection(section) {
+  async getSection(section: any) {
     const settings = await this.get();
+    // @ts-ignore
     return settings[section] || DEFAULTS[section] || {};
   },
 
@@ -74,8 +82,11 @@ const SettingsService = {
    * @param {object} data - Partial settings object to merge
    * @returns {Promise<object>} The full settings after merge
    */
-  async update(data) {
-    const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTIONS.SETTINGS);
+  async update(data: any) {
+    const collection = MongoWrapper.getCollection(
+      MONGO_DB_NAME,
+      COLLECTIONS.SETTINGS,
+    );
     if (!collection) throw new Error("Database not available");
 
     const current = await this.get();
@@ -110,12 +121,14 @@ const SettingsService = {
    * @param {"extraction"|"consolidation"|"embedding"} role
    * @returns {Promise<{ provider: string, model: string }>}
    */
-  async getMemoryModelConfig(role) {
+  async getMemoryModelConfig(role: any) {
     const mem = await this.getSection("memory");
     const provider = mem[`${role}Provider`];
     const model = mem[`${role}Model`];
     if (!provider || !model) {
-      throw new Error(`${role} model not configured — set it in Settings → Memory Models`);
+      throw new Error(
+        `${role} model not configured — set it in Settings → Memory Models`,
+      );
     }
     return { provider, model };
   },

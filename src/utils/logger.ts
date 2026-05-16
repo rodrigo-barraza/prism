@@ -1,3 +1,4 @@
+// @ts-ignore
 import { createLogger } from "@rodrigo-barraza/utilities-library/node";
 import { getRequestContext } from "./RequestContext.js";
 
@@ -6,7 +7,7 @@ const base = createLogger("prism");
 /**
  * Build identity + IP tags from provided values or AsyncLocalStorage context.
  */
-function buildContextTags(project, username, clientIp) {
+function buildContextTags(project: any, username: any, clientIp: any) {
   const hasProject = project && project !== "unknown";
   const hasUser = username && username !== "unknown";
 
@@ -27,21 +28,22 @@ function buildContextTags(project, username, clientIp) {
 const logger = {
   ...base,
 
-  provider(provider, action, ...args) {
+  provider(provider: any, action: any, ...args: any) {
     const ctx = getRequestContext();
+    // @ts-ignore
     const tags = buildContextTags(ctx.project, ctx.username, ctx.clientIp);
-    base.info(
-      `[${provider}] ${action}${tags}`,
-      ...args,
-    );
+    base.info(`[${provider}] ${action}${tags}`, ...args);
   },
 
-  request(project, username, clientIp, message, ...args) {
+  request(
+    project: any,
+    username: any,
+    clientIp: any,
+    message: any,
+    ...args: any
+  ) {
     const tags = buildContextTags(project, username, clientIp);
-    base.info(
-      `${message}${tags}`,
-      ...args,
-    );
+    base.info(`${message}${tags}`, ...args);
   },
 };
 

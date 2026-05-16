@@ -42,17 +42,22 @@ export default class PlanningModeService {
    *
    * @param {Array} messages - The message array (mutated in place)
    */
-  static injectPlanningInstruction(messages) {
-    const systemMsg = messages.find((m) => m.role === "system");
+  static injectPlanningInstruction(messages: any) {
+    const systemMsg = messages.find((m: any) => m.role === "system");
     if (systemMsg) {
       // Idempotency: don't append twice
       if (systemMsg.content.includes("PLANNING MODE ACTIVE")) return;
       systemMsg.content = systemMsg.content + PLANNING_INSTRUCTION;
     } else {
-      messages.unshift({ role: "system", content: PLANNING_INSTRUCTION.trim() });
+      messages.unshift({
+        role: "system",
+        content: PLANNING_INSTRUCTION.trim(),
+      });
     }
 
-    logger.info("[PlanningMode] Injected planning instruction into system prompt");
+    logger.info(
+      "[PlanningMode] Injected planning instruction into system prompt",
+    );
   }
 
   /**
@@ -61,11 +66,13 @@ export default class PlanningModeService {
    *
    * @param {Array} messages - The message array (mutated in place)
    */
-  static stripPlanningInstruction(messages) {
-    const systemMsg = messages.find((m) => m.role === "system");
+  static stripPlanningInstruction(messages: any) {
+    const systemMsg = messages.find((m: any) => m.role === "system");
     if (systemMsg && systemMsg.content.includes("PLANNING MODE ACTIVE")) {
       systemMsg.content = systemMsg.content.replace(PLANNING_INSTRUCTION, "");
-      logger.info("[PlanningMode] Stripped planning instruction from system prompt");
+      logger.info(
+        "[PlanningMode] Stripped planning instruction from system prompt",
+      );
     }
   }
 
@@ -75,10 +82,10 @@ export default class PlanningModeService {
    * @param {string} planText - The plan markdown text
    * @returns {Array<string>} Step descriptions
    */
-  static extractSteps(planText) {
+  static extractSteps(planText: any) {
     const stepRegex = /^\d+\.\s+(.+)$/gm;
     const steps = [];
-    let match;
+    let match: any;
     while ((match = stepRegex.exec(planText)) !== null) {
       steps.push(match[1].trim());
     }

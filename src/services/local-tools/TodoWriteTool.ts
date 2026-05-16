@@ -21,12 +21,21 @@ export default {
             type: "object",
             properties: {
               content: { type: "string", description: "The todo item text." },
-              status: { type: "string", enum: ["pending", "in_progress", "completed"], description: "Item status. Default: 'pending'." },
-              priority: { type: "string", enum: ["high", "medium", "low"], description: "Optional priority level." },
+              status: {
+                type: "string",
+                enum: ["pending", "in_progress", "completed"],
+                description: "Item status. Default: 'pending'.",
+              },
+              priority: {
+                type: "string",
+                enum: ["high", "medium", "low"],
+                description: "Optional priority level.",
+              },
             },
             required: ["content"],
           },
-          description: "Full list of todo items. Replaces the previous list entirely.",
+          description:
+            "Full list of todo items. Replaces the previous list entirely.",
         },
       },
       required: ["items"],
@@ -36,13 +45,13 @@ export default {
   domain: "Agentic: Task Management",
   labels: ["coding"],
 
-  async execute(args, ctx) {
+  async execute(args: any, ctx: any) {
     const { items } = args;
     if (!Array.isArray(items)) {
       return { error: "'items' must be an array of todo objects" };
     }
 
-    const normalized = items.map((item, i) => ({
+    const normalized = items.map((item: any, i: any) => ({
       id: i + 1,
       content: item.content || "",
       status: item.status || "pending",
@@ -51,12 +60,15 @@ export default {
 
     const stats = {
       total: normalized.length,
-      pending: normalized.filter((i) => i.status === "pending").length,
-      in_progress: normalized.filter((i) => i.status === "in_progress").length,
-      completed: normalized.filter((i) => i.status === "completed").length,
+      pending: normalized.filter((i: any) => i.status === "pending").length,
+      in_progress: normalized.filter((i: any) => i.status === "in_progress")
+        .length,
+      completed: normalized.filter((i: any) => i.status === "completed").length,
     };
 
-    logger.info(`[TodoWrite] ${stats.total} items (${stats.completed} done, ${stats.in_progress} in progress, ${stats.pending} pending)`);
+    logger.info(
+      `[TodoWrite] ${stats.total} items (${stats.completed} done, ${stats.in_progress} in progress, ${stats.pending} pending)`,
+    );
 
     if (ctx._emit) {
       ctx._emit({ type: "todo_update", items: normalized, stats });

@@ -28,4 +28,3 @@ export function createAbortController(maxListeners = DEFAULT_MAX_LISTENERS) {
   setMaxListeners(maxListeners, controller.signal);
   return controller;
 }
-

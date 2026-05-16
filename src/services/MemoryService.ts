@@ -1,7 +1,9 @@
+// @ts-ignore
 import { daysSinceIso } from "@rodrigo-barraza/utilities-library";
 import crypto from "crypto";
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { getProvider } from "../providers/index.js";
+// @ts-ignore
 import { MONGO_DB_NAME } from "../../config.js";
 import EmbeddingService from "./EmbeddingService.js";
 import RequestLogger from "./RequestLogger.js";
@@ -41,20 +43,20 @@ export const CODING_MEMORY_TYPES = ["user", "feedback", "project", "reference"];
  * @param {object} [options] - Extra options forwarded to EmbeddingService
  * @returns {Promise<number[]>}
  */
-async function generateEmbedding(text, options = {}) {
+async function generateEmbedding(text: any, options = {}) {
   return EmbeddingService.embed(text, { source: "memory", ...options });
 }
 /**
  * Calculate days elapsed since a timestamp.
  */
-function memoryAgeDays(createdAt) {
+function memoryAgeDays(createdAt: any) {
   return daysSinceIso(createdAt);
 }
 /**
  * Human-readable age string. Models are poor at date arithmetic —
  * "47 days ago" triggers staleness reasoning better than a raw ISO timestamp.
  */
-function memoryAge(createdAt) {
+function memoryAge(createdAt: any) {
   const d = memoryAgeDays(createdAt);
   if (d === 0) return "today";
   if (d === 1) return "yesterday";
@@ -64,7 +66,7 @@ function memoryAge(createdAt) {
  * Staleness caveat for memories >1 day old.
  * Returns empty string for fresh memories.
  */
-function freshnessCaveat(createdAt) {
+function freshnessCaveat(createdAt: any) {
   const d = memoryAgeDays(createdAt);
   if (d <= 1) return "";
   return ` ⚠️ ${d} days old — verify against current code before acting on this.`;
@@ -77,21 +79,28 @@ function freshnessCaveat(createdAt) {
  * @param {Array} participants - Array of { id, username, displayName }
  * @returns {Promise<Array>}
  */
-async function extractFactsFromConversation(messages, participants, meta = {}) {
+async function extractFactsFromConversation(
+  messages: any,
+  participants: any,
+  meta = {},
+) {
+  // @ts-ignore
   const endpoint = meta.endpoint || null;
+  // @ts-ignore
   const agent = meta.agent || null;
-  const { provider: extractionProvider, model: extractionModel } = await getExtractionConfig();
+  const { provider: extractionProvider, model: extractionModel } =
+    await getExtractionConfig();
   const provider = getProvider(extractionProvider);
   const requestId = crypto.randomUUID();
   const requestStart = performance.now();
   const participantList = participants
     .map(
-      (p) =>
+      (p: any) =>
         `- ID: ${p.id}, Username: ${p.username}, Display: ${p.displayName || p.username}`,
     )
     .join("\n");
   const conversationText = messages
-    .map((m) => `${m.name || m.role}: ${m.content}`)
+    .map((m: any) => `${m.name || m.role}: ${m.content}`)
     .join("\n");
   const systemPrompt = `You are a memory extraction system. Analyze the conversation and extract notable personal facts about the participants. Focus on:
 - Personal information (location, occupation, hobbies, pets, family)
@@ -124,7 +133,7 @@ ${participantList}`;
       content: `Extract personal facts from this conversation:\n\n${conversationText}`,
     },
   ];
-  let result;
+  let result: any;
   let success = true;
   let errorMessage = null;
   try {
@@ -132,7 +141,7 @@ ${participantList}`;
       maxTokens: 1000,
       temperature: 0.1,
     });
-  } catch (error) {
+  } catch (error: any) {
     success = false;
     errorMessage = error.message;
     throw error;
@@ -141,12 +150,16 @@ ${participantList}`;
       requestId,
       endpoint,
       operation: "memory:extract",
+      // @ts-ignore
       project: meta.project || null,
+      // @ts-ignore
       username: meta.username || "system",
       agent,
       provider: extractionProvider,
       model: extractionModel,
+      // @ts-ignore
       traceId: meta.traceId || null,
+      // @ts-ignore
       agentSessionId: meta.agentSessionId || null,
       aiMessages,
       resultText: result?.text || "",
@@ -164,7 +177,7 @@ ${participantList}`;
   if (!Array.isArray(facts)) return [];
   // Validate each fact has the required fields
   return facts.filter(
-    (f) =>
+    (f: any) =>
       f.fact &&
       f.aboutUserId &&
       f.aboutUsername &&
@@ -200,8 +213,22 @@ const MemoryService = {
    * @param {string} [params.conversationId] - Source conversation
    * @returns {Promise<object|null>} Stored memory document, or null if duplicate
    */
-  async store({ agent, project, username, type, title, content, embedding, metadata = {}, conversationId, traceId, agentSessionId, endpoint }) {
-    if (!agent) throw new Error("MemoryService.store requires an agent identifier");
+  async store({
+    agent,
+    project,
+    username,
+    type,
+    title,
+    content,
+    embedding,
+    metadata = {},
+    conversationId,
+    traceId,
+    agentSessionId,
+    endpoint,
+  }: any) {
+    if (!agent)
+      throw new Error("MemoryService.store requires an agent identifier");
     if (!content) throw new Error("MemoryService.store requires content");
     // Validate type for CODING agent
     if (agent === "CODING") {
@@ -212,16 +239,23 @@ const MemoryService = {
     // Generate embedding if not provided
     if (!embedding) {
       const embedOpts = { project };
+      // @ts-ignore
       if (traceId) embedOpts.traceId = traceId;
+      // @ts-ignore
       if (agentSessionId) embedOpts.agentSessionId = agentSessionId;
+      // @ts-ignore
       if (endpoint) embedOpts.endpoint = endpoint;
+      // @ts-ignore
       if (agent) embedOpts.agent = agent;
       embedding = await generateEmbedding(embedText, embedOpts);
     }
     // Duplicate detection — compare against existing memories for the same agent
     const dedupFilter = { agent };
+    // @ts-ignore
     if (project) dedupFilter.project = project;
+    // @ts-ignore
     if (metadata.guildId) dedupFilter.guildId = metadata.guildId;
+    // @ts-ignore
     if (metadata.aboutUserId) dedupFilter.aboutUserId = metadata.aboutUserId;
     const existing = await collection
       .find(dedupFilter)
@@ -229,7 +263,7 @@ const MemoryService = {
       .sort({ createdAt: -1 })
       .limit(200)
       .toArray();
-    const isDuplicate = existing.some((doc) => {
+    const isDuplicate = existing.some((doc: any) => {
       if (!doc.embedding) return false;
       return cosineSimilarity(embedding, doc.embedding) > DUPLICATE_THRESHOLD;
     });
@@ -282,9 +316,14 @@ const MemoryService = {
     traceId,
     project,
     endpoint,
-  }) {
+  }: any) {
     // Extract facts from the conversation via AI
-    const facts = await extractFactsFromConversation(messages, participants, { project, traceId, endpoint, agent: "LUPOS" });
+    const facts = await extractFactsFromConversation(messages, participants, {
+      project,
+      traceId,
+      endpoint,
+      agent: "LUPOS",
+    });
     if (facts.length === 0) {
       logger.info(
         "[MemoryService] No personal facts extracted from conversation.",
@@ -295,9 +334,15 @@ const MemoryService = {
       `[MemoryService] Extracted ${facts.length} fact(s), generating embeddings...`,
     );
     const storedMemories = [];
-    for (const fact of facts) {
+    // @ts-ignore
+    for ( const fact of facts) {
       try {
-        const embedding = await generateEmbedding(fact.fact, { project, traceId, endpoint, agent: "LUPOS" });
+        const embedding = await generateEmbedding(fact.fact, {
+          project,
+          traceId,
+          endpoint,
+          agent: "LUPOS",
+        });
         const memory = await this.store({
           agent: "LUPOS",
           project: project || null,
@@ -323,7 +368,7 @@ const MemoryService = {
             `[MemoryService] Stored: "${fact.fact.substring(0, 60)}..." (about: ${fact.aboutUsername})`,
           );
         }
-      } catch (error) {
+      } catch (error: any) {
         logger.error(`[MemoryService] Failed to store fact: ${error.message}`);
       }
     }
@@ -343,22 +388,41 @@ const MemoryService = {
    * @param {number} [params.limit=10]
    * @returns {Promise<Array>} Relevant memories sorted by relevance
    */
-  async search({ agent, project, guildId, userIds, queryText, limit = 10, traceId, agentSessionId, endpoint }) {
-    if (!agent) throw new Error("MemoryService.search requires an agent identifier");
+  async search({
+    agent,
+    project,
+    guildId,
+    userIds,
+    queryText,
+    limit = 10,
+    traceId,
+    agentSessionId,
+    endpoint,
+  }: any) {
+    if (!agent)
+      throw new Error("MemoryService.search requires an agent identifier");
     const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
     // Generate embedding for the search query
     const embeddingOpts = {};
+    // @ts-ignore
     if (traceId) embeddingOpts.traceId = traceId;
+    // @ts-ignore
     if (agentSessionId) embeddingOpts.agentSessionId = agentSessionId;
+    // @ts-ignore
     if (project) embeddingOpts.project = project;
+    // @ts-ignore
     if (endpoint) embeddingOpts.endpoint = endpoint;
+    // @ts-ignore
     if (agent) embeddingOpts.agent = agent;
     const queryEmbedding = await generateEmbedding(queryText, embeddingOpts);
     // Build the filter — always scoped by agent
     const filter = { agent };
+    // @ts-ignore
     if (project) filter.project = project;
+    // @ts-ignore
     if (guildId) filter.guildId = guildId;
     if (userIds && userIds.length > 0) {
+      // @ts-ignore
       filter.aboutUserId = { $in: userIds };
     }
     // Fetch all memories matching the filter
@@ -381,8 +445,8 @@ const MemoryService = {
     if (memories.length === 0) return [];
     // Compute cosine similarity and sort
     const scored = memories
-      .filter((m) => m.embedding && m.embedding.length > 0)
-      .map((m) => ({
+      .filter((m: any) => m.embedding && m.embedding.length > 0)
+      .map((m: any) => ({
         id: m._id,
         type: m.type || "other",
         title: m.title || (m.content ? m.content.substring(0, 60) : "untitled"),
@@ -395,8 +459,8 @@ const MemoryService = {
         ageDays: memoryAgeDays(m.createdAt),
         score: cosineSimilarity(queryEmbedding, m.embedding),
       }))
-      .filter((m) => m.score > RELEVANCE_THRESHOLD)
-      .sort((a, b) => b.score - a.score)
+      .filter((m: any) => m.score > RELEVANCE_THRESHOLD)
+      .sort((a: any, b: any) => b.score - a.score)
       .slice(0, limit);
     logger.info(
       `[MemoryService] Search found ${scored.length} relevant memories for ${agent} (from ${memories.length} total)`,
@@ -416,12 +480,16 @@ const MemoryService = {
    * @param {number} [params.skip=0]
    * @returns {Promise<{ memories: Array, total: number }>}
    */
-  async list({ agent, project, guildId, userId, limit = 50, skip = 0 }) {
+  async list({ agent, project, guildId, userId, limit = 50, skip = 0 }: any) {
     const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
     const filter = {};
+    // @ts-ignore
     if (agent) filter.agent = agent;
+    // @ts-ignore
     if (project) filter.project = project;
+    // @ts-ignore
     if (guildId) filter.guildId = guildId;
+    // @ts-ignore
     if (userId) filter.aboutUserId = userId;
     const [memories, total] = await Promise.all([
       collection
@@ -470,7 +538,7 @@ const MemoryService = {
    * @param {string} memoryId
    * @returns {Promise<boolean>} Whether a document was deleted
    */
-  async delete(memoryId) {
+  async delete(memoryId: any) {
     const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
     const result = await collection.deleteOne({ id: memoryId });
     return result.deletedCount > 0;
@@ -478,7 +546,7 @@ const MemoryService = {
   /**
    * Alias for delete — used by callers that preferred the AgentMemoryService naming.
    */
-  async remove(memoryId) {
+  async remove(memoryId: any) {
     return this.delete(memoryId);
   },
   // ── Update ─────────────────────────────────────────────────────────────────
@@ -489,17 +557,27 @@ const MemoryService = {
    * @param {object} updates - Fields to update (title, content, type)
    * @returns {Promise<boolean>}
    */
-  async update(memoryId, { title, content, type }) {
+  async update(memoryId: any, { title, content, type }: any) {
     const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
     const $set = { updatedAt: new Date().toISOString() };
+    // @ts-ignore
     if (title !== undefined) $set.title = title;
+    // @ts-ignore
     if (content !== undefined) $set.content = content;
+    // @ts-ignore
     if (type !== undefined) $set.type = type;
     // Re-generate embedding if content changed
     if (content !== undefined) {
-      const doc = await collection.findOne({ id: memoryId }, { projection: { project: 1, title: 1 } });
-      const embedText = (title || doc?.title) ? `${title || doc?.title}: ${content}` : content;
-      $set.embedding = await generateEmbedding(embedText, { project: doc?.project });
+      const doc = await collection.findOne(
+        { id: memoryId },
+        { projection: { project: 1, title: 1 } },
+      );
+      const embedText =
+        title || doc?.title ? `${title || doc?.title}: ${content}` : content;
+      // @ts-ignore
+      $set.embedding = await generateEmbedding(embedText, {
+        project: doc?.project,
+      });
     }
     const result = await collection.updateOne({ id: memoryId }, { $set });
     return result.modifiedCount > 0;
@@ -512,10 +590,10 @@ const MemoryService = {
    * @param {Array} memories - Array from search()
    * @returns {string} Formatted text block
    */
-  formatForPrompt(memories) {
+  formatForPrompt(memories: any) {
     if (!memories || memories.length === 0) return "";
     return memories
-      .map((m) => {
+      .map((m: any) => {
         const badge = `[${m.type}]`;
         const age = m.age !== "today" ? ` (${m.age})` : "";
         const caveat = freshnessCaveat(m.createdAt);
@@ -541,7 +619,9 @@ const MemoryService = {
     await collection.createIndex({ id: 1 }, { unique: true });
     // Chronological listing
     await collection.createIndex({ createdAt: -1 });
-    logger.info("[MemoryService] Indexes ensured on unified memories collection.");
+    logger.info(
+      "[MemoryService] Indexes ensured on unified memories collection.",
+    );
   },
 };
 export default MemoryService;

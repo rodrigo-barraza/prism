@@ -24,12 +24,13 @@ const TRUNCATABLE_ARRAY_KEYS = [
  * The full result is still stored in the DB and shown in the UI;
  * this only affects what gets re-sent to the model.
  */
-export function truncateToolResult(result, maxChars = 8000) {
+export function truncateToolResult(result: any, maxChars = 8000) {
   if (!result || typeof result !== "object") return result;
 
   // If result has a known array wrapper, cap items at 10
   const trimmed = { ...result };
-  for (const key of TRUNCATABLE_ARRAY_KEYS) {
+  // @ts-ignore
+  for ( const key of TRUNCATABLE_ARRAY_KEYS) {
     if (Array.isArray(trimmed[key]) && trimmed[key].length > 10) {
       const total = trimmed[key].length;
       trimmed[key] = trimmed[key].slice(0, 10);
@@ -61,16 +62,19 @@ export function truncateToolResult(result, maxChars = 8000) {
  * @param {boolean} [options.filterDeleted=true] - Strip soft-deleted messages
  * @returns {Array} Provider-ready messages
  */
-export function expandMessagesForFC(messages, { filterDeleted = true } = {}) {
+export function expandMessagesForFC(
+  messages: any,
+  { filterDeleted = true } = {},
+) {
   const filtered = filterDeleted
     ? messages.filter(
-        (m) =>
+        (m: any) =>
           !m.deleted &&
           (m.role !== "assistant" || m.content?.trim() || m.toolCalls?.length),
       )
     : messages;
 
-  return filtered.flatMap((m) => {
+  return filtered.flatMap((m: any) => {
     // Expand assistant messages with toolCalls into
     // [assistant(tool_calls), tool(result1), tool(result2), ...]
     if (m.role === "assistant" && m.toolCalls?.length > 0) {
@@ -80,7 +84,7 @@ export function expandMessagesForFC(messages, { filterDeleted = true } = {}) {
         // Preserve thinking + signature for Anthropic multi-turn round-trips
         ...(m.thinking && { thinking: m.thinking }),
         ...(m.thinkingSignature && { thinkingSignature: m.thinkingSignature }),
-        toolCalls: m.toolCalls.map((tc) => ({
+        toolCalls: m.toolCalls.map((tc: any) => ({
           id: tc.id,
           name: tc.name,
           args: tc.args,
@@ -93,8 +97,8 @@ export function expandMessagesForFC(messages, { filterDeleted = true } = {}) {
         })),
       };
       const toolMsgs = m.toolCalls
-        .filter((tc) => tc.result !== undefined)
-        .map((tc) => ({
+        .filter((tc: any) => tc.result !== undefined)
+        .map((tc: any) => ({
           role: "tool",
           name: tc.name,
           tool_call_id: tc.id,
@@ -129,8 +133,12 @@ export function expandMessagesForFC(messages, { filterDeleted = true } = {}) {
         ...(m.video?.length > 0 ? { video: m.video } : {}),
         ...(m.audio?.length > 0 ? { audio: m.audio } : {}),
         ...(m.pdf?.length > 0 ? { pdf: m.pdf } : {}),
-        ...(m.role === "assistant" && m.thinking ? { thinking: m.thinking } : {}),
-        ...(m.role === "assistant" && m.thinkingSignature ? { thinkingSignature: m.thinkingSignature } : {}),
+        ...(m.role === "assistant" && m.thinking
+          ? { thinking: m.thinking }
+          : {}),
+        ...(m.role === "assistant" && m.thinkingSignature
+          ? { thinkingSignature: m.thinkingSignature }
+          : {}),
       },
     ];
   });

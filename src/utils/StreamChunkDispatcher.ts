@@ -18,17 +18,19 @@ import logger from "./logger.js";
  * @param {string} text
  * @returns {string}
  */
-export function stripToolCallMarkup(text) {
-  return text
-    // Completed tag pairs
-    .replace(/<\|?tool_call\|?>[\s\S]*?<\/?\|?tool_call\|?>/gi, "")
-    .replace(/<\|?tool_response\|?>[\s\S]*?<\/?\|?tool_response\|?>/gi, "")
-    .replace(/<\|?result\|?>[\s\S]*?<\/?\|?result\|?>/gi, "")
-    .replace(/\[END_TOOL_REQUEST\]/gi, "")
-    // Incomplete tags at end of stream (closing tag hasn't arrived yet)
-    .replace(/<\|?tool_call\|?>[\s\S]*$/gi, "")
-    .replace(/<\|?tool_response\|?>[\s\S]*$/gi, "")
-    .replace(/<\|?result\|?>[\s\S]*$/gi, "");
+export function stripToolCallMarkup(text: any) {
+  return (
+    text
+      // Completed tag pairs
+      .replace(/<\|?tool_call\|?>[\s\S]*?<\/?\|?tool_call\|?>/gi, "")
+      .replace(/<\|?tool_response\|?>[\s\S]*?<\/?\|?tool_response\|?>/gi, "")
+      .replace(/<\|?result\|?>[\s\S]*?<\/?\|?result\|?>/gi, "")
+      .replace(/\[END_TOOL_REQUEST\]/gi, "")
+      // Incomplete tags at end of stream (closing tag hasn't arrived yet)
+      .replace(/<\|?tool_call\|?>[\s\S]*$/gi, "")
+      .replace(/<\|?tool_response\|?>[\s\S]*$/gi, "")
+      .replace(/<\|?result\|?>[\s\S]*$/gi, "")
+  );
 }
 
 /**
@@ -40,14 +42,24 @@ export function stripToolCallMarkup(text) {
  * @param {string} [logPrefix="stream"] - Prefix for error logs
  * @returns {Promise<string|null>} MinIO ref, or null on failure
  */
-export async function uploadImageChunk(chunk, project, username, logPrefix = "stream") {
+export async function uploadImageChunk(
+  chunk: any,
+  project: any,
+  username: any,
+  logPrefix = "stream",
+) {
   if (!chunk.data) return null;
   try {
     const mimeType = chunk.mimeType || "image/png";
     const dataUrl = `data:${mimeType};base64,${chunk.data}`;
-    const { ref } = await FileService.uploadFile(dataUrl, "generations", project, username);
+    const { ref } = await FileService.uploadFile(
+      dataUrl,
+      "generations",
+      project,
+      username,
+    );
     return ref;
-  } catch (error) {
+  } catch (error: any) {
     logger.error(`[${logPrefix}] MinIO upload failed: ${error.message}`);
     return null;
   }
@@ -61,7 +73,11 @@ export async function uploadImageChunk(chunk, project, username, logPrefix = "st
  * @param {string} [mimeType="image/png"]
  * @returns {string}
  */
-export function imageRefOrInline(minioRef, data, mimeType = "image/png") {
+export function imageRefOrInline(
+  minioRef: any,
+  data: any,
+  mimeType = "image/png",
+) {
   return minioRef || `data:${mimeType};base64,${data}`;
 }
 
@@ -93,8 +109,14 @@ export function imageRefOrInline(minioRef, data, mimeType = "image/png") {
  * @param {string} [options.logPrefix] - Prefix for error logs
  * @returns {Promise<boolean>} true if chunk was handled, false if unrecognised
  */
-export async function dispatchChunk(chunk, state, ctx, options = {}) {
+export async function dispatchChunk(
+  chunk: any,
+  state: any,
+  ctx: any,
+  options = {},
+) {
   const { emit, project, username } = ctx;
+  // @ts-ignore
   const logPrefix = options.logPrefix || "stream";
 
   // Non-object chunks are treated as text (raw string from provider)
@@ -102,7 +124,11 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
     if (!state.firstTokenTime) {
       state.firstTokenTime = performance.now();
       if (state.requestStart) {
-        emit({ type: "status", message: "generation_started", timeToFirstToken: (state.firstTokenTime - state.requestStart) / 1000 });
+        emit({
+          type: "status",
+          message: "generation_started",
+          timeToFirstToken: (state.firstTokenTime - state.requestStart) / 1000,
+        });
       }
     }
     state.generationEnd = performance.now();
@@ -112,13 +138,20 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
     const cleanText = stripToolCallMarkup(state.text);
     const chunkStr = cleanText.slice(state.outputCharacters);
     state.outputCharacters = cleanText.length;
-    if (chunkStr) emit({ type: "chunk", content: chunkStr, outputCharacters: state.outputCharacters });
+    if (chunkStr)
+      emit({
+        type: "chunk",
+        content: chunkStr,
+        outputCharacters: state.outputCharacters,
+      });
     return true;
   }
 
   switch (chunk.type) {
     case "usage":
+      // @ts-ignore
       if (options.onUsage) {
+        // @ts-ignore
         options.onUsage(chunk.usage);
       } else {
         state.usage = chunk.usage;
@@ -133,13 +166,22 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
       if (!state.firstTokenTime) {
         state.firstTokenTime = performance.now();
         if (state.requestStart) {
-          emit({ type: "status", message: "generation_started", timeToFirstToken: (state.firstTokenTime - state.requestStart) / 1000 });
+          emit({
+            type: "status",
+            message: "generation_started",
+            timeToFirstToken:
+              (state.firstTokenTime - state.requestStart) / 1000,
+          });
         }
       }
       state.generationEnd = performance.now();
       state.thinking += chunk.content;
       state.outputCharacters += (chunk.content || "").length;
-      emit({ type: "thinking", content: chunk.content, outputCharacters: state.outputCharacters });
+      emit({
+        type: "thinking",
+        content: chunk.content,
+        outputCharacters: state.outputCharacters,
+      });
       return true;
 
     case "thinking_signature":
@@ -147,9 +189,16 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
       return true;
 
     case "image": {
-      const minioRef = await uploadImageChunk(chunk, project, username, logPrefix);
+      const minioRef = await uploadImageChunk(
+        chunk,
+        project,
+        username,
+        logPrefix,
+      );
       if (chunk.data) {
-        state.images.push(imageRefOrInline(minioRef, chunk.data, chunk.mimeType));
+        state.images.push(
+          imageRefOrInline(minioRef, chunk.data, chunk.mimeType),
+        );
       }
       emit({
         type: "image",
@@ -161,11 +210,19 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
     }
 
     case "executableCode":
-      emit({ type: "executableCode", code: chunk.code, language: chunk.language });
+      emit({
+        type: "executableCode",
+        code: chunk.code,
+        language: chunk.language,
+      });
       return true;
 
     case "codeExecutionResult":
-      emit({ type: "codeExecutionResult", output: chunk.output, outcome: chunk.outcome });
+      emit({
+        type: "codeExecutionResult",
+        output: chunk.output,
+        outcome: chunk.outcome,
+      });
       return true;
 
     case "webSearchResult":
@@ -186,14 +243,19 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
       if (!state.firstTokenTime) {
         state.firstTokenTime = performance.now();
         if (state.requestStart) {
-          emit({ type: "status", message: "generation_started", timeToFirstToken: (state.firstTokenTime - state.requestStart) / 1000 });
+          emit({
+            type: "status",
+            message: "generation_started",
+            timeToFirstToken:
+              (state.firstTokenTime - state.requestStart) / 1000,
+          });
         }
       }
       state.generationEnd = performance.now();
 
       if (chunk.status === "done" || chunk.status === "error") {
         const existing = state.toolCalls.find(
-          (tc) =>
+          (tc: any) =>
             (chunk.id && tc.id === chunk.id) ||
             (!chunk.id && tc.name === chunk.name && !tc.result),
         );
@@ -231,7 +293,12 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
       if (!state.firstTokenTime) {
         state.firstTokenTime = performance.now();
         if (state.requestStart) {
-          emit({ type: "status", message: "generation_started", timeToFirstToken: (state.firstTokenTime - state.requestStart) / 1000 });
+          emit({
+            type: "status",
+            message: "generation_started",
+            timeToFirstToken:
+              (state.firstTokenTime - state.requestStart) / 1000,
+          });
         }
       }
       state.generationEnd = performance.now();
@@ -239,7 +306,12 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
       return true;
 
     case "status":
-      emit({ type: "status", message: chunk.message, phase: chunk.phase, ...(chunk.progress != null && { progress: chunk.progress }) });
+      emit({
+        type: "status",
+        message: chunk.message,
+        phase: chunk.phase,
+        ...(chunk.progress != null && { progress: chunk.progress }),
+      });
       return true;
 
     default: {
@@ -247,7 +319,12 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
       if (!state.firstTokenTime) {
         state.firstTokenTime = performance.now();
         if (state.requestStart) {
-          emit({ type: "status", message: "generation_started", timeToFirstToken: (state.firstTokenTime - state.requestStart) / 1000 });
+          emit({
+            type: "status",
+            message: "generation_started",
+            timeToFirstToken:
+              (state.firstTokenTime - state.requestStart) / 1000,
+          });
         }
       }
       state.generationEnd = performance.now();
@@ -257,7 +334,12 @@ export async function dispatchChunk(chunk, state, ctx, options = {}) {
       const cleanText = stripToolCallMarkup(state.text);
       const chunkStr = cleanText.slice(state.outputCharacters);
       state.outputCharacters = cleanText.length;
-      if (chunkStr) emit({ type: "chunk", content: chunkStr, outputCharacters: state.outputCharacters });
+      if (chunkStr)
+        emit({
+          type: "chunk",
+          content: chunkStr,
+          outputCharacters: state.outputCharacters,
+        });
       return true;
     }
   }
@@ -272,7 +354,7 @@ export function createStreamState() {
     usage: null,
     firstTokenTime: null,
     generationEnd: null,
-    requestStart: null,  // Set by caller to enable server-computed TTFT
+    requestStart: null, // Set by caller to enable server-computed TTFT
     outputCharacters: 0,
     text: "",
     thinking: "",

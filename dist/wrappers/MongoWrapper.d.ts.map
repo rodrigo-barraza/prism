@@ -1,0 +1,1 @@
+{"version":3,"file":"MongoWrapper.d.ts","sourceRoot":"","sources":["../../src/wrappers/MongoWrapper.ts"],"names":[],"mappings":"AAwBA,QAAA,MAAM,YAAY;uBACS,GAAG,OAAO,GAAG;qBAGrB,GAAG;gBAQR,GAAG;0BAGO,GAAG,kBAAkB,GAAG;sBAI5B,GAAG;CAGtB,CAAC;AAEF,eAAe,YAAY,CAAC"}

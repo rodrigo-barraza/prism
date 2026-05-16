@@ -20,7 +20,8 @@ const enterWorktree = {
       properties: {
         reason: {
           type: "string",
-          description: "Why you're entering an isolated worktree (e.g. 'risky refactor', 'experimental approach').",
+          description:
+            "Why you're entering an isolated worktree (e.g. 'risky refactor', 'experimental approach').",
         },
       },
       required: [],
@@ -29,19 +30,25 @@ const enterWorktree = {
   domain: "Agentic: Git Isolation",
   labels: ["coding", "git"],
 
-  async execute(args, ctx) {
-    const { default: ToolOrchestratorService } = await import("../ToolOrchestratorService.js");
+  async execute(args: any, ctx: any) {
+    const { default: ToolOrchestratorService } =
+      await import("../ToolOrchestratorService.js");
     const { resolve } = await import("node:path");
     const { existsSync } = await import("node:fs");
 
     const sessionId = ctx.agentSessionId;
     if (!sessionId) {
-      return { error: "No agent session — worktree isolation requires an active session" };
+      return {
+        error:
+          "No agent session — worktree isolation requires an active session",
+      };
     }
 
     const worktreeState = ToolOrchestratorService.getWorktreeState(sessionId);
     if (worktreeState) {
-      return { error: `Already in a worktree (branch: ${worktreeState.branchName}). Call exit_worktree first.` };
+      return {
+        error: `Already in a worktree (branch: ${worktreeState.branchName}). Call exit_worktree first.`,
+      };
     }
 
     const workspaceRoot = ToolOrchestratorService.getWorkspaceRoot();
@@ -62,29 +69,45 @@ const enterWorktree = {
       ctx,
     );
 
+    // @ts-ignore
     if (createResult.error) {
+      // @ts-ignore
       return { error: `Failed to create worktree: ${createResult.error}` };
     }
 
     // Store the worktree state
     ToolOrchestratorService._setWorktree(sessionId, {
       originalRoot: workspaceRoot,
+      // @ts-ignore
       worktreePath: createResult.worktreePath,
       branchName,
       repoPath,
     });
 
-    logger.info(`[Worktree] enter: ${branchName} → ${createResult.worktreePath}`);
+    // @ts-ignore
+    logger.info(
+      // @ts-ignore
+      `[Worktree] enter: ${branchName} → ${createResult.worktreePath}`,
+    );
 
     if (ctx._emit) {
-      ctx._emit({ type: "status", message: "worktree_entered", branch: branchName, path: createResult.worktreePath });
+      // @ts-ignore
+      ctx._emit({
+        type: "status",
+        message: "worktree_entered",
+        branch: branchName,
+        // @ts-ignore
+        path: createResult.worktreePath,
+      });
     }
 
     return {
       acknowledged: true,
       branch: branchName,
+      // @ts-ignore
       worktreePath: createResult.worktreePath,
       reason: args.reason || null,
+      // @ts-ignore
       message: `Now working in isolated worktree. All file operations are redirected to ${createResult.worktreePath}. Call exit_worktree with action 'merge' or 'discard' when done.`,
     };
   },
@@ -104,11 +127,13 @@ const exitWorktree = {
         action: {
           type: "string",
           enum: ["merge", "discard"],
-          description: "'merge' to apply changes to main branch, 'discard' to throw them away.",
+          description:
+            "'merge' to apply changes to main branch, 'discard' to throw them away.",
         },
         commitMessage: {
           type: "string",
-          description: "Commit message for the merge (used when action is 'merge'). Auto-generated if not provided.",
+          description:
+            "Commit message for the merge (used when action is 'merge'). Auto-generated if not provided.",
         },
       },
       required: ["action"],
@@ -117,13 +142,16 @@ const exitWorktree = {
   domain: "Agentic: Git Isolation",
   labels: ["coding", "git"],
 
-  async execute(args, ctx) {
-    const { default: ToolOrchestratorService } = await import("../ToolOrchestratorService.js");
+  async execute(args: any, ctx: any) {
+    const { default: ToolOrchestratorService } =
+      await import("../ToolOrchestratorService.js");
 
     const sessionId = ctx.agentSessionId;
     const wt = ToolOrchestratorService.getWorktreeState(sessionId);
     if (!sessionId || !wt) {
-      return { error: "Not currently in a worktree. Call enter_worktree first." };
+      return {
+        error: "Not currently in a worktree. Call enter_worktree first.",
+      };
     }
 
     const { action, commitMessage } = args;
@@ -146,10 +174,16 @@ const exitWorktree = {
         ctx,
       );
 
+      // @ts-ignore
       if (mergeResult.error) {
-        return { error: `Merge failed: ${mergeResult.error}. Worktree preserved at ${wt.worktreePath}. Resolve conflicts and try again, or exit_worktree with action 'discard'.` };
+        // @ts-ignore
+        return {
+          // @ts-ignore
+          error: `Merge failed: ${mergeResult.error}. Worktree preserved at ${wt.worktreePath}. Resolve conflicts and try again, or exit_worktree with action 'discard'.`,
+        };
       }
 
+      // @ts-ignore
       mergeResult.diff = diffResult.error ? null : diffResult;
     }
 
@@ -165,7 +199,12 @@ const exitWorktree = {
     logger.info(`[Worktree] exit: ${action} — ${wt.branchName}`);
 
     if (ctx._emit) {
-      ctx._emit({ type: "status", message: "worktree_exited", action, branch: wt.branchName });
+      ctx._emit({
+        type: "status",
+        message: "worktree_exited",
+        action,
+        branch: wt.branchName,
+      });
     }
 
     return {
@@ -173,9 +212,10 @@ const exitWorktree = {
       action,
       branch: wt.branchName,
       merged: action === "merge" ? mergeResult : undefined,
-      message: action === "merge"
-        ? `Changes from ${wt.branchName} merged into main branch. Workspace restored.`
-        : `Worktree ${wt.branchName} discarded. All changes removed. Workspace restored.`,
+      message:
+        action === "merge"
+          ? `Changes from ${wt.branchName} merged into main branch. Workspace restored.`
+          : `Worktree ${wt.branchName} discarded. All changes removed. Workspace restored.`,
     };
   },
 };

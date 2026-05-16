@@ -1,4 +1,5 @@
 import MongoWrapper from "../wrappers/MongoWrapper.js";
+// @ts-ignore
 import { MONGO_DB_NAME } from "../../config.js";
 
 /**
@@ -8,7 +9,7 @@ import { MONGO_DB_NAME } from "../../config.js";
  *
  * Usage: `router.use(requireDb)` or per-route `router.get("/", requireDb, handler)`
  */
-export default function requireDb(req, res, next) {
+export default function requireDb(req: any, res: any, next: any) {
   const db = MongoWrapper.getDb(MONGO_DB_NAME);
   if (!db) {
     return res.status(503).json({ error: "Database not available" });
