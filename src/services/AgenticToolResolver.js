@@ -42,6 +42,9 @@ export default class AgenticToolResolver {
           .find({ project, username, enabled: true })
           .toArray();
       }
+      if (customToolsData.length > 0) {
+        logger.info(`[AgenticToolResolver] Loaded ${customToolsData.length} custom tool(s) from MongoDB: [${customToolsData.map((t) => t.name).join(", ")}]`);
+      }
     } catch (err) {
       logger.warn(`Failed to fetch custom tools for loop: ${err.message}`);
     }
@@ -159,6 +162,7 @@ export default class AgenticToolResolver {
         enabledSet = new Set(resolvedEnabledTools);
       }
 
+      const preFilterCustom = finalTools.filter((t) => t._isCustom).map((t) => t.name);
       finalTools = finalTools.filter(
         (t) =>
           enabledSet.has(t.name) ||
@@ -167,6 +171,10 @@ export default class AgenticToolResolver {
           COORDINATOR_TOOL_NAMES.has(t.name) ||
           PRISM_LOCAL_TOOL_NAMES.has(t.name),
       );
+      const postFilterCustom = finalTools.filter((t) => t._isCustom).map((t) => t.name);
+      if (preFilterCustom.length > 0) {
+        logger.info(`[AgenticToolResolver] Custom tools: pre-filter=[${preFilterCustom.join(", ")}] post-filter=[${postFilterCustom.join(", ")}] (enabledSet has ${enabledSet.size} entries)`);
+      }
     }
 
     // ── Native tool collision prevention ────────────────────────
@@ -182,6 +190,8 @@ export default class AgenticToolResolver {
       finalTools = finalTools.filter((t) => t.name !== "describe_image");
     }
 
+    const finalCustomCount = finalTools.filter((t) => t._isCustom).length;
+    logger.info(`[AgenticToolResolver] Final: ${finalTools.length} tools (${finalCustomCount} custom, ${customToolMap.size} in map)`);
     return { finalTools, customToolMap, resolvedEnabledTools };
   }
 }
