@@ -35,12 +35,10 @@ vi.mock("../src/services/ToolOrchestratorService.js", () => ({
 
 vi.mock("../src/wrappers/MongoWrapper.js", () => ({
   default: {
-    getClient: vi.fn().mockReturnValue({
-      db: vi.fn().mockReturnValue({
-        collection: vi.fn().mockReturnValue({
-          find: vi.fn().mockReturnValue({
-            toArray: vi.fn().mockResolvedValue([]),
-          }),
+    getDb: vi.fn().mockReturnValue({
+      collection: vi.fn().mockReturnValue({
+        find: vi.fn().mockReturnValue({
+          toArray: vi.fn().mockResolvedValue([]),
         }),
       }),
     }),
@@ -390,16 +388,14 @@ describe("AgenticLoopService", () => {
   it("should load custom tools from MongoDB and pass them to the LLM", async () => {
     // Override Mongo mock for this test
     const MongoWrapper = (await import("../src/wrappers/MongoWrapper.js")).default;
-    MongoWrapper.getClient.mockReturnValueOnce({
-      db: () => ({
-        collection: () => ({
-          find: () => ({
-            toArray: async () => [{
-              name: "custom_db_tool",
-              description: "A tool from the database",
-              parameters: [{ name: "param1", type: "string", required: true }]
-            }]
-          })
+    MongoWrapper.getDb.mockReturnValueOnce({
+      collection: () => ({
+        find: () => ({
+          toArray: async () => [{
+            name: "custom_db_tool",
+            description: "A tool from the database",
+            parameters: [{ name: "param1", type: "string", required: true }]
+          }]
         })
       })
     });
