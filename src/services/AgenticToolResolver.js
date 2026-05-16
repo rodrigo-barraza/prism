@@ -162,6 +162,7 @@ export default class AgenticToolResolver {
       finalTools = finalTools.filter(
         (t) =>
           enabledSet.has(t.name) ||
+          t._isCustom ||
           t.name.startsWith("mcp__") ||
           COORDINATOR_TOOL_NAMES.has(t.name) ||
           PRISM_LOCAL_TOOL_NAMES.has(t.name),
