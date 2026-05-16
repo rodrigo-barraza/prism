@@ -52,6 +52,7 @@ const MODEL_MANAGEMENT_TYPES = new Set(["lm-studio"]);
  */
 const THINKING_PATTERNS = [
   "qwen3", "deepseek-r1", "deepseek-v3", "gpt-oss", "gemma-4",
+  "minimax",
 ];
 
 /**
@@ -61,7 +62,7 @@ const THINKING_PATTERNS = [
 const FC_PATTERNS = [
   "qwen", "deepseek", "llama", "mistral", "gemma",
   "phi", "command", "hermes", "functionary", "gpt-oss",
-  "nemotron",
+  "nemotron", "minimax",
 ];
 
 /**
