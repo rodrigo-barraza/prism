@@ -216,8 +216,8 @@ function handleWsLive(ws, project, username, _clientIp, agent) {
         username,
       );
       return ref;
-    } catch (err) {
-      logger.error(`[Live API] Failed to build/upload WAV: ${err.message}`);
+    } catch (error) {
+      logger.error(`[Live API] Failed to build/upload WAV: ${error.message}`);
       return null;
     }
   }
@@ -302,8 +302,8 @@ function handleWsLive(ws, project, username, _clientIp, agent) {
           if (googleFormats) {
             tools.push(...googleFormats);
           }
-        } catch (err) {
-          logger.error(`[Live API] Error loading tools: ${err.message}`);
+        } catch (error) {
+          logger.error(`[Live API] Error loading tools: ${error.message}`);
         }
       }
 
@@ -360,8 +360,8 @@ function handleWsLive(ws, project, username, _clientIp, agent) {
               if (activeConversationId) {
                 ConversationService.setGenerating(
                   activeConversationId, project, username, true,
-                ).catch((err) =>
-                  logger.error(`[Live API] Failed to set isGenerating: ${err.message}`),
+                ).catch((error) =>
+                  logger.error(`[Live API] Failed to set isGenerating: ${error.message}`),
                 );
               }
               emit({ type: "setupComplete" });
@@ -470,8 +470,8 @@ function handleWsLive(ws, project, username, _clientIp, agent) {
                           customToolMap.set(t.name, t);
                         }
                       }
-                    } catch (e) {
-                      logger.warn(`Failed to fetch custom tools for Live API loop: ${e.message}`);
+                    } catch (error) {
+                      logger.warn(`Failed to fetch custom tools for Live API loop: ${error.message}`);
                     }
 
                     const results = await Promise.all(
@@ -502,8 +502,8 @@ function handleWsLive(ws, project, username, _clientIp, agent) {
                     }));
 
                     liveSession.sendToolResponse({ functionResponses });
-                  } catch (err) {
-                    logger.error(`[Live API] Error executing tools: ${err.message}`);
+                  } catch (error) {
+                    logger.error(`[Live API] Error executing tools: ${error.message}`);
                   }
                 })();
               }
@@ -598,7 +598,7 @@ function handleWsLive(ws, project, username, _clientIp, agent) {
                     toolCalls: turnToolCalls,
                     outputCharacters: turnText.length,
                     ...(audioRef ? { audioRef } : {})
-                  }).catch(err => logger.error(`[Live API] Failed to log ${eventType} request: ${err.message}`));
+                  }).catch(error => logger.error(`[Live API] Failed to log ${eventType} request: ${error.message}`));
 
                   emit({
                     type: eventType,
@@ -624,8 +624,8 @@ function handleWsLive(ws, project, username, _clientIp, agent) {
                   if (activeConversationId) {
                     ConversationService.setGenerating(
                       activeConversationId, project, username, false,
-                    ).catch((err) =>
-                      logger.error(`[Live API] Failed to clear isGenerating on ${eventType}: ${err.message}`),
+                    ).catch((error) =>
+                      logger.error(`[Live API] Failed to clear isGenerating on ${eventType}: ${error.message}`),
                     );
                   }
                 });
@@ -666,17 +666,17 @@ function handleWsLive(ws, project, username, _clientIp, agent) {
               if (activeConversationId) {
                 ConversationService.setGenerating(
                   activeConversationId, project, username, false,
-                ).catch((err) =>
-                  logger.error(`[Live API] Failed to clear isGenerating on close: ${err.message}`),
+                ).catch((error) =>
+                  logger.error(`[Live API] Failed to clear isGenerating on close: ${error.message}`),
                 );
               }
               emit({ type: "sessionClosed" });
             },
           },
         });
-      } catch (err) {
-        logger.error(`[Live API] Failed to connect: ${err.message}`);
-        emit({ type: "error", message: `Failed to connect: ${err.message}` });
+      } catch (error) {
+        logger.error(`[Live API] Failed to connect: ${error.message}`);
+        emit({ type: "error", message: `Failed to connect: ${error.message}` });
       }
       return;
     }
@@ -722,9 +722,9 @@ function handleWsLive(ws, project, username, _clientIp, agent) {
         liveSession.sendRealtimeInput({ activityStart: {} });
         liveSession.sendRealtimeInput({ text: data.text });
         liveSession.sendRealtimeInput({ activityEnd: {} });
-      } catch (err) {
-        logger.error(`[Live API] Failed to send text: ${err.message}`);
-        emit({ type: "error", message: `Failed to send text: ${err.message}` });
+      } catch (error) {
+        logger.error(`[Live API] Failed to send text: ${error.message}`);
+        emit({ type: "error", message: `Failed to send text: ${error.message}` });
       }
       return;
     }
@@ -763,8 +763,8 @@ function handleWsLive(ws, project, username, _clientIp, agent) {
     if (activeConversationId) {
       ConversationService.setGenerating(
         activeConversationId, project, username, false,
-      ).catch((err) =>
-        logger.error(`[Live API] Failed to clear isGenerating on disconnect: ${err.message}`),
+      ).catch((error) =>
+        logger.error(`[Live API] Failed to clear isGenerating on disconnect: ${error.message}`),
       );
     }
     logger.info(

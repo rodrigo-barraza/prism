@@ -39,8 +39,8 @@ async function* parseNdjsonStream(body) {
           if (chunk.result) {
             yield chunk.result;
           }
-        } catch (e) {
-          logger.warn(`[Inworld] NDJSON parse error: ${e.message}`);
+        } catch (error) {
+          logger.warn(`[Inworld] NDJSON parse error: ${error.message}`);
         }
       }
     }

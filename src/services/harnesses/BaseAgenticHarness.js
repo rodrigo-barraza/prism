@@ -383,7 +383,7 @@ export default class BaseAgenticHarness {
       toolCalls: pass.pendingToolCalls,
       outputCharacters: pass.outputCharacters,
       agenticIteration: state.iterations,
-    }).catch(err => logger.error(`[AgenticLoopService] Failed to log intermediate request: ${err.message}`));
+    }).catch(error => logger.error(`[AgenticLoopService] Failed to log intermediate request: ${error.message}`));
   }
 
   // ── Per-iteration pass state factory ──────────────────────
@@ -446,8 +446,8 @@ export default class BaseAgenticHarness {
         const dataUrl = `data:${mimeType};base64,${chunk.data}`;
         const { ref } = await FileService.uploadFile(dataUrl, "generations", project, username);
         minioRef = ref;
-      } catch (err) {
-        logger.error(`MinIO upload failed: ${err.message}`);
+      } catch (error) {
+        logger.error(`MinIO upload failed: ${error.message}`);
       }
       const imgRef = minioRef || `data:${chunk.mimeType || "image/png"};base64,${chunk.data}`;
       state.streamedImages.push(imgRef);

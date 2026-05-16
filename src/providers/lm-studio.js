@@ -12,8 +12,8 @@ import { resolveArchParams } from "../utils/gguf-arch.js";
 import { TOOLS_SERVICE_URL, LM_STUDIO_EVAL_BATCH_SIZE, LM_STUDIO_DEFAULT_MAX_CONTEXT } from "../../config.js";
 import { TYPES, getDefaultModels } from "../config.js";
 import {  } from "../utils/utilities.js";
-// Default MCP server URL for ephemeral tool integrations
-const DEFAULT_MCP_SERVER_URL = TOOLS_SERVICE_URL || "http://localhost:5590";
+// Default MCP server URL for ephemeral tool integrations (vault-resolved)
+const DEFAULT_MCP_SERVER_URL = TOOLS_SERVICE_URL;
 import {
   convertToolsToOpenAI,
   buildPayloadParams,
@@ -438,9 +438,9 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
                   .then(() => {
                     loadDone = true;
                   })
-                  .catch((err) => {
+                  .catch((error) => {
                     loadDone = true;
-                    if (err.name !== "AbortError") loadError = err;
+                    if (error.name !== "AbortError") loadError = error;
                   });
                 const startTime = Date.now();
                 const EXPECTED_LOAD_MS = 15_000;
@@ -943,8 +943,8 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
           await this.unloadModel(inst.id);
         }
       }
-    } catch (err) {
-      logger.warn(`[LM-Studio] unloadModelByKey(${modelKey}) failed: ${err.message}`);
+    } catch (error) {
+      logger.warn(`[LM-Studio] unloadModelByKey(${modelKey}) failed: ${error.message}`);
     }
   },
   /**

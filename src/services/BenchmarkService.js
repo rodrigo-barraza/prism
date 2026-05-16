@@ -370,10 +370,10 @@ async function runSingleModel(benchmark, model, project, username, { signal, onE
       error: null,
       completedAt: new Date().toISOString(),
     };
-  } catch (err) {
+  } catch (error) {
     const latency = (performance.now() - start) / 1000;
     logger.error(
-      `[benchmark]   💥 ${model.model} threw: ${err.message}`,
+      `[benchmark]   💥 ${model.model} threw: ${error.message}`,
     );
     return {
       provider: model.provider,
@@ -387,7 +387,7 @@ async function runSingleModel(benchmark, model, project, username, { signal, onE
       latency: roundMs(latency),
       usage: null,
       estimatedCost: null,
-      error: err.message,
+      error: error.message,
       completedAt: new Date().toISOString(),
     };
   }

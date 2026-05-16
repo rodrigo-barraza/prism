@@ -1267,8 +1267,8 @@ async function connectDB() {
 
     log(`${C.dim}    Connected to MongoDB (${MONGO_DB_NAME})${C.reset}`);
     return _db;
-  } catch (err) {
-    log(`${C.yellow}    MongoDB unavailable: ${err.message} — results will be JSON-only${C.reset}`);
+  } catch (error) {
+    log(`${C.yellow}    MongoDB unavailable: ${error.message} — results will be JSON-only${C.reset}`);
     return null;
   }
 }
@@ -1548,8 +1548,8 @@ async function main() {
   let models;
   try {
     models = await provider.listModels();
-  } catch (err) {
-    console.error(`Failed to list models: ${err.message}`);
+  } catch (error) {
+    console.error(`Failed to list models: ${error.message}`);
     process.exit(1);
   }
 
@@ -1901,11 +1901,11 @@ async function main() {
       log(
         `${C.dim}        actual=${C.reset}${C.cyan}${fmtGiB(entry.modelVramGiB)}${C.reset}${C.dim}  est=${C.reset}${fmtGiB(entry.estimatedGiB)}${C.dim}  Δ=${C.reset}${dc}${entry.deltaGiB >= 0 ? "+" : ""}${entry.deltaGiB.toFixed(2)}${C.reset}${C.dim}  ${entry.tokensPerSecond} tok/s  TTFT=${ttftStr}  ${entry.gpu.temp}°C ${entry.gpu.power}W ${ramStr} ${bwStr}${C.reset}`,
       );
-    } catch (err) {
-      entry.error = err.message;
+    } catch (error) {
+      entry.error = error.message;
       process.stdout.write(` ${C.red}FAILED${C.reset}\n`);
       log(
-        `${C.red}        Error: ${err.message.slice(0, 120)}${C.reset}`,
+        `${C.red}        Error: ${error.message.slice(0, 120)}${C.reset}`,
       );
     }
 
@@ -1968,8 +1968,8 @@ async function main() {
           eval_batch_size: 512,
           parallel: 4,
         });
-      } catch (err) {
-        log(`    ${C.red}Failed to load for extended tests: ${err.message.slice(0, 100)}${C.reset}`);
+      } catch (error) {
+        log(`    ${C.red}Failed to load for extended tests: ${error.message.slice(0, 100)}${C.reset}`);
         continue;
       }
 
@@ -2001,8 +2001,8 @@ async function main() {
           for (const t of turnResults) {
             log(`      ${C.dim}  Turn ${t.turn}: ${fmtMiB(t.vramMiB)} (in=${t.inputTokens} out=${t.outputTokens})${C.reset}`);
           }
-        } catch (err) {
-          log(`      ${C.red}Multi-turn failed: ${err.message.slice(0, 100)}${C.reset}`);
+        } catch (error) {
+          log(`      ${C.red}Multi-turn failed: ${error.message.slice(0, 100)}${C.reset}`);
         }
       }
 
@@ -2044,8 +2044,8 @@ async function main() {
           await saveResult(csEntry);
 
           log(`      ${C.dim}Single:${C.reset} ${fmtMiB(singleVramMiB)}  ${C.dim}Concurrent:${C.reset} ${fmtMiB(concurrentVramMiB)}  ${C.dim}Per-slot:${C.reset} ${perSlotDelta > 100 ? C.red : C.green}+${perSlotDelta} MiB${C.reset}`);
-        } catch (err) {
-          log(`      ${C.red}Concurrent test failed: ${err.message.slice(0, 100)}${C.reset}`);
+        } catch (error) {
+          log(`      ${C.red}Concurrent test failed: ${error.message.slice(0, 100)}${C.reset}`);
         }
       }
 
@@ -2086,8 +2086,8 @@ async function main() {
           await saveResult(satEntry);
 
           log(`      ${C.dim}Filled:${C.reset} ${satResult.inputTokens || "?"} tokens  ${C.dim}VRAM:${C.reset} ${fmtMiB(satVramMiB)}  ${C.dim}Δ vs empty:${C.reset} ${vramDelta > 100 ? C.yellow : C.green}+${vramDelta} MiB${C.reset}  ${C.dim}TTFT:${C.reset} ${satResult.ttftMs || "?"}ms`);
-        } catch (err) {
-          log(`      ${C.red}Saturation test failed: ${err.message.slice(0, 100)}${C.reset}`);
+        } catch (error) {
+          log(`      ${C.red}Saturation test failed: ${error.message.slice(0, 100)}${C.reset}`);
         }
       }
     }
@@ -2422,7 +2422,7 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(`\nFatal: ${err.message}`);
-  console.error(err.stack);
+  console.error(`\nFatal: ${error.message}`);
+  console.error(error.stack);
   process.exit(1);
 });

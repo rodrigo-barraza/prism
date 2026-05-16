@@ -62,10 +62,10 @@ function wrapProvider(provider) {
         let result;
         try {
           result = value.apply(target, args);
-        } catch (err) {
+        } catch (error) {
           // Synchronous throw (rare but possible)
           ActiveGenerationTracker.decrement();
-          throw err;
+          throw error;
         }
 
         // Async generator — wrap the iterator

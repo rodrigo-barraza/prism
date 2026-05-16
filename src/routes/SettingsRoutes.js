@@ -13,9 +13,9 @@ router.get("/", asyncHandler(async (_req, res, next) => {
   try {
     const settings = await SettingsService.get();
     res.json(settings);
-  } catch (err) {
-    logger.error(`GET /settings error: ${err.message}`);
-    next(err);
+  } catch (error) {
+    logger.error(`GET /settings error: ${error.message}`);
+    next(error);
   }
 }));
 
@@ -32,9 +32,9 @@ router.put("/", asyncHandler(async (req, res, next) => {
 
     const updated = await SettingsService.update(data);
     res.json(updated);
-  } catch (err) {
-    logger.error(`PUT /settings error: ${err.message}`);
-    next(err);
+  } catch (error) {
+    logger.error(`PUT /settings error: ${error.message}`);
+    next(error);
   }
 }));
 

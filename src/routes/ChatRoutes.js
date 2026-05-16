@@ -112,8 +112,8 @@ async function compressDataUrlIfOversized(dataUrl) {
         `[chat] Dimension-constrained image: now ${(base64Data.length / 1024 / 1024).toFixed(2)} MB b64 (${mimeType})`,
       );
     }
-  } catch (err) {
-    logger.warn(`[chat] Dimension constraint failed: ${err.message}`);
+  } catch (error) {
+    logger.warn(`[chat] Dimension constraint failed: ${error.message}`);
   }
   // Step 2: enforce byte-size limit
   const b64Len = base64Data.length; // Anthropic checks base64 STRING length
@@ -133,8 +133,8 @@ async function compressDataUrlIfOversized(dataUrl) {
       `[chat] Compressed: ${(b64Len / 1024 / 1024).toFixed(2)} MB → ${(newLen / 1024 / 1024).toFixed(2)} MB b64 (${result.mediaType})`,
     );
     return newUrl;
-  } catch (err) {
-    logger.error(`[chat] Image compression failed: ${err.message}. Sending original.`);
+  } catch (error) {
+    logger.error(`[chat] Image compression failed: ${error.message}. Sending original.`);
     return `data:${mimeType};base64,${base64Data}`;
   }
 }
@@ -157,8 +157,8 @@ async function resolveMediaRef(ref, project, username) {
         username,
       );
       storageRef = minioRef;
-    } catch (err) {
-      logger.error(`[chat] Failed to upload media to MinIO: ${err.message}`);
+    } catch (error) {
+      logger.error(`[chat] Failed to upload media to MinIO: ${error.message}`);
     }
     return { providerRef, storageRef };
   }
@@ -184,8 +184,8 @@ async function resolveMediaRef(ref, project, username) {
         providerRef,
         storageRef: ref,
       };
-    } catch (err) {
-      logger.error(`[chat] Failed to resolve MinIO ref ${ref}: ${err.message}`);
+    } catch (error) {
+      logger.error(`[chat] Failed to resolve MinIO ref ${ref}: ${error.message}`);
       return { providerRef: ref, storageRef: ref };
     }
   }
@@ -210,8 +210,8 @@ async function resolveMediaRef(ref, project, username) {
         providerRef,
         storageRef: ref,
       };
-    } catch (err) {
-      logger.error(`[chat] Failed to fetch media URL ${ref}: ${err.message}`);
+    } catch (error) {
+      logger.error(`[chat] Failed to fetch media URL ${ref}: ${error.message}`);
       return { providerRef: ref, storageRef: ref };
     }
   }
@@ -987,9 +987,9 @@ export async function finalizeTextGeneration(
         username,
       );
       audioRef = ref;
-    } catch (err) {
+    } catch (error) {
       logger.error(
-        `[chat] Failed to build/upload Live API audio WAV: ${err.message}`,
+        `[chat] Failed to build/upload Live API audio WAV: ${error.message}`,
       );
     }
   }
@@ -1230,8 +1230,8 @@ async function handleStreamingText(ctx) {
         tc.result = result;
         tc.status = result?.error ? "error" : "done";
         emit({ type: "toolCall", id: tc.id, name: tc.name, args: tc.args, result, status: tc.status });
-      } catch (err) {
-        tc.result = { error: err.message };
+      } catch (error) {
+        tc.result = { error: error.message };
         tc.status = "error";
         emit({ type: "toolCall", id: tc.id, name: tc.name, args: tc.args, result: tc.result, status: "error" });
       }

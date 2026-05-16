@@ -44,8 +44,8 @@ export default class AgenticToolResolver {
       if (customToolsData.length > 0) {
         logger.info(`[AgenticToolResolver] Loaded ${customToolsData.length} custom tool(s) from MongoDB: [${customToolsData.map((t) => t.name).join(", ")}]`);
       }
-    } catch (err) {
-      logger.warn(`Failed to fetch custom tools for loop: ${err.message}`);
+    } catch (error) {
+      logger.warn(`Failed to fetch custom tools for loop: ${error.message}`);
     }
 
     // Build the dynamic tool map

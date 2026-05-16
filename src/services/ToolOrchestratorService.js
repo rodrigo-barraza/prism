@@ -112,9 +112,9 @@ async function fetchSchemas() {
     } catch (cfgErr) {
       logger.warn(`[ToolOrchestrator] Could not fetch workspace config: ${cfgErr.message}`);
     }
-  } catch (err) {
+  } catch (error) {
     logger.warn(
-      `[ToolOrchestrator] Could not reach tools-api for schemas: ${err.message}`,
+      `[ToolOrchestrator] Could not reach tools-api for schemas: ${error.message}`,
     );
   }
 }
@@ -269,11 +269,11 @@ async function fetchJson(url, extraHeaders = {}, signal) {
       }
     }
     return await res.json();
-  } catch (err) {
-    if (err.name === "AbortError") {
+  } catch (error) {
+    if (error.name === "AbortError") {
       return { error: "Tool execution aborted" };
     }
-    return { error: `Failed to reach API: ${err.message}` };
+    return { error: `Failed to reach API: ${error.message}` };
   }
 }
 
@@ -295,11 +295,11 @@ async function fetchJsonPost(url, body, extraHeaders = {}, signal) {
       }
     }
     return await res.json();
-  } catch (err) {
-    if (err.name === "AbortError") {
+  } catch (error) {
+    if (error.name === "AbortError") {
       return { error: "Tool execution aborted" };
     }
-    return { error: `Failed to reach API: ${err.message}` };
+    return { error: `Failed to reach API: ${error.message}` };
   }
 }
 
@@ -463,8 +463,8 @@ export default class ToolOrchestratorService {
           cachedStaticRoots = config.staticRoots;
         }
       }
-    } catch (err) {
-      logger.warn(`[ToolOrchestrator] refreshWorkspaceRoots failed: ${err.message}`);
+    } catch (error) {
+      logger.warn(`[ToolOrchestrator] refreshWorkspaceRoots failed: ${error.message}`);
     }
   }
 
@@ -635,8 +635,8 @@ export default class ToolOrchestratorService {
         const dataUrl = `data:${result.image.mimeType || "image/png"};base64,${result.image.data}`;
         const { ref } = await FileService.uploadFile(dataUrl, "generations", ctx.project, ctx.username);
         result.image.minioRef = ref;
-      } catch (err) {
-        logger.warn(`[ToolOrchestrator] Image MinIO upload failed: ${err.message}`);
+      } catch (error) {
+        logger.warn(`[ToolOrchestrator] Image MinIO upload failed: ${error.message}`);
       }
     }
 
@@ -648,8 +648,8 @@ export default class ToolOrchestratorService {
         const { ref } = await FileService.uploadFile(dataUrl, "screenshots", ctx.project, ctx.username);
         result.screenshotRef = ref;
         delete result.screenshot; // Don't send base64 downstream
-      } catch (err) {
-        logger.warn(`[ToolOrchestrator] Screenshot MinIO upload failed: ${err.message}`);
+      } catch (error) {
+        logger.warn(`[ToolOrchestrator] Screenshot MinIO upload failed: ${error.message}`);
         // Keep base64 as fallback if MinIO fails
       }
     }
@@ -872,8 +872,8 @@ export default class ToolOrchestratorService {
         };
       }
       return finalResult || { error: "Stream ended without exit event" };
-    } catch (err) {
-      return { error: `Streaming failed: ${err.message}` };
+    } catch (error) {
+      return { error: `Streaming failed: ${error.message}` };
     }
   }
 
@@ -906,11 +906,11 @@ export default class ToolOrchestratorService {
           }
         }
         return await res.json();
-      } catch (err) {
-        if (err.name === "AbortError" || err.name === "TimeoutError") {
+      } catch (error) {
+        if (error.name === "AbortError" || error.name === "TimeoutError") {
           return { error: "Custom tool execution timed out (35s)" };
         }
-        return { error: `Custom tool execution failed: ${err.message}` };
+        return { error: `Custom tool execution failed: ${error.message}` };
       }
     }
 
@@ -949,8 +949,8 @@ export default class ToolOrchestratorService {
         return { error: `API returned ${res.status}: ${res.statusText}` };
       }
       return await res.json();
-    } catch (err) {
-      return { error: `Failed to reach API: ${err.message}` };
+    } catch (error) {
+      return { error: `Failed to reach API: ${error.message}` };
     }
   }
 

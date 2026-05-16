@@ -10,6 +10,7 @@ import { TYPES } from "./config.js";
 import { setupWebSocket } from "./websocket/index.js";
 import { authMiddleware } from "./middleware/AuthMiddleware.js";
 import { requestLoggerMiddleware } from "./middleware/RequestLoggerMiddleware.js";
+import { CORS_MAX_AGE_SECONDS } from "./constants.js";
 import {
   PRISM_SERVICE_PORT as PORT,
   MONGO_URI,
@@ -75,7 +76,7 @@ app.use(cors({
     "x-api-secret",
     "x-admin-secret",
   ],
-  maxAge: 86400,                          // cache preflight for 24h — eliminates burst OPTIONS storms
+  maxAge: CORS_MAX_AGE_SECONDS,          // cache preflight for 24h — eliminates burst OPTIONS storms
 }));
 app.use(express.json({ limit: "50mb" }));
 app.use(requestLoggerMiddleware);
@@ -238,8 +239,8 @@ setupWebSocket(wss);
       ]);
       logger.success("Database indexes ensured");
     }
-  } catch (err) {
-    logger.error(`Failed to ensure indexes: ${err.message}`);
+  } catch (error) {
+    logger.error(`Failed to ensure indexes: ${error.message}`);
   }
 
   // Clear any stale isGenerating flags left over from a previous crash/restart
@@ -260,8 +261,8 @@ setupWebSocket(wss);
         logger.info(`Cleared ${agentCleared} stale isGenerating flag(s) in agent_sessions`);
       }
     }
-  } catch (err) {
-    logger.error(`Failed to clear stale isGenerating flags: ${err.message}`);
+  } catch (error) {
+    logger.error(`Failed to clear stale isGenerating flags: ${error.message}`);
   }
 
   // ── One-time migration: conversations → agent_sessions ──────────
@@ -286,16 +287,16 @@ setupWebSocket(wss);
         logger.info(`Migrated ${agentConvs.length} agent conversation(s) → agent_sessions`);
       }
     }
-  } catch (err) {
-    logger.error(`Agent session migration failed: ${err.message}`);
+  } catch (error) {
+    logger.error(`Agent session migration failed: ${error.message}`);
   }
 
   // Load custom agents from database into the persona registry
   try {
     const { default: AgentPersonaRegistryCustom } = await import("./services/AgentPersonaRegistry.js");
     await AgentPersonaRegistryCustom.loadCustomAgents();
-  } catch (err) {
-    logger.warn(`Custom agent loading failed: ${err.message}`);
+  } catch (error) {
+    logger.warn(`Custom agent loading failed: ${error.message}`);
   }
 
   // Initialize Change Streams (requires replica set — graceful fallback)
@@ -310,8 +311,8 @@ setupWebSocket(wss);
     if (mcpDb) {
       await MCPClientService.connectAllFromDB(mcpDb, codingProject, "admin");
     }
-  } catch (err) {
-    logger.warn(`MCP auto-connect failed: ${err.message}`);
+  } catch (error) {
+    logger.warn(`MCP auto-connect failed: ${error.message}`);
   }
 
   // ── Scheduled Memory Consolidation ─────────────────
@@ -346,28 +347,28 @@ setupWebSocket(wss);
               username: "system",
               trigger: "scheduled",
             });
-          } catch (err) {
-            logger.error(`[AutoDream] Scheduled consolidation failed for "${agent}/${project}": ${err.message}`);
+          } catch (error) {
+            logger.error(`[AutoDream] Scheduled consolidation failed for "${agent}/${project}": ${error.message}`);
           }
         }
       }
-    } catch (err) {
-      logger.error(`[AutoDream] Scheduled consolidation sweep failed: ${err.message}`);
+    } catch (error) {
+      logger.error(`[AutoDream] Scheduled consolidation sweep failed: ${error.message}`);
     }
   }, CONSOLIDATION_INTERVAL_MS);
   logger.info(`[AutoDream] Scheduled consolidation every ${CONSOLIDATION_INTERVAL_MS / 3_600_000}h`);
 
   // ── Background Housekeeping ────────────────────────────────
   // Boot-time run: clean up orphans from previous crashes
-  BackgroundHousekeepingService.run({ trigger: "boot" }).catch((err) =>
-    logger.error(`[Housekeeping] Boot-time run failed: ${err.message}`),
+  BackgroundHousekeepingService.run({ trigger: "boot" }).catch((error) =>
+    logger.error(`[Housekeeping] Boot-time run failed: ${error.message}`),
   );
 
   // Scheduled run: every 6h (independent of consolidation interval)
   const HOUSEKEEPING_INTERVAL_MS = hours(6);
   setInterval(() => {
-    BackgroundHousekeepingService.run({ trigger: "scheduled" }).catch((err) =>
-      logger.error(`[Housekeeping] Scheduled run failed: ${err.message}`),
+    BackgroundHousekeepingService.run({ trigger: "scheduled" }).catch((error) =>
+      logger.error(`[Housekeeping] Scheduled run failed: ${error.message}`),
     );
   }, HOUSEKEEPING_INTERVAL_MS);
   logger.info(`[Housekeeping] Scheduled cleanup every ${HOUSEKEEPING_INTERVAL_MS / 3_600_000}h`);

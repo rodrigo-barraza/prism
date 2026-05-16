@@ -14,9 +14,9 @@ router.get("/", asyncHandler(async (_req, res, next) => {
   try {
     const agents = await CustomAgentService.list();
     res.json(agents);
-  } catch (err) {
-    logger.error(`GET /custom-agents error: ${err.message}`);
-    next(err);
+  } catch (error) {
+    logger.error(`GET /custom-agents error: ${error.message}`);
+    next(error);
   }
 }));
 
@@ -37,12 +37,12 @@ router.post("/", asyncHandler(async (req, res, next) => {
     AgentPersonaRegistry.registerCustom(created);
 
     res.status(201).json(created);
-  } catch (err) {
-    if (err.message?.includes("already exists")) {
-      return res.status(409).json({ error: err.message });
+  } catch (error) {
+    if (error.message?.includes("already exists")) {
+      return res.status(409).json({ error: error.message });
     }
-    logger.error(`POST /custom-agents error: ${err.message}`);
-    next(err);
+    logger.error(`POST /custom-agents error: ${error.message}`);
+    next(error);
   }
 }));
 
@@ -73,9 +73,9 @@ router.put("/:id", asyncHandler(async (req, res, next) => {
     AgentPersonaRegistry.registerCustom(updated);
 
     res.json(updated);
-  } catch (err) {
-    logger.error(`PUT /custom-agents/:id error: ${err.message}`);
-    next(err);
+  } catch (error) {
+    logger.error(`PUT /custom-agents/:id error: ${error.message}`);
+    next(error);
   }
 }));
 
@@ -97,9 +97,9 @@ router.delete("/:id", asyncHandler(async (req, res, next) => {
     AgentPersonaRegistry.unregister(doc.agentId);
 
     res.json({ success: true });
-  } catch (err) {
-    logger.error(`DELETE /custom-agents/:id error: ${err.message}`);
-    next(err);
+  } catch (error) {
+    logger.error(`DELETE /custom-agents/:id error: ${error.message}`);
+    next(error);
   }
 }));
 

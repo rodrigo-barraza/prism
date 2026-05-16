@@ -368,8 +368,8 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
               this.tools.finalTools = [...builtInTools, ...freshSchemas];
               logger.info(`[AgenticLoop] Hot-reloaded ${freshCustom.length} custom tool(s) into live session`);
             }
-          } catch (err) {
-            logger.warn(`[AgenticLoop] Failed to hot-reload custom tools: ${err.message}`);
+          } catch (error) {
+            logger.warn(`[AgenticLoop] Failed to hot-reload custom tools: ${error.message}`);
           }
           emit({ type: "status", message: "custom_tools_updated" });
         }
@@ -627,8 +627,8 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
           );
           logger.info(`[AgenticLoop] Persisted ${workers.length} worker(s) to session ${agentSessionId}`);
         }
-      } catch (err) {
-        logger.error(`[AgenticLoop] Failed to persist workers: ${err.message}`);
+      } catch (error) {
+        logger.error(`[AgenticLoop] Failed to persist workers: ${error.message}`);
       }
     }
 
@@ -638,8 +638,8 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
       thinking: state.streamedThinking,
       toolCalls: state.streamedToolCalls,
       messages: currentMessages,
-    }).catch((err) =>
-      logger.error(`[AgenticLoopService] afterResponse hooks failed: ${err.message}`),
+    }).catch((error) =>
+      logger.error(`[AgenticLoopService] afterResponse hooks failed: ${error.message}`),
     );
   }
 }

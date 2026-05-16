@@ -654,9 +654,9 @@ class LocalProviderGateway {
       }
 
       return normalized;
-    } catch (err) {
+    } catch (error) {
       logger.warn(
-        `[LocalProviderGateway] Failed to discover models for ${inst.id}: ${err.message}`,
+        `[LocalProviderGateway] Failed to discover models for ${inst.id}: ${error.message}`,
       );
       return [];
     }
@@ -870,13 +870,13 @@ class LocalProviderGateway {
               status: "ok",
               models: models.length,
             };
-          } catch (err) {
+          } catch (error) {
             return {
               id: inst.id,
               type: inst.type,
               ok: false,
               status: "unreachable",
-              error: err.message,
+              error: error.message,
             };
           }
         }

@@ -119,8 +119,8 @@ const elevenlabsProvider = {
       if (resolveMessage) resolveMessage();
     });
 
-    ws.on("error", (err) => {
-      error = err;
+    ws.on("error", (wsError) => {
+      error = wsError;
       if (resolveMessage) resolveMessage();
     });
 
@@ -157,8 +157,8 @@ const elevenlabsProvider = {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({ text: "" }));
         }
-      } catch (err) {
-        logger.error("Error sending to ElevenLabs WS:", err);
+      } catch (error) {
+        logger.error("Error sending to ElevenLabs WS:", error);
         ws.close();
       }
     })();

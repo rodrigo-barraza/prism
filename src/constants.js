@@ -2,6 +2,17 @@
 // Prism — Application Constants
 // ─────────────────────────────────────────────────────────────
 
+// ─── Timing Constants ───────────────────────────────────────
+
+/** SSE keep-alive ping interval for admin streaming endpoints. */
+export const SSE_KEEPALIVE_INTERVAL_MS = 30_000;
+
+/** Reconnect interval for MongoDB change stream watchers. */
+export const CHANGE_STREAM_RECONNECT_MS = 60_000;
+
+/** CORS preflight cache duration — 24 hours. */
+export const CORS_MAX_AGE_SECONDS = 86_400;
+
 /**
  * MongoDB collection names — single source of truth.
  * Import from here instead of defining local `const COLLECTION = "..."`.

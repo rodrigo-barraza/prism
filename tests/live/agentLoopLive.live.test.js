@@ -200,11 +200,11 @@ async function consumeAgentSSE(response, { timeoutMs = AGENT_TIMEOUT_MS, control
       // If we see done, stop reading
       if (result.done) break;
     }
-  } catch (err) {
-    if (err.name === "AbortError") {
+  } catch (error) {
+    if (error.name === "AbortError") {
       result.aborted = true;
     } else {
-      result.errors.push({ type: "error", message: err.message });
+      result.errors.push({ type: "error", message: error.message });
     }
   } finally {
     clearTimeout(timeoutId);
@@ -569,8 +569,8 @@ describe("Agent Loop — LM Studio Agentic Endpoint", () => {
           continue;
         }
         break;
-      } catch (err) {
-        if (attempt < 3 && err.message?.includes("ECONNREFUSED")) {
+      } catch (error) {
+        if (attempt < 3 && error.message?.includes("ECONNREFUSED")) {
           console.log(`  ⚠ Attempt ${attempt}: server not ready, retrying in 3s…`);
           await new Promise((r) => setTimeout(r, 3000));
         } else {

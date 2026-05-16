@@ -49,8 +49,8 @@ function createMockCollection() {
         const err = new Error(
           `Updating the path '${conflicts[0]}' would create a conflict at '${conflicts[0]}'`,
         );
-        err.name = "MongoServerError";
-        err.code = 40;
+        error.name = "MongoServerError";
+        error.code = 40;
         throw err;
       }
 

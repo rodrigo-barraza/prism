@@ -70,8 +70,8 @@ async function pruneOrphanedWorktrees() {
         await rm(entryPath, { recursive: true, force: true });
         pruned.push(entry);
       }
-    } catch (err) {
-      errors.push(`${entry}: ${err.message}`);
+    } catch (error) {
+      errors.push(`${entry}: ${error.message}`);
     }
   }
 
@@ -196,8 +196,8 @@ async function pruneMinioOrphans() {
         }
       }
     }
-  } catch (err) {
-    logger.warn(`[Housekeeping] MinIO orphan scan failed: ${err.message}`);
+  } catch (error) {
+    logger.warn(`[Housekeeping] MinIO orphan scan failed: ${error.message}`);
   }
 
   return removed;
@@ -230,9 +230,9 @@ const BackgroundHousekeepingService = {
       if (worktrees.errors.length > 0) {
         logger.warn(`[Housekeeping] Worktree errors: ${worktrees.errors.join("; ")}`);
       }
-    } catch (err) {
-      results.worktrees = { error: err.message };
-      logger.error(`[Housekeeping] Worktree pruning failed: ${err.message}`);
+    } catch (error) {
+      results.worktrees = { error: error.message };
+      logger.error(`[Housekeeping] Worktree pruning failed: ${error.message}`);
     }
 
     // 2. Clear stale sessions
@@ -243,9 +243,9 @@ const BackgroundHousekeepingService = {
       if (total > 0) {
         logger.info(`[Housekeeping] Cleared ${total} stale isGenerating flag(s)`);
       }
-    } catch (err) {
-      results.staleSessions = { error: err.message };
-      logger.error(`[Housekeeping] Session cleanup failed: ${err.message}`);
+    } catch (error) {
+      results.staleSessions = { error: error.message };
+      logger.error(`[Housekeeping] Session cleanup failed: ${error.message}`);
     }
 
     // 3. Prune old request logs
@@ -255,9 +255,9 @@ const BackgroundHousekeepingService = {
       if (deletedLogs > 0) {
         logger.info(`[Housekeeping] Pruned ${deletedLogs} request log(s) older than ${REQUEST_LOG_MAX_AGE_DAYS} days`);
       }
-    } catch (err) {
-      results.requestLogs = { error: err.message };
-      logger.error(`[Housekeeping] Request log pruning failed: ${err.message}`);
+    } catch (error) {
+      results.requestLogs = { error: error.message };
+      logger.error(`[Housekeeping] Request log pruning failed: ${error.message}`);
     }
 
     // 4. MinIO orphan cleanup
@@ -267,9 +267,9 @@ const BackgroundHousekeepingService = {
       if (minioOrphans > 0) {
         logger.info(`[Housekeeping] Removed ${minioOrphans} orphaned MinIO object(s)`);
       }
-    } catch (err) {
-      results.minioOrphans = { error: err.message };
-      logger.error(`[Housekeeping] MinIO orphan cleanup failed: ${err.message}`);
+    } catch (error) {
+      results.minioOrphans = { error: error.message };
+      logger.error(`[Housekeeping] MinIO orphan cleanup failed: ${error.message}`);
     }
 
     const durationMs = Math.round(performance.now() - startTime);

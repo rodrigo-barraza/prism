@@ -1181,8 +1181,8 @@ const AgentPersonaRegistry = {
       }
 
       logger.info(`[AgentPersonaRegistry] Loaded ${agents.length} custom agent(s) from database`);
-    } catch (err) {
-      logger.warn(`[AgentPersonaRegistry] Failed to load custom agents: ${err.message}`);
+    } catch (error) {
+      logger.warn(`[AgentPersonaRegistry] Failed to load custom agents: ${error.message}`);
     }
   },
 };

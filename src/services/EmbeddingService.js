@@ -68,10 +68,10 @@ const EmbeddingService = {
         resolvedModel,
         providerOptions,
       );
-    } catch (err) {
+    } catch (error) {
       success = false;
-      errorMessage = err.message;
-      throw err;
+      errorMessage = error.message;
+      throw error;
     } finally {
       const totalSec = (performance.now() - requestStart) / 1000;
       // Cost estimation

@@ -66,8 +66,8 @@ router.post("/", asyncHandler(async (req, res, next) => {
     // Generate embedding for semantic similarity search
     try {
       doc.embedding = await generateSkillEmbedding(doc);
-    } catch (err) {
-      logger.warn(`[Skills] Embedding generation failed: ${err.message}`);
+    } catch (error) {
+      logger.warn(`[Skills] Embedding generation failed: ${error.message}`);
       doc.embedding = null;
     }
 
@@ -122,8 +122,8 @@ router.put("/:id", asyncHandler(async (req, res, next) => {
           };
           updates.embedding = await generateSkillEmbedding(merged);
         }
-      } catch (err) {
-        logger.warn(`[Skills] Embedding re-generation failed: ${err.message}`);
+      } catch (error) {
+        logger.warn(`[Skills] Embedding re-generation failed: ${error.message}`);
       }
     }
 

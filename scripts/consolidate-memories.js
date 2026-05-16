@@ -255,10 +255,10 @@ async function runAll() {
         }
         results.push({ project, agent, ...result });
       }
-    } catch (err) {
+    } catch (error) {
       const elapsed = Math.round(performance.now() - start);
-      console.error(`  ${RED}✗ ${err.message}${RESET} ${DIM}(${elapsed}ms)${RESET}`);
-      results.push({ project, agent, error: err.message });
+      console.error(`  ${RED}✗ ${error.message}${RESET} ${DIM}(${elapsed}ms)${RESET}`);
+      results.push({ project, agent, error: error.message });
     }
   }
 
@@ -387,20 +387,20 @@ async function main() {
     } else {
       await runConsolidation(opts);
     }
-  } catch (err) {
+  } catch (error) {
     // Dig into the cause chain for the real network error
-    const cause = err.cause?.cause || err.cause;
+    const cause = error.cause?.cause || error.cause;
     const code = cause?.code || "";
     const isNetwork =
-      err.message === "fetch failed" ||
+      error.message === "fetch failed" ||
       ["ECONNREFUSED", "ETIMEDOUT", "ENOTFOUND", "ECONNRESET", "UND_ERR_CONNECT_TIMEOUT"].includes(code);
 
     if (isNetwork) {
       console.error(`${RED}✗ Cannot connect to Prism at ${PRISM_URL}${RESET}`);
-      console.error(`  ${DIM}${code || cause?.message || err.message}${RESET}`);
+      console.error(`  ${DIM}${code || cause?.message || error.message}${RESET}`);
       console.error(`  ${DIM}Is the service running? (npm run dev)${RESET}`);
     } else {
-      console.error(`${RED}✗ ${err.message}${RESET}`);
+      console.error(`${RED}✗ ${error.message}${RESET}`);
       if (cause) console.error(`  ${DIM}${cause.message || cause}${RESET}`);
     }
     process.exit(1);

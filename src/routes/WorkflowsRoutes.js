@@ -35,8 +35,8 @@ async function uploadIfDataUrl(
         username,
       );
       return ref;
-    } catch (err) {
-      logger.error(`Workflow file upload failed: ${err.message}`);
+    } catch (error) {
+      logger.error(`Workflow file upload failed: ${error.message}`);
       return value;
     }
   }

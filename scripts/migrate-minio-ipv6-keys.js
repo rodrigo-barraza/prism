@@ -72,8 +72,8 @@ async function main() {
 
       console.log("  ✅ migrated\n");
       migrated++;
-    } catch (err) {
-      console.error(`  ❌ error: ${err.message}\n`);
+    } catch (error) {
+      console.error(`  ❌ error: ${error.message}\n`);
       errors++;
     }
   }

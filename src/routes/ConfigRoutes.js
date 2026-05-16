@@ -376,8 +376,8 @@ router.post("/tools/refresh", asyncHandler(async (_req, res) => {
   try {
     const count = await ToolOrchestratorService.refreshSchemas();
     res.json({ ok: true, count });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 }));
 

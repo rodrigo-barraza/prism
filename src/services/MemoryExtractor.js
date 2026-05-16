@@ -186,10 +186,10 @@ export default class MemoryExtractor {
           maxTokens: 1000,
           temperature: 0.1,
         });
-      } catch (err) {
+      } catch (error) {
         success = false;
-        errorMessage = err.message;
-        throw err;
+        errorMessage = error.message;
+        throw error;
       } finally {
         // Use real API-reported usage when available; fall back to heuristic
         const realUsage = result?.usage || null;
@@ -284,8 +284,8 @@ export default class MemoryExtractor {
               `[MemoryExtractor] Skipped duplicate [${type}] "${mem.title.substring(0, 60)}"`,
             );
           }
-        } catch (err) {
-          logger.error(`[MemoryExtractor] Storage failed: ${err.message}`);
+        } catch (error) {
+          logger.error(`[MemoryExtractor] Storage failed: ${error.message}`);
         }
       }
 
@@ -320,8 +320,8 @@ export default class MemoryExtractor {
       }
 
       return stored;
-    } catch (err) {
-      logger.error(`[MemoryExtractor] Failed: ${err.message}`);
+    } catch (error) {
+      logger.error(`[MemoryExtractor] Failed: ${error.message}`);
       return [];
     }
   }
@@ -372,8 +372,8 @@ export default class MemoryExtractor {
             agentSessionId: ctx.agentSessionId || null,
           });
         })
-        .catch((err) =>
-          logger.error(`[MemoryExtractor] Background extraction failed: ${err.message}`),
+        .catch((error) =>
+          logger.error(`[MemoryExtractor] Background extraction failed: ${error.message}`),
         );
     };
   }

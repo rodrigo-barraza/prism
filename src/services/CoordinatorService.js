@@ -128,7 +128,7 @@ registerCleanup(async () => {
     .map((w) =>
       removeWorktree(w.repoPath, w.worktreePath)
         .then(() => { w.worktreePath = null; })
-        .catch((e) => logger.warn(`[Coordinator] Shutdown worktree cleanup failed for ${w.agentId}: ${e.message}`)),
+        .catch((error) => logger.warn(`[Coordinator] Shutdown worktree cleanup failed for ${w.agentId}: ${error.message}`)),
     );
 
   if (cleanups.length > 0) {
@@ -262,12 +262,12 @@ async function toolsApiPost(path, body) {
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      return { error: err.error || `API returned ${res.status}` };
+      const error = await res.json().catch(() => ({}));
+      return { error: error.error || `API returned ${res.status}` };
     }
     return await res.json();
-  } catch (err) {
-    return { error: `Failed to reach tools-api: ${err.message}` };
+  } catch (error) {
+    return { error: `Failed to reach tools-api: ${error.message}` };
   }
 }
 
@@ -573,16 +573,16 @@ export default class CoordinatorService {
     // the agentic loop's Promise.all executes them concurrently.
     try {
       await CoordinatorService._runWorkerLoop(workerState, prompt, coordinatorCtx);
-    } catch (err) {
-      logger.error(`[Coordinator] Worker ${agentId} loop error: ${err.message}`);
+    } catch (error) {
+      logger.error(`[Coordinator] Worker ${agentId} loop error: ${error.message}`);
       workerState.status = "failed";
-      workerState.error = err.message;
+      workerState.error = error.message;
       workerState.durationMs = Date.now() - workerState.startedAt;
 
       // Clean up worktree on failure to prevent orphaned branches
       if (workerState.isolated && workerState.worktreePath) {
-        await removeWorktree(workerState.repoPath, workerState.worktreePath).catch((e) =>
-          logger.warn(`[Coordinator] Worktree cleanup failed for ${agentId}: ${e.message}`),
+        await removeWorktree(workerState.repoPath, workerState.worktreePath).catch((error) =>
+          logger.warn(`[Coordinator] Worktree cleanup failed for ${agentId}: ${error.message}`),
         );
       }
 
@@ -592,7 +592,7 @@ export default class CoordinatorService {
           type: "worker_status",
           workerId: agentId,
           message: "failed",
-          error: err.message,
+          error: error.message,
         });
       }
     }
@@ -638,10 +638,10 @@ export default class CoordinatorService {
     logger.info(`[Coordinator] Continuing worker ${agentId} with follow-up`);
 
     CoordinatorService._runWorkerLoop(worker, message, coordinatorCtx)
-      .catch((err) => {
-        logger.error(`[Coordinator] Worker ${agentId} continuation error: ${err.message}`);
+      .catch((error) => {
+        logger.error(`[Coordinator] Worker ${agentId} continuation error: ${error.message}`);
         worker.status = "failed";
-        worker.error = err.message;
+        worker.error = error.message;
       });
 
     return { agent_id: agentId, status: "running", message: "Worker continued with follow-up." };
@@ -736,7 +736,7 @@ export default class CoordinatorService {
           cleanupPromises.push(
             removeWorktree(worker.repoPath, worker.worktreePath)
               .then(() => { worker.worktreePath = null; })
-              .catch((e) => logger.warn(`[Coordinator] Worktree cleanup failed for ${agentId}: ${e.message}`)),
+              .catch((error) => logger.warn(`[Coordinator] Worktree cleanup failed for ${agentId}: ${error.message}`)),
           );
         }
       } else {
@@ -1389,11 +1389,11 @@ export default class CoordinatorService {
         emit: workerEmit,
         signal: worker.abortController.signal,
       });
-    } catch (err) {
-      if (err.name === "AbortError" || worker.abortController.signal.aborted) {
+    } catch (error) {
+      if (error.name === "AbortError" || worker.abortController.signal.aborted) {
         worker.status = "stopped";
       } else {
-        throw err;
+        throw error;
       }
     }
 
@@ -1432,8 +1432,8 @@ export default class CoordinatorService {
     // Remove worktree now that the diff has been collected — prevents orphaned
     // worktrees from accumulating on disk across sessions.
     if (worker.isolated && worker.worktreePath) {
-      await removeWorktree(worker.repoPath, worker.worktreePath).catch((e) =>
-        logger.warn(`[Coordinator] Post-completion worktree cleanup failed for ${worker.agentId}: ${e.message}`),
+      await removeWorktree(worker.repoPath, worker.worktreePath).catch((error) =>
+        logger.warn(`[Coordinator] Post-completion worktree cleanup failed for ${worker.agentId}: ${error.message}`),
       );
     }
 
@@ -1483,12 +1483,12 @@ export default class CoordinatorService {
             logger.info(
               `[Coordinator] VRAM eviction: unloading "${worker.resolvedModel}" from secondary instance ${workerInstanceId} (no active workers remain)`,
             );
-            await workerProviderObj.unloadModelByKey(worker.resolvedModel).catch((e) =>
-              logger.warn(`[Coordinator] VRAM eviction failed on ${workerInstanceId}: ${e.message}`),
+            await workerProviderObj.unloadModelByKey(worker.resolvedModel).catch((error) =>
+              logger.warn(`[Coordinator] VRAM eviction failed on ${workerInstanceId}: ${error.message}`),
             );
           }
-        } catch (e) {
-          logger.warn(`[Coordinator] VRAM eviction error: ${e.message}`);
+        } catch (error) {
+          logger.warn(`[Coordinator] VRAM eviction error: ${error.message}`);
         }
       } else {
         logger.info(
@@ -1529,10 +1529,10 @@ export default class CoordinatorService {
     const result = await provider.generateText(messages, COORDINATOR_DECOMPOSITION_MODEL, {
       maxTokens: 2000,
       temperature: 0.2,
-    }).catch((err) => {
+    }).catch((error) => {
       llmSuccess = false;
-      llmError = err.message;
-      throw err;
+      llmError = error.message;
+      throw error;
     });
 
     // Log the decomposition LLM call
@@ -1677,10 +1677,10 @@ export default class CoordinatorService {
         completedCount: completedWorkers.length,
         totalCount: taskState.workers.length,
       };
-    } catch (err) {
+    } catch (error) {
       taskState.status = "error";
-      logger.error(`[Coordinator] Task ${taskId} failed: ${err.message}`);
-      return { error: err.message, taskId };
+      logger.error(`[Coordinator] Task ${taskId} failed: ${error.message}`);
+      return { error: error.message, taskId };
     }
   }
 
@@ -1809,11 +1809,11 @@ export default class CoordinatorService {
       onProgress?.({ status: "complete" });
 
       logger.info(`[Coordinator] Panel worker ${worker.id} completed (${workerToolCalls.length} tool calls)`);
-    } catch (err) {
+    } catch (error) {
       worker.status = "error";
-      worker.error = err.message;
-      onProgress?.({ status: "error", error: err.message });
-      logger.error(`[Coordinator] Panel worker ${worker.id} failed: ${err.message}`);
+      worker.error = error.message;
+      onProgress?.({ status: "error", error: error.message });
+      logger.error(`[Coordinator] Panel worker ${worker.id} failed: ${error.message}`);
     }
   }
 

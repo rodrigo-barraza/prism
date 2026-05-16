@@ -446,9 +446,9 @@ async function applyActions(actions, agent, agentType, project, username, { trac
           `[MemoryConsolidation] Deleted "${action.id}" (${action.reason || ""})`,
         );
       }
-    } catch (err) {
+    } catch (error) {
       results.errors++;
-      logger.error(`[MemoryConsolidation] Failed to apply action: ${err.message}`);
+      logger.error(`[MemoryConsolidation] Failed to apply action: ${error.message}`);
     }
   }
   return results;
@@ -578,11 +578,11 @@ async function processBatch(batch, batchIndex, totalBatches, {
       maxTokens: LLM_MAX_OUTPUT_TOKENS,
       temperature: 0.1,
     });
-  } catch (err) {
+  } catch (error) {
     llmSuccess = false;
-    llmError = err.message;
+    llmError = error.message;
     logger.error(
-      `[MemoryConsolidation] ${batchLabel} LLM call failed: ${err.message}`,
+      `[MemoryConsolidation] ${batchLabel} LLM call failed: ${error.message}`,
     );
   }
 
@@ -884,8 +884,8 @@ const MemoryConsolidationService = {
           project,
           ...consolidationResult,
         });
-      } catch (err) {
-        logger.warn(`[MemoryConsolidation] Broadcast failed: ${err.message}`);
+      } catch (error) {
+        logger.warn(`[MemoryConsolidation] Broadcast failed: ${error.message}`);
       }
     }
     return consolidationResult;
@@ -917,12 +917,12 @@ const MemoryConsolidationService = {
           endpoint: endpoint || "/agent",
           traceId: traceId || null,
           agentSessionId: agentSessionId || null,
-        }).catch((err) =>
-          logger.error(`[MemoryConsolidation] Background consolidation failed: ${err.message}`),
+        }).catch((error) =>
+          logger.error(`[MemoryConsolidation] Background consolidation failed: ${error.message}`),
         );
       }
-    } catch (err) {
-      logger.error(`[MemoryConsolidation] checkAndRun failed: ${err.message}`);
+    } catch (error) {
+      logger.error(`[MemoryConsolidation] checkAndRun failed: ${error.message}`);
     }
   },
   /**

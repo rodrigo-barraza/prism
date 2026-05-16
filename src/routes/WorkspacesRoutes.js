@@ -35,8 +35,8 @@ router.get("/", asyncHandler(async (_req, res) => {
     }));
 
     res.json(workspaces);
-  } catch (err) {
-    logger.error(`GET /workspaces error: ${err.message}`);
+  } catch (error) {
+    logger.error(`GET /workspaces error: ${error.message}`);
     res.status(500).json({ error: "Failed to retrieve workspace roots" });
   }
 }));
@@ -83,8 +83,8 @@ router.get("/full", asyncHandler(async (_req, res) => {
     }));
 
     res.json({ workspaces, agents, staticRoots });
-  } catch (err) {
-    logger.error(`GET /workspaces/full error: ${err.message}`);
+  } catch (error) {
+    logger.error(`GET /workspaces/full error: ${error.message}`);
     res.status(500).json({ error: "Failed to retrieve full workspace config" });
   }
 }));
@@ -99,8 +99,8 @@ router.put("/", asyncHandler(async (req, res) => {
   try {
     const result = await ToolOrchestratorService.updateWorkspaceRoots(req.body?.roots || []);
     res.json(result);
-  } catch (err) {
-    logger.error(`PUT /workspaces error: ${err.message}`);
+  } catch (error) {
+    logger.error(`PUT /workspaces error: ${error.message}`);
     res.status(500).json({ error: "Failed to update workspace roots" });
   }
 }));
@@ -114,8 +114,8 @@ router.post("/validate", asyncHandler(async (req, res) => {
   try {
     const result = await ToolOrchestratorService.validateWorkspacePath(req.body?.path);
     res.json(result);
-  } catch (err) {
-    logger.error(`POST /workspaces/validate error: ${err.message}`);
+  } catch (error) {
+    logger.error(`POST /workspaces/validate error: ${error.message}`);
     res.status(500).json({ error: "Failed to validate workspace path" });
   }
 }));
@@ -144,14 +144,14 @@ router.get("/tree", asyncHandler(async (req, res) => {
     });
 
     if (!toolsRes.ok) {
-      const err = await toolsRes.json().catch(() => ({}));
-      return res.status(toolsRes.status).json({ error: err.error || `tools-service returned ${toolsRes.status}` });
+      const errorBody = await toolsRes.json().catch(() => ({}));
+      return res.status(toolsRes.status).json({ error: errorBody.error || `tools-service returned ${toolsRes.status}` });
     }
 
     const result = await toolsRes.json();
     res.json(result);
-  } catch (err) {
-    logger.error(`GET /workspaces/tree error: ${err.message}`);
+  } catch (error) {
+    logger.error(`GET /workspaces/tree error: ${error.message}`);
     res.status(500).json({ error: "Failed to fetch workspace tree" });
   }
 }));

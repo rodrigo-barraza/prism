@@ -22,9 +22,9 @@ export function markGenerating(conversationId, project, username, generating, op
     username,
     generating,
     opts,
-  ).catch((err) =>
+  ).catch((error) =>
     logger.error(
-      `Failed to ${generating ? "set" : "clear"} isGenerating: ${err.message}`,
+      `Failed to ${generating ? "set" : "clear"} isGenerating: ${error.message}`,
     ),
   );
 }
@@ -65,10 +65,10 @@ export function appendAndFinalize(conversationId, project, username, messagesToA
         opts,
       ),
     )
-    .catch((err) => {
+    .catch((error) => {
       logger.error(
         `Failed to append ${messagesToAppend?.length ?? 0} messages to ${conversationId} ` +
-        `(project=${project}, collection=${opts?.collection || "conversations"}): ${err.message}`,
+        `(project=${project}, collection=${opts?.collection || "conversations"}): ${error.message}`,
       );
 
       // Always clear isGenerating even on failure — prevents sessions

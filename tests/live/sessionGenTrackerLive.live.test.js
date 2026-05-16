@@ -201,11 +201,11 @@ async function consumeAgentSSE(response, { timeoutMs = AGENT_TIMEOUT_MS, control
 
       if (result.done) break;
     }
-  } catch (err) {
-    if (err.name === "AbortError") {
+  } catch (error) {
+    if (error.name === "AbortError") {
       result.aborted = true;
     } else {
-      result.errors.push({ type: "error", message: err.message });
+      result.errors.push({ type: "error", message: error.message });
     }
   } finally {
     clearTimeout(timeoutId);

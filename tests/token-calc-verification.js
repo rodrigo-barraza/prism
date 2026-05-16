@@ -490,7 +490,7 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("\n❌ Test failed:", err.message);
-  console.error(err.stack);
+  console.error("\n❌ Test failed:", error.message);
+  console.error(error.stack);
   process.exit(1);
 });

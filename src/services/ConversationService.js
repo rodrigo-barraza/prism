@@ -39,8 +39,8 @@ export async function extractFiles(messages, project = null, username = null) {
               username,
             );
             newImages.push(ref);
-          } catch (err) {
-            logger.error(`Failed to upload file: ${err.message}`);
+          } catch (error) {
+            logger.error(`Failed to upload file: ${error.message}`);
             newImages.push(img);
           }
         } else {
@@ -65,8 +65,8 @@ export async function extractFiles(messages, project = null, username = null) {
           username,
         );
         updated = { ...updated, audio: ref };
-      } catch (err) {
-        logger.error(`Failed to upload audio: ${err.message}`);
+      } catch (error) {
+        logger.error(`Failed to upload audio: ${error.message}`);
       }
     }
 

@@ -132,10 +132,10 @@ ${participantList}`;
       maxTokens: 1000,
       temperature: 0.1,
     });
-  } catch (err) {
+  } catch (error) {
     success = false;
-    errorMessage = err.message;
-    throw err;
+    errorMessage = error.message;
+    throw error;
   } finally {
     RequestLogger.logBackgroundLlmCall({
       requestId,
@@ -323,8 +323,8 @@ const MemoryService = {
             `[MemoryService] Stored: "${fact.fact.substring(0, 60)}..." (about: ${fact.aboutUsername})`,
           );
         }
-      } catch (err) {
-        logger.error(`[MemoryService] Failed to store fact: ${err.message}`);
+      } catch (error) {
+        logger.error(`[MemoryService] Failed to store fact: ${error.message}`);
       }
     }
     return storedMemories;

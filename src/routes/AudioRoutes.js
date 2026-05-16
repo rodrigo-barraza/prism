@@ -92,8 +92,8 @@ export async function handleVoice(params, emitBinary, emitJSON) {
         project,
         username,
         true,
-      ).catch((err) =>
-        logger.error(`Failed to set isGenerating: ${err.message}`),
+      ).catch((error) =>
+        logger.error(`Failed to set isGenerating: ${error.message}`),
       );
     }
     const options = { instructions, model, ...extraOptions };
@@ -155,8 +155,8 @@ export async function handleVoice(params, emitBinary, emitJSON) {
           username,
         );
         audioRef = ref;
-      } catch (err) {
-        logger.error(`Failed to upload TTS audio: ${err.message}`);
+      } catch (error) {
+        logger.error(`Failed to upload TTS audio: ${error.message}`);
       }
       const messagesToAppend = [];
       // Derive user message from text
@@ -193,9 +193,9 @@ export async function handleVoice(params, emitBinary, emitJSON) {
             false,
           ),
         )
-        .catch((err) =>
+        .catch((error) =>
           logger.error(
-            `Failed to append messages to conversation ${conversationId}: ${err.message}`,
+            `Failed to append messages to conversation ${conversationId}: ${error.message}`,
           ),
         );
     }
@@ -208,8 +208,8 @@ export async function handleVoice(params, emitBinary, emitJSON) {
         project,
         username,
         false,
-      ).catch((err) =>
-        logger.error(`Failed to clear isGenerating on error: ${err.message}`),
+      ).catch((error) =>
+        logger.error(`Failed to clear isGenerating on error: ${error.message}`),
       );
     }
     const totalSec = (performance.now() - requestStart) / 1000;
@@ -345,8 +345,8 @@ router.post("/", asyncHandler(async (req, res, next) => {
         req.project,
         req.username,
         true,
-      ).catch((err) =>
-        logger.error(`Failed to set isGenerating: ${err.message}`),
+      ).catch((error) =>
+        logger.error(`Failed to set isGenerating: ${error.message}`),
       );
     }
     const provider = getProvider(providerName);
@@ -421,8 +421,8 @@ router.post("/", asyncHandler(async (req, res, next) => {
           req.username,
         );
         audioRef = ref;
-      } catch (err) {
-        logger.error(`Failed to upload STT audio: ${err.message}`);
+      } catch (error) {
+        logger.error(`Failed to upload STT audio: ${error.message}`);
       }
       const messagesToAppend = [
         {
@@ -463,9 +463,9 @@ router.post("/", asyncHandler(async (req, res, next) => {
             false,
           ),
         )
-        .catch((err) =>
+        .catch((error) =>
           logger.error(
-            `Failed to append messages to conversation ${conversationId}: ${err.message}`,
+            `Failed to append messages to conversation ${conversationId}: ${error.message}`,
           ),
         );
     }
@@ -484,8 +484,8 @@ router.post("/", asyncHandler(async (req, res, next) => {
         req.project,
         req.username,
         false,
-      ).catch((err) =>
-        logger.error(`Failed to clear isGenerating on error: ${err.message}`),
+      ).catch((error) =>
+        logger.error(`Failed to clear isGenerating on error: ${error.message}`),
       );
     }
     const totalSec = (performance.now() - requestStart) / 1000;

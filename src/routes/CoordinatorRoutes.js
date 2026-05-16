@@ -145,8 +145,8 @@ router.get("/workers", asyncHandler(async (req, res) => {
       if (session?.workers?.length > 0) {
         workers = session.workers;
       }
-    } catch (err) {
-      logger.warn(`[coordinator] Failed to load persisted workers: ${err.message}`);
+    } catch (error) {
+      logger.warn(`[coordinator] Failed to load persisted workers: ${error.message}`);
     }
   }
 

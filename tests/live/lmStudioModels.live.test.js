@@ -313,7 +313,7 @@ describe("LM Studio — Model Compatibility", () => {
         expect(
           res.estimatedCost === null || res.estimatedCost === 0,
         ).toBe(true);
-      } catch (e) {
+      } catch (error) {
         status = "✗";
         error = e.message;
       }
@@ -380,7 +380,7 @@ describe("LM Studio — Model Compatibility", () => {
 
         // Should also produce final text answer
         expect(res.text || res.thinking).toBeTruthy();
-      } catch (e) {
+      } catch (error) {
         status = "✗";
         error = e.message;
       }
@@ -448,7 +448,7 @@ describe("LM Studio — Model Compatibility", () => {
         // The streaming path may have already executed them
         const hasOutput = res.text || res.thinking;
         expect(hasOutput || res.usage.outputTokens > 0).toBeTruthy();
-      } catch (e) {
+      } catch (error) {
         // Some models may error on FC — that's a valid test result
         status = "⚠";
         error = e.message;
@@ -516,7 +516,7 @@ describe("LM Studio — Model Compatibility", () => {
         const _hasName = output.includes("testbot") || output.includes("test");
         // Not all models will get this right, but we at least got a response
         expect(res.text || res.thinking).toBeTruthy();
-      } catch (e) {
+      } catch (error) {
         status = "✗";
         error = e.message;
       }
@@ -571,7 +571,7 @@ describe("LM Studio — Model Compatibility", () => {
 
         expect(res.usage).toBeDefined();
         expect(res.text || res.thinking).toBeTruthy();
-      } catch (e) {
+      } catch (error) {
         status = "✗";
         error = e.message;
       }

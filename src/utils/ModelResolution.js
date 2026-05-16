@@ -146,8 +146,8 @@ export async function resolveModelForInstances(modelKey, siblings) {
     logger.info(`[ModelResolution] Model "${modelKey}": ${usable.length}/${siblings.length} instances usable [${summary}]`);
 
     return { usable, modelOverrides };
-  } catch (err) {
-    logger.warn(`[ModelResolution] Model availability check failed: ${err.message}`);
+  } catch (error) {
+    logger.warn(`[ModelResolution] Model availability check failed: ${error.message}`);
     return { usable: siblings, modelOverrides };
   }
 }

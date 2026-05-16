@@ -8,7 +8,7 @@ import BenchmarkService from "../services/BenchmarkService.js";
 import ActiveGenerationTracker from "../services/ActiveGenerationTracker.js";
 import logger from "../utils/logger.js";
 import { resolveArchParams, estimateMemory } from "../utils/gguf-arch.js";
-import { COLLECTIONS, COST_SUM_EXPR, TOTAL_TOKENS_EXPR, AVG_TOKENS_PER_SEC_EXPR } from "../constants.js";
+import { COLLECTIONS, COST_SUM_EXPR, TOTAL_TOKENS_EXPR, AVG_TOKENS_PER_SEC_EXPR, SSE_KEEPALIVE_INTERVAL_MS } from "../constants.js";
 import AgentPersonaRegistry from "../services/AgentPersonaRegistry.js";
 import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
 import { MS_PER_MINUTE, MS_PER_HOUR, hours as hoursToMs, minutes } from "@rodrigo-barraza/utilities-library";
@@ -1356,8 +1356,8 @@ router.get("/conversations/stream", asyncHandler(async (req, res) => {
         lastPayload = payload;
         res.write(`data: ${payload}\n\n`);
       }
-    } catch (err) {
-      logger.error(`SSE conversations/stream error: ${err.message}`);
+    } catch (error) {
+      logger.error(`SSE conversations/stream error: ${error.message}`);
     }
   };
 
@@ -1386,7 +1386,7 @@ router.get("/conversations/stream", asyncHandler(async (req, res) => {
 
     const keepAlive = setInterval(() => {
       try { res.write(": ping\n\n"); } catch { /* ignore */ }
-    }, 30000);
+    }, SSE_KEEPALIVE_INTERVAL_MS);
 
     req.on("close", () => {
       ChangeStreamService.unsubscribe(onEvent);
@@ -1398,7 +1398,7 @@ router.get("/conversations/stream", asyncHandler(async (req, res) => {
     const interval = setInterval(sendStats, 2000);
     const keepAlive = setInterval(() => {
       res.write(": ping\n\n");
-    }, 30000);
+    }, SSE_KEEPALIVE_INTERVAL_MS);
 
     req.on("close", () => {
       clearInterval(interval);
@@ -1440,7 +1440,7 @@ router.get("/changes/stream", asyncHandler(async (req, res) => {
       } catch {
         // ignore
       }
-    }, 30000);
+    }, SSE_KEEPALIVE_INTERVAL_MS);
 
     req.on("close", () => {
       ChangeStreamService.unsubscribe(onEvent);
@@ -1456,7 +1456,7 @@ router.get("/changes/stream", asyncHandler(async (req, res) => {
       } catch {
         // ignore
       }
-    }, 30000);
+    }, SSE_KEEPALIVE_INTERVAL_MS);
 
     req.on("close", () => {
       clearInterval(keepAlive);

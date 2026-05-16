@@ -59,8 +59,8 @@ export default class AgentHooks extends EventEmitter {
         if (hookResult && typeof hookResult === "object") {
           result = { ...result, ...hookResult };
         }
-      } catch (err) {
-        logger.error(`[AgentHooks] Hook "${name}" on "${event}" failed: ${err.message}`);
+      } catch (error) {
+        logger.error(`[AgentHooks] Hook "${name}" on "${event}" failed: ${error.message}`);
       }
     }
 

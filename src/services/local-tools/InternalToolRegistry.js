@@ -58,8 +58,8 @@ async function init() {
 }
 
 // Kick off registration at module load
-init().catch((err) =>
-  logger.error(`[InternalToolRegistry] Init failed: ${err.message}`),
+init().catch((error) =>
+  logger.error(`[InternalToolRegistry] Init failed: ${error.message}`),
 );
 
 export default class InternalToolRegistry {

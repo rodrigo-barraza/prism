@@ -47,8 +47,8 @@ export async function uploadImageChunk(chunk, project, username, logPrefix = "st
     const dataUrl = `data:${mimeType};base64,${chunk.data}`;
     const { ref } = await FileService.uploadFile(dataUrl, "generations", project, username);
     return ref;
-  } catch (err) {
-    logger.error(`[${logPrefix}] MinIO upload failed: ${err.message}`);
+  } catch (error) {
+    logger.error(`[${logPrefix}] MinIO upload failed: ${error.message}`);
     return null;
   }
 }

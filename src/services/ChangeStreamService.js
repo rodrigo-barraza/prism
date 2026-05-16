@@ -1,7 +1,7 @@
 import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../config.js";
 import logger from "../utils/logger.js";
-import { COLLECTIONS } from "../constants.js";
+import { COLLECTIONS, CHANGE_STREAM_RECONNECT_MS } from "../constants.js";
 
 /**
  * ChangeStreamService — watches MongoDB collections via Change Streams
@@ -59,15 +59,15 @@ function openStream(db, collectionName) {
       for (const listener of listeners) {
         try {
           listener(payload);
-        } catch (err) {
-          logger.error(`ChangeStream listener error: ${err.message}`);
+        } catch (error) {
+          logger.error(`ChangeStream listener error: ${error.message}`);
         }
       }
     });
 
-    stream.on("error", (err) => {
+    stream.on("error", (error) => {
       logger.error(
-        `ChangeStream error on ${collectionName}: ${err.message}`,
+        `ChangeStream error on ${collectionName}: ${error.message}`,
       );
       // Attempt to re-open after a delay
       streams.delete(collectionName);
@@ -114,9 +114,9 @@ const ChangeStreamService = {
       // If watch() succeeds without throwing, Change Streams are supported.
       // We need to close this test stream and open real ones.
       await testStream.close();
-    } catch (err) {
+    } catch (error) {
       logger.warn(
-        `Change Streams not available (${err.message}). ` +
+        `Change Streams not available (${error.message}). ` +
         "Admin dashboard will fall back to polling. " +
         "To enable Change Streams, configure MongoDB as a replica set.",
       );
@@ -142,7 +142,7 @@ const ChangeStreamService = {
     // Catches flags left behind by crashed requests or dropped connections
     staleGeneratingInterval = setInterval(async () => {
       try {
-        const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        const fiveMinAgo = new Date(Date.now() - CHANGE_STREAM_RECONNECT_MS).toISOString();
         const { modifiedCount } = await db
           .collection(COLLECTIONS.CONVERSATIONS)
           .updateMany(
@@ -155,7 +155,7 @@ const ChangeStreamService = {
       } catch {
         // ignore
       }
-    }, 60000);
+    }, CHANGE_STREAM_RECONNECT_MS);
   },
 
   /**

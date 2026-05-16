@@ -138,7 +138,7 @@ router.post("/load-stream", asyncHandler(async (req, res) => {
     let loadError = null;
     const loadPromise = provider.loadModel(model, loadOptions)
       .then(() => { loadDone = true; })
-      .catch((err) => { loadDone = true; loadError = err; });
+      .catch((error) => { loadDone = true; loadError = error; });
     const startTime = Date.now();
     const EXPECTED_LOAD_MS = 15_000;
     let lastPct = 0;

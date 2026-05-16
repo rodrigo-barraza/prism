@@ -125,6 +125,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("❌ Migration failed:", err.message);
+  console.error("❌ Migration failed:", error.message);
   process.exit(1);
 });
