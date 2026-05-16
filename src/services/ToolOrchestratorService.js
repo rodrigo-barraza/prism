@@ -888,6 +888,36 @@ export default class ToolOrchestratorService {
   }
 
   static async executeCustomTool(toolDef, args = {}) {
+    // ── Code-based tools — execute JS in tools-service sandbox ──
+    if (toolDef.code) {
+      try {
+        const res = await fetch(`${TOOLS_SERVICE_URL}/agentic/custom-tool/execute`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: toolDef.code, args }),
+          signal: AbortSignal.timeout(35_000),
+        });
+        if (!res.ok) {
+          try {
+            const errBody = await res.json();
+            return { error: errBody.error || `Execution failed: ${res.status}` };
+          } catch {
+            return { error: `Execution failed: ${res.status} ${res.statusText}` };
+          }
+        }
+        return await res.json();
+      } catch (err) {
+        if (err.name === "AbortError" || err.name === "TimeoutError") {
+          return { error: "Custom tool execution timed out (35s)" };
+        }
+        return { error: `Custom tool execution failed: ${err.message}` };
+      }
+    }
+
+    // ── Legacy endpoint-based tools — HTTP dispatch ─────────────
+    if (!toolDef.endpoint) {
+      return { error: "Custom tool has no code or endpoint defined" };
+    }
     try {
       const headers = { "Content-Type": "application/json" };
       if (toolDef.bearerToken) {

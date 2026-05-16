@@ -43,7 +43,8 @@ router.post("/", asyncHandler(async (req, res, next) => {
       username,
       name: req.body.name,
       description: req.body.description || "",
-      endpoint: req.body.endpoint,
+      code: req.body.code || "",
+      endpoint: req.body.endpoint || "",
       method: req.body.method || "GET",
       parameters: req.body.parameters || [],
       enabled: req.body.enabled !== false,
@@ -75,6 +76,7 @@ router.put("/:id", asyncHandler(async (req, res, next) => {
       ...(req.body.description !== undefined && {
         description: req.body.description,
       }),
+      ...(req.body.code !== undefined && { code: req.body.code }),
       ...(req.body.endpoint !== undefined && { endpoint: req.body.endpoint }),
       ...(req.body.method !== undefined && { method: req.body.method }),
       ...(req.body.parameters !== undefined && {
