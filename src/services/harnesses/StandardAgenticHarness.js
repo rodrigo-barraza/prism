@@ -320,6 +320,64 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
           emit({ type: "status", message: "memories_updated" });
         }
 
+        // ── Hot-reload custom tools mid-session ──────────────────
+        // When a custom tool is created/updated/deleted during the agentic
+        // loop, update the live customToolMap and finalTools so the agent
+        // can invoke the new tool on subsequent iterations without restart.
+        const customToolMutations = pass.pendingToolCalls.filter((tc) =>
+          ["create_custom_tool", "update_custom_tool", "delete_custom_tool"].includes(tc.name),
+        );
+        if (customToolMutations.length > 0) {
+          try {
+            const client = (await import("../../wrappers/MongoWrapper.js")).default.getClient(
+              (await import("../../config.js")).MONGO_DB_NAME,
+            );
+            if (client) {
+              const { MONGO_DB_NAME: dbName } = await import("../../config.js");
+              const freshCustom = await client
+                .db(dbName)
+                .collection("custom_tools")
+                .find({ project, username, enabled: true })
+                .toArray();
+
+              // Rebuild the customToolMap
+              this.tools.customToolMap.clear();
+              for (const t of freshCustom) {
+                this.tools.customToolMap.set(t.name, t);
+              }
+
+              // Rebuild finalTools: remove old custom tools, add fresh ones
+              const builtInTools = this.tools.finalTools.filter(
+                (t) => !t._isCustom,
+              );
+              const freshSchemas = freshCustom.map((t) => ({
+                name: t.name,
+                description: t.description,
+                _isCustom: true,
+                parameters: {
+                  type: "object",
+                  properties: Object.fromEntries(
+                    (t.parameters || []).map((p) => [
+                      p.name,
+                      {
+                        type: p.type || "string",
+                        description: p.description || "",
+                        ...(p.enum?.length ? { enum: p.enum } : {}),
+                      },
+                    ]),
+                  ),
+                  required: (t.parameters || []).filter((p) => p.required).map((p) => p.name),
+                },
+              }));
+              this.tools.finalTools = [...builtInTools, ...freshSchemas];
+              logger.info(`[AgenticLoop] Hot-reloaded ${freshCustom.length} custom tool(s) into live session`);
+            }
+          } catch (err) {
+            logger.warn(`[AgenticLoop] Failed to hot-reload custom tools: ${err.message}`);
+          }
+          emit({ type: "status", message: "custom_tools_updated" });
+        }
+
         // ── Plan mode toggling ────────────────────────────────
         if (pass.pendingToolCalls.some((tc) => tc.name === "enter_plan_mode")) {
           state.planModeActive = true;

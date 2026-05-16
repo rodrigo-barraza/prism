@@ -55,6 +55,7 @@ export default class AgenticToolResolver {
       dynamicTools.push({
         name: t.name,
         description: t.description,
+        _isCustom: true,
         parameters: {
           type: "object",
           properties: Object.fromEntries(
