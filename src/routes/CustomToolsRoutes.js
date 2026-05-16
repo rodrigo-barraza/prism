@@ -47,6 +47,7 @@ router.post("/", asyncHandler(async (req, res, next) => {
       endpoint: req.body.endpoint || "",
       method: req.body.method || "GET",
       parameters: req.body.parameters || [],
+      execution: req.body.execution === "privileged" ? "privileged" : "sandboxed",
       enabled: req.body.enabled !== false,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -81,6 +82,9 @@ router.put("/:id", asyncHandler(async (req, res, next) => {
       ...(req.body.method !== undefined && { method: req.body.method }),
       ...(req.body.parameters !== undefined && {
         parameters: req.body.parameters,
+      }),
+      ...(req.body.execution !== undefined && {
+        execution: req.body.execution === "privileged" ? "privileged" : "sandboxed",
       }),
       ...(req.body.enabled !== undefined && { enabled: req.body.enabled }),
       updatedAt: new Date(),

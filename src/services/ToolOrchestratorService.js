@@ -888,13 +888,16 @@ export default class ToolOrchestratorService {
   }
 
   static async executeCustomTool(toolDef, args = {}) {
-    // ── Code-based tools — execute JS in tools-service sandbox ──
+    // ── Code-based tools — execute JS via tools-service ────────
+    // The execution tier (sandboxed/privileged) is stored on the tool
+    // document and controls which vm globals are injected.
     if (toolDef.code) {
       try {
+        const execution = toolDef.execution === "privileged" ? "privileged" : "sandboxed";
         const res = await fetch(`${TOOLS_SERVICE_URL}/agentic/custom-tool/execute`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code: toolDef.code, args }),
+          body: JSON.stringify({ code: toolDef.code, args, execution }),
           signal: AbortSignal.timeout(35_000),
         });
         if (!res.ok) {

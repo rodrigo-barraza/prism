@@ -325,7 +325,7 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
         // loop, update the live customToolMap and finalTools so the agent
         // can invoke the new tool on subsequent iterations without restart.
         const customToolMutations = pass.pendingToolCalls.filter((tc) =>
-          ["create_custom_tool", "update_custom_tool", "delete_custom_tool"].includes(tc.name),
+          ["create_custom_tool", "create_privileged_tool", "update_custom_tool", "delete_custom_tool"].includes(tc.name),
         );
         if (customToolMutations.length > 0) {
           try {
