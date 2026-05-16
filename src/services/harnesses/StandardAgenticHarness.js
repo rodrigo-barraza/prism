@@ -329,13 +329,10 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
         );
         if (customToolMutations.length > 0) {
           try {
-            const client = (await import("../../wrappers/MongoWrapper.js")).default.getClient(
-              (await import("../../config.js")).MONGO_DB_NAME,
-            );
+            const client = MongoWrapper.getClient(MONGO_DB_NAME);
             if (client) {
-              const { MONGO_DB_NAME: dbName } = await import("../../config.js");
               const freshCustom = await client
-                .db(dbName)
+                .db(MONGO_DB_NAME)
                 .collection("custom_tools")
                 .find({ project, username, enabled: true })
                 .toArray();
