@@ -417,11 +417,30 @@ function normalizeOpenAICompatModel(raw) {
   return entry;
 }
 
+/**
+ * vLLM-specific normalizer.
+ * vLLM containers are launched with --enable-auto-tool-choice and a
+ * --tool-call-parser, so every served model supports tool calling at
+ * the server level regardless of name. Force "Tool Calling" onto all
+ * vLLM models, then delegate the rest to the shared normalizer.
+ */
+function normalizeVllmModel(raw) {
+  const entry = normalizeOpenAICompatModel(raw);
+
+  // Ensure Tool Calling is always present for vLLM models
+  if (!entry.tools) entry.tools = [];
+  if (!entry.tools.includes("Tool Calling")) {
+    entry.tools.push("Tool Calling");
+  }
+
+  return entry;
+}
+
 /** Select the normalizer function for a provider type. */
 const NORMALIZER_BY_TYPE = {
   "lm-studio": normalizeLmStudioModel,
   ollama: normalizeOllamaModel,
-  vllm: normalizeOpenAICompatModel,
+  vllm: normalizeVllmModel,
   "llama-cpp": normalizeOpenAICompatModel,
 };
 
@@ -1161,6 +1180,7 @@ export {
   normalizeLmStudioModel,
   normalizeOllamaModel,
   normalizeOpenAICompatModel,
+  normalizeVllmModel,
   NORMALIZER_BY_TYPE,
   HF_ENRICHED_TYPES,
 };
