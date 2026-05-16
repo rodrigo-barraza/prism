@@ -80,11 +80,9 @@ vi.mock("../src/services/ToolOrchestratorService.js", () => ({
 const mockFindToArray = vi.fn().mockResolvedValue(MOCK_CUSTOM_TOOLS);
 vi.mock("../src/wrappers/MongoWrapper.js", () => ({
   default: {
-    getClient: vi.fn(() => ({
-      db: () => ({
-        collection: () => ({
-          find: () => ({ toArray: mockFindToArray }),
-        }),
+    getDb: vi.fn(() => ({
+      collection: () => ({
+        find: () => ({ toArray: mockFindToArray }),
       }),
     })),
   },
