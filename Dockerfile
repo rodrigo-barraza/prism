@@ -43,4 +43,4 @@ EXPOSE 7777
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD wget --no-verbose --tries=1 -O /dev/null http://127.0.0.1:7777/health || exit 1
 
-CMD ["node", "dist/src/boot.js"]
+CMD ["node", "dist/boot.js"]
