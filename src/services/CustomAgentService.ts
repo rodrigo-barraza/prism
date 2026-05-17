@@ -82,7 +82,7 @@ const CustomAgentService = {
       throw new Error(`Agent with ID "${agentId}" already exists`);
     }
 
-    const doc = {
+    const document = {
       name: data.name,
       agentId,
       type: data.type || "",
@@ -101,11 +101,11 @@ const CustomAgentService = {
       updatedAt: new Date().toISOString(),
     };
 
-    const result = await col.insertOne(doc);
+    const result = await col.insertOne(document);
     logger.info(
-      `[CustomAgentService] Created agent "${doc.name}" (${doc.agentId})`,
+      `[CustomAgentService] Created agent "${document.name}" (${document.agentId})`,
     );
-    return { ...doc, _id: result.insertedId };
+    return { ...document, _id: result.insertedId };
   },
 
   /**
@@ -145,11 +145,11 @@ const CustomAgentService = {
     const col = getCollection();
     if (!col) throw new Error("Database not available");
 
-    const doc = await col.findOne({ _id: new ObjectId(id) });
+    const document = await col.findOne({ _id: new ObjectId(id) });
     const result = await col.deleteOne({ _id: new ObjectId(id) });
-    if (doc) {
+    if (document) {
       logger.info(
-        `[CustomAgentService] Deleted agent "${doc.name}" (${doc.agentId})`,
+        `[CustomAgentService] Deleted agent "${document.name}" (${document.agentId})`,
       );
     }
     return result.deletedCount > 0;

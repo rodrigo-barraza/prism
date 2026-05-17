@@ -117,15 +117,15 @@ router.get(
       // Build sessionId → enrichment map
       const enrichMap = new Map();
       // @ts-ignore
-      for ( const doc of enrichDocs) {
+      for ( const document of enrichDocs) {
         // Unique non-null models and providers
-        const models = doc.models.filter(Boolean);
-        const providers = doc.providers.filter(Boolean);
+        const models = document.models.filter(Boolean);
+        const providers = document.providers.filter(Boolean);
 
         // Merge modality keys from all requests into a single flags object
         const mergedModalities = {};
         // @ts-ignore
-        for ( const keySet of doc.modalityKeys) {
+        for ( const keySet of document.modalityKeys) {
           // @ts-ignore
           for ( const k of keySet) mergedModalities[k] = true;
         }
@@ -133,16 +133,16 @@ router.get(
         // Count per-tool occurrences
         const toolCounts = {};
         // @ts-ignore
-        for ( const arr of doc.allToolApiNames) {
+        for ( const array of document.allToolApiNames) {
           // @ts-ignore
-          for ( const name of arr) {
+          for ( const name of array) {
             // @ts-ignore
             toolCounts[name] = (toolCounts[name] || 0) + 1;
           }
         }
 
-        enrichMap.set(doc._id, {
-          totalCost: doc.totalCost,
+        enrichMap.set(document._id, {
+          totalCost: document.totalCost,
           models,
           providers,
           modalities: mergedModalities,

@@ -72,13 +72,13 @@ export function buildPayloadParams(
  * Handles both nested OpenAI format ({ function: { name, arguments } })
  * and flat llama.cpp format ({ name, arguments }).
  *
- * @param {object} msg - The message object from choices[0].message
+ * @param {object} message - The message object from choices[0].message
  * @returns {Array|null} Array of { id, name, args } or null if no tool calls
  */
-export function extractToolCallsFromMessage(msg: any) {
-  if (!msg?.tool_calls || msg.tool_calls.length === 0) return null;
+export function extractToolCallsFromMessage(message: any) {
+  if (!message?.tool_calls || message.tool_calls.length === 0) return null;
 
-  return msg.tool_calls.map((tc: any) => {
+  return message.tool_calls.map((tc: any) => {
     const fnName = tc.function?.name || tc.name || "";
     const fnArgs = tc.function?.arguments || tc.arguments || "{}";
     let args = {};
@@ -176,7 +176,7 @@ export async function expandVideoToFrames(messages: any, options = {}) {
   const { extractVideoFrames, getDataUrlMimeType } = await import("./media.js");
 
   // @ts-ignore
-  for ( const msg of messages) {
+  for ( const message of messages) {
     // Collect video data URLs from both `video` and `images` arrays.
     // The frontend may place video files in `images` if it doesn't
     // categorize by MIME type (backwards compatibility).
@@ -184,15 +184,15 @@ export async function expandVideoToFrames(messages: any, options = {}) {
     const keptImages = [];
 
     // Check explicit video field
-    if (msg.video && Array.isArray(msg.video)) {
-      videoUrls.push(...msg.video);
-      delete msg.video;
+    if (message.video && Array.isArray(message.video)) {
+      videoUrls.push(...message.video);
+      delete message.video;
     }
 
     // Check images field for misclassified video data URLs
-    if (msg.images && Array.isArray(msg.images)) {
+    if (message.images && Array.isArray(message.images)) {
       // @ts-ignore
-      for ( const dataUrl of msg.images) {
+      for ( const dataUrl of message.images) {
         const mime = getDataUrlMimeType(dataUrl);
         if (mime && mime.startsWith("video/")) {
           videoUrls.push(dataUrl);
@@ -200,7 +200,7 @@ export async function expandVideoToFrames(messages: any, options = {}) {
           keptImages.push(dataUrl);
         }
       }
-      msg.images = keptImages;
+      message.images = keptImages;
     }
 
     if (videoUrls.length === 0) continue;
@@ -214,7 +214,7 @@ export async function expandVideoToFrames(messages: any, options = {}) {
 
     if (allFrames.length > 0) {
       // Prepend frames to images array (model card recommends media before text)
-      msg.images = [...allFrames, ...(msg.images || [])];
+      message.images = [...allFrames, ...(message.images || [])];
     }
   }
 
@@ -285,11 +285,11 @@ export function prepareOpenAICompatMessages(
       // Full media handling (vllm, llama-cpp)
       // @ts-ignore
       for ( const field of ["images", "audio", "video", "pdf"]) {
-        const arr = m[field];
-        if (!arr || !Array.isArray(arr) || arr.length === 0) continue;
+        const array = m[field];
+        if (!array || !Array.isArray(array) || array.length === 0) continue;
 
         // @ts-ignore
-        for ( const dataUrl of arr) {
+        for ( const dataUrl of array) {
           const mime = getDataUrlMimeType(dataUrl);
 
           if (mime && mime.startsWith("image/")) {
@@ -373,24 +373,24 @@ export function prepareOpenAICompatMessages(
  * @returns {{ text: string, thinking: string|null, usage: object, toolCalls: Array|null }}
  */
 export function processNonStreamingResponse(data: any, options = {}) {
-  const msg = data.choices?.[0]?.message;
-  const rawText = msg?.content || "";
+  const message = data.choices?.[0]?.message;
+  const rawText = message?.content || "";
 
   // When thinking is disabled, return raw text without parsing <think> tags
   // @ts-ignore
   if (options.thinkingEnabled === false) {
     const usage = normalizeUsage(data.usage);
-    const toolCalls = extractToolCallsFromMessage(msg);
+    const toolCalls = extractToolCallsFromMessage(message);
     return { text: rawText, thinking: null, usage, toolCalls };
   }
 
   // Check native reasoning fields first, fall back to <think> tag parsing
-  const nativeThinking = msg?.reasoning_content || msg?.reasoning || null;
+  const nativeThinking = message?.reasoning_content || message?.reasoning || null;
   const { thinking: tagThinking, text } = extractThinkTags(rawText);
   const thinking = nativeThinking || tagThinking;
 
   const usage = normalizeUsage(data.usage);
-  const toolCalls = extractToolCallsFromMessage(msg);
+  const toolCalls = extractToolCallsFromMessage(message);
 
   return { text, thinking, usage, toolCalls };
 }
@@ -502,25 +502,25 @@ export async function* parseSSEStream(reader: any, options = {}) {
             let deltaChars = 0;
             // @ts-ignore
             for ( const tc of delta.tool_calls) {
-              const idx = tc.index;
+              const index = tc.index;
               // @ts-ignore
-              if (!pendingToolCalls[idx]) {
+              if (!pendingToolCalls[index]) {
                 // @ts-ignore
-                pendingToolCalls[idx] = {
+                pendingToolCalls[index] = {
                   id: tc.id || "",
                   name: tc.function?.name || tc.name || "",
                   args: "",
                 };
               }
               // @ts-ignore
-              if (tc.id) pendingToolCalls[idx].id = tc.id;
+              if (tc.id) pendingToolCalls[index].id = tc.id;
               const chunkName = tc.function?.name || tc.name;
               // @ts-ignore
-              if (chunkName) pendingToolCalls[idx].name = chunkName;
+              if (chunkName) pendingToolCalls[index].name = chunkName;
               const chunkArgs = tc.function?.arguments || tc.arguments;
               if (chunkArgs) {
                 // @ts-ignore
-                pendingToolCalls[idx].args += chunkArgs;
+                pendingToolCalls[index].args += chunkArgs;
                 deltaChars += chunkArgs.length;
               }
             }

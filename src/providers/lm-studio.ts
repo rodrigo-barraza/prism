@@ -254,13 +254,13 @@ function buildNativeInput(messages: any) {
   if (historyMessages.length > 0) {
     const lines = [];
     // @ts-ignore
-    for ( const msg of historyMessages) {
-      const role = msg.role === "user" ? "User" : "Assistant";
+    for ( const message of historyMessages) {
+      const role = message.role === "user" ? "User" : "Assistant";
       const text =
-        typeof msg.content === "string"
-          ? msg.content
-          : Array.isArray(msg.content)
-            ? msg.content
+        typeof message.content === "string"
+          ? message.content
+          : Array.isArray(message.content)
+            ? message.content
                 .filter((c: any) => c.type === "text")
                 .map((c: any) => c.text)
                 .join("\n")
@@ -493,11 +493,11 @@ export function createLmStudioProvider(baseUrl: any, instanceId = "lm-studio") {
                 (m: any) => m.key === model,
               );
               if (entry?.loaded_instances?.length > 0) {
-                const ctx = entry.loaded_instances[0]?.config?.context_length;
+                const context = entry.loaded_instances[0]?.config?.context_length;
                 // @ts-ignore
-                if (ctx) options._loadedContextLength = ctx;
+                if (context) options._loadedContextLength = context;
                 logger.info(
-                  `[LM-Studio:${instanceId}] Singleflight resolved — model "${model}" ready (ctx=${ctx})`,
+                  `[LM-Studio:${instanceId}] Singleflight resolved — model "${model}" ready (ctx=${context})`,
                 );
                 // Skip to inference — model is loaded
               } else {
@@ -523,10 +523,10 @@ export function createLmStudioProvider(baseUrl: any, instanceId = "lm-studio") {
               const isNowLoaded = recheck?.loaded_instances?.length > 0;
               if (isNowLoaded && !needsReload) {
                 // Model is loaded — capture context and skip to inference
-                const ctx =
+                const context =
                   recheck?.loaded_instances?.[0]?.config?.context_length;
                 // @ts-ignore
-                if (ctx) options._loadedContextLength = ctx;
+                if (context) options._loadedContextLength = context;
               } else if (!_loadInflight.has(model)) {
                 // ── SYNCHRONOUS registration — no awaits after this point ──
                 // Double-check: between our listModels() and here, another
@@ -668,10 +668,10 @@ export function createLmStudioProvider(baseUrl: any, instanceId = "lm-studio") {
                     const entry = (refreshed.models || []).find(
                       (m: any) => m.key === model,
                     );
-                    const ctx =
+                    const context =
                       entry?.loaded_instances?.[0]?.config?.context_length;
                     // @ts-ignore
-                    if (ctx) options._loadedContextLength = ctx;
+                    if (context) options._loadedContextLength = context;
                   } catch {
                     /* ignore */
                   }
@@ -705,10 +705,10 @@ export function createLmStudioProvider(baseUrl: any, instanceId = "lm-studio") {
                 const entry = (refreshed.models || []).find(
                   (m: any) => m.key === model,
                 );
-                const ctx =
+                const context =
                   entry?.loaded_instances?.[0]?.config?.context_length;
                 // @ts-ignore
-                if (ctx) options._loadedContextLength = ctx;
+                if (context) options._loadedContextLength = context;
               }
             }
           }
@@ -1067,9 +1067,9 @@ export function createLmStudioProvider(baseUrl: any, instanceId = "lm-studio") {
       try {
         const content = [
           { type: "text", text: prompt },
-          ...images.map((img: any) => ({
+          ...images.map((image: any) => ({
             type: "image_url",
-            image_url: { url: img },
+            image_url: { url: image },
           })),
         ];
         const messages = [];
@@ -1163,9 +1163,9 @@ export function createLmStudioProvider(baseUrl: any, instanceId = "lm-studio") {
         const entry = (refreshed.models || []).find(
           (m: any) => m.key === modelKey,
         );
-        const ctx =
+        const context =
           entry?.loaded_instances?.[0]?.config?.context_length || null;
-        return { alreadyLoaded: false, contextLength: ctx };
+        return { alreadyLoaded: false, contextLength: context };
       } catch {
         return { alreadyLoaded: false, contextLength: null };
       }

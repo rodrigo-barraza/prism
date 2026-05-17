@@ -35,19 +35,19 @@ export default class BaseAgenticHarness {
   static description = "Abstract base harness — do not use directly.";
 
   /**
-   * @param {object}              ctx    — generation context from ChatRoutes
+   * @param {object}              context    — generation context from ChatRoutes
    * @param {AgenticLoopState}    state  — shared mutable state accumulator
    * @param {object}              tools  — { finalTools, customToolMap, resolvedEnabledTools }
    */
-  constructor(ctx: any, state: any, tools: any) {
+  constructor(context: any, state: any, tools: any) {
     // @ts-ignore
-    this.ctx = ctx;
+    this.ctx = context;
     // @ts-ignore
     this.state = state;
     // @ts-ignore
     this.tools = tools;
 
-    const { parentAgentSessionId, agentSessionId } = ctx;
+    const { parentAgentSessionId, agentSessionId } = context;
     // @ts-ignore
     this.trackerSessionId = parentAgentSessionId || agentSessionId;
   }

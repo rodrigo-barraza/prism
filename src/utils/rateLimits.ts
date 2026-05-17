@@ -115,8 +115,8 @@ export function extractAnthropicRateLimits(response: any, model: any) {
 /**
  * Safely parse a string to an integer, returning null on failure.
  */
-function safeInt(val: any) {
-  if (val == null) return null;
-  const parsed = parseInt(val, 10);
+function safeInt(value: any) {
+  if (value == null) return null;
+  const parsed = parseInt(value, 10);
   return Number.isNaN(parsed) ? null : parsed;
 }

@@ -656,7 +656,7 @@ const BenchmarkService = {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) throw new Error("Database not available");
     const now = new Date().toISOString();
-    const doc = {
+    const document = {
       id: crypto.randomUUID(),
       project,
       username,
@@ -676,8 +676,8 @@ const BenchmarkService = {
       createdAt: now,
       updatedAt: now,
     };
-    await db.collection(BENCHMARKS_COL).insertOne(doc);
-    return doc;
+    await db.collection(BENCHMARKS_COL).insertOne(document);
+    return document;
   },
   async list(project: any) {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);

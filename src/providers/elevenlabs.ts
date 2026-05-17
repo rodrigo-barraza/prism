@@ -182,11 +182,11 @@ const elevenlabsProvider = {
       while (true) {
         if (messageQueue.length > 0) {
           // @ts-ignore
-          const msg = messageQueue.shift();
-          if (msg.audio) {
-            yield Buffer.from(msg.audio, "base64");
+          const message = messageQueue.shift();
+          if (message.audio) {
+            yield Buffer.from(message.audio, "base64");
           }
-          if (msg.isFinal) {
+          if (message.isFinal) {
             break;
           }
         } else {

@@ -516,18 +516,18 @@ const openaiProvider = {
         .chat.completions.create(payload)
         .withResponse();
       const rateLimits = extractOpenAIRateLimits(rawResponse, model);
-      const msg = response.choices[0].message;
+      const message = response.choices[0].message;
       const result = {
-        text: msg.content || "",
+        text: message.content || "",
         usage: {
           inputTokens: response.usage?.prompt_tokens ?? 0,
           outputTokens: response.usage?.completion_tokens ?? 0,
         },
       };
       // Extract tool calls if present
-      if (msg.tool_calls && msg.tool_calls.length > 0) {
+      if (message.tool_calls && message.tool_calls.length > 0) {
         // @ts-ignore
-        result.toolCalls = msg.tool_calls.map((tc: any) => {
+        result.toolCalls = message.tool_calls.map((tc: any) => {
           let args = {};
           try {
             args = JSON.parse(tc.function.arguments || "{}");
@@ -937,23 +937,23 @@ const openaiProvider = {
         let deltaChars = 0;
         // @ts-ignore
         for ( const tc of delta.tool_calls) {
-          const idx = tc.index;
+          const index = tc.index;
           // @ts-ignore
-          if (!pendingToolCalls[idx]) {
+          if (!pendingToolCalls[index]) {
             // @ts-ignore
-            pendingToolCalls[idx] = {
+            pendingToolCalls[index] = {
               id: tc.id || "",
               name: tc.function?.name || "",
               args: "",
             };
           }
           // @ts-ignore
-          if (tc.id) pendingToolCalls[idx].id = tc.id;
+          if (tc.id) pendingToolCalls[index].id = tc.id;
           // @ts-ignore
-          if (tc.function?.name) pendingToolCalls[idx].name = tc.function.name;
+          if (tc.function?.name) pendingToolCalls[index].name = tc.function.name;
           if (tc.function?.arguments) {
             // @ts-ignore
-            pendingToolCalls[idx].args += tc.function.arguments;
+            pendingToolCalls[index].args += tc.function.arguments;
             deltaChars += tc.function.arguments.length;
           }
         }
@@ -1105,9 +1105,9 @@ const openaiProvider = {
     try {
       const content = [
         { type: "text", text: prompt },
-        ...images.map((img: any) => ({
+        ...images.map((image: any) => ({
           type: "image_url",
-          image_url: { url: img },
+          image_url: { url: image },
         })),
       ];
       const messages = [];

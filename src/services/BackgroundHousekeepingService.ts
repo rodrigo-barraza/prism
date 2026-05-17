@@ -179,9 +179,9 @@ async function pruneMinioOrphans() {
       .collection(COLLECTIONS.AGENT_SESSIONS)
       .find({}, { projection: { id: 1, _id: 0 } });
     // @ts-ignore
-    for await ( const doc of convCursor) validIds.add(doc.id);
+    for await ( const document of convCursor) validIds.add(document.id);
     // @ts-ignore
-    for await ( const doc of sessionCursor) validIds.add(doc.id);
+    for await ( const document of sessionCursor) validIds.add(document.id);
 
     // List MinIO objects with the conversation-scoped prefix pattern
     // Convention: conversation objects are stored as {conversationId}/{filename}
@@ -193,8 +193,8 @@ async function pruneMinioOrphans() {
     // NOT known structural paths (projects/, uploads/, generations/, etc.)
     const prefixes = new Set();
     // @ts-ignore
-    for ( const obj of objects) {
-      const prefix = (obj.name || obj).split("/")[0];
+    for ( const object of objects) {
+      const prefix = (object.name || object).split("/")[0];
       if (prefix && !validIds.has(prefix) && !STRUCTURAL_PREFIXES.has(prefix)) {
         prefixes.add(prefix);
       }
@@ -207,9 +207,9 @@ async function pruneMinioOrphans() {
         (o.name || o).startsWith(`${prefix}/`),
       );
       // @ts-ignore
-      for ( const obj of orphanedObjects) {
+      for ( const object of orphanedObjects) {
         try {
-          await MinioWrapper.remove(obj.name || obj);
+          await MinioWrapper.remove(object.name || object);
           removed++;
         } catch {
           // Best-effort — skip failures

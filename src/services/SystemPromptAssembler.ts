@@ -74,17 +74,17 @@ export default class SystemPromptAssembler {
 
       // @ts-ignore
       const url = `${TOOLS_SERVICE_URL}/filesystem/list?path=${encodeURIComponent(this.workspaceRoot)}&depth=2`;
-      const res = await fetch(url, { signal: controller.signal });
+      const response = await fetch(url, { signal: controller.signal });
       clearTimeout(timeout);
 
-      if (!res.ok) {
+      if (!response.ok) {
         logger.warn(
-          `[SystemPromptAssembler] Directory fetch failed: ${res.status}`,
+          `[SystemPromptAssembler] Directory fetch failed: ${response.status}`,
         );
         return "";
       }
 
-      const data = await res.json();
+      const data = await response.json();
       const tree = this._formatDirectoryTree(data);
       // @ts-ignore
       this._directoryCache = tree;
@@ -341,20 +341,20 @@ export default class SystemPromptAssembler {
    *   8. Project skills (relevance-filtered)
    *   9. Session memory from past conversations
    *
-   * @param {object} ctx - Request context
-   * @param {string} ctx.project - Project identifier
-   * @param {string} ctx.username - Username
-   * @param {string} [ctx.agent] - Agent identifier (e.g. "LUPOS", "CODING")
-   * @param {object} [ctx.agentContext] - Runtime context from caller
-   * @param {Array} ctx.messages - Current messages array
-   * @param {Array} [ctx.enabledTools] - Enabled tool names
+   * @param {object} context - Request context
+   * @param {string} context.project - Project identifier
+   * @param {string} context.username - Username
+   * @param {string} [context.agent] - Agent identifier (e.g. "LUPOS", "CODING")
+   * @param {object} [context.agentContext] - Runtime context from caller
+   * @param {Array} context.messages - Current messages array
+   * @param {Array} [context.enabledTools] - Enabled tool names
    * @returns {Promise<{ prompt: string, skillNames: string[] }>} Complete system prompt + skill names for UI emission
    */
-  async assemble(ctx: any) {
+  async assemble(context: any) {
     const sections = [];
     // null/undefined agent = direct chat mode (no persona)
-    const isDirectMode = !ctx.agent;
-    const agentId = ctx.agent || "CODING";
+    const isDirectMode = !context.agent;
+    const agentId = context.agent || "CODING";
     const persona = isDirectMode ? null : AgentPersonaRegistry.get(agentId);
 
     // If no persona found, fall back to CODING defaults (unless direct mode)
@@ -369,7 +369,7 @@ export default class SystemPromptAssembler {
     } else if (persona) {
       const identityText =
         typeof persona.identity === "function"
-          ? persona.identity(ctx)
+          ? persona.identity(context)
           : persona.identity;
       sections.push(identityText);
     } else {
@@ -381,8 +381,8 @@ export default class SystemPromptAssembler {
     // ── 2. Agent Context (runtime data from caller) ──────────────
     // Only injected when the caller provides agentContext (e.g. Lupos
     // sends Discord server/channel/participant info, trending data, etc.)
-    if (ctx.agentContext) {
-      const ac = ctx.agentContext;
+    if (context.agentContext) {
+      const ac = context.agentContext;
 
       // Structured context blocks — each is a pre-formatted text block
       // assembled by the caller (Lupos/Prism Client/etc.)
@@ -428,7 +428,7 @@ export default class SystemPromptAssembler {
     if (persona?.toolPolicy) {
       const policyText =
         typeof persona.toolPolicy === "function"
-          ? persona.toolPolicy(ctx)
+          ? persona.toolPolicy(context)
           : persona.toolPolicy;
       if (policyText) sections.push(policyText);
     }
@@ -438,11 +438,11 @@ export default class SystemPromptAssembler {
     // This ensures every persona (CODING, LUPOS, future agents) gets the
     // same domain-grouped tool documentation in its system prompt.
     {
-      const toolDescs = this.buildToolDescriptions(ctx.enabledTools);
+      const toolDescs = this.buildToolDescriptions(context.enabledTools);
       if (toolDescs) {
         const schemas = ToolOrchestratorService.getToolSchemas();
-        const count = ctx.enabledTools
-          ? schemas.filter((t: any) => new Set(ctx.enabledTools).has(t.name))
+        const count = context.enabledTools
+          ? schemas.filter((t: any) => new Set(context.enabledTools).has(t.name))
               .length
           : schemas.length;
         sections.push(`## Available Tools (${count})\n` + toolDescs);
@@ -473,7 +473,7 @@ export default class SystemPromptAssembler {
 
     // ── 5b. Coordinator Mode Addendum (when coordinator tools available) ──
     if (!isDirectMode && (codingFallback || persona?.usesCodingGuidelines)) {
-      const enabledSet = ctx.enabledTools ? new Set(ctx.enabledTools) : null;
+      const enabledSet = context.enabledTools ? new Set(context.enabledTools) : null;
       const coordinatorAvailable = enabledSet
         ? COORDINATOR_ONLY_TOOLS.some((t: any) => enabledSet.has(t))
         : true; // No filter = all tools available including coordinator
@@ -507,18 +507,18 @@ export default class SystemPromptAssembler {
     }
 
     // ── 8. Project Skills (relevance-filtered) ────────────────────
-    const lastUserMsg = [...(ctx.messages || [])]
+    const lastUserMsg = [...(context.messages || [])]
       .reverse()
       .find((m: any) => m.role === "user");
     const queryText = lastUserMsg?.content || "";
 
     const skills = await this.fetchSkills(
-      ctx.project,
-      ctx.username,
+      context.project,
+      context.username,
       queryText,
       {
-        traceId: ctx.traceId,
-        agentSessionId: ctx.agentSessionId,
+        traceId: context.traceId,
+        agentSessionId: context.agentSessionId,
         endpoint: "/agent",
         agent: agentId,
       },
@@ -536,18 +536,18 @@ export default class SystemPromptAssembler {
     }
 
     // ── 9. Session Memory (embedding search) ────────────────────
-    const memoryQuery = queryText || ctx.project || "";
+    const memoryQuery = queryText || context.project || "";
 
     if (memoryQuery) {
       const memories = await this.fetchMemories(
         agentId,
-        ctx.project,
+        context.project,
         memoryQuery,
         {
-          traceId: ctx.traceId,
-          agentSessionId: ctx.agentSessionId,
+          traceId: context.traceId,
+          agentSessionId: context.agentSessionId,
           endpoint: "/agent",
-          username: ctx.username,
+          username: context.username,
         },
       );
       if (memories) {
@@ -569,26 +569,26 @@ export default class SystemPromptAssembler {
    * @returns {Function}
    */
   createHook() {
-    return async (ctx: any) => {
+    return async (context: any) => {
       try {
-        const { prompt: systemPrompt, skillNames } = await this.assemble(ctx);
+        const { prompt: systemPrompt, skillNames } = await this.assemble(context);
         if (!systemPrompt) return;
 
         // Expose skill names on ctx for downstream emission
-        ctx._injectedSkills = skillNames;
+        context._injectedSkills = skillNames;
 
         // Replace existing system message or prepend a new one
-        const systemIdx = ctx.messages?.findIndex(
+        const systemIdx = context.messages?.findIndex(
           (m: any) => m.role === "system",
         );
         if (systemIdx !== undefined && systemIdx >= 0) {
-          ctx.messages[systemIdx].content = systemPrompt;
+          context.messages[systemIdx].content = systemPrompt;
         } else {
-          ctx.messages?.unshift({ role: "system", content: systemPrompt });
+          context.messages?.unshift({ role: "system", content: systemPrompt });
         }
 
         logger.info(
-          `[SystemPromptAssembler] Assembled ${systemPrompt.length} char system prompt for agent="${ctx.agent || "DIRECT"}" (${skillNames.length} skills)`,
+          `[SystemPromptAssembler] Assembled ${systemPrompt.length} char system prompt for agent="${context.agent || "DIRECT"}" (${skillNames.length} skills)`,
         );
       } catch (error: any) {
         logger.error(

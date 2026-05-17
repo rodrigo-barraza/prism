@@ -513,8 +513,8 @@ async function applyActions(
 async function getRunCount(project: any) {
   const db = MongoWrapper.getDb(MONGO_DB_NAME);
   if (!db) return 0;
-  const doc = await db.collection(RUNS_COLLECTION).findOne({ project });
-  return doc?.sessionsSinceLastRun || 0;
+  const document = await db.collection(RUNS_COLLECTION).findOne({ project });
+  return document?.sessionsSinceLastRun || 0;
 }
 async function incrementRunCount(project: any) {
   const db = MongoWrapper.getDb(MONGO_DB_NAME);

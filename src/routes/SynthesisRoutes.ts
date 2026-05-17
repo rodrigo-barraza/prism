@@ -84,7 +84,7 @@ router.post(
       }
 
       const now = new Date().toISOString();
-      const doc = {
+      const document = {
         id,
         project,
         username,
@@ -101,9 +101,9 @@ router.post(
         updatedAt: now,
       };
 
-      await db.collection(COLLECTION).insertOne(doc);
+      await db.collection(COLLECTION).insertOne(document);
 
-      res.json(doc);
+      res.json(document);
     } catch (error: any) {
       logger.error(`Error creating synthesis run: ${error.message}`);
       next(error);

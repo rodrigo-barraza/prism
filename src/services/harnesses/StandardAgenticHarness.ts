@@ -43,7 +43,7 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
   // @ts-ignore
   async run() {
     // @ts-ignore
-    const ctx = this.ctx;
+    const context = this.ctx;
     // @ts-ignore
     const state = this.state;
     const {
@@ -58,7 +58,7 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
       workspaceRoot,
       emit,
       signal,
-    } = ctx;
+    } = context;
 
     // ── Resolve max iterations ────────────────────────────────
     const clientMax = options.maxIterations;
@@ -69,7 +69,7 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
           ? Math.min(100, Math.max(1, clientMax))
           : MAX_TOOL_ITERATIONS;
 
-    let currentMessages = [...ctx.messages];
+    let currentMessages = [...context.messages];
 
     // ── Initialize lifecycle hooks ──────────────────────────
     const hooks = new AgentHooks();
@@ -174,7 +174,7 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
 
       // ── Create per-iteration pass state ────────────────────
       const pass = this.createPassState(passOptions);
-      const passRequestId = `${ctx.requestId || agentSessionId}-iter-${state.iterations}`;
+      const passRequestId = `${context.requestId || agentSessionId}-iter-${state.iterations}`;
       // @ts-ignore
       pass.requestId = passRequestId;
 
@@ -232,8 +232,8 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
             );
             // @ts-ignore
             for ( const tc of blocked) {
-              const idx = pass.pendingToolCalls.indexOf(tc);
-              if (idx >= 0) pass.pendingToolCalls.splice(idx, 1);
+              const index = pass.pendingToolCalls.indexOf(tc);
+              if (index >= 0) pass.pendingToolCalls.splice(index, 1);
             }
             if (pass.pendingToolCalls.length === 0) {
               if (pass.streamedText) {
@@ -278,10 +278,10 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
               resolve({ approved: false, reason: "timeout" });
             }, 120_000);
             pendingApprovals.set(agentSessionId, {
-              resolve: (val: any) => {
+              resolve: (value: any) => {
                 clearTimeout(timeoutId);
                 pendingApprovals.delete(agentSessionId);
-                resolve(val);
+                resolve(value);
               },
               type: "tool",
               tools: needsApproval.map((t: any) => t.name),
@@ -305,7 +305,7 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
         // ── Execute tools in parallel ─────────────────────────
         const results = await Promise.all(
           pass.pendingToolCalls.map(async (tc: any) => {
-            await hooks.run("beforeToolCall", tc, ctx);
+            await hooks.run("beforeToolCall", tc, context);
             // @ts-ignore
             const customDef = this.tools.customToolMap.get(tc.name);
             if (customDef) {
@@ -313,7 +313,7 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
                 customDef,
                 tc.args,
               );
-              await hooks.run("afterToolCall", tc, result, ctx);
+              await hooks.run("afterToolCall", tc, result, context);
               return { name: tc.name, id: tc.id, result };
             }
             if (ToolOrchestratorService.isStreamable(tc.name)) {
@@ -334,13 +334,13 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
                   project,
                   username,
                   agent,
-                  requestId: ctx.requestId,
+                  requestId: context.requestId,
                   agentSessionId,
                   iteration: state.iterations,
                   workspaceRoot,
                 },
               );
-              await hooks.run("afterToolCall", tc, result, ctx);
+              await hooks.run("afterToolCall", tc, result, context);
               return { name: tc.name, id: tc.id, result };
             }
             const result = await ToolOrchestratorService.executeTool(
@@ -353,8 +353,8 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
                 agent: agent || null,
                 traceId: traceId || null,
                 agentSessionId,
-                clientIp: ctx.clientIp || null,
-                requestId: ctx.requestId,
+                clientIp: context.clientIp || null,
+                requestId: context.requestId,
                 agenticIteration: state.iterations,
                 iteration: state.iterations,
                 _providerName: providerName,
@@ -365,7 +365,7 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
                 workspaceRoot,
               },
             );
-            await hooks.run("afterToolCall", tc, result, ctx);
+            await hooks.run("afterToolCall", tc, result, context);
             return { name: tc.name, id: tc.id, result };
           }),
         );
@@ -403,17 +403,17 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
           }
 
           if (res?.result?.image?.data) {
-            const img = res.result.image;
+            const image = res.result.image;
             const toolImgRef =
-              img.minioRef || `data:${img.mimeType};base64,${img.data}`;
+              image.minioRef || `data:${image.mimeType};base64,${image.data}`;
             state.streamedImages.push(toolImgRef);
             // @ts-ignore
             pass.streamedImages.push(toolImgRef);
             emit({
               type: "image",
-              data: img.data,
-              mimeType: img.mimeType,
-              minioRef: img.minioRef,
+              data: image.data,
+              mimeType: image.mimeType,
+              minioRef: image.minioRef,
             });
             delete res.result.image;
           }
@@ -626,7 +626,7 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
     }
 
     // ── Finalization ─────────────────────────────────────────
-    await this._finalize(ctx, currentMessages, hooks);
+    await this._finalize(context, currentMessages, hooks);
     return { messages: currentMessages };
   }
 
@@ -668,10 +668,10 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
           resolve(false);
         }, 120_000);
         pendingApprovals.set(agentSessionId, {
-          resolve: (val: any) => {
+          resolve: (value: any) => {
             clearTimeout(timeoutId);
             pendingApprovals.delete(agentSessionId);
-            resolve(val);
+            resolve(value);
           },
           type: "plan",
         });
@@ -811,10 +811,10 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
     SessionGenerationTracker.complete(exhaustionRequestId);
   }
 
-  async _finalize(ctx: any, currentMessages: any, hooks: any) {
+  async _finalize(context: any, currentMessages: any, hooks: any) {
     // @ts-ignore
     const state = this.state;
-    const { agentSessionId, project, username, requestStart } = ctx;
+    const { agentSessionId, project, username, requestStart } = context;
 
     const now = performance.now();
     state.overallUsage.requests = state.iterations;
@@ -835,7 +835,7 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
     );
 
     await finalizeTextGeneration(
-      ctx,
+      context,
       {
         text: state.finalStreamedText.trim(),
         thinking: state.streamedThinking.trim() || "",
@@ -895,7 +895,7 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
 
     // afterResponse hook (fire-and-forget)
     hooks
-      .run("afterResponse", ctx, {
+      .run("afterResponse", context, {
         text: state.finalStreamedText,
         thinking: state.streamedThinking,
         toolCalls: state.streamedToolCalls,

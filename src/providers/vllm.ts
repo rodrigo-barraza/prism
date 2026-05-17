@@ -195,9 +195,9 @@ export function createVllmProvider(baseUrl: any, instanceId = "vllm") {
       try {
         const content = [
           { type: "text", text: prompt },
-          ...images.map((img: any) => ({
+          ...images.map((image: any) => ({
             type: "image_url",
-            image_url: { url: img },
+            image_url: { url: image },
           })),
         ];
         const messages = [];

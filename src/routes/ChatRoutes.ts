@@ -73,18 +73,18 @@ async function resolveImageRefs(messages: any, project: any, username: any) {
   // Deep copy for the provider — images will be data URLs
   const providerMessages = messages.map((m: any) => ({ ...m }));
   for (let i = 0; i < messages.length; i++) {
-    const msg = messages[i];
+    const message = messages[i];
     // ── Resolve media array fields: images, audio, video, pdf ──
     // @ts-ignore
     for ( const field of ["images", "audio", "video", "pdf"]) {
-      const arr = msg[field];
-      if (arr && Array.isArray(arr) && arr.length > 0) {
+      const array = message[field];
+      if (array && Array.isArray(array) && array.length > 0) {
         // @ts-ignore
         const providerArr = [];
         // @ts-ignore
         const storageArr = [];
         await Promise.all(
-          arr.map(async (ref: any, j: any) => {
+          array.map(async (ref: any, j: any) => {
             const resolved = await resolveMediaRef(ref, project, username);
             providerArr[j] = resolved.providerRef;
             storageArr[j] = resolved.storageRef;
@@ -514,9 +514,9 @@ export async function handleConversation(
   // @ts-ignore
   { signal } = {},
 ) {
-  let ctx: any;
+  let context: any;
   try {
-    ctx = await prepareGenerationContext(params, emit, { signal });
+    context = await prepareGenerationContext(params, emit, { signal });
   } catch (error: any) {
     emit({ type: "error", message: error.message });
     return;
@@ -536,13 +536,13 @@ export async function handleConversation(
     requestStart,
     requestId,
     localRelease,
-  } = ctx;
+  } = context;
   // ── Conversation identity ──────────────────────────────────
   let conversationId = skipConversation ? null : incomingConversationId;
   let conversationMeta = skipConversation ? null : incomingConversationMeta;
   if (!skipConversation && !conversationId) {
     conversationId = crypto.randomUUID();
-    const firstUserMsg = ctx.rawMessages
+    const firstUserMsg = context.rawMessages
       ?.filter((m: any) => m.role === "user")
       .pop();
     const titleSnippet =
@@ -556,14 +556,14 @@ export async function handleConversation(
     conversationMeta = { traceId };
   }
   // Merge conversation identity into ctx for sub-handlers
-  const fullCtx = { ...ctx, conversationId, conversationMeta, traceId };
+  const fullCtx = { ...context, conversationId, conversationMeta, traceId };
   try {
     try {
-      if (ctx.isImageAPIModel) {
+      if (context.isImageAPIModel) {
         await handleImageAPIModel(fullCtx);
         return;
       }
-      if (!ctx.provider.generateTextStream && !ctx.provider.generateText) {
+      if (!context.provider.generateTextStream && !context.provider.generateText) {
         throw new ProviderError(
           providerName,
           `Provider "${providerName}" does not support text generation`,
@@ -571,7 +571,7 @@ export async function handleConversation(
         );
       }
       const useStreaming =
-        ctx.provider.generateTextStream && ctx.modelDef?.streaming !== false;
+        context.provider.generateTextStream && context.modelDef?.streaming !== false;
       if (useStreaming) {
         // Native MCP tool execution — provider handles tool calling internally
         const useNativeMcp =
@@ -591,8 +591,8 @@ export async function handleConversation(
             tools = tools.filter((t: any) => !disabledSet.has(t.name));
           }
           options.tools = tools;
-          if (ctx.modelDef?.contextLength) {
-            options.contextLength = ctx.modelDef.contextLength;
+          if (context.modelDef?.contextLength) {
+            options.contextLength = context.modelDef.contextLength;
           }
           logger.info(
             `[chat] Native MCP (${providerName}): ${tools.length} tools enabled, enabledTools=${(options.enabledTools || []).length}, builtIn=${builtInTools.length}, contextLength=${options.contextLength || "unset"}`,
@@ -658,7 +658,7 @@ export async function handleConversation(
       success: false,
       errorMessage: error.message,
       totalSec,
-      messages: ctx.rawMessages || [],
+      messages: context.rawMessages || [],
       options: {},
     });
     emit({ type: "error", message: error.message });
@@ -673,9 +673,9 @@ export async function handleConversation(
  */
 // @ts-ignore
 export async function handleAgent(params: any, emit: any, { signal } = {}) {
-  let ctx: any;
+  let context: any;
   try {
-    ctx = await prepareGenerationContext(params, emit, { signal });
+    context = await prepareGenerationContext(params, emit, { signal });
   } catch (error: any) {
     emit({ type: "error", message: error.message });
     return;
@@ -696,7 +696,7 @@ export async function handleAgent(params: any, emit: any, { signal } = {}) {
     requestStart,
     requestId,
     localRelease,
-  } = ctx;
+  } = context;
   // ── Agent session identity ─────────────────────────────────
   const agentSessionId =
     incomingAgentSessionId || incomingConversationId || crypto.randomUUID();
@@ -715,7 +715,7 @@ export async function handleAgent(params: any, emit: any, { signal } = {}) {
   );
   try {
     try {
-      if (!ctx.provider.generateTextStream && !ctx.provider.generateText) {
+      if (!context.provider.generateTextStream && !context.provider.generateText) {
         throw new ProviderError(
           providerName,
           `Provider "${providerName}" does not support text generation`,
@@ -725,22 +725,22 @@ export async function handleAgent(params: any, emit: any, { signal } = {}) {
       const { default: AgenticLoopService } =
         await import("../services/AgenticLoopService.js");
       await AgenticLoopService.runAgenticLoop({
-        provider: ctx.provider,
+        provider: context.provider,
         providerName,
         resolvedModel,
-        modelDef: ctx.modelDef,
-        messages: ctx.messages,
-        originalMessages: ctx.originalMessages,
+        modelDef: context.modelDef,
+        messages: context.messages,
+        originalMessages: context.originalMessages,
         options,
         agentSessionId,
-        userMessage: ctx.userMessage,
+        userMessage: context.userMessage,
         conversationMeta,
         traceId,
         project,
         username,
         clientIp,
         agent,
-        workspaceRoot: ctx.workspaceRoot,
+        workspaceRoot: context.workspaceRoot,
         requestId,
         requestStart,
         emit,
@@ -786,14 +786,14 @@ export async function handleAgent(params: any, emit: any, { signal } = {}) {
       success: false,
       errorMessage: error.message,
       totalSec,
-      messages: ctx.rawMessages || [],
+      messages: context.rawMessages || [],
       options: {},
     });
     emit({ type: "error", message: error.message });
   }
 }
 // ─── Dispatch: Image API models (e.g. GPT Image 1.5, OpenAI images) ─
-async function handleImageAPIModel(ctx: any) {
+async function handleImageAPIModel(context: any) {
   const {
     provider,
     providerName,
@@ -811,7 +811,7 @@ async function handleImageAPIModel(ctx: any) {
     requestId,
     requestStart,
     emit,
-  } = ctx;
+  } = context;
   // Mark conversation as generating
   markGenerating(
     conversationId,
@@ -825,9 +825,9 @@ async function handleImageAPIModel(ctx: any) {
   // Collect all images from the conversation
   const allImages = [];
   // @ts-ignore
-  for ( const msg of messages) {
-    if (msg.images && msg.images.length > 0) {
-      allImages.push(...msg.images);
+  for ( const message of messages) {
+    if (message.images && message.images.length > 0) {
+      allImages.push(...message.images);
     }
   }
   const result = await provider.generateImage(
@@ -961,7 +961,7 @@ async function handleImageAPIModel(ctx: any) {
 }
 // ─── Shared: Post-generation finalization ───────────────────
 export async function finalizeTextGeneration(
-  ctx: any,
+  context: any,
   {
     text,
     thinking,
@@ -1004,7 +1004,7 @@ export async function finalizeTextGeneration(
     requestId,
     emit,
     signal,
-  } = ctx;
+  } = context;
   // Agent sessions use agentSessionId as the persistence key
   const conversationId = rawConversationId ?? agentSessionId;
   // ── Cost calculation ──────────────────────────────────────────
@@ -1300,7 +1300,7 @@ export async function finalizeTextGeneration(
   }
 }
 // ─── Dispatch: Streaming text/multimodal generation ─────────
-async function handleStreamingText(ctx: any) {
+async function handleStreamingText(context: any) {
   const {
     provider,
     providerName,
@@ -1314,7 +1314,7 @@ async function handleStreamingText(ctx: any) {
     requestStart,
     emit,
     signal,
-  } = ctx;
+  } = context;
   // Mark conversation as generating
   markGenerating(
     conversationId,
@@ -1510,7 +1510,7 @@ async function handleStreamingText(ctx: any) {
   }
   // Build normalized result for shared finalization
   const now = performance.now();
-  await finalizeTextGeneration(ctx, {
+  await finalizeTextGeneration(context, {
     text: ss.text,
     thinking: ss.thinking,
     thinkingSignature: ss.thinkingSignature,
@@ -1532,7 +1532,7 @@ async function handleStreamingText(ctx: any) {
   });
 }
 // ─── Dispatch: Non-streaming text generation (fallback) ─────
-async function handleNonStreamingText(ctx: any) {
+async function handleNonStreamingText(context: any) {
   const {
     provider,
     resolvedModel,
@@ -1543,7 +1543,7 @@ async function handleNonStreamingText(ctx: any) {
     username,
     requestStart,
     emit,
-  } = ctx;
+  } = context;
   // Mark conversation as generating
   markGenerating(
     conversationId,
@@ -1555,13 +1555,13 @@ async function handleNonStreamingText(ctx: any) {
   // Track this sub-request in SessionGenerationTracker if it belongs
   // to an active agent session (e.g., tools-api calling /chat?stream=false
   // for generate_image prompt-softening or describe_image).
-  const subRequestId = ctx.agentSessionId
-    ? `sub-${ctx.requestId || crypto.randomUUID()}`
+  const subRequestId = context.agentSessionId
+    ? `sub-${context.requestId || crypto.randomUUID()}`
     : null;
-  if (subRequestId && ctx.agentSessionId) {
-    SessionGenerationTracker.register(ctx.agentSessionId, subRequestId, {
+  if (subRequestId && context.agentSessionId) {
+    SessionGenerationTracker.register(context.agentSessionId, subRequestId, {
       // @ts-ignore
-      provider: ctx.providerName,
+      provider: context.providerName,
       model: resolvedModel,
       source: "tool-sub-request",
     });
@@ -1574,7 +1574,7 @@ async function handleNonStreamingText(ctx: any) {
   );
   const now = performance.now();
   // Complete sub-request tracking with actual token data
-  if (subRequestId && ctx.agentSessionId) {
+  if (subRequestId && context.agentSessionId) {
     const outTokens = genResult.usage?.outputTokens || 0;
     if (outTokens > 0) {
       SessionGenerationTracker.update(subRequestId, {
@@ -1606,12 +1606,12 @@ async function handleNonStreamingText(ctx: any) {
   const images = [];
   if (genResult.images && genResult.images.length > 0) {
     // @ts-ignore
-    for ( const img of genResult.images) {
+    for ( const image of genResult.images) {
       let minioRef = null;
-      if (img.data) {
+      if (image.data) {
         try {
-          const mimeType = img.mimeType || "image/png";
-          const dataUrl = `data:${mimeType};base64,${img.data}`;
+          const mimeType = image.mimeType || "image/png";
+          const dataUrl = `data:${mimeType};base64,${image.data}`;
           const { ref } = await FileService.uploadFile(
             dataUrl,
             "generations",
@@ -1625,19 +1625,19 @@ async function handleNonStreamingText(ctx: any) {
           );
         }
         images.push(
-          minioRef || `data:${img.mimeType || "image/png"};base64,${img.data}`,
+          minioRef || `data:${image.mimeType || "image/png"};base64,${image.data}`,
         );
       }
       emit({
         type: "image",
-        data: img.data,
-        mimeType: img.mimeType,
+        data: image.data,
+        mimeType: image.mimeType,
         minioRef,
       });
     }
   }
   // Build normalized result for shared finalization
-  await finalizeTextGeneration(ctx, {
+  await finalizeTextGeneration(context, {
     text: genResult.text || "",
     thinking: genResult.thinking || "",
     images,

@@ -55,14 +55,14 @@ const SettingsService = {
     );
     if (!collection) return { ...DEFAULTS };
 
-    const doc = await collection.findOne({ _key: "global" });
-    if (!doc) {
+    const document = await collection.findOne({ _key: "global" });
+    if (!document) {
       _cache = { ...DEFAULTS };
       return _cache;
     }
 
     // Deep merge: defaults ← stored
-    _cache = deepMerge(DEFAULTS, doc.data || {});
+    _cache = deepMerge(DEFAULTS, document.data || {});
     return _cache;
   },
 

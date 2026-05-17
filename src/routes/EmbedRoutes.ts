@@ -84,8 +84,8 @@ router.post(
 
         if (images && images.length > 0) {
           // @ts-ignore
-          for ( const img of images) {
-            const { data, mimeType } = parseDataUrl(img, "image/jpeg");
+          for ( const image of images) {
+            const { data, mimeType } = parseDataUrl(image, "image/jpeg");
             parts.push({ inlineData: { data, mimeType } });
           }
         }

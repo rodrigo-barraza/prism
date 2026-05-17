@@ -86,7 +86,7 @@ export default {
   domain: "Agentic: Control Flow",
   labels: ["coding"],
 
-  async execute(args: any, ctx: any) {
+  async execute(args: any, context: any) {
     const { question, choices, context: questionContext, questions } = args;
 
     // ── Normalize into questions array ─────────────────
@@ -153,7 +153,7 @@ export default {
       };
     }
 
-    const sessionId = ctx.agentSessionId;
+    const sessionId = context.agentSessionId;
     if (!sessionId) {
       return {
         error:
@@ -172,8 +172,8 @@ export default {
     );
 
     // Emit the SSE event with the full questions array
-    if (ctx._emit) {
-      ctx._emit({
+    if (context._emit) {
+      context._emit({
         type: "user_question",
         // Full multi-question payload
         questions: normalizedQuestions,
@@ -192,9 +192,9 @@ export default {
         300_000,
       );
       AgenticLoopService._setPendingQuestion(sessionId, {
-        resolve: (val: any) => {
+        resolve: (value: any) => {
           clearTimeout(timeoutId);
-          resolve(val);
+          resolve(value);
         },
         questions: normalizedQuestions,
       });

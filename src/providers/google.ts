@@ -33,14 +33,14 @@ function getClient() {
  * rather than propagated as 500 server errors.
  */
 function isSafetyBlockError(error: any) {
-  const msg = (error?.message || "").toLowerCase();
+  const message = (error?.message || "").toLowerCase();
   return (
-    msg.includes("prohibited_content") ||
-    msg.includes("image_safety") ||
-    msg.includes("safety") ||
-    msg.includes("blocked") ||
-    msg.includes("content filter") ||
-    msg.includes("response was blocked")
+    message.includes("prohibited_content") ||
+    message.includes("image_safety") ||
+    message.includes("safety") ||
+    message.includes("blocked") ||
+    message.includes("content filter") ||
+    message.includes("response was blocked")
   );
 }
 
@@ -189,10 +189,10 @@ async function convertMessages(messages: any) {
       // All media fields are arrays of data URLs or HTTP URLs
       // @ts-ignore
       for ( const field of ["images", "audio", "video", "pdf"]) {
-        const arr = item[field];
-        if (arr && Array.isArray(arr)) {
+        const array = item[field];
+        if (array && Array.isArray(array)) {
           // @ts-ignore
-          for ( const mediaRef of arr) {
+          for ( const mediaRef of array) {
             const match = mediaRef.match(
               /^data:([\w-]+\/[\w.+-]+);base64,(.+)$/,
             );
@@ -768,18 +768,18 @@ const googleProvider = {
           onopen: () => {
             logger.provider("Google", `Live API session opened for ${model}`);
           },
-          onmessage: (msg: any) => {
+          onmessage: (message: any) => {
             // Setup complete — signal we can send messages
-            if (msg.setupComplete !== undefined) {
+            if (message.setupComplete !== undefined) {
               setupComplete = true;
               enqueue({ type: "setupComplete" });
               return;
             }
 
             // Audio data from model turn (inlineData)
-            if (msg.serverContent?.modelTurn?.parts) {
+            if (message.serverContent?.modelTurn?.parts) {
               // @ts-ignore
-              for ( const part of msg.serverContent.modelTurn.parts) {
+              for ( const part of message.serverContent.modelTurn.parts) {
                 if (part.thought && part.text) {
                   enqueue({ type: "thinking", content: part.text });
                 } else if (part.inlineData) {
@@ -805,17 +805,17 @@ const googleProvider = {
 
             // Output transcription — TEXT transcript of the audio output.
             // This is the primary text content for the SSE chat flow.
-            if (msg.serverContent?.outputTranscription?.text) {
+            if (message.serverContent?.outputTranscription?.text) {
               enqueue({
                 type: "text",
-                content: msg.serverContent.outputTranscription.text,
+                content: message.serverContent.outputTranscription.text,
               });
             }
 
             // Tool calls from the server
-            if (msg.toolCall?.functionCalls) {
+            if (message.toolCall?.functionCalls) {
               // @ts-ignore
-              for ( const fc of msg.toolCall.functionCalls) {
+              for ( const fc of message.toolCall.functionCalls) {
                 enqueue({
                   type: "toolCall",
                   id: `google-tc-${crypto.randomUUID()}`,
@@ -826,8 +826,8 @@ const googleProvider = {
             }
 
             // Usage metadata
-            if (msg.usageMetadata) {
-              const u = msg.usageMetadata;
+            if (message.usageMetadata) {
+              const u = message.usageMetadata;
               if (u.promptTokenCount || u.candidatesTokenCount) {
                 enqueue({
                   type: "usage",
@@ -840,7 +840,7 @@ const googleProvider = {
             }
 
             // Turn complete — signal we're done
-            if (msg.serverContent?.turnComplete) {
+            if (message.serverContent?.turnComplete) {
               done = true;
               enqueue({ type: "done" });
             }
@@ -887,16 +887,16 @@ const googleProvider = {
       if (priorMessages.length > 0) {
         const historyTurns = [];
         // @ts-ignore
-        for ( const msg of priorMessages) {
+        for ( const message of priorMessages) {
           const parts = [];
 
-          if (msg.content) {
-            parts.push({ text: msg.content });
+          if (message.content) {
+            parts.push({ text: message.content });
           }
 
           if (parts.length > 0) {
             historyTurns.push({
-              role: msg.role === "assistant" ? "model" : "user",
+              role: message.role === "assistant" ? "model" : "user",
               parts,
             });
           }

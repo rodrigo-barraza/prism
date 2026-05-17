@@ -19,10 +19,10 @@ import logger from "../utils/logger.js";
 export default class AgenticLoopService {
   /**
    * Run an agentic loop using the specified (or default) harness.
-   * @param {object} ctx — generation context from ChatRoutes.prepareGenerationContext
+   * @param {object} context — generation context from ChatRoutes.prepareGenerationContext
    * @returns {Promise<{ messages: object[] }>}
    */
-  static async runAgenticLoop(ctx: any) {
+  static async runAgenticLoop(context: any) {
     const {
       options,
       agent,
@@ -32,7 +32,7 @@ export default class AgenticLoopService {
       messages,
       agentSessionId,
       parentAgentSessionId,
-    } = ctx;
+    } = context;
 
     // 1. Resolve tools
     const resolvedTools = await AgenticToolResolver.resolve({
@@ -67,7 +67,7 @@ export default class AgenticLoopService {
     );
 
     // 4. Instantiate and run
-    const harness = new HarnessClass(ctx, state, resolvedTools);
+    const harness = new HarnessClass(context, state, resolvedTools);
     try {
       return await harness.run();
     } finally {

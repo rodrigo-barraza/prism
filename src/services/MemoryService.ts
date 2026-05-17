@@ -263,9 +263,9 @@ const MemoryService = {
       .sort({ createdAt: -1 })
       .limit(200)
       .toArray();
-    const isDuplicate = existing.some((doc: any) => {
-      if (!doc.embedding) return false;
-      return cosineSimilarity(embedding, doc.embedding) > DUPLICATE_THRESHOLD;
+    const isDuplicate = existing.some((document: any) => {
+      if (!document.embedding) return false;
+      return cosineSimilarity(embedding, document.embedding) > DUPLICATE_THRESHOLD;
     });
     if (isDuplicate) {
       logger.info(
@@ -567,15 +567,15 @@ const MemoryService = {
     if (type !== undefined) $set.type = type;
     // Re-generate embedding if content changed
     if (content !== undefined) {
-      const doc = await collection.findOne(
+      const document = await collection.findOne(
         { id: memoryId },
         { projection: { project: 1, title: 1 } },
       );
       const embedText =
-        title || doc?.title ? `${title || doc?.title}: ${content}` : content;
+        title || document?.title ? `${title || document?.title}: ${content}` : content;
       // @ts-ignore
       $set.embedding = await generateEmbedding(embedText, {
-        project: doc?.project,
+        project: document?.project,
       });
     }
     const result = await collection.updateOne({ id: memoryId }, { $set });

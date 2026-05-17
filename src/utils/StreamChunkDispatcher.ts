@@ -100,10 +100,10 @@ export function imageRefOrInline(
  * @param {number|null} state.firstTokenTime - First text token timestamp
  * @param {number|null} state.generationEnd - Last token timestamp
  * @param {object|null} state.usage - Usage object from provider
- * @param {object} ctx - Request context
- * @param {Function} ctx.emit - SSE emit function
- * @param {string} ctx.project
- * @param {string} ctx.username
+ * @param {object} context - Request context
+ * @param {Function} context.emit - SSE emit function
+ * @param {string} context.project
+ * @param {string} context.username
  * @param {object} [options]
  * @param {Function} [options.onUsage] - Custom usage handler (for merging across iterations)
  * @param {string} [options.logPrefix] - Prefix for error logs
@@ -112,10 +112,10 @@ export function imageRefOrInline(
 export async function dispatchChunk(
   chunk: any,
   state: any,
-  ctx: any,
+  context: any,
   options = {},
 ) {
-  const { emit, project, username } = ctx;
+  const { emit, project, username } = context;
   // @ts-ignore
   const logPrefix = options.logPrefix || "stream";
 

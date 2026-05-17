@@ -80,15 +80,15 @@ export default class InternalToolRegistry {
    * Execute an internal tool by name.
    * @param {string} name - Tool name
    * @param {object} args - Tool arguments (from LLM)
-   * @param {object} ctx - Orchestrator context (emit, session, project, etc.)
+   * @param {object} context - Orchestrator context (emit, session, project, etc.)
    * @returns {Promise<object>}
    */
-  static async execute(name: any, args: any, ctx = {}) {
+  static async execute(name: any, args: any, context = {}) {
     const tool = registry.get(name);
     if (!tool) {
       return { error: `Unknown internal tool: ${name}` };
     }
-    return tool.execute(args, ctx);
+    return tool.execute(args, context);
   }
 
   /**

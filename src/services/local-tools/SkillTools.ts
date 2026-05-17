@@ -89,7 +89,7 @@ const skillExecute = {
   },
   domain: "Agentic: Skills",
   labels: ["coding", "automation"],
-  async execute(args: any, ctx: any) {
+  async execute(args: any, context: any) {
     const { default: SkillService } = await import("../SkillService.js");
     const prepared = await SkillService.prepare(
       args.skillId,
@@ -116,7 +116,7 @@ const skillExecute = {
           },
         ],
       },
-      ctx,
+      context,
     );
   },
 };
@@ -140,10 +140,10 @@ const skillList = {
   },
   domain: "Agentic: Skills",
   labels: ["coding", "automation"],
-  async execute(args: any, ctx: any) {
+  async execute(args: any, context: any) {
     const { default: SkillService } = await import("../SkillService.js");
     // @ts-ignore
-    return SkillService.list({ project: args.project || ctx.project });
+    return SkillService.list({ project: args.project || context.project });
   },
 };
 

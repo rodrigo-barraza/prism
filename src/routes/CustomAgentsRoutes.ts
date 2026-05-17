@@ -102,13 +102,13 @@ router.delete(
       const { id } = req.params;
 
       // Get the doc first so we know the agentId to unregister
-      const doc = await CustomAgentService.get(id);
-      if (!doc) {
+      const document = await CustomAgentService.get(id);
+      if (!document) {
         return res.status(404).json({ error: "Agent not found" });
       }
 
       await CustomAgentService.delete(id);
-      AgentPersonaRegistry.unregister(doc.agentId);
+      AgentPersonaRegistry.unregister(document.agentId);
 
       res.json({ success: true });
     } catch (error: any) {

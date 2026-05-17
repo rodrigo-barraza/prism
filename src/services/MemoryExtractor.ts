@@ -379,23 +379,23 @@ export default class MemoryExtractor {
    * @returns {Function}
    */
   static createHook() {
-    return async (ctx: any, { _text, messages, toolCalls }: any) => {
+    return async (context: any, { _text, messages, toolCalls }: any) => {
       // Fire-and-forget — don't block the response
       MemoryExtractor.extractAndStore({
-        project: ctx.project,
-        username: ctx.username,
-        messages: messages || ctx.messages,
-        traceId: ctx.traceId,
-        agentSessionId: ctx.agentSessionId,
-        conversationId: ctx.conversationId,
-        endpoint: ctx.endpoint || "/agent",
-        agent: ctx.agent || null,
+        project: context.project,
+        username: context.username,
+        messages: messages || context.messages,
+        traceId: context.traceId,
+        agentSessionId: context.agentSessionId,
+        conversationId: context.conversationId,
+        endpoint: context.endpoint || "/agent",
+        agent: context.agent || null,
         toolCalls: toolCalls || [],
-        emit: ctx.emit || null,
+        emit: context.emit || null,
       })
         .then((stored: any) => {
-          if (stored?.length > 0 && ctx.emit) {
-            ctx.emit({
+          if (stored?.length > 0 && context.emit) {
+            context.emit({
               type: "status",
               message: "memories_updated",
               count: stored.length,
@@ -403,19 +403,19 @@ export default class MemoryExtractor {
           }
 
           // Build a broadcast callback from ctx.emit for consolidation notifications
-          const broadcast = ctx.emit
-            ? (payload: any) => ctx.emit(payload)
+          const broadcast = context.emit
+            ? (payload: any) => context.emit(payload)
             : undefined;
 
           // Check if consolidation should run (tracks session count)
           MemoryConsolidationService.checkAndRun({
-            project: ctx.project,
-            username: ctx.username,
+            project: context.project,
+            username: context.username,
             broadcast,
-            endpoint: ctx.endpoint || "/agent",
-            agent: ctx.agent || null,
-            traceId: ctx.traceId || null,
-            agentSessionId: ctx.agentSessionId || null,
+            endpoint: context.endpoint || "/agent",
+            agent: context.agent || null,
+            traceId: context.traceId || null,
+            agentSessionId: context.agentSessionId || null,
           });
         })
         .catch((error: any) =>

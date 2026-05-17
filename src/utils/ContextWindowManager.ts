@@ -37,30 +37,30 @@ const PROTECTED_RECENT_TURNS = 4;
  * Estimate token count for a single message.
  * Accounts for content, tool calls, tool results, thinking blocks, and images.
  *
- * @param {object} msg
+ * @param {object} message
  * @returns {number}
  */
-function estimateMessageTokens(msg: any) {
+function estimateMessageTokens(message: any) {
   let tokens = 4; // Per-message overhead (role, formatting)
 
   // Text content
-  if (msg.content) {
+  if (message.content) {
     tokens += estimateTokens(
-      typeof msg.content === "string"
-        ? msg.content
-        : JSON.stringify(msg.content),
+      typeof message.content === "string"
+        ? message.content
+        : JSON.stringify(message.content),
     );
   }
 
   // Thinking blocks
-  if (msg.thinking) {
-    tokens += estimateTokens(msg.thinking);
+  if (message.thinking) {
+    tokens += estimateTokens(message.thinking);
   }
 
   // Tool calls (function name + args + results)
-  if (msg.toolCalls && Array.isArray(msg.toolCalls)) {
+  if (message.toolCalls && Array.isArray(message.toolCalls)) {
     // @ts-ignore
-    for ( const tc of msg.toolCalls) {
+    for ( const tc of message.toolCalls) {
       tokens += estimateTokens(tc.name || "");
       tokens += estimateTokens(tc.args ? JSON.stringify(tc.args) : "");
       if (tc.result) {
@@ -72,17 +72,17 @@ function estimateMessageTokens(msg: any) {
   }
 
   // Tool response content (standalone tool messages)
-  if (msg.role === "tool" && msg.content) {
+  if (message.role === "tool" && message.content) {
     tokens += estimateTokens(
-      typeof msg.content === "string"
-        ? msg.content
-        : JSON.stringify(msg.content),
+      typeof message.content === "string"
+        ? message.content
+        : JSON.stringify(message.content),
     );
   }
 
   // Images (rough: ~1000 tokens per image reference)
-  if (msg.images && Array.isArray(msg.images)) {
-    tokens += msg.images.length * 1000;
+  if (message.images && Array.isArray(message.images)) {
+    tokens += message.images.length * 1000;
   }
 
   return tokens;
@@ -96,7 +96,7 @@ function estimateMessageTokens(msg: any) {
  */
 function estimateTotalTokens(messages: any) {
   return messages.reduce(
-    (sum: any, msg: any) => sum + estimateMessageTokens(msg),
+    (sum: any, message: any) => sum + estimateMessageTokens(message),
     0,
   );
 }
@@ -136,13 +136,13 @@ function truncateToolResults(
     }
   }
 
-  return messages.map((msg: any, i: any) => {
+  return messages.map((message: any, i: any) => {
     // Never truncate tool results in recent (protected) messages
-    if (i >= protectionIndex) return msg;
-    if (msg.role !== "assistant" || !msg.toolCalls?.length) return msg;
+    if (i >= protectionIndex) return message;
+    if (message.role !== "assistant" || !message.toolCalls?.length) return message;
 
-    const truncated = { ...msg };
-    truncated.toolCalls = msg.toolCalls.map((tc: any) => {
+    const truncated = { ...message };
+    truncated.toolCalls = message.toolCalls.map((tc: any) => {
       if (!tc.result) return tc;
 
       const resultStr =
@@ -187,20 +187,20 @@ function compressOldAssistantMessages(
     }
   }
 
-  return messages.map((msg: any, i: any) => {
+  return messages.map((message: any, i: any) => {
     // Never compress system messages, user messages, or protected recent messages
-    if (msg.role === "system" || msg.role === "user" || i >= protectionIndex) {
-      return msg;
+    if (message.role === "system" || message.role === "user" || i >= protectionIndex) {
+      return message;
     }
 
     // Compress assistant messages
-    if (msg.role === "assistant") {
-      const compressed = { ...msg };
+    if (message.role === "assistant") {
+      const compressed = { ...message };
 
       // Keep a short summary of what the assistant did
       const toolNames =
-        msg.toolCalls?.map((tc: any) => tc.name).join(", ") || "";
-      const contentPreview = msg.content?.slice(0, 200) || "";
+        message.toolCalls?.map((tc: any) => tc.name).join(", ") || "";
+      const contentPreview = message.content?.slice(0, 200) || "";
 
       compressed.content = `[Earlier response${toolNames ? ` — used: ${toolNames}` : ""}]${contentPreview ? `\n${contentPreview}...` : ""}`;
       compressed.thinking = undefined;
@@ -218,14 +218,14 @@ function compressOldAssistantMessages(
     }
 
     // Compress standalone tool messages
-    if (msg.role === "tool") {
+    if (message.role === "tool") {
       return {
-        ...msg,
+        ...message,
         content: "[tool result truncated for context budget]",
       };
     }
 
-    return msg;
+    return message;
   });
 }
 
@@ -398,10 +398,10 @@ export default class ContextWindowManager {
 
   /**
    * Estimate tokens for a single message (exposed for diagnostics).
-   * @param {object} msg
+   * @param {object} message
    * @returns {number}
    */
-  static estimateMessageTokens(msg: any) {
-    return estimateMessageTokens(msg);
+  static estimateMessageTokens(message: any) {
+    return estimateMessageTokens(message);
   }
 }

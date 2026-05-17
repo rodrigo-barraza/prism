@@ -24,23 +24,23 @@ export async function extractFiles(
 
   const processed = [];
   // @ts-ignore
-  for ( const msg of messages) {
-    let updated = msg;
+  for ( const message of messages) {
+    let updated = message;
 
     // Handle images
-    if (msg.images && msg.images.length > 0) {
-      const category = msg.role === "assistant" ? "generations" : "uploads";
+    if (message.images && message.images.length > 0) {
+      const category = message.role === "assistant" ? "generations" : "uploads";
       const newImages = [];
       // @ts-ignore
-      for ( const img of msg.images) {
-        if (FileService.isMinioRef(img) || img.startsWith("http")) {
-          newImages.push(img);
+      for ( const image of message.images) {
+        if (FileService.isMinioRef(image) || image.startsWith("http")) {
+          newImages.push(image);
           continue;
         }
-        if (img.startsWith("data:")) {
+        if (image.startsWith("data:")) {
           try {
             const { ref } = await FileService.uploadFile(
-              img,
+              image,
               category,
               project,
               username,
@@ -48,10 +48,10 @@ export async function extractFiles(
             newImages.push(ref);
           } catch (error: any) {
             logger.error(`Failed to upload file: ${error.message}`);
-            newImages.push(img);
+            newImages.push(image);
           }
         } else {
-          newImages.push(img);
+          newImages.push(image);
         }
       }
       updated = { ...updated, images: newImages };

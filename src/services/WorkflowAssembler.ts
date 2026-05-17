@@ -28,9 +28,9 @@ function isUtilityStep(step: any) {
 function buildConversationPorts(messages: any, supportedModalities = ["text"]) {
   const ports = [];
   for (let i = 0; i < messages.length; i++) {
-    const msg = messages[i];
+    const message = messages[i];
     ports.push(`${i}.text`);
-    if (msg.role === "user" || msg.role === "assistant") {
+    if (message.role === "user" || message.role === "assistant") {
       // @ts-ignore
       for ( const mod of supportedModalities) {
         if (mod !== "text") {

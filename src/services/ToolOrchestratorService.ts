@@ -63,19 +63,19 @@ async function fetchSchemas() {
     const controller = createAbortController();
     const timeout = setTimeout(() => controller.abort(), TOOL_SCHEMA_FETCH_TIMEOUT_MS);
 
-    const res = await fetch(`${TOOLS_SERVICE_URL}/admin/tool-schemas`, {
+    const response = await fetch(`${TOOLS_SERVICE_URL}/admin/tool-schemas`, {
       signal: controller.signal,
     });
     clearTimeout(timeout);
 
-    if (!res.ok) {
+    if (!response.ok) {
       logger.warn(
-        `[ToolOrchestrator] Failed to fetch tool schemas: ${res.status} ${res.statusText}`,
+        `[ToolOrchestrator] Failed to fetch tool schemas: ${response.status} ${response.statusText}`,
       );
       return;
     }
 
-    const schemas = await res.json();
+    const schemas = await response.json();
 
     if (!Array.isArray(schemas) || schemas.length === 0) {
       logger.warn(
@@ -207,7 +207,7 @@ const ARG_REMAPS = {
   search_products: { query: "q" },
 };
 
-async function executeToolGeneric(name: any, args = {}, ctx = {}) {
+async function executeToolGeneric(name: any, args = {}, context = {}) {
   const schema = toolMap.get(name);
   if (!schema || !schema.endpoint) {
     return { error: `Unknown tool: ${name}` };
@@ -231,7 +231,7 @@ async function executeToolGeneric(name: any, args = {}, ctx = {}) {
   }
 
   // Build caller-context headers for tools-api telemetry
-  const contextHeaders = buildContextHeaders(ctx);
+  const contextHeaders = buildContextHeaders(context);
 
   // POST-method tools send args as JSON body
   if (schema.endpoint.method === "POST") {
@@ -241,18 +241,18 @@ async function executeToolGeneric(name: any, args = {}, ctx = {}) {
     // only come from the orchestrator's session context.
     const body = { ...resolvedArgs };
     // @ts-ignore
-    if (ctx.project) body.project = ctx.project;
+    if (context.project) body.project = context.project;
     // @ts-ignore
-    if (ctx.agent) body.agent = ctx.agent;
+    if (context.agent) body.agent = context.agent;
     // @ts-ignore
-    if (ctx.username) body.username = ctx.username;
+    if (context.username) body.username = context.username;
 
     // Worktree path rewriting — redirect file paths to the worktree directory
     // when the session has an active worktree.
     // @ts-ignore
-    if (ctx.agentSessionId && activeWorktrees.has(ctx.agentSessionId)) {
+    if (context.agentSessionId && activeWorktrees.has(context.agentSessionId)) {
       // @ts-ignore
-      const wt = activeWorktrees.get(ctx.agentSessionId);
+      const wt = activeWorktrees.get(context.agentSessionId);
       const rewritePath = (p: any) => {
         if (typeof p !== "string") return p;
         if (p.startsWith(wt.originalRoot)) {
@@ -281,65 +281,65 @@ async function executeToolGeneric(name: any, args = {}, ctx = {}) {
     }
 
     // @ts-ignore
-    return fetchJsonPost(url, body, contextHeaders, ctx.signal);
+    return fetchJsonPost(url, body, contextHeaders, context.signal);
   }
 
   const url = buildUrlFromEndpoint(schema.endpoint, resolvedArgs);
   // @ts-ignore
-  return fetchJson(url, contextHeaders, ctx.signal);
+  return fetchJson(url, contextHeaders, context.signal);
 }
 
 /**
  * Build X-context headers from the caller context object.
  * These are consumed by tools-api's ToolCallLoggerMiddleware.
- * @param {object} ctx - Caller context
+ * @param {object} context - Caller context
  * @returns {object} Headers object
  */
-function buildContextHeaders(ctx = {}) {
+function buildContextHeaders(context = {}) {
   const headers = {};
   // @ts-ignore
-  if (ctx.project) headers["X-Project"] = ctx.project;
+  if (context.project) headers["X-Project"] = context.project;
   // @ts-ignore
-  if (ctx.username) headers["X-Username"] = ctx.username;
+  if (context.username) headers["X-Username"] = context.username;
   // @ts-ignore
-  if (ctx.agent) headers["X-Agent"] = ctx.agent;
+  if (context.agent) headers["X-Agent"] = context.agent;
   // @ts-ignore
-  if (ctx.requestId) headers["X-Request-Id"] = ctx.requestId;
+  if (context.requestId) headers["X-Request-Id"] = context.requestId;
   // @ts-ignore
-  if (ctx.traceId) headers["X-Trace-Id"] = ctx.traceId;
+  if (context.traceId) headers["X-Trace-Id"] = context.traceId;
   // @ts-ignore
-  if (ctx.agentSessionId) headers["X-Agent-Session-Id"] = ctx.agentSessionId;
+  if (context.agentSessionId) headers["X-Agent-Session-Id"] = context.agentSessionId;
   // @ts-ignore
-  if (ctx.iteration !== undefined && ctx.iteration !== null)
+  if (context.iteration !== undefined && context.iteration !== null)
     // @ts-ignore
-    headers["X-Iteration"] = String(ctx.iteration);
+    headers["X-Iteration"] = String(context.iteration);
   // Multi-workspace: when the user has selected a non-default workspace root,
   // send it to tools-api so file/git/shell tools resolve within it.
   // @ts-ignore
-  if (ctx.workspaceRoot) headers["X-Workspace-Root"] = ctx.workspaceRoot;
+  if (context.workspaceRoot) headers["X-Workspace-Root"] = context.workspaceRoot;
   return headers;
 }
 
 async function fetchJson(url: any, extraHeaders = {}, signal: any) {
   try {
-    const res = await fetch(url, {
+    const response = await fetch(url, {
       headers: { ...extraHeaders },
       ...(signal && { signal }),
     });
-    if (!res.ok) {
+    if (!response.ok) {
       try {
-        const errBody = await res.json();
+        const errBody = await response.json();
         // @ts-ignore
         return {
           error:
             // @ts-ignore
-            errBody.error || `API returned ${res.status}: ${res.statusText}`,
+            errBody.error || `API returned ${response.status}: ${response.statusText}`,
         };
       } catch {
-        return { error: `API returned ${res.status}: ${res.statusText}` };
+        return { error: `API returned ${response.status}: ${response.statusText}` };
       }
     }
-    return await res.json();
+    return await response.json();
   } catch (error: any) {
     if (error.name === "AbortError") {
       return { error: "Tool execution aborted" };
@@ -355,27 +355,27 @@ async function fetchJsonPost(
   signal: any,
 ) {
   try {
-    const res = await fetch(url, {
+    const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...extraHeaders },
       body: JSON.stringify(body),
       ...(signal && { signal }),
     });
-    if (!res.ok) {
+    if (!response.ok) {
       // Forward the actual error body from tools-api for debugging
       try {
-        const errBody = await res.json();
+        const errBody = await response.json();
         // @ts-ignore
         return {
           error:
             // @ts-ignore
-            errBody.error || `API returned ${res.status}: ${res.statusText}`,
+            errBody.error || `API returned ${response.status}: ${response.statusText}`,
         };
       } catch {
-        return { error: `API returned ${res.status}: ${res.statusText}` };
+        return { error: `API returned ${response.status}: ${response.statusText}` };
       }
     }
-    return await res.json();
+    return await response.json();
   } catch (error: any) {
     if (error.name === "AbortError") {
       return { error: "Tool execution aborted" };
@@ -598,15 +598,15 @@ export default class ToolOrchestratorService {
    * @returns {Promise<object>}
    */
   static async updateWorkspaceRoots(roots: any) {
-    const res = await fetch(`${TOOLS_SERVICE_URL}/admin/config/workspaces`, {
+    const response = await fetch(`${TOOLS_SERVICE_URL}/admin/config/workspaces`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ roots }),
       signal: AbortSignal.timeout(TOOL_WORKSPACE_UPDATE_TIMEOUT_MS),
     });
-    const result = await res.json();
+    const result = await response.json();
     // @ts-ignore
-    if (!res.ok)
+    if (!response.ok)
       // @ts-ignore
       throw new Error(result.error || "Failed to update workspace roots");
 
@@ -630,7 +630,7 @@ export default class ToolOrchestratorService {
    * @returns {Promise<object>}
    */
   static async validateWorkspacePath(path: any) {
-    const res = await fetch(
+    const response = await fetch(
       `${TOOLS_SERVICE_URL}/admin/config/workspaces/validate`,
       {
         method: "POST",
@@ -639,7 +639,7 @@ export default class ToolOrchestratorService {
         signal: AbortSignal.timeout(TOOL_WORKSPACE_VALIDATE_TIMEOUT_MS),
       },
     );
-    return res.json();
+    return response.json();
   }
 
   /**
@@ -681,11 +681,11 @@ export default class ToolOrchestratorService {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), TOOL_API_HEALTH_TIMEOUT_MS);
-      const res = await fetch(`${TOOLS_SERVICE_URL}/health`, {
+      const response = await fetch(`${TOOLS_SERVICE_URL}/health`, {
         signal: controller.signal,
       });
       clearTimeout(timeout);
-      online = res.ok;
+      online = response.ok;
     } catch {
       online = false;
     }
@@ -712,15 +712,15 @@ export default class ToolOrchestratorService {
     return initialized;
   }
 
-  static async executeTool(name: any, args = {}, ctx = {}) {
+  static async executeTool(name: any, args = {}, context = {}) {
     // ── Internal tools — delegated to InternalToolRegistry ──────
     if (InternalToolRegistry.has(name)) {
-      return InternalToolRegistry.execute(name, args, ctx);
+      return InternalToolRegistry.execute(name, args, context);
     }
 
     // Route coordinator tools to CoordinatorService (Prism-local)
     if (COORDINATOR_ONLY_TOOLS.includes(name)) {
-      return ToolOrchestratorService.executeCoordinatorTool(name, args, ctx);
+      return ToolOrchestratorService.executeCoordinatorTool(name, args, context);
     }
 
     // Route MCP tools to MCPClientService
@@ -734,42 +734,42 @@ export default class ToolOrchestratorService {
     // IMPORTANT: Only extract from the LAST user message to avoid collecting
     // stale images from conversation history.
     // @ts-ignore
-    if (name === "generate_image" && ctx.messages) {
+    if (name === "generate_image" && context.messages) {
       const referenceImages = [];
       // Find the last user message with images
       // @ts-ignore
-      for (let i = ctx.messages.length - 1; i >= 0; i--) {
+      for (let i = context.messages.length - 1; i >= 0; i--) {
         // @ts-ignore
-        const msg = ctx.messages[i];
+        const message = context.messages[i];
         if (
-          msg.role === "user" &&
-          msg.images &&
-          Array.isArray(msg.images) &&
-          msg.images.length > 0
+          message.role === "user" &&
+          message.images &&
+          Array.isArray(message.images) &&
+          message.images.length > 0
         ) {
           logger.info(
-            `[ToolOrchestrator] generate_image: found ${msg.images.length} image(s) on last user message`,
+            `[ToolOrchestrator] generate_image: found ${message.images.length} image(s) on last user message`,
           );
           // @ts-ignore
-          for ( const img of msg.images) {
+          for ( const image of message.images) {
             if (
-              typeof img === "string" &&
-              (img.startsWith("http://") || img.startsWith("https://"))
+              typeof image === "string" &&
+              (image.startsWith("http://") || image.startsWith("https://"))
             ) {
-              referenceImages.push(img);
+              referenceImages.push(image);
               logger.info(
-                `[ToolOrchestrator] generate_image: accepted HTTP image ref (${img.substring(0, 80)}...)`,
+                `[ToolOrchestrator] generate_image: accepted HTTP image ref (${image.substring(0, 80)}...)`,
               );
-            } else if (typeof img === "string" && img.startsWith("data:")) {
+            } else if (typeof image === "string" && image.startsWith("data:")) {
               // Accept base64 data URLs — the /creative route supports up to 50MB bodies.
               // Discord avatars and user-attached images are typically well under 5MB.
-              referenceImages.push(img);
+              referenceImages.push(image);
               logger.info(
-                `[ToolOrchestrator] generate_image: accepted base64 data URL (${(img.length / 1024).toFixed(0)} KB)`,
+                `[ToolOrchestrator] generate_image: accepted base64 data URL (${(image.length / 1024).toFixed(0)} KB)`,
               );
             } else {
               logger.warn(
-                `[ToolOrchestrator] generate_image: REJECTED image ref (type=${typeof img}, prefix=${String(img).substring(0, 30)})`,
+                `[ToolOrchestrator] generate_image: REJECTED image ref (type=${typeof image}, prefix=${String(image).substring(0, 30)})`,
               );
             }
           }
@@ -788,7 +788,7 @@ export default class ToolOrchestratorService {
       }
     }
 
-    const result = await executeToolGeneric(name, args, ctx);
+    const result = await executeToolGeneric(name, args, context);
 
     // Post-process: upload generated images to MinIO
     // @ts-ignore
@@ -802,9 +802,9 @@ export default class ToolOrchestratorService {
           dataUrl,
           "generations",
           // @ts-ignore
-          ctx.project,
+          context.project,
           // @ts-ignore
-          ctx.username,
+          context.username,
         );
         // @ts-ignore
         result.image.minioRef = ref;
@@ -827,9 +827,9 @@ export default class ToolOrchestratorService {
           dataUrl,
           "screenshots",
           // @ts-ignore
-          ctx.project,
+          context.project,
           // @ts-ignore
-          ctx.username,
+          context.username,
         );
         // @ts-ignore
         result.screenshotRef = ref;
@@ -852,41 +852,41 @@ export default class ToolOrchestratorService {
    *
    * @param {string} name - Tool name
    * @param {object} args - Tool arguments
-   * @param {object} ctx - Caller context (carries coordinatorCtx for message injection)
+   * @param {object} context - Caller context (carries coordinatorCtx for message injection)
    * @returns {Promise<object>}
    */
-  static async executeCoordinatorTool(name: any, args = {}, ctx = {}) {
+  static async executeCoordinatorTool(name: any, args = {}, context = {}) {
     const { default: CoordinatorService } =
       await import("./CoordinatorService.js");
 
     // Build coordinatorCtx from the loop's context
     const coordinatorCtx = {
       // @ts-ignore
-      project: ctx.project,
+      project: context.project,
       // @ts-ignore
-      username: ctx.username,
+      username: context.username,
       // @ts-ignore
-      agent: ctx.agent,
+      agent: context.agent,
       // @ts-ignore
-      providerName: ctx._providerName,
+      providerName: context._providerName,
       // @ts-ignore
-      resolvedModel: ctx._resolvedModel,
+      resolvedModel: context._resolvedModel,
       // @ts-ignore
-      agentSessionId: ctx.agentSessionId,
+      agentSessionId: context.agentSessionId,
       // @ts-ignore
-      traceId: ctx.traceId,
+      traceId: context.traceId,
 
       // Pass the parent's emit so workers can forward live events
       // @ts-ignore
-      emit: ctx._emit || null,
+      emit: context._emit || null,
 
       // User-configured max iterations for worker agents
       // @ts-ignore
-      maxWorkerIterations: ctx._maxWorkerIterations,
+      maxWorkerIterations: context._maxWorkerIterations,
 
       // Inherit context window size so workers load with the same context
       // @ts-ignore
-      minContextLength: ctx._minContextLength,
+      minContextLength: context._minContextLength,
     };
 
     switch (name) {
@@ -967,19 +967,19 @@ export default class ToolOrchestratorService {
    * @param {string} name - tool name (must be in STREAMABLE_TOOLS)
    * @param {object} args - tool arguments (code, command, etc.)
    * @param {function} onChunk - (event: "stdout"|"stderr"|"start"|"exit", data?: string, meta?: object) => void
-   * @param {object} [ctx] - Caller context for telemetry headers
+   * @param {object} [context] - Caller context for telemetry headers
    * @returns {Promise<object>} final result
    */
   static async executeToolStreaming(
     name: any,
     args = {},
     onChunk: any,
-    ctx = {},
+    context = {},
   ) {
     // @ts-ignore
     const streamPath = ToolOrchestratorService.STREAMABLE_TOOLS[name];
     if (!streamPath) {
-      return ToolOrchestratorService.executeTool(name, args, ctx);
+      return ToolOrchestratorService.executeTool(name, args, context);
     }
 
     // @ts-ignore
@@ -1000,7 +1000,7 @@ export default class ToolOrchestratorService {
     }
 
     const url = `${TOOLS_SERVICE_URL}${streamPath}`;
-    const contextHeaders = buildContextHeaders(ctx);
+    const contextHeaders = buildContextHeaders(context);
 
     try {
       // Combine session abort signal with a 65s timeout.
@@ -1011,25 +1011,25 @@ export default class ToolOrchestratorService {
 
       // If session signal exists, abort the local controller when session aborts
       // @ts-ignore
-      if (ctx.signal && !ctx.signal.aborted) {
+      if (context.signal && !context.signal.aborted) {
         const onSessionAbort = () => controller.abort();
         // @ts-ignore
-        ctx.signal.addEventListener("abort", onSessionAbort, { once: true });
+        context.signal.addEventListener("abort", onSessionAbort, { once: true });
         // Clean up listener when controller aborts from timeout (not session)
         controller.signal.addEventListener(
           "abort",
           () => {
             // @ts-ignore
-            ctx.signal.removeEventListener("abort", onSessionAbort);
+            context.signal.removeEventListener("abort", onSessionAbort);
           },
           { once: true },
         );
         // @ts-ignore
-      } else if (ctx.signal?.aborted) {
+      } else if (context.signal?.aborted) {
         controller.abort();
       }
 
-      const res = await fetch(url, {
+      const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...contextHeaders },
         body: JSON.stringify(resolvedArgs),
@@ -1037,15 +1037,15 @@ export default class ToolOrchestratorService {
       });
       clearTimeout(timeout);
 
-      if (!res.ok) {
-        return { error: `API returned ${res.status}: ${res.statusText}` };
+      if (!response.ok) {
+        return { error: `API returned ${response.status}: ${response.statusText}` };
       }
 
       // Parse the SSE stream — accumulate stdout/stderr so the final result
       // includes the full output for persistence (TerminalRenderer reads
       // result.stdout after page refresh when streamingOutput is gone).
       // @ts-ignore
-      const reader = res.body.getReader();
+      const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
       let finalResult = null;
@@ -1130,7 +1130,7 @@ export default class ToolOrchestratorService {
       try {
         const execution =
           toolDef.execution === "privileged" ? "privileged" : "sandboxed";
-        const res = await fetch(
+        const response = await fetch(
           `${TOOLS_SERVICE_URL}/agentic/custom-tool/execute`,
           {
             method: "POST",
@@ -1139,21 +1139,21 @@ export default class ToolOrchestratorService {
             signal: AbortSignal.timeout(35_000),
           },
         );
-        if (!res.ok) {
+        if (!response.ok) {
           try {
-            const errBody = await res.json();
+            const errBody = await response.json();
             // @ts-ignore
             return {
               // @ts-ignore
-              error: errBody.error || `Execution failed: ${res.status}`,
+              error: errBody.error || `Execution failed: ${response.status}`,
             };
           } catch {
             return {
-              error: `Execution failed: ${res.status} ${res.statusText}`,
+              error: `Execution failed: ${response.status} ${response.statusText}`,
             };
           }
         }
-        return await res.json();
+        return await response.json();
       } catch (error: any) {
         if (error.name === "AbortError" || error.name === "TimeoutError") {
           return { error: "Custom tool execution timed out (35s)" };
@@ -1174,15 +1174,15 @@ export default class ToolOrchestratorService {
       }
 
       if (toolDef.method === "POST") {
-        const res = await fetch(toolDef.endpoint, {
+        const response = await fetch(toolDef.endpoint, {
           method: "POST",
           headers,
           body: JSON.stringify(args),
         });
-        if (!res.ok) {
-          return { error: `API returned ${res.status}: ${res.statusText}` };
+        if (!response.ok) {
+          return { error: `API returned ${response.status}: ${response.statusText}` };
         }
-        return await res.json();
+        return await response.json();
       }
 
       const params = new URLSearchParams();
@@ -1195,11 +1195,11 @@ export default class ToolOrchestratorService {
       }
       const qs = params.toString();
       const url = `${toolDef.endpoint}${qs ? `?${qs}` : ""}`;
-      const res = await fetch(url, { headers });
-      if (!res.ok) {
-        return { error: `API returned ${res.status}: ${res.statusText}` };
+      const response = await fetch(url, { headers });
+      if (!response.ok) {
+        return { error: `API returned ${response.status}: ${response.statusText}` };
       }
-      return await res.json();
+      return await response.json();
     } catch (error: any) {
       return { error: `Failed to reach API: ${error.message}` };
     }
@@ -1212,12 +1212,12 @@ export default class ToolOrchestratorService {
   /** @internal */ static _clearWorktree(sessionId: any) {
     activeWorktrees.delete(sessionId);
   }
-  /** @internal */ static async _proxyPost(path: any, body: any, ctx: any) {
+  /** @internal */ static async _proxyPost(path: any, body: any, context: any) {
     return fetchJsonPost(
       `${TOOLS_SERVICE_URL}${path}`,
       body,
-      buildContextHeaders(ctx),
-      ctx.signal,
+      buildContextHeaders(context),
+      context.signal,
     );
   }
 }

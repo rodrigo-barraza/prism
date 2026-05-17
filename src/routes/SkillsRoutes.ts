@@ -61,7 +61,7 @@ router.post(
     try {
       const { project, username, db } = req;
 
-      const doc = {
+      const document = {
         project,
         username,
         name: req.body.name,
@@ -75,18 +75,18 @@ router.post(
       // Generate embedding for semantic similarity search
       try {
         // @ts-ignore
-        doc.embedding = await generateSkillEmbedding(doc);
+        document.embedding = await generateSkillEmbedding(document);
       } catch (error: any) {
         logger.warn(`[Skills] Embedding generation failed: ${error.message}`);
         // @ts-ignore
-        doc.embedding = null;
+        document.embedding = null;
       }
 
-      const result = await db.collection(COLLECTION).insertOne(doc);
+      const result = await db.collection(COLLECTION).insertOne(document);
 
-      logger.info(`Skill created: ${doc.name} (${result.insertedId})`);
+      logger.info(`Skill created: ${document.name} (${result.insertedId})`);
       // @ts-ignore
-      const { embedding: _, ...response } = doc;
+      const { embedding: _, ...response } = document;
       res.status(201).json({ ...response, id: result.insertedId.toString() });
     } catch (error: any) {
       next(error);

@@ -24,8 +24,8 @@ export function calculateTokensPerSec(tokens: any, sec: any, opts = {}) {
   // @ts-ignore
   if (opts.providerReported != null && opts.providerReported > 0) {
     // @ts-ignore
-    const val = parseFloat(opts.providerReported.toFixed(1));
-    return val > MAX_TOKENS_PER_SEC ? null : val;
+    const value = parseFloat(opts.providerReported.toFixed(1));
+    return value > MAX_TOKENS_PER_SEC ? null : value;
   }
 
   // 2. Determine effective duration
@@ -41,6 +41,6 @@ export function calculateTokensPerSec(tokens: any, sec: any, opts = {}) {
 
   if (!effectiveSec || !tokens || tokens <= 0) return null;
 
-  const val = parseFloat((tokens / effectiveSec).toFixed(1));
-  return val > MAX_TOKENS_PER_SEC ? null : val;
+  const value = parseFloat((tokens / effectiveSec).toFixed(1));
+  return value > MAX_TOKENS_PER_SEC ? null : value;
 }

@@ -117,12 +117,12 @@ router.get(
       const db = MongoWrapper.getDb(MONGO_DB_NAME);
       if (!db) return res.status(503).json({ error: "Database not available" });
 
-      const doc = await db
+      const document = await db
         .collection(REQUESTS_COL)
         .findOne({ requestId: req.params.id });
-      if (!doc) return res.status(404).json({ error: "Request not found" });
+      if (!document) return res.status(404).json({ error: "Request not found" });
 
-      res.json(doc);
+      res.json(document);
     } catch (error: any) {
       logger.error(`Admin /requests/:id error: ${error.message}`);
       next(error);
@@ -1889,13 +1889,13 @@ router.get(
       const db = MongoWrapper.getDb(MONGO_DB_NAME);
       if (!db) return res.status(503).json({ error: "Database not available" });
 
-      const doc = await db
+      const document = await db
         .collection(CONVERSATIONS_COL)
         .findOne({ id: req.params.id });
-      if (!doc)
+      if (!document)
         return res.status(404).json({ error: "Conversation not found" });
 
-      res.json(doc);
+      res.json(document);
     } catch (error: any) {
       logger.error(`Admin /conversations/:id error: ${error.message}`);
       next(error);
@@ -2319,10 +2319,10 @@ router.get(
         return res.status(400).json({ error: "Invalid workflow ID" });
       }
 
-      const doc = await db.collection(WORKFLOWS_COL).findOne({ _id: objectId });
-      if (!doc) return res.status(404).json({ error: "Workflow not found" });
+      const document = await db.collection(WORKFLOWS_COL).findOne({ _id: objectId });
+      if (!document) return res.status(404).json({ error: "Workflow not found" });
 
-      res.json(doc);
+      res.json(document);
     } catch (error: any) {
       logger.error(`Admin GET /workflows/:id error: ${error.message}`);
       next(error);
@@ -3266,14 +3266,14 @@ router.get(
       const db = MongoWrapper.getDb(MONGO_DB_NAME);
       if (!db) return res.status(503).json({ error: "Database not available" });
 
-      const doc = await db
+      const document = await db
         .collection(COLLECTIONS.AGENT_SESSIONS)
         .findOne({ id: req.params.id });
 
-      if (!doc)
+      if (!document)
         return res.status(404).json({ error: "Agent session not found" });
 
-      res.json(doc);
+      res.json(document);
     } catch (error: any) {
       logger.error(`Admin /agent-sessions/:id error: ${error.message}`);
       next(error);

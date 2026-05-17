@@ -91,7 +91,7 @@ class RateLimitStore {
 
     // Group dynamic models by provider
     // @ts-ignore
-    for ( const [key, val] of this._models) {
+    for ( const [key, value] of this._models) {
       const [provider, model] = key.split("::");
       // @ts-ignore
       if (!result[provider]) {
@@ -99,7 +99,7 @@ class RateLimitStore {
         result[provider] = { dynamic: true, models: {} };
       }
       // @ts-ignore
-      result[provider].models[model] = val;
+      result[provider].models[model] = value;
     }
 
     // Add Google static limits

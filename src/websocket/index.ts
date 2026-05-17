@@ -420,9 +420,9 @@ function handleWsLive(
               }
               emit({ type: "setupComplete" });
             },
-            onmessage: (msg: any) => {
+            onmessage: (message: any) => {
               // Model turn parts (audio data, text, function calls)
-              if (msg.serverContent?.modelTurn?.parts) {
+              if (message.serverContent?.modelTurn?.parts) {
                 // @ts-ignore
                 if (!passFirstTokenTime) {
                   passFirstTokenTime = performance.now();
@@ -456,7 +456,7 @@ function handleWsLive(
                   });
                 }
                 // @ts-ignore
-                for ( const part of msg.serverContent.modelTurn.parts) {
+                for ( const part of message.serverContent.modelTurn.parts) {
                   if (part.thought && part.text) {
                     emit({ type: "thinking", content: part.text });
                     turnThinking += part.text;
@@ -495,8 +495,8 @@ function handleWsLive(
               }
 
               // Top-level tool calls
-              if (msg.toolCall?.functionCalls) {
-                const functionCalls = msg.toolCall.functionCalls.map(
+              if (message.toolCall?.functionCalls) {
+                const functionCalls = message.toolCall.functionCalls.map(
                   (fc: any) => ({
                     id: fc.id || `live-tc-${crypto.randomUUID()}`,
                     name: fc.name,
@@ -601,16 +601,16 @@ function handleWsLive(
               }
 
               // Transcriptions
-              if (msg.serverContent?.inputTranscription?.text) {
+              if (message.serverContent?.inputTranscription?.text) {
                 turnInputText +=
-                  msg.serverContent.inputTranscription.text + "\n";
+                  message.serverContent.inputTranscription.text + "\n";
                 emit({
                   type: "inputTranscription",
-                  text: msg.serverContent.inputTranscription.text,
+                  text: message.serverContent.inputTranscription.text,
                 });
               }
-              if (msg.serverContent?.outputTranscription?.text) {
-                const outText = msg.serverContent.outputTranscription.text;
+              if (message.serverContent?.outputTranscription?.text) {
+                const outText = message.serverContent.outputTranscription.text;
                 turnText += outText;
                 emit({
                   type: "outputTranscription",
@@ -621,11 +621,11 @@ function handleWsLive(
               // Usage metadata — accumulate per turn (must run BEFORE
               // turnComplete / interrupted checks because the final
               // usageMetadata arrives in the same message as those events)
-              if (msg.usageMetadata) {
+              if (message.usageMetadata) {
                 turnUsage.inputTokens +=
-                  msg.usageMetadata.promptTokenCount ?? 0;
+                  message.usageMetadata.promptTokenCount ?? 0;
                 turnUsage.outputTokens +=
-                  msg.usageMetadata.candidatesTokenCount ?? 0;
+                  message.usageMetadata.candidatesTokenCount ?? 0;
               }
 
               // Finalize usage: the Live API does not report
@@ -758,13 +758,13 @@ function handleWsLive(
               }
 
               // Turn complete — build WAV + upload, then emit with audioRef and usage
-              if (msg.serverContent?.turnComplete) {
+              if (message.serverContent?.turnComplete) {
                 finalizeTurn("turnComplete");
                 return;
               }
 
               // Interrupted (model was cut off by user speech)
-              if (msg.serverContent?.interrupted) {
+              if (message.serverContent?.interrupted) {
                 finalizeTurn("interrupted");
                 return;
               }

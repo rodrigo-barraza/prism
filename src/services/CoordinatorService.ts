@@ -298,17 +298,17 @@ function selectAndReserveInstance(
 
 async function toolsApiPost(path: any, body: any) {
   try {
-    const res = await fetch(`${TOOLS_SERVICE_URL}${path}`, {
+    const response = await fetch(`${TOOLS_SERVICE_URL}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (!res.ok) {
-      const error = await res.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
       // @ts-ignore
-      return { error: error.error || `API returned ${res.status}` };
+      return { error: error.error || `API returned ${response.status}` };
     }
-    return await res.json();
+    return await response.json();
   } catch (error: any) {
     return { error: `Failed to reach tools-api: ${error.message}` };
   }

@@ -281,15 +281,15 @@ async function fetchHuggingFaceMetadata(modelId: any) {
   }
 
   try {
-    const res = await fetch(`https://huggingface.co/api/models/${modelId}`, {
+    const response = await fetch(`https://huggingface.co/api/models/${modelId}`, {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) {
+    if (!response.ok) {
       _hfCache.set(modelId, { data: null, timestamp: Date.now() });
       return null;
     }
-    const data = await res.json();
+    const data = await response.json();
     const meta = {
       // @ts-ignore
       architectures: data.config?.architectures || [],

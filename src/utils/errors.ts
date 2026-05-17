@@ -34,17 +34,17 @@ export class ProviderError extends Error {
   }
 }
 
-export function errorHandler(err: any, _req: any, res: any, _next: any) {
-  logger.error(`${err.provider || "Server"}: ${err.message}`);
+export function errorHandler(error: any, _req: any, res: any, _next: any) {
+  logger.error(`${error.provider || "Server"}: ${error.message}`);
 
-  if (err instanceof ProviderError) {
+  if (error instanceof ProviderError) {
     // @ts-ignore
-    return res.status(err.statusCode).json(err.toJSON());
+    return res.status(error.statusCode).json(error.toJSON());
   }
 
   return res.status(500).json({
     error: true,
-    message: err.message || "Internal server error",
+    message: error.message || "Internal server error",
     statusCode: 500,
   });
 }

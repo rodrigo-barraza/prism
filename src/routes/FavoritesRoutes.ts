@@ -55,7 +55,7 @@ router.post(
         return res.status(400).json({ error: "type and key are required" });
       }
 
-      const doc = {
+      const document = {
         project,
         username,
         type,
@@ -69,11 +69,11 @@ router.post(
         .collection(COLLECTION)
         .updateOne(
           { project, username, type, key },
-          { $set: doc },
+          { $set: document },
           { upsert: true },
         );
 
-      res.json({ success: true, favorite: doc });
+      res.json({ success: true, favorite: document });
     } catch (error: any) {
       logger.error(`Error adding favorite: ${error.message}`);
       next(error);

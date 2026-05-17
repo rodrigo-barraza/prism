@@ -236,9 +236,9 @@ router.get(
     );
     const availableProviderMap = {};
     // @ts-ignore
-    for ( const [key, val] of Object.entries(PROVIDERS)) {
+    for ( const [key, value] of Object.entries(PROVIDERS)) {
       // @ts-ignore
-      if (AVAILABLE_PROVIDERS.has(val)) availableProviderMap[key] = val;
+      if (AVAILABLE_PROVIDERS.has(value)) availableProviderMap[key] = value;
     }
 
     // Build the dynamic Tool Calling system prompt

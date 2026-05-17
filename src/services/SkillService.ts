@@ -79,7 +79,7 @@ const SkillService = {
       };
     }
 
-    const doc = {
+    const document = {
       skillId,
       name,
       description: description || "",
@@ -98,11 +98,11 @@ const SkillService = {
       updatedAt: new Date().toISOString(),
     };
 
-    await col.insertOne(doc);
+    await col.insertOne(document);
     logger.info(`[SkillService] Created skill "${name}" (${skillId})`);
 
     return {
-      skill: sanitize(doc),
+      skill: sanitize(document),
       message: `Skill "${name}" created. Execute with skill_execute({ skillId: "${skillId}" }).`,
     };
   },
@@ -143,8 +143,8 @@ const SkillService = {
   async get(skillId: any) {
     const col = getCollection();
     if (!col) return null;
-    const doc = await col.findOne({ skillId });
-    return doc ? sanitize(doc) : null;
+    const document = await col.findOne({ skillId });
+    return document ? sanitize(document) : null;
   },
 
   /**
@@ -156,15 +156,15 @@ const SkillService = {
     const col = getCollection();
     if (!col) return { error: "Database not available" };
 
-    const doc = await col.findOne({ skillId });
-    if (!doc) {
+    const document = await col.findOne({ skillId });
+    if (!document) {
       return { error: `Skill "${skillId}" not found` };
     }
 
     await col.deleteOne({ skillId });
-    logger.info(`[SkillService] Deleted skill "${doc.name}" (${skillId})`);
+    logger.info(`[SkillService] Deleted skill "${document.name}" (${skillId})`);
 
-    return { deleted: true, skillId, name: doc.name };
+    return { deleted: true, skillId, name: document.name };
   },
 
   /**
@@ -182,15 +182,15 @@ const SkillService = {
     const col = getCollection();
     if (!col) return { error: "Database not available" };
 
-    const doc = await col.findOne({ skillId });
-    if (!doc) {
+    const document = await col.findOne({ skillId });
+    if (!document) {
       return {
         error: `Skill "${skillId}" not found. Use skill_list to see available skills.`,
       };
     }
 
     // Interpolate variables into the prompt template
-    let prompt = doc.prompt;
+    let prompt = document.prompt;
     // @ts-ignore
     for ( const [key, value] of Object.entries(variables)) {
       prompt = prompt.replace(
@@ -215,27 +215,27 @@ const SkillService = {
     );
 
     const config = {
-      maxIterations: doc.maxIterations || 25,
-      model: doc.model || null,
-      tools: doc.tools || null, // null = all tools
-      agent: doc.agent || null,
-      project: doc.project || null,
+      maxIterations: document.maxIterations || 25,
+      model: document.model || null,
+      tools: document.tools || null, // null = all tools
+      agent: document.agent || null,
+      project: document.project || null,
     };
 
     return {
       skillId,
-      name: doc.name,
+      name: document.name,
       prompt,
       config,
       unresolved: unresolved.length > 0 ? unresolved : undefined,
-      steps: doc.steps?.length > 0 ? doc.steps : undefined,
+      steps: document.steps?.length > 0 ? document.steps : undefined,
     };
   },
 };
 
-function sanitize(doc: any) {
-  if (!doc) return null;
-  const { _id, ...rest } = doc;
+function sanitize(document: any) {
+  if (!document) return null;
+  const { _id, ...rest } = document;
   return rest;
 }
 
