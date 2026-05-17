@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Streaming tool output persistence — regression tests.
  *

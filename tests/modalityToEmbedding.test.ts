@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, it, expect, beforeEach } from "vitest";
 import request from "supertest";
 import { app, MOCK_GENERATE_EMBEDDING } from "./setup.js";

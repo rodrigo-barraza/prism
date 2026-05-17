@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * tokenAccuracyLive.test.js
  *

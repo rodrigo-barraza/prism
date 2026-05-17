@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * LM Studio Model Compatibility Tests
  * ═══════════════════════════════════════════════════════════

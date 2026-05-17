@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { describe, it, expect, beforeAll } from "vitest";
 
 const PRISM_SERVICE_URL = process.env.PRISM_SERVICE_URL || "http://localhost:7777";

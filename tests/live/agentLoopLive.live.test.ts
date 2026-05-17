@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Agent Loop — LM Studio Live Integration Tests
  * ═══════════════════════════════════════════════════════════

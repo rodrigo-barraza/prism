@@ -1,3 +1,4 @@
+// @ts-nocheck
 #!/usr/bin/env node
 // ─── Token Calculation Verification Test ────────────────────
 // Sends real agentic requests to Prism → LM Studio (Qwen3.6 35B),

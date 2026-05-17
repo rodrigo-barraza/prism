@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * ConversationService.appendMessages — $set/$setOnInsert path conflict regression tests.
  *
