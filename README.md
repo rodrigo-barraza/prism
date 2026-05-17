@@ -2,12 +2,12 @@
 
 Centralized AI gateway routing requests to **9 providers** (OpenAI, Anthropic, Google GenAI, ElevenLabs, Inworld, LM Studio, Ollama, llama.cpp, vLLM) through a unified REST + WebSocket API. Single entry point for the entire ecosystem.
 
-**Port:** `7777` · **Runtime:** Node.js (ES Modules) · **Framework:** Express 5 · **DB:** MongoDB · **Storage:** MinIO
+**Port:** `7777` · **Runtime:** Node.js (TypeScript) · **Framework:** Express 5 · **DB:** MongoDB · **Storage:** MinIO
 
 ## Quick Start
 
 ```bash
-cp secrets.example.js secrets.js   # API keys, MongoDB URI, etc.
+cp secrets.example.ts secrets.ts   # API keys, MongoDB URI, etc.
 npm install
 npm run dev
 ```
