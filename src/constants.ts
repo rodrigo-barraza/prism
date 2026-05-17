@@ -10,8 +10,22 @@ export const SSE_KEEPALIVE_INTERVAL_MS = 30_000;
 /** Reconnect interval for MongoDB change stream watchers. */
 export const CHANGE_STREAM_RECONNECT_MS = 60_000;
 
+/** Retry delay for reopening a failed change stream. */
+export const CHANGE_STREAM_RETRY_MS = 5000;
+
+/** Cache TTL for directory listings. */
+export const DIRECTORY_CACHE_TTL_MS = 60_000;
+
 /** CORS preflight cache duration — 24 hours. */
 export const CORS_MAX_AGE_SECONDS = 86_400;
+
+// ─── Tool Orchestration Timeouts ────────────────────────────
+export const TOOL_SCHEMA_FETCH_TIMEOUT_MS = 5000;
+export const TOOL_CONFIG_FETCH_TIMEOUT_MS = 3000;
+export const TOOL_WORKSPACE_UPDATE_TIMEOUT_MS = 10000;
+export const TOOL_WORKSPACE_VALIDATE_TIMEOUT_MS = 5000;
+export const TOOL_API_HEALTH_TIMEOUT_MS = 3000;
+export const DIRECTORY_FETCH_TIMEOUT_MS = 5000;
 
 /**
  * MongoDB collection names — single source of truth.

@@ -12,6 +12,7 @@ import {
   COORDINATOR_ONLY_TOOLS,
 } from "./CoordinatorPrompt.js";
 import { createAbortController } from "../utils/AbortController.js";
+import { DIRECTORY_CACHE_TTL_MS, DIRECTORY_FETCH_TIMEOUT_MS } from "../constants.js";
 
 const SKILL_RELEVANCE_THRESHOLD = 0.3;
 
@@ -45,7 +46,7 @@ export default class SystemPromptAssembler {
     // @ts-ignore
     this._directoryCacheTime = 0;
     // @ts-ignore
-    this._directoryCacheTTL = 60_000; // 1 minute
+    this._directoryCacheTTL = DIRECTORY_CACHE_TTL_MS;
   }
 
   /**
@@ -69,7 +70,7 @@ export default class SystemPromptAssembler {
 
     try {
       const controller = createAbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
+      const timeout = setTimeout(() => controller.abort(), DIRECTORY_FETCH_TIMEOUT_MS);
 
       // @ts-ignore
       const url = `${TOOLS_SERVICE_URL}/filesystem/list?path=${encodeURIComponent(this.workspaceRoot)}&depth=2`;

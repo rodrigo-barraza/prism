@@ -5,6 +5,13 @@ import MCPClientService from "./MCPClientService.js";
 import logger from "../utils/logger.js";
 import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
 import { createAbortController } from "../utils/AbortController.js";
+import {
+  TOOL_SCHEMA_FETCH_TIMEOUT_MS,
+  TOOL_CONFIG_FETCH_TIMEOUT_MS,
+  TOOL_WORKSPACE_UPDATE_TIMEOUT_MS,
+  TOOL_WORKSPACE_VALIDATE_TIMEOUT_MS,
+  TOOL_API_HEALTH_TIMEOUT_MS
+} from "../constants.js";
 import InternalToolRegistry from "./local-tools/InternalToolRegistry.js";
 
 // ────────────────────────────────────────────────────────────
@@ -54,7 +61,7 @@ const activeWorktrees = new Map();
 async function fetchSchemas() {
   try {
     const controller = createAbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
+    const timeout = setTimeout(() => controller.abort(), TOOL_SCHEMA_FETCH_TIMEOUT_MS);
 
     const res = await fetch(`${TOOLS_SERVICE_URL}/admin/tool-schemas`, {
       signal: controller.signal,
@@ -109,7 +116,7 @@ async function fetchSchemas() {
     // Fetch workspace config from tools-api (single source of truth)
     try {
       const configRes = await fetch(`${TOOLS_SERVICE_URL}/admin/config`, {
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(TOOL_CONFIG_FETCH_TIMEOUT_MS),
       });
       if (configRes.ok) {
         const config = await configRes.json();
@@ -563,7 +570,7 @@ export default class ToolOrchestratorService {
   static async refreshWorkspaceRoots() {
     try {
       const configRes = await fetch(`${TOOLS_SERVICE_URL}/admin/config`, {
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(TOOL_CONFIG_FETCH_TIMEOUT_MS),
       });
       if (configRes.ok) {
         const config = await configRes.json();
@@ -595,7 +602,7 @@ export default class ToolOrchestratorService {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ roots }),
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(TOOL_WORKSPACE_UPDATE_TIMEOUT_MS),
     });
     const result = await res.json();
     // @ts-ignore
@@ -629,7 +636,7 @@ export default class ToolOrchestratorService {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path }),
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(TOOL_WORKSPACE_VALIDATE_TIMEOUT_MS),
       },
     );
     return res.json();
@@ -673,7 +680,7 @@ export default class ToolOrchestratorService {
     let online = false;
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 3000);
+      const timeout = setTimeout(() => controller.abort(), TOOL_API_HEALTH_TIMEOUT_MS);
       const res = await fetch(`${TOOLS_SERVICE_URL}/health`, {
         signal: controller.signal,
       });

@@ -1,9 +1,6 @@
-// @ts-ignore
-import { formatFileSize } from "@rodrigo-barraza/utilities-library";
+import { formatBytes } from "@rodrigo-barraza/utilities-library";
 import logger from "../utils/logger.js";
 import { requestContext } from "../utils/RequestContext.js";
-
-const formatBytes = (bytes: any) => formatFileSize(bytes, { compact: true });
 
 /**
  * Express middleware that:

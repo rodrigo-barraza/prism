@@ -3,7 +3,7 @@
 import logger from "../utils/logger.js";
 // @ts-ignore
 import {
-  formatFileSize,
+  formatBytes,
   withTimeoutFallback,
 // @ts-ignore
 } from "@rodrigo-barraza/utilities-library";
@@ -213,11 +213,6 @@ function detectCapabilities(modelKey: any, providerMeta = {}) {
     outputTypes: [TYPES.TEXT],
   };
 }
-
-// ─── FORMATTING HELPERS ─────────────────────────────────────
-
-/** Format a byte count into a human-readable size string. */
-const formatBytes = formatFileSize;
 
 /** Format a total parameter count into a human-readable string. */
 function formatParams(totalParams: any) {

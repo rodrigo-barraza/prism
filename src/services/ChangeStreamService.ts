@@ -2,7 +2,7 @@ import MongoWrapper from "../wrappers/MongoWrapper.js";
 // @ts-ignore
 import { MONGO_DB_NAME } from "../../config.js";
 import logger from "../utils/logger.js";
-import { COLLECTIONS, CHANGE_STREAM_RECONNECT_MS } from "../constants.js";
+import { COLLECTIONS, CHANGE_STREAM_RECONNECT_MS, CHANGE_STREAM_RETRY_MS } from "../constants.js";
 
 /**
  * ChangeStreamService — watches MongoDB collections via Change Streams
@@ -87,7 +87,7 @@ function openStream(db: any, collectionName: any) {
             logger.info(`ChangeStream re-opened on ${collectionName}`);
           }
         }
-      }, 5000);
+      }, CHANGE_STREAM_RETRY_MS);
     });
 
     return stream;
