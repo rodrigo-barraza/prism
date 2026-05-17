@@ -6,3 +6,7 @@ node_modules/
 
 # logs
 *.log
+
+# TypeScript build artifacts
+dist/
+*.tsbuildinfo
