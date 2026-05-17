@@ -24,7 +24,7 @@ function parseProviderInstances(envPrefix) {
     if (!url) continue;
     const concurrency = parseInt(process.env[`${envPrefix}_${i}_CONCURRENCY`], 10) || 1;
     const nickname = process.env[`${envPrefix}_${i}_NICKNAME`];
-    const entry = { url, concurrency };
+    const entry: { url: string; concurrency: number; nickname?: string } = { url, concurrency };
     if (nickname) entry.nickname = nickname;
     instances.push(entry);
   }
