@@ -11,7 +11,7 @@ declare const _default: ({
                     description: string;
                 };
             };
-            required: never[];
+            required: any[];
         };
     };
     domain: string;
@@ -65,7 +65,7 @@ declare const _default: ({
         acknowledged: boolean;
         action: any;
         branch: any;
-        merged: unknown;
+        merged: any;
         message: string;
         error?: undefined;
     }>;

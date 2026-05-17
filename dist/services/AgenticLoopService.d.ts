@@ -23,7 +23,7 @@ export default class AgenticLoopService {
      * @returns {boolean} true if resolved
      */
     static resolveApproval(agentSessionId: any, approved: any, { approveAll }?: {
-        approveAll?: boolean | undefined;
+        approveAll?: boolean;
     }): boolean;
     /**
      * Check if an agent session has a pending approval.

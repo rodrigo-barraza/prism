@@ -62,18 +62,18 @@ export declare function dispatchChunk(chunk: any, state: any, ctx: any, options?
  * @returns {object}
  */
 export declare function createStreamState(): {
-    usage: null;
-    firstTokenTime: null;
-    generationEnd: null;
-    requestStart: null;
+    usage: any;
+    firstTokenTime: any;
+    generationEnd: any;
+    requestStart: any;
     outputCharacters: number;
     text: string;
     thinking: string;
     thinkingSignature: string;
-    images: never[];
-    toolCalls: never[];
-    audioChunks: never[];
+    images: any[];
+    toolCalls: any[];
+    audioChunks: any[];
     audioSampleRate: number;
-    rateLimits: null;
+    rateLimits: any;
 };
 //# sourceMappingURL=StreamChunkDispatcher.d.ts.map

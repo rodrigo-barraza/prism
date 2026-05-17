@@ -11,7 +11,7 @@ declare const _default: {
                     description: string;
                 };
             };
-            required: never[];
+            required: any[];
         };
     };
     domain: string;

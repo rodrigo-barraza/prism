@@ -24,16 +24,16 @@
 export declare function extractOpenAIRateLimits(response: any, model: any): {
     provider: string;
     requests: {
-        limit: number | null;
-        remaining: number | null;
+        limit: number;
+        remaining: number;
         reset: any;
     };
     tokens: {
-        limit: number | null;
-        remaining: number | null;
+        limit: number;
+        remaining: number;
         reset: any;
     };
-} | null;
+};
 /**
  * Extract rate-limit headers from an Anthropic HTTP response.
  *
@@ -55,24 +55,24 @@ export declare function extractOpenAIRateLimits(response: any, model: any): {
 export declare function extractAnthropicRateLimits(response: any, model: any): {
     provider: string;
     requests: {
-        limit: number | null;
-        remaining: number | null;
+        limit: number;
+        remaining: number;
         reset: any;
     };
     tokens: {
-        limit: number | null;
-        remaining: number | null;
+        limit: number;
+        remaining: number;
         reset: any;
     };
     inputTokens: {
-        limit: number | null;
-        remaining: number | null;
+        limit: number;
+        remaining: number;
         reset: any;
     };
     outputTokens: {
-        limit: number | null;
-        remaining: number | null;
+        limit: number;
+        remaining: number;
         reset: any;
     };
-} | null;
+};
 //# sourceMappingURL=rateLimits.d.ts.map

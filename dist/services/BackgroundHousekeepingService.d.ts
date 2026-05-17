@@ -8,7 +8,7 @@ declare const BackgroundHousekeepingService: {
      * @returns {Promise<object>} Summary of actions taken
      */
     run({ trigger }?: {
-        trigger?: string | undefined;
+        trigger?: string;
     }): Promise<{}>;
 };
 export default BackgroundHousekeepingService;

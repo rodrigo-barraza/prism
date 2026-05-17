@@ -1,20 +1,10 @@
 declare const providers: {
     openai: {
         name: string;
-        generateText(messages: any, model?: any, options?: {}): Promise<{
-            text: any;
-            usage: {
-                inputTokens: any;
-                outputTokens: any;
-            };
-        }>;
+        generateText(messages: any, model?: any, options?: {}): Promise<any>;
         _generateTextResponses(messages: any, model: any, options: any): Promise<{
             text: any;
-            images: {
-                type: string;
-                data: any;
-                mimeType: string;
-            }[];
+            images: any[];
             usage: {
                 inputTokens: any;
                 outputTokens: any;
@@ -27,19 +17,19 @@ declare const providers: {
                 outputTokens: any;
             };
         }>;
-        generateTextStream(messages: any, model?: any, options?: {}): AsyncGenerator<any, void, unknown>;
+        generateTextStream(messages: any, model?: any, options?: {}): AsyncGenerator<any, void, any>;
         _streamResponses(messages: any, model: any, options: any): AsyncGenerator<any, void, unknown>;
         _streamChatCompletions(messages: any, model: any, options: any): AsyncGenerator<any, void, unknown>;
         generateSpeech(text: any, voice?: string, options?: {}): Promise<{
             stream: any;
             contentType: string;
         }>;
-        generateImage(prompt: any, images?: never[], model?: string): Promise<{
+        generateImage(prompt: any, images?: any[], model?: string): Promise<{
             imageData: any;
             mimeType: string;
             text: any;
         }>;
-        captionImage(images: any, prompt: string | undefined, model: any, systemPrompt: any): Promise<{
+        captionImage(images: any, prompt: string, model: any, systemPrompt: any): Promise<{
             text: any;
             usage: {
                 inputTokens: any;
@@ -49,7 +39,7 @@ declare const providers: {
         generateEmbedding(text: any, model?: any): Promise<{
             embedding: any;
         }>;
-        transcribeAudio(audioBuffer: any, mimeType: any, model?: any, options?: {}): Promise<{
+        transcribeAudio(audioBuffer: any, mimeType: any, model?: string, options?: {}): Promise<{
             text: any;
             usage: {};
         }>;
@@ -65,7 +55,7 @@ declare const providers: {
                 cacheCreationInputTokens: any;
             };
         }>;
-        captionImage(images: any, prompt: string | undefined, model: any, systemPrompt: any): Promise<{
+        captionImage(images: any, prompt: string, model: any, systemPrompt: any): Promise<{
             text: string;
             usage: {
                 inputTokens: any;
@@ -74,7 +64,7 @@ declare const providers: {
                 cacheCreationInputTokens: any;
             };
         }>;
-        generateTextStream(messages: any, model?: any, options?: {}): any;
+        generateTextStream(messages: any, model?: any, options?: {}): AsyncGenerator<any, void, any>;
     };
     google: {
         name: string;
@@ -94,14 +84,14 @@ declare const providers: {
         }>;
         generateTextStream(messages: any, model?: any, options?: {}): AsyncGenerator<any, void, unknown>;
         generateTextStreamLive(messages: any, model: any, options?: {}): AsyncGenerator<any, void, unknown>;
-        captionImage(images: any, prompt: string | undefined, model: any, systemPrompt: any): Promise<{
+        captionImage(images: any, prompt: string, model: any, systemPrompt: any): Promise<{
             text: any;
             usage: {
                 inputTokens: any;
                 outputTokens: any;
             };
         }>;
-        generateImage(prompt: any, images: never[] | undefined, model: string | undefined, systemPrompt: any): Promise<{
+        generateImage(prompt: any, images: any[], model: string, systemPrompt: any): Promise<{
             imageData: any;
             mimeType: any;
             text: string;
@@ -110,7 +100,7 @@ declare const providers: {
             stream: import("node:stream").Readable;
             contentType: string;
         }>;
-        transcribeAudio(audioBuffer: any, mimeType: any, model?: any, options?: {}): Promise<{
+        transcribeAudio(audioBuffer: any, mimeType: any, model?: string, options?: {}): Promise<{
             text: any;
             usage: {
                 inputTokens: any;
@@ -125,7 +115,7 @@ declare const providers: {
     elevenlabs: {
         name: string;
         generateSpeech(text: any, voiceId?: string, options?: {}): Promise<{
-            stream: import("node:stream/web").ReadableStream<any> | null;
+            stream: import("node:stream/web").ReadableStream<any>;
             contentType: string;
         }>;
         generateSpeechStream(textStream: any, voiceId?: string, options?: {}): AsyncGenerator<Buffer<ArrayBuffer>, void, unknown>;

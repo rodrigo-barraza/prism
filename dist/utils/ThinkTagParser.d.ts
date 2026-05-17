@@ -4,7 +4,7 @@
  * and text is the remaining content with think tags removed.
  */
 export declare function extractThinkTags(raw: any): {
-    thinking: string | null;
+    thinking: string;
     text: any;
 };
 /**
@@ -17,10 +17,7 @@ export declare function extractThinkTags(raw: any): {
  */
 export declare class ThinkTagParser {
     constructor();
-    feed(chunk: any): {
-        type: string;
-        content: any;
-    }[];
+    feed(chunk: any): any[];
     /** Check if the end of str is a partial match for "<think>" */
     _partialStartTag(str: any): number;
     /** Check if the end of str is a partial match for "</think>" */

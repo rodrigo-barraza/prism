@@ -25,6 +25,6 @@ export declare function truncateToolResult(result: any, maxChars?: number): any;
  * @returns {Array} Provider-ready messages
  */
 export declare function expandMessagesForFC(messages: any, { filterDeleted }?: {
-    filterDeleted?: boolean | undefined;
+    filterDeleted?: boolean;
 }): any;
 //# sourceMappingURL=FunctionCallingUtilities.d.ts.map

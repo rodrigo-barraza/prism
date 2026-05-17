@@ -1,3 +1,4 @@
+import { formatFileSize } from "@rodrigo-barraza/utilities-library";
 /** All recognized local provider types. */
 declare const LOCAL_PROVIDER_TYPES: Set<string>;
 /**
@@ -57,14 +58,14 @@ declare function detectCapabilities(modelKey: any, providerMeta?: {}): {
     vision: any;
     video: any;
     audio: any;
-    tools: string[];
+    tools: any[];
     inputTypes: string[];
     outputTypes: string[];
 };
 /** Format a byte count into a human-readable size string. */
-declare const formatBytes: any;
+declare const formatBytes: typeof formatFileSize;
 /** Format a total parameter count into a human-readable string. */
-declare function formatParams(totalParams: any): string | null;
+declare function formatParams(totalParams: any): string;
 /** Extract parameter count from model name (e.g. "qwen3-8b" → "8B"). */
 declare function parseParamsFromName(name: any): any;
 /** Extract quantization from model name (e.g. "model-AWQ" → "AWQ"). */
@@ -95,7 +96,7 @@ declare function normalizeLmStudioModel(raw: any): {
     outputTypes: string[];
     supportsSystemPrompt: boolean;
     streaming: boolean;
-    defaultTemperature: number | undefined;
+    defaultTemperature: number;
     pricing: {
         inputPerMillion: number;
         outputPerMillion: number;
@@ -247,8 +248,8 @@ declare class LocalProviderGateway {
      * @returns {Promise<{ [instanceId: string]: object[] }>} Normalized models grouped by instance
      */
     discoverModels({ timeoutMs, enrich }?: {
-        timeoutMs?: number | undefined;
-        enrich?: boolean | undefined;
+        timeoutMs?: number;
+        enrich?: boolean;
     }): Promise<{}>;
     /**
      * Discover models for a single instance.
@@ -257,8 +258,8 @@ declare class LocalProviderGateway {
      * @returns {Promise<object[]>} Normalized model entries
      */
     discoverModelsForInstance(instanceId: any, { timeoutMs, enrich }?: {
-        timeoutMs?: number | undefined;
-        enrich?: boolean | undefined;
+        timeoutMs?: number;
+        enrich?: boolean;
     }): Promise<any[]>;
     /**
      * Internal: Fetch, normalize, and optionally enrich models for an instance.
@@ -279,10 +280,7 @@ declare class LocalProviderGateway {
      * @param {string} [filter.query] - Free-text substring search on name/label
      * @returns {Promise<Array<{ instanceId: string, model: object }>>}
      */
-    searchModels(filter?: {}): Promise<{
-        instanceId: string;
-        model: any;
-    }[]>;
+    searchModels(filter?: {}): Promise<any[]>;
     /**
      * Check if a model entry matches the given filter criteria.
      * @private
@@ -323,12 +321,12 @@ declare class LocalProviderGateway {
      * @returns {Promise<{ instanceId: string, type: string, provider: object } | null>}
      */
     resolveProvider(modelName: any, { timeoutMs }?: {
-        timeoutMs?: number | undefined;
+        timeoutMs?: number;
     }): Promise<{
         instanceId: any;
         type: any;
         provider: any;
-    } | null>;
+    }>;
     /**
      * Check health of all local provider instances.
      * Returns a map of instance ID → health status.
@@ -366,7 +364,7 @@ declare class LocalProviderGateway {
         gpuGiB: number;
         totalGiB: number;
         cpuOffloaded: boolean;
-    } | null;
+    };
     /**
      * Estimate VRAM for a model by its key on a specific instance.
      * Fetches model metadata from the provider, then runs estimateVRAM.
@@ -388,7 +386,7 @@ declare class LocalProviderGateway {
         gpuGiB: number;
         totalGiB: number;
         cpuOffloaded: boolean;
-    } | null>;
+    }>;
     /**
      * Load a model on a specific instance.
      * Only supported by providers that expose loadModel (LM Studio).
@@ -399,7 +397,7 @@ declare class LocalProviderGateway {
      * @param {AbortSignal} [signal] - Optional abort signal
      * @returns {Promise<object>}
      */
-    loadModel(instanceId: any, modelKey: any, options: {} | undefined, signal: any): Promise<any>;
+    loadModel(instanceId: any, modelKey: any, options: {}, signal: any): Promise<any>;
     /**
      * Ensure a specific model is loaded on a specific instance.
      * Handles unloading of other models if necessary (single-model enforcement).
@@ -411,7 +409,7 @@ declare class LocalProviderGateway {
      * @param {function} [onStatus] - Optional status callback
      * @returns {Promise<{ alreadyLoaded: boolean, contextLength: number|null }>}
      */
-    ensureModelLoaded(instanceId: any, modelKey: any, options: {} | undefined, signal: any, onStatus: any): Promise<any>;
+    ensureModelLoaded(instanceId: any, modelKey: any, options: {}, signal: any, onStatus: any): Promise<any>;
     /**
      * Unload a model from a specific instance.
      *
@@ -443,7 +441,7 @@ declare class LocalProviderGateway {
      * @param {string} [instanceId] - Explicit instance ID (skips auto-routing)
      * @returns {Promise<{ text: string, thinking: string|null, usage: object }>}
      */
-    generateText(messages: any, model: any, options: {} | undefined, instanceId: any): Promise<any>;
+    generateText(messages: any, model: any, options: {}, instanceId: any): Promise<any>;
     /**
      * Generate text (streaming) via a local provider.
      * Auto-resolves the provider if only a model name is given.
@@ -454,7 +452,7 @@ declare class LocalProviderGateway {
      * @param {string} [instanceId] - Explicit instance ID (skips auto-routing)
      * @returns {AsyncGenerator}
      */
-    generateTextStream(messages: any, model: any, options: {} | undefined, instanceId: any): AsyncGenerator<any, void, any>;
+    generateTextStream(messages: any, model: any, options: {}, instanceId: any): AsyncGenerator<any, void, any>;
     /**
      * Generate an embedding via a local provider.
      *
@@ -464,7 +462,7 @@ declare class LocalProviderGateway {
      * @param {string} [instanceId] - Explicit instance ID
      * @returns {Promise<{ embedding: number[], dimensions: number }>}
      */
-    generateEmbedding(content: any, model: any, options: {} | undefined, instanceId: any): Promise<any>;
+    generateEmbedding(content: any, model: any, options: {}, instanceId: any): Promise<any>;
     /**
      * Caption an image via a local provider.
      *

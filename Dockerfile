@@ -32,6 +32,8 @@ RUN apk add --no-cache ffmpeg
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/package.json ./package.json
+# Root-level JS files imported by dist/ via ../config.js
+COPY --from=build /app/config.js ./config.js
 
 # Non-root user for security
 RUN addgroup --system --gid 1001 prism && \

@@ -45,7 +45,7 @@ export declare function mergeUsage(target: any, source: any): any;
  * @param {{ inputPerMillion: number, outputPerMillion: number, cachedInputPerMillion?: number, cacheWriteInputPerMillion?: number }} pricing
  * @returns {number|null} Cost in USD, or null if pricing is unavailable.
  */
-export declare function calculateTextCost(usage: any, pricing: any): number | null;
+export declare function calculateTextCost(usage: any, pricing: any): number;
 /**
  * Calculate the estimated cost for an audio-to-text request.
  * Supports two strategies — per-minute pricing takes priority.
@@ -54,7 +54,7 @@ export declare function calculateTextCost(usage: any, pricing: any): number | nu
  * @param {{ perMinute?: number, audioInputPerMillion?: number, outputPerMillion?: number }} pricing
  * @returns {number|null} Cost in USD, or null if pricing is unavailable.
  */
-export declare function calculateAudioCost(usage: any, pricing: any): number | null;
+export declare function calculateAudioCost(usage: any, pricing: any): number;
 /**
  * Calculate the estimated cost for a Live API session turn.
  * The Live API streams audio in and out, so input tokens should
@@ -65,7 +65,7 @@ export declare function calculateAudioCost(usage: any, pricing: any): number | n
  * @param {{ inputPerMillion?: number, audioInputPerMillion?: number, outputPerMillion?: number, audioOutputPerMillion?: number }} pricing
  * @returns {number|null} Cost in USD, or null if pricing is unavailable.
  */
-export declare function calculateLiveCost(usage: any, pricing: any): number | null;
+export declare function calculateLiveCost(usage: any, pricing: any): number;
 /**
  * Calculate the estimated cost for a text-to-image request.
  * Estimates input tokens from prompt length (~4 chars per token).
@@ -79,5 +79,5 @@ export declare function calculateLiveCost(usage: any, pricing: any): number | nu
  * @param {number} [outputImageTokens=1120] - Estimated output image tokens (provider-specific)
  * @returns {number|null} Cost in USD, or null if pricing is unavailable.
  */
-export declare function calculateImageCost(prompt: any, pricing: any, inputImages?: number, outputImageTokens?: number): number | null;
+export declare function calculateImageCost(prompt: any, pricing: any, inputImages?: number, outputImageTokens?: number): number;
 //# sourceMappingURL=CostCalculator.d.ts.map

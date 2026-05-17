@@ -14,5 +14,5 @@ export { cosineSimilarity } from "@rodrigo-barraza/utilities-library";
  * @param {number} [opts.fallbackSec]      - Fallback duration if `sec` is not usable (e.g. totalSec)
  * @returns {number|null} Rounded to 1 decimal, or null if not computable
  */
-export declare function calculateTokensPerSec(tokens: any, sec: any, opts?: {}): number | null;
+export declare function calculateTokensPerSec(tokens: any, sec: any, opts?: {}): number;
 //# sourceMappingURL=math.d.ts.map

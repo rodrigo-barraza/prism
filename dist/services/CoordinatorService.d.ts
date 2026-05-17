@@ -23,7 +23,7 @@ export default class CoordinatorService {
         summary: string;
         result: any;
         toolUses: any;
-        toolNames: {} | undefined;
+        toolNames: {};
         iterations: any;
         durationMs: any;
         messages: any;
@@ -75,7 +75,7 @@ export default class CoordinatorService {
         summary: string;
         result: any;
         toolUses: any;
-        toolNames: {} | undefined;
+        toolNames: {};
         iterations: any;
         durationMs: any;
         messages: any;
@@ -125,7 +125,7 @@ export default class CoordinatorService {
         durationMs: any;
         diff: any;
         error: any;
-    } | null;
+    };
     /**
      * List all active workers spawned via chat tools.
      * @param {object} [options]
@@ -287,11 +287,7 @@ export default class CoordinatorService {
         merged?: undefined;
     } | {
         taskId: any;
-        merged: {
-            workerId: any;
-            merged: boolean;
-            error: any;
-        }[];
+        merged: any[];
         error?: undefined;
     }>;
     /**

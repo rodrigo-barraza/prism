@@ -248,7 +248,6 @@ export default class MemoryExtractor {
             // ── Store each memory via MemoryService ─────────────────────
             const agentId = agent || "CODING";
             const stored = [];
-            // @ts-ignore
             for (const mem of memories) {
                 if (!mem.content || !mem.title)
                     continue;

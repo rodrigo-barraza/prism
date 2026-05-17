@@ -13,6 +13,6 @@ export declare function handleConversation(params: any, emit: any, { signal }?: 
  * Used exclusively by the /agent route.
  */
 export declare function handleAgent(params: any, emit: any, { signal }?: {}): Promise<void>;
-export declare function finalizeTextGeneration(ctx: any, { text, thinking, thinkingSignature, images, toolCalls, audioChunks, audioSampleRate, usage, outputCharacters, timeToGenerationSec, generationSec, totalSec, rateLimits, contentSegments, textFragments, thinkingFragments, }: any, overrideMessagesToAppend?: null): Promise<void>;
+export declare function finalizeTextGeneration(ctx: any, { text, thinking, thinkingSignature, images, toolCalls, audioChunks, audioSampleRate, usage, outputCharacters, timeToGenerationSec, generationSec, totalSec, rateLimits, contentSegments, textFragments, thinkingFragments, }: any, overrideMessagesToAppend?: any): Promise<void>;
 export default router;
 //# sourceMappingURL=ChatRoutes.d.ts.map

@@ -308,7 +308,6 @@ const MemoryService = {
         }
         logger.info(`[MemoryService] Extracted ${facts.length} fact(s), generating embeddings...`);
         const storedMemories = [];
-        // @ts-ignore
         for (const fact of facts) {
             try {
                 const embedding = await generateEmbedding(fact.fact, {

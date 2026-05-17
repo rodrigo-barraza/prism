@@ -1,22 +1,12 @@
 declare const openaiProvider: {
     name: string;
-    generateText(messages: any, model?: any, options?: {}): Promise<{
-        text: any;
-        usage: {
-            inputTokens: any;
-            outputTokens: any;
-        };
-    }>;
+    generateText(messages: any, model?: any, options?: {}): Promise<any>;
     /**
      * Responses API path for GPT-5.2/5.4 models.
      */
     _generateTextResponses(messages: any, model: any, options: any): Promise<{
         text: any;
-        images: {
-            type: string;
-            data: any;
-            mimeType: string;
-        }[];
+        images: any[];
         usage: {
             inputTokens: any;
             outputTokens: any;
@@ -32,7 +22,7 @@ declare const openaiProvider: {
             outputTokens: any;
         };
     }>;
-    generateTextStream(messages: any, model?: any, options?: {}): AsyncGenerator<any, void, unknown>;
+    generateTextStream(messages: any, model?: any, options?: {}): AsyncGenerator<any, void, any>;
     /**
      * Streaming via the Responses API.
      */
@@ -45,12 +35,12 @@ declare const openaiProvider: {
         stream: any;
         contentType: string;
     }>;
-    generateImage(prompt: any, images?: never[], model?: string): Promise<{
+    generateImage(prompt: any, images?: any[], model?: string): Promise<{
         imageData: any;
         mimeType: string;
         text: any;
     }>;
-    captionImage(images: any, prompt: string | undefined, model: any, systemPrompt: any): Promise<{
+    captionImage(images: any, prompt: string, model: any, systemPrompt: any): Promise<{
         text: any;
         usage: {
             inputTokens: any;
@@ -60,7 +50,7 @@ declare const openaiProvider: {
     generateEmbedding(text: any, model?: any): Promise<{
         embedding: any;
     }>;
-    transcribeAudio(audioBuffer: any, mimeType: any, model?: any, options?: {}): Promise<{
+    transcribeAudio(audioBuffer: any, mimeType: any, model?: string, options?: {}): Promise<{
         text: any;
         usage: {};
     }>;

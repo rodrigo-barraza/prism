@@ -31,10 +31,10 @@ declare const SkillService: {
      * @returns {Promise<object>}
      */
     list({ project, limit }?: {
-        limit?: number | undefined;
+        limit?: number;
     }): Promise<{
-        skills: any;
-        total: any;
+        skills: any[];
+        total: number;
     }>;
     /**
      * Get a single skill by skillId.
@@ -88,7 +88,7 @@ declare const SkillService: {
             agent: any;
             project: any;
         };
-        unresolved: unknown[] | undefined;
+        unresolved: unknown[];
         steps: any;
         error?: undefined;
     }>;

@@ -11,8 +11,8 @@ declare const SessionGenerationTracker: {
      * @param {string} [meta.workerId]              - Worker agent ID (for worker requests)
      */
     register(agentSessionId: any, requestId: any, { provider, model, source, workerId }?: {
-        source?: string | undefined;
-        workerId?: null | undefined;
+        source?: string;
+        workerId?: any;
     }): void;
     /**
      * Update a tracked request with new token data.
@@ -67,12 +67,12 @@ declare const SessionGenerationTracker: {
      * }}
      */
     getSessionStats(agentSessionId: any): {
-        tokPerSec: number | null;
+        tokPerSec: any;
         activeRequests: any;
         totalOutputTokens: any;
         totalInputTokens: any;
         totalTokens: any;
-        avgTtft: number | null;
+        avgTtft: number;
     };
     /**
      * Clean up all tracking data for a session.

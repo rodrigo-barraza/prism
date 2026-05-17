@@ -62,7 +62,12 @@ export default class SystemPromptAssembler {
      * @param {string} queryText - The user's latest message (used for relevance matching)
      * @returns {Promise<Array<{ name: string, content: string, score: number }>>}
      */
-    fetchSkills(project: any, username: any, queryText: any, { traceId, agentSessionId, endpoint, agent }?: {}): Promise<any>;
+    fetchSkills(project: any, username: any, queryText: any, { traceId, agentSessionId, endpoint, agent }?: {}): Promise<{
+        name: any;
+        content: any;
+        description: any;
+        score: number;
+    }[]>;
     /**
      * Assemble the complete agent system prompt.
      *

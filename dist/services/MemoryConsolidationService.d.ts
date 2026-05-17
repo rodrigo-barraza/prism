@@ -15,7 +15,7 @@ declare const MemoryConsolidationService: {
         actionsApplied: any;
         batchCount: any;
         summary: string;
-        total: any;
+        total: number;
         trigger: any;
         durationMs: number;
         merged: number;
@@ -24,13 +24,13 @@ declare const MemoryConsolidationService: {
     } | {
         skipped: boolean;
         reason: string;
-        total: any;
+        total: number;
         actions?: undefined;
         summary?: undefined;
     } | {
         actions: number;
         summary: string;
-        total: any;
+        total: number;
         skipped?: undefined;
         reason?: undefined;
     }>;
@@ -51,7 +51,7 @@ declare const MemoryConsolidationService: {
      * @param {number} [limit=10] - Max history entries to return
      * @returns {Promise<Array>} Consolidation history entries, newest first
      */
-    getHistory(project: any, limit?: number): Promise<any>;
+    getHistory(project: any, limit?: number): Promise<import("bson").Document[]>;
 };
 export default MemoryConsolidationService;
 //# sourceMappingURL=MemoryConsolidationService.d.ts.map

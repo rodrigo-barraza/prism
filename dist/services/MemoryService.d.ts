@@ -58,7 +58,19 @@ declare const MemoryService: {
      * @param {number} [params.limit=10]
      * @returns {Promise<Array>} Relevant memories sorted by relevance
      */
-    search({ agent, project, guildId, userIds, queryText, limit, traceId, agentSessionId, endpoint, }: any): Promise<any>;
+    search({ agent, project, guildId, userIds, queryText, limit, traceId, agentSessionId, endpoint, }: any): Promise<{
+        id: any;
+        type: any;
+        title: any;
+        content: any;
+        aboutUserId: any;
+        aboutUsername: any;
+        confidence: any;
+        createdAt: any;
+        age: string;
+        ageDays: number;
+        score: number;
+    }[]>;
     /**
      * List memories for a specific agent, optionally filtered by project/guild/user.
      *
@@ -72,8 +84,8 @@ declare const MemoryService: {
      * @returns {Promise<{ memories: Array, total: number }>}
      */
     list({ agent, project, guildId, userId, limit, skip }: any): Promise<{
-        memories: any;
-        total: any;
+        memories: import("mongodb").WithId<import("bson").Document>[];
+        total: number;
     }>;
     /**
      * Aggregate all distinct project/agent combinations with memory counts.
@@ -81,7 +93,7 @@ declare const MemoryService: {
      *
      * @returns {Promise<Array<{ project: string, agent: string, count: number }>>}
      */
-    discoverCombos(): Promise<any>;
+    discoverCombos(): Promise<import("bson").Document[]>;
     /**
      * Delete a specific memory by its id field.
      *
@@ -92,7 +104,7 @@ declare const MemoryService: {
     /**
      * Alias for delete — used by callers that preferred the AgentMemoryService naming.
      */
-    remove(memoryId: any): Promise<boolean>;
+    remove(memoryId: any): Promise<any>;
     /**
      * Update an existing memory.
      *

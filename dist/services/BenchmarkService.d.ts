@@ -10,11 +10,7 @@ declare function evaluate(response: any, expected: any, matchMode?: string): any
  * Get all listed conversation-type models grouped by provider.
  * Returns flat array of { provider, model, label }.
  */
-declare function getConversationModels(): {
-    provider: string;
-    model: string;
-    label: string;
-}[];
+declare function getConversationModels(): any[];
 declare const BenchmarkService: {
     MATCH_MODES: {
         CONTAINS: string;
@@ -70,12 +66,12 @@ declare const BenchmarkService: {
         createdAt: string;
         updatedAt: string;
     }>;
-    list(project: any): Promise<any>;
-    getById(id: any, project: any): Promise<any>;
+    list(project: any): Promise<import("mongodb").WithId<import("bson").Document>[]>;
+    getById(id: any, project: any): Promise<import("mongodb").WithId<import("bson").Document>>;
     remove(id: any, project: any): Promise<void>;
-    getRuns(benchmarkId: any, project: any): Promise<any>;
-    getRunById(runId: any, project: any): Promise<any>;
-    getLatestRun(benchmarkId: any, project: any): Promise<any>;
+    getRuns(benchmarkId: any, project: any): Promise<import("mongodb").WithId<import("bson").Document>[]>;
+    getRunById(runId: any, project: any): Promise<import("mongodb").WithId<import("bson").Document>>;
+    getLatestRun(benchmarkId: any, project: any): Promise<import("mongodb").WithId<import("bson").Document>>;
 };
 export default BenchmarkService;
 //# sourceMappingURL=BenchmarkService.d.ts.map

@@ -85,11 +85,11 @@ export default class BaseAgenticHarness {
         streamedText: string;
         streamedThinking: string;
         thinkingSignature: string;
-        pendingToolCalls: never[];
-        streamedImages: never[];
+        pendingToolCalls: any[];
+        streamedImages: any[];
         start: number;
-        firstTokenTime: null;
-        generationEnd: null;
+        firstTokenTime: any;
+        generationEnd: any;
         outputCharacters: number;
         usage: {
             inputTokens: number;
@@ -99,7 +99,7 @@ export default class BaseAgenticHarness {
             reasoningOutputTokens: number;
         };
         options: any;
-        requestId: null;
+        requestId: any;
     };
     _recordFirstToken(pass: any): void;
     _recordTiming(pass: any): void;

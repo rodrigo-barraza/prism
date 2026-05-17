@@ -28,7 +28,18 @@ export declare function buildJsonResponseFromEvents(events: any, reqBody: any): 
     error: ProviderError;
     response?: undefined;
 } | {
-    response: any;
+    response: {
+        conversationId: any;
+        traceId: any;
+        text: any;
+        thinking: any;
+        images: any;
+        toolCalls: any;
+        provider: any;
+        model: any;
+        usage: any;
+        estimatedCost: any;
+    };
     error?: undefined;
 };
 /**

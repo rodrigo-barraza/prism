@@ -10,7 +10,7 @@ declare const AgentPersonaRegistry: {
      * @returns {Array<{ id: string, name: string, custom?: boolean }>}
      */
     list(): {
-        custom?: boolean | undefined;
+        custom?: boolean;
         id: any;
         name: any;
         type: any;

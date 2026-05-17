@@ -6,7 +6,7 @@
  * @param {string} username
  * @returns {Promise<Array>} messages with refs replacing inline data
  */
-export declare function extractFiles(messages: any, project?: null, username?: null): Promise<any>;
+export declare function extractFiles(messages: any, project?: any, username?: any): Promise<any>;
 /**
  * Compute input/output modalities from messages for lightweight querying.
  * @param {Array} messages
@@ -69,9 +69,26 @@ declare const ConversationService: {
   
        * @returns {Promise<object>} The updated conversation document
        */
-    appendMessages(conversationId: any, project: any, username: any, newMessages: any, conversationMeta?: null, { collection }?: {
-        collection?: string | undefined;
-    }): Promise<any>;
+    appendMessages(conversationId: any, project: any, username: any, newMessages: any, conversationMeta?: any, { collection }?: {
+        collection?: string;
+    }): Promise<{
+        modalities: {
+            textIn: boolean;
+            textOut: boolean;
+            imageIn: boolean;
+            imageOut: boolean;
+            audioIn: boolean;
+            audioOut: boolean;
+            docIn: boolean;
+            webSearch: boolean;
+            codeExecution: boolean;
+            functionCalling: boolean;
+            thinking: boolean;
+        };
+        providers: unknown[];
+        totalCost: number;
+        _id: import("bson").ObjectId;
+    }>;
     /**
      * Set or clear the isGenerating flag on a conversation.
      * Lightweight update — only touches isGenerating + updatedAt.
@@ -82,7 +99,7 @@ declare const ConversationService: {
      * @param {boolean} generating
      */
     setGenerating(conversationId: any, project: any, username: any, generating: any, { collection }?: {
-        collection?: string | undefined;
+        collection?: string;
     }): Promise<void>;
 };
 export default ConversationService;

@@ -63,5 +63,5 @@ export declare function inferMimeFromUrl(url: any): "unknown" | "text" | "image"
  * @param {number} [options.quality=5] - JPEG quality (2=best, 31=worst)
  * @returns {Promise<string[]>} Array of data:image/jpeg;base64,... URLs
  */
-export declare function extractVideoFrames(videoDataUrl: any, options?: {}): Promise<string[]>;
+export declare function extractVideoFrames(videoDataUrl: any, options?: {}): Promise<any[]>;
 //# sourceMappingURL=media.d.ts.map

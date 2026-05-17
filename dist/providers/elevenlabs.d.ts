@@ -1,7 +1,7 @@
 declare const elevenlabsProvider: {
     name: string;
     generateSpeech(text: any, voiceId?: string, options?: {}): Promise<{
-        stream: import("node:stream/web").ReadableStream<any> | null;
+        stream: import("node:stream/web").ReadableStream<any>;
         contentType: string;
     }>;
     /**

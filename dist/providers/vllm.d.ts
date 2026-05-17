@@ -15,7 +15,7 @@ export declare function createVllmProvider(baseUrl: any, instanceId?: string): {
         };
     }>;
     generateTextStream(messages: any, model?: any, options?: {}): AsyncGenerator<any, void, unknown>;
-    captionImage(images: any, prompt: string | undefined, model: any, systemPrompt: any): Promise<{
+    captionImage(images: any, prompt: string, model: any, systemPrompt: any): Promise<{
         text: any;
         usage: {
             inputTokens: any;

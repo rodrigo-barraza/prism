@@ -23,11 +23,7 @@ export default class MemoryExtractor {
      * @param {Array} [params.toolCalls] - Tool calls from the current turn (for mutual exclusion)
      * @returns {Promise<Array>} Stored memory documents
      */
-    static extractAndStore({ project, username, messages, traceId, agentSessionId, conversationId, endpoint, agent, toolCalls, emit, }: any): Promise<{
-        type: any;
-        id: any;
-        title: any;
-    }[]>;
+    static extractAndStore({ project, username, messages, traceId, agentSessionId, conversationId, endpoint, agent, toolCalls, emit, }: any): Promise<any[]>;
     /**
      * Create an afterResponse hook handler for AgentHooks.
      * Runs as fire-and-forget (non-blocking).

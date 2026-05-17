@@ -2468,7 +2468,7 @@ declare function getModelByName(name: any): {
     };
     inputTypes: string[];
     outputTypes: string[];
-} | null;
+};
 declare const VOICES: {
     [PROVIDERS.OPENAI]: {
         name: string;

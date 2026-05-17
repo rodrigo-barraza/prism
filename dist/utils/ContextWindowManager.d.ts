@@ -15,11 +15,6 @@ export default class ContextWindowManager {
     static enforce(messages: any, options?: {}): {
         messages: any;
         truncated: boolean;
-        strategy: null;
-        estimatedTokens: any;
-    } | {
-        messages: any;
-        truncated: boolean;
         strategy: string;
         estimatedTokens: any;
     };

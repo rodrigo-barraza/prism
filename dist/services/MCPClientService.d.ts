@@ -32,16 +32,7 @@ declare const MCPClientService: {
      * @param {string} serverName
      * @returns {Promise<{ tools: Array, serverName: string }>}
      */
-    reconnect(serverName: any): Promise<{
-        tools: {
-            name: string;
-            description: any;
-            parameters: any;
-            _mcpServer: any;
-            _mcpOriginalName: any;
-        }[];
-        serverName: any;
-    }>;
+    reconnect(serverName: any): Promise<any>;
     /**
      * Call a tool on a connected MCP server.
      *
@@ -50,7 +41,7 @@ declare const MCPClientService: {
      * @param {object} args - Tool arguments
      * @returns {Promise<object>} Tool result
      */
-    callTool(serverName: any, toolName: any, args?: {}): any;
+    callTool(serverName: any, toolName: any, args?: {}): Promise<any>;
     /**
      * Get all tool schemas from all connected MCP servers.
      * @returns {Array} Namespaced tool schemas
@@ -60,14 +51,7 @@ declare const MCPClientService: {
      * Get connection info for all servers.
      * @returns {Array<{ name, status, toolCount, transport, connectedAt }>}
      */
-    getConnectedServers(): {
-        name: any;
-        status: any;
-        toolCount: any;
-        tools: any;
-        transport: any;
-        connectedAt: any;
-    }[];
+    getConnectedServers(): any[];
     /**
      * Check if a specific server is connected.
      * @param {string} serverName
@@ -88,7 +72,7 @@ declare const MCPClientService: {
     parseMCPToolName(fullName: any): {
         serverName: any;
         toolName: any;
-    } | null;
+    };
     /**
      * List available resources from a connected MCP server.
      * MCP Resources are read-only data sources (files, DB rows, API data)
@@ -110,7 +94,7 @@ declare const MCPClientService: {
         error?: undefined;
         note?: undefined;
     } | {
-        resources: never[];
+        resources: any[];
         serverName: any;
         count: number;
         note: string;
@@ -172,7 +156,7 @@ declare const MCPClientService: {
     } | {
         acknowledged: boolean;
         serverName: any;
-        toolCount: number;
+        toolCount: any;
         message: string;
         error?: undefined;
     }>;

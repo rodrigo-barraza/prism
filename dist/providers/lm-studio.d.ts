@@ -14,7 +14,7 @@ export declare function createLmStudioProvider(baseUrl: any, instanceId?: string
             outputTokens: any;
         };
     }>;
-    generateTextStream(messages: any, model?: any, options?: {}): AsyncGenerator<any, void, unknown>;
+    generateTextStream(messages: any, model?: any, options?: {}): AsyncGenerator<any, void, any>;
     /**
      * OpenAI-compat streaming path — used when coordinator tools are enabled.
      * Sends a standard /v1/chat/completions request with `tools` array.
@@ -38,7 +38,7 @@ export declare function createLmStudioProvider(baseUrl: any, instanceId?: string
         embedding: any;
         dimensions: any;
     }>;
-    captionImage(images: any, prompt: string | undefined, model: any, systemPrompt: any): Promise<{
+    captionImage(images: any, prompt: string, model: any, systemPrompt: any): Promise<{
         text: any;
         usage: {
             inputTokens: any;
@@ -57,7 +57,7 @@ export declare function createLmStudioProvider(baseUrl: any, instanceId?: string
      * @param {function} [onStatus] - Optional callback for status messages (loading progress, unloading, etc.).
      * @returns {{ alreadyLoaded: boolean, contextLength: number|null }} - Info about the loaded model.
      */
-    ensureModelLoaded(modelKey: any, loadOptions: {} | undefined, signal: any, onStatus: any): Promise<{
+    ensureModelLoaded(modelKey: any, loadOptions: {}, signal: any, onStatus: any): Promise<{
         alreadyLoaded: boolean;
         contextLength: any;
     }>;
@@ -69,7 +69,7 @@ export declare function createLmStudioProvider(baseUrl: any, instanceId?: string
     /**
      * Load a model into LM Studio memory.
      */
-    loadModel(model: any, options: {} | undefined, signal: any): Promise<unknown>;
+    loadModel(model: any, options: {}, signal: any): Promise<unknown>;
     /**
      * Unload a model from LM Studio by its model key.
      * Looks up the loaded instance ID and unloads it.

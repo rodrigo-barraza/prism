@@ -77,7 +77,7 @@ declare const _default: {
         questions?: undefined;
         answer?: undefined;
     } | {
-        answers: null;
+        answers: any;
         timedOut: boolean;
         message: string;
         error?: undefined;

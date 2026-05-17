@@ -11,7 +11,7 @@ declare const FileService: {
     /**
      * Whether external (MinIO) storage is active.
      */
-    isExternalStorage(): any;
+    isExternalStorage(): boolean;
     /**
      * Upload a file from a base64 data URL.
      * @param {string} dataUrl - e.g. "data:image/png;base64,iVBOR..."
@@ -21,7 +21,7 @@ declare const FileService: {
      * @returns {Promise<{ ref: string, size: number, contentType: string }>}
      *   ref is either `minio://...` or the original dataUrl.
      */
-    uploadFile(dataUrl: any, category?: string, project?: null, username?: null): Promise<{
+    uploadFile(dataUrl: any, category?: string, project?: any, username?: any): Promise<{
         ref: any;
         size: number;
         contentType: string;
@@ -36,9 +36,9 @@ declare const FileService: {
      * @returns {Promise<{ stream: import('stream').Readable, contentType: string } | null>}
      */
     getFile(key: any): Promise<{
-        stream: any;
+        stream: import("node:stream").Readable;
         contentType: any;
-    } | null>;
+    }>;
     /**
      * Check if a string is a MinIO reference.
      * @param {string} ref

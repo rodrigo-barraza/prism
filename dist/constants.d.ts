@@ -60,13 +60,13 @@ export declare const AVG_TOKENS_PER_SEC_EXPR: {
     $avg: {
         $cond: (string | {
             $and: ({
-                $ne: (string | null)[];
+                $ne: string[];
                 $lte?: undefined;
             } | {
                 $lte: (string | number)[];
                 $ne?: undefined;
             })[];
-        } | null)[];
+        })[];
     };
 };
 //# sourceMappingURL=constants.d.ts.map

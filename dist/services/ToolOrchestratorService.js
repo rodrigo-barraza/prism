@@ -1,3 +1,4 @@
+// @ts-nocheck
 // @ts-ignore
 import { TOOLS_SERVICE_URL } from "../../config.js";
 import MCPClientService from "./MCPClientService.js";

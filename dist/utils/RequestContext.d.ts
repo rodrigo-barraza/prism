@@ -11,5 +11,5 @@ export declare const requestContext: AsyncLocalStorage<unknown>;
  * Get the current request context, or an empty object if none.
  * @returns {{ project?: string, username?: string, clientIp?: string, workspaceId?: string | null }}
  */
-export declare function getRequestContext(): {};
+export declare function getRequestContext(): unknown;
 //# sourceMappingURL=RequestContext.d.ts.map

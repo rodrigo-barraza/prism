@@ -70,7 +70,7 @@ export default class ToolOrchestratorService {
         summary: string;
         result: any;
         toolUses: any;
-        toolNames: {} | undefined;
+        toolNames: {};
         iterations: any;
         durationMs: any;
         messages: any;
@@ -145,7 +145,7 @@ export default class ToolOrchestratorService {
      * @param {object} [ctx] - Caller context for telemetry headers
      * @returns {Promise<object>} final result
      */
-    static executeToolStreaming(name: any, args: {} | undefined, onChunk: any, ctx?: {}): Promise<any>;
+    static executeToolStreaming(name: any, args: {}, onChunk: any, ctx?: {}): Promise<any>;
     static executeToolCalls(toolCalls: any): Promise<any[]>;
     static executeCustomTool(toolDef: any, args?: {}): Promise<unknown>;
     /** @internal */ static _setWorktree(sessionId: any, state: any): void;

@@ -35,11 +35,7 @@ declare class MutationQueue {
      * Get the current lock status for debugging.
      * @returns {Array<{ filePath: string, holder: string|null, queueLength: number }>}
      */
-    getStatus(): {
-        filePath: any;
-        holder: any;
-        queueLength: any;
-    }[];
+    getStatus(): any[];
     /**
      * Force-release all locks. Use for cleanup on abort/shutdown.
      */

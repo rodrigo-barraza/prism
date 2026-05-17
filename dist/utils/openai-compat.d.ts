@@ -10,7 +10,7 @@ export declare function convertToolsToOpenAI(tools: any): {
         description: any;
         parameters: any;
     };
-}[] | null;
+}[];
 /**
  * Build the common sampling/generation parameters for an
  * OpenAI-compatible Chat Completions payload.
@@ -24,10 +24,10 @@ export declare function convertToolsToOpenAI(tools: any): {
  * @returns {object} Payload fields to spread into the request body
  */
 export declare function buildPayloadParams(options: any, { temperature, maxTokens }?: {
-    temperature?: number | undefined;
-    maxTokens?: number | undefined;
+    temperature?: number;
+    maxTokens?: number;
 }): {
-    seed?: number | undefined;
+    seed: number;
     temperature: any;
     top_p: any;
     frequency_penalty: any;
@@ -108,7 +108,7 @@ export declare function expandVideoToFrames(messages: any, options?: {}): Promis
  * @returns {Array} OpenAI-compatible messages
  */
 export declare function prepareOpenAICompatMessages(messages: any, { mediaStrategy }?: {
-    mediaStrategy?: string | undefined;
+    mediaStrategy?: string;
 }): any;
 /**
  * Process a non-streaming OpenAI-compatible chat completion response.
