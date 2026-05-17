@@ -3,6 +3,7 @@ import MongoWrapper from "../wrappers/MongoWrapper.js";
 import { MONGO_DB_NAME } from "../../config.js";
 import logger from "../utils/logger.js";
 import { COLLECTIONS, CHANGE_STREAM_RECONNECT_MS, CHANGE_STREAM_RETRY_MS } from "../constants.js";
+import { registerCleanup } from "../utils/CleanupRegistry.js";
 
 /**
  * ChangeStreamService — watches MongoDB collections via Change Streams
@@ -209,5 +210,9 @@ const ChangeStreamService = {
     available = false;
   },
 };
+
+registerCleanup(async () => {
+  await ChangeStreamService.close();
+});
 
 export default ChangeStreamService;
