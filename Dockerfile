@@ -11,9 +11,17 @@ FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN apk add --no-cache git
-RUN npm ci --omit=dev
+RUN npm ci
 
-# ── Stage 2: Runtime ──────────────────────────────────────────
+# ── Stage 2: Build TypeScript ─────────────────────────────────
+FROM deps AS build
+WORKDIR /app
+COPY . .
+RUN npm run build
+# Prune devDependencies for the runtime image
+RUN npm prune --omit=dev
+
+# ── Stage 3: Runtime ──────────────────────────────────────────
 FROM node:22-alpine
 WORKDIR /app
 
@@ -21,10 +29,9 @@ WORKDIR /app
 RUN apk add --no-cache ffmpeg
 
 # Copy pre-built node_modules from deps stage
-COPY --from=deps /app/node_modules ./node_modules
-
-# Copy application source
-COPY . .
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/package.json ./package.json
 
 # Non-root user for security
 RUN addgroup --system --gid 1001 prism && \
@@ -36,4 +43,4 @@ EXPOSE 7777
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD wget --no-verbose --tries=1 -O /dev/null http://127.0.0.1:7777/health || exit 1
 
-CMD ["node", "src/boot.ts"]
+CMD ["node", "dist/src/boot.js"]
