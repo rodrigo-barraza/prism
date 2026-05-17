@@ -17,7 +17,7 @@ RUN npm ci
 FROM deps AS build
 WORKDIR /app
 COPY . .
-RUN npm run build
+RUN rm -rf dist && npm run build
 # Prune devDependencies for the runtime image
 RUN npm prune --omit=dev
 
