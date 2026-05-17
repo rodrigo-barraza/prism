@@ -11,8 +11,8 @@
 /**
  * Build the coordinator system prompt addendum.
  *
- * @param {object} [options]
- * @param {string[]} [options.workerTools] - Tool names available to workers
+
+
  * @returns {string} System prompt section to append
  */
 export function getCoordinatorPromptAddendum({ workerTools = [] } = {}) {

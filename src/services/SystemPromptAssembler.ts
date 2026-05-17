@@ -29,10 +29,6 @@ const SKILL_RELEVANCE_THRESHOLD = 0.3;
  * of the default coding agent sections.
  */
 export default class SystemPromptAssembler {
-  /**
-   * @param {object} [options]
-   * @param {string} [options.workspaceRoot] - Workspace root path
-   */
   constructor(options = {}) {
     // @ts-ignore
     this.workspaceRoot =
@@ -102,8 +98,8 @@ export default class SystemPromptAssembler {
 
   /**
    * Format directory listing into a readable tree string.
-   * @param {object} data - Response from tools-api list endpoint
-   * @returns {string}
+
+
    */
   _formatDirectoryTree(data: any) {
     if (!data || !data.entries) return "";
@@ -138,8 +134,8 @@ export default class SystemPromptAssembler {
    *   - Name + first sentence of description (capability summary)
    *   - Full parameter listing with required markers
    *
-   * @param {Array} [enabledTools] - If provided, only include these tool names
-   * @returns {string}
+
+
    */
   buildToolDescriptions(enabledTools: any) {
     const schemas = ToolOrchestratorService.getToolSchemas();
@@ -192,12 +188,8 @@ export default class SystemPromptAssembler {
    * Queries the unified `memories` collection using cosine similarity,
    * scoped by agent and project.
    *
-   * @param {string} agent - Agent identifier
-   * @param {string} project - Project identifier
-   * @param {string} queryText - Query for semantic search
-   * @param {string} [traceId] - Session identifier
-   * @param {string} [endpoint] - Request endpoint
-   * @param {string} [username] - Username
+
+
    * @returns {Promise<string>} Formatted memory sections for the system prompt
    */
   // @ts-ignore
@@ -236,9 +228,8 @@ export default class SystemPromptAssembler {
   /**
    * Fetch enabled skills relevant to the user's query via embedding similarity.
    *
-   * @param {string} project - Project identifier
-   * @param {string} username - Username
-   * @param {string} queryText - The user's latest message (used for relevance matching)
+
+
    * @returns {Promise<Array<{ name: string, content: string, score: number }>>}
    */
   // @ts-ignore
@@ -341,13 +332,13 @@ export default class SystemPromptAssembler {
    *   8. Project skills (relevance-filtered)
    *   9. Session memory from past conversations
    *
-   * @param {object} context - Request context
+
    * @param {string} context.project - Project identifier
    * @param {string} context.username - Username
-   * @param {string} [context.agent] - Agent identifier (e.g. "LUPOS", "CODING")
-   * @param {object} [context.agentContext] - Runtime context from caller
+
+
    * @param {Array} context.messages - Current messages array
-   * @param {Array} [context.enabledTools] - Enabled tool names
+
    * @returns {Promise<{ prompt: string, skillNames: string[] }>} Complete system prompt + skill names for UI emission
    */
   async assemble(context: any) {
@@ -566,7 +557,7 @@ export default class SystemPromptAssembler {
    * Any existing system message content from the client is ignored — the
    * backend is the single source of truth for the agent system prompt.
    *
-   * @returns {Function}
+
    */
   createHook() {
     return async (context: any) => {

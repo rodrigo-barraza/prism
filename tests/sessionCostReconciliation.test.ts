@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Session Cost Reconciliation — verifies that session-level totalCost
  * displayed in the UI is always derived from request_logs (the single

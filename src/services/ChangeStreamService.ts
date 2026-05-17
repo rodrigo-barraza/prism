@@ -14,10 +14,10 @@ import { registerCleanup } from "../utils/CleanupRegistry.js";
  * `available = false` — callers should fall back to polling.
  */
 
-/** @type {Set<Function>} */
+
 const listeners = new Set();
 
-/** @type {Map<string, import('mongodb').ChangeStream>} */
+
 const streams = new Map();
 
 let available = false;
@@ -173,7 +173,7 @@ const ChangeStreamService = {
 
   /**
    * Register a listener for collection change events.
-   * @param {Function} callback - (event) => void
+
    */
   subscribe(callback: any) {
     listeners.add(callback);
@@ -181,7 +181,7 @@ const ChangeStreamService = {
 
   /**
    * Unregister a listener.
-   * @param {Function} callback
+
    */
   unsubscribe(callback: any) {
     listeners.delete(callback);

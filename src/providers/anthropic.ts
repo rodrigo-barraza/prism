@@ -589,9 +589,8 @@ const anthropicProvider = {
 
   /**
    * Caption / describe images (image-to-text).
-   * @param {string[]} images - Array of image URLs or base64 data URLs
-   * @param {string} prompt - Caption prompt
-   * @param {string} model - Model name
+
+
    * @returns {Promise<{ text: string, usage: object }>}
    */
   async captionImage(

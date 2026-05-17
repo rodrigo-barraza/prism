@@ -1087,8 +1087,8 @@ PERSONAS.set("MEEPO", {
 const AgentPersonaRegistry = {
   /**
    * Get a persona by agent identifier.
-   * @param {string} agentId - e.g. "LUPOS", "CODING"
-   * @returns {AgentPersona|null}
+
+
    */
   get(agentId: any) {
     if (!agentId) return null;
@@ -1115,8 +1115,8 @@ const AgentPersonaRegistry = {
 
   /**
    * Check if a persona exists.
-   * @param {string} agentId
-   * @returns {boolean}
+
+
    */
   has(agentId: any) {
     return PERSONAS.has((agentId || "").toUpperCase());
@@ -1124,8 +1124,8 @@ const AgentPersonaRegistry = {
 
   /**
    * Check if a project belongs to a registered agent.
-   * @param {string} project
-   * @returns {boolean}
+
+
    */
   isAgentProject(project: any) {
     if (!project) return false;
@@ -1141,7 +1141,7 @@ const AgentPersonaRegistry = {
    * Converts a MongoDB document into a persona object compatible
    * with the built-in format, then inserts into the PERSONAS map.
    *
-   * @param {object} document - Custom agent document from CustomAgentService
+
    */
   registerCustom(document: any) {
     if (!document?.agentId) return;
@@ -1174,7 +1174,7 @@ const AgentPersonaRegistry = {
 
   /**
    * Unregister a persona by agent ID (only custom agents should be removed).
-   * @param {string} agentId
+
    */
   unregister(agentId: any) {
     if (!agentId) return;

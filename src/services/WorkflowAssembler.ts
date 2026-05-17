@@ -94,7 +94,7 @@ function resolveModelModalities(step: any) {
  * Utility steps (🧠 prefix) are shown in the graph but without viewers
  * or chain edges, keeping the visualization focused on output.
  *
- * @param {Array} steps - Raw step data from the client
+
  * @returns {{ nodes, edges, nodeResults }}
  */
 function assembleGraph(steps: any) {

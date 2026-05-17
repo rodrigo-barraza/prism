@@ -177,8 +177,8 @@ registerCleanup(async () => {
 
 /**
  * Count active workers + pending reservations on an instance.
- * @param {string} instanceId
- * @returns {number}
+
+
  */
 function getActiveOn(instanceId: any) {
   const reserved = instanceReservations.get(instanceId) || 0;
@@ -194,9 +194,8 @@ function getActiveOn(instanceId: any) {
  * are at capacity.
  *
  * @param {Array<{id: string, concurrency: number}>} siblings - Available instances
- * @param {string} coordinatorInstanceId - The coordinator's own instance id
- * @param {Map<string, string>} instanceModelOverrides - Per-instance model overrides (quant fallback)
- * @param {string} defaultModel - The default model to use when no override exists
+
+
  * @returns {{ provider: string, model: string, slotsAvailable: number }|null}
  */
 function selectAndReserveInstance(
@@ -468,13 +467,11 @@ export default class CoordinatorService {
    * collects the diff when complete, and injects a [WORKER COMPLETED] notification into
    * the coordinator's conversation.
    *
-   * @param {object} params
+
    * @param {string} params.description - Short label for the worker
    * @param {string} params.prompt - Self-contained task prompt for the worker
-   * @param {string[]} [params.files] - Optional file paths to focus on
-   * @param {string} [params.model] - Optional model override for the worker
-   * @param {string} [params.assignedProvider] - Pre-assigned provider (from createTeam)
-   * @param {string} [params.assignedModel] - Pre-assigned model (from createTeam)
+
+
    * @param {object} params.coordinatorCtx - Coordinator's loop context
    * @returns {Promise<object>} Spawn result with agentId
    */
@@ -731,10 +728,8 @@ export default class CoordinatorService {
 
   /**
    * Send a follow-up message to a running/idle worker.
-   * @param {string} agentId
-   * @param {string} message
-   * @param {object} coordinatorCtx
-   * @returns {Promise<object>}
+
+
    */
   static async sendMessage(agentId: any, message: any, coordinatorCtx: any) {
     const worker = activeWorkers.get(agentId);
@@ -784,8 +779,8 @@ export default class CoordinatorService {
 
   /**
    * Stop a running worker and clean up its worktree.
-   * @param {string} agentId
-   * @returns {Promise<object>}
+
+
    */
   static async stopAgent(agentId: any) {
     const worker = activeWorkers.get(agentId);
@@ -815,8 +810,8 @@ export default class CoordinatorService {
   /**
    * Read the output from a previously spawned worker agent.
    * Returns the full result if completed, or partial status if still running.
-   * @param {string} agentId
-   * @returns {object}
+
+
    */
   static getTaskOutput(agentId: any) {
     const worker = activeWorkers.get(agentId);
@@ -849,7 +844,7 @@ export default class CoordinatorService {
    * Called when the coordinator's SSE connection is severed (user presses stop)
    * or explicitly via the REST endpoint.
    *
-   * @param {string} parentAgentSessionId - The coordinator session ID
+
    * @returns {{ stopped: string[], alreadyStopped: string[] }}
    */
   static async abortWorkersBySession(parentAgentSessionId: any) {
@@ -920,8 +915,8 @@ export default class CoordinatorService {
 
   /**
    * Get the status of a specific worker.
-   * @param {string} agentId
-   * @returns {object|null}
+
+
    */
   static getWorkerStatus(agentId: any) {
     const worker = activeWorkers.get(agentId);
@@ -942,9 +937,8 @@ export default class CoordinatorService {
 
   /**
    * List all active workers spawned via chat tools.
-   * @param {object} [options]
-   * @param {string} [options.parentAgentSessionId] - Filter workers by parent coordinator session
-   * @returns {Array}
+
+
    */
   // @ts-ignore
   static listWorkers({ parentAgentSessionId } = {}) {
@@ -986,7 +980,7 @@ export default class CoordinatorService {
    * Called when the coordinator loop completes/errors to prevent unbounded
    * growth of the in-memory activeWorkers Map.
    *
-   * @param {string} parentAgentSessionId
+
    */
   static cleanupSession(parentAgentSessionId: any) {
     let cleaned = 0;
@@ -1009,11 +1003,11 @@ export default class CoordinatorService {
    * Each member is spawned via spawnFromTool and runs concurrently.
    * Returns aggregated results from all members when they all complete.
    *
-   * @param {object} args
+
    * @param {string} args.name - Team name
    * @param {Array} args.members - [{ description, prompt, files?, model? }]
-   * @param {object} coordinatorCtx - Coordinator loop context
-   * @returns {Promise<object>}
+
+
    */
   static async createTeam(args: any, coordinatorCtx: any) {
     const { name, members } = args;
@@ -1188,8 +1182,8 @@ export default class CoordinatorService {
 
   /**
    * Stop and remove all workers in a named team.
-   * @param {string} teamName
-   * @returns {Promise<object>}
+
+
    */
   static async deleteTeam(teamName: any) {
     if (!teamName || typeof teamName !== "string") {
@@ -1767,10 +1761,10 @@ export default class CoordinatorService {
   /**
    * Decompose a task into parallel sub-tasks using LLM.
    *
-   * @param {object} params
+
    * @param {string} params.task - The refactoring task description
    * @param {string[]} params.files - Target file paths
-   * @param {string} [params.repoPath] - Repository root path
+
    * @returns {Promise<object>} Decomposed plan with sub-tasks
    */
   static async decompose({
@@ -1857,13 +1851,8 @@ export default class CoordinatorService {
   /**
    * Execute an approved plan — spawn workers in git worktrees.
    *
-   * @param {object} plan - The approved plan from decompose()
-   * @param {object} [options]
-   * @param {string} [options.provider] - LLM provider for workers
-   * @param {string} [options.model] - LLM model for workers
-   * @param {string} [options.project] - Project identifier
-   * @param {string} [options.username] - Username
-   * @param {Function} [options.onProgress] - Progress callback (taskId, workers)
+
+
    * @returns {Promise<object>} Execution results with diffs
    */
   static async execute(plan: any, options = {}) {
@@ -2157,8 +2146,8 @@ export default class CoordinatorService {
   /**
    * Approve and merge all completed worker branches.
    *
-   * @param {string} taskId
-   * @returns {Promise<object>}
+
+
    */
   static async approveMerge(taskId: any) {
     const task = activeTasks.get(taskId);
@@ -2199,8 +2188,8 @@ export default class CoordinatorService {
   /**
    * Abort a running task — kill workers and clean up worktrees.
    *
-   * @param {string} taskId
-   * @returns {Promise<object>}
+
+
    */
   static async abort(taskId: any) {
     const task = activeTasks.get(taskId);
@@ -2252,8 +2241,8 @@ export default class CoordinatorService {
   /**
    * Get the current status of a coordinator task.
    *
-   * @param {string} taskId
-   * @returns {object|null}
+
+
    */
   static getStatus(taskId: any) {
     return activeTasks.get(taskId) || null;
@@ -2261,7 +2250,7 @@ export default class CoordinatorService {
 
   /**
    * List all active coordinator tasks.
-   * @returns {Array}
+
    */
   static listTasks() {
     return Array.from(activeTasks.values()).map((t: any) => ({

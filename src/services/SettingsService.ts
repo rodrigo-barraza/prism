@@ -43,7 +43,7 @@ let _cache = null;
 const SettingsService = {
   /**
    * Get the current settings, merging with defaults for any missing keys.
-   * @returns {Promise<object>}
+
    */
   async get() {
     // @ts-ignore
@@ -68,8 +68,8 @@ const SettingsService = {
 
   /**
    * Get a specific section of settings (e.g. "memory").
-   * @param {string} section
-   * @returns {Promise<object>}
+
+
    */
   async getSection(section: any) {
     const settings = await this.get();
@@ -79,7 +79,7 @@ const SettingsService = {
 
   /**
    * Update settings. Performs a deep merge with existing settings.
-   * @param {object} data - Partial settings object to merge
+
    * @returns {Promise<object>} The full settings after merge
    */
   async update(data: any) {
@@ -118,7 +118,7 @@ const SettingsService = {
    * Centralises the identical getXxxConfig() helpers in MemoryService,
    * MemoryConsolidationService, and EmbeddingService.
    *
-   * @param {"extraction"|"consolidation"|"embedding"} role
+
    * @returns {Promise<{ provider: string, model: string }>}
    */
   async getMemoryModelConfig(role: any) {

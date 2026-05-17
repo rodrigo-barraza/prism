@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { vi } from "vitest";
 
 // Suppress logger output during tests

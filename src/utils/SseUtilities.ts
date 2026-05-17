@@ -8,7 +8,7 @@ import { createAbortController } from "./AbortController.js";
  * Configure an Express response for SSE (Server-Sent Events) streaming.
  * Sets the required headers and flushes them immediately.
  *
- * @param {import("express").Response} res
+
  */
 export function initSseResponse(res: any) {
   res.setHeader("Content-Type", "text/event-stream");
@@ -21,9 +21,8 @@ export function initSseResponse(res: any) {
  * Create an SSE emit callback that writes events to the response.
  * Strips heavy base64 data from image events when minioRef is available.
  *
- * @param {import("express").Response} res
- * @param {AbortSignal} signal
- * @returns {(event: object) => void}
+
+
  */
 export function createSseEmitter(res: any, signal: any) {
   // Disable Nagle's algorithm for minimal SSE latency.
@@ -59,8 +58,8 @@ export function createSseEmitter(res: any, signal: any) {
  * Build a flat JSON response from collected SSE events.
  * Used by non-streaming callers (?stream=false).
  *
- * @param {Array<object>} events   - Collected events from the handler
- * @param {object}        reqBody  - The original request body (for fallback provider/model)
+
+
  * @returns {{ error?: object, response?: object }}
  */
 export function buildJsonResponseFromEvents(events: any, reqBody: any) {
@@ -115,10 +114,8 @@ export function buildJsonResponseFromEvents(events: any, reqBody: any) {
  * Handle a full SSE streaming request lifecycle.
  * Sets up SSE headers, AbortController, runs the handler, and closes.
  *
- * @param {import("express").Request}  req
- * @param {import("express").Response} res
- * @param {object}                     params  - Parameters to pass to the handler
- * @param {Function}                   [handler] - Generation handler (default: handleConversation)
+
+
  */
 export async function handleSseRequest(
   req: any,
@@ -144,11 +141,8 @@ export async function handleSseRequest(
  * Handle a non-streaming JSON request lifecycle.
  * Collects events from the handler and returns a flat JSON response.
  *
- * @param {import("express").Request}  req
- * @param {import("express").Response} res
- * @param {import("express").NextFunction} next
- * @param {object}                     params  - Parameters to pass to the handler
- * @param {Function}                   [handler] - Generation handler (default: handleConversation)
+
+
  */
 export async function handleJsonRequest(
   req: any,

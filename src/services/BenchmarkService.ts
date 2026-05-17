@@ -28,7 +28,7 @@ const MATCH_MODES = {
  * @param {string} response   The raw model output
  * @param {string} expected   The expected value
  * @param {string} matchMode  One of: "contains", "exact", "startsWith", "regex"
- * @returns {boolean}
+
  */
 function evaluate(
   response: any,
@@ -63,7 +63,7 @@ function evaluate(
  * @param {Object} benchmark         The benchmark definition
  * @param {Array}  benchmark.assertions       Array of { expectedValue, matchMode }
  * @param {string} benchmark.assertionOperator "AND" or "OR"
- * @returns {boolean}
+
  */
 function evaluateAssertions(response: any, benchmark: any) {
   const assertions = benchmark.assertions;
@@ -98,7 +98,7 @@ const COMPARATORS = {
  *
  * @param {Object} assertion       — { type, operator?, operand? }
  * @param {Object} executionData   — { response, thinking, toolCalls, turnCount }
- * @returns {boolean}
+
  */
 function evaluateSingleAgentAssertion(assertion: any, executionData: any) {
   const { type, operator, operand } = assertion;
@@ -137,7 +137,7 @@ function evaluateSingleAgentAssertion(assertion: any, executionData: any) {
  *
  * @param {Object} benchmark       The benchmark definition
  * @param {Object} executionData   — { response, thinking, toolCalls, turnCount }
- * @returns {boolean}
+
  */
 function evaluateAgentAssertions(benchmark: any, executionData: any) {
   const assertions = benchmark.agentAssertions;
@@ -466,8 +466,8 @@ const BenchmarkService = {
    * Run a benchmark test against the specified models (or all available).
    * @param {Object}   benchmark   The benchmark definition document
    * @param {Array}    [modelTargets]  Optional array of { provider, model } to test
-   * @param {string}   project
-   * @param {string}   username
+
+
    * @returns {Object} The completed run document
    */
   async runBenchmark(

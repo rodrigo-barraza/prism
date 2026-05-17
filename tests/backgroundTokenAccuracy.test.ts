@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Background Token Accuracy — verifies that background LLM calls
  * (memory extraction, memory consolidation, coordinator decomposition)

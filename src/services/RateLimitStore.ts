@@ -61,9 +61,8 @@ class RateLimitStore {
    * Update the stored rate-limit snapshot for a provider + model.
    * Called after every API response that contains rate-limit headers.
    *
-   * @param {string} providerName - e.g. "openai", "anthropic"
-   * @param {string} model - Model name from the API call
-   * @param {object} rateLimits - Parsed rate-limit data from extractXxxRateLimits()
+
+
    */
   update(providerName: any, model: any, rateLimits: any) {
     if (!rateLimits || !providerName || !model) return;

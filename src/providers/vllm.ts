@@ -18,8 +18,8 @@ import {
 
 /**
  * Factory: create a vLLM provider instance targeting a specific baseUrl.
- * @param {string} baseUrl - The base URL for the vLLM server
- * @param {string} [instanceId="vllm"] - Unique instance identifier
+
+
  * @returns {object} Provider object with all vLLM methods
  */
 export function createVllmProvider(baseUrl: any, instanceId = "vllm") {
@@ -240,9 +240,8 @@ export function createVllmProvider(baseUrl: any, instanceId = "vllm") {
      * vLLM also exposes /v2/embed, but /v1/embeddings keeps the response
      * contract identical to the OpenAI provider.
      *
-     * @param {string} content - Text to embed
-     * @param {string} model - Embedding model name
-     * @param {object} [options] - Optional { dimensions }
+
+
      * @returns {Promise<{ embedding: number[], dimensions: number }>}
      */
     async generateEmbedding(content: any, model: any, options = {}) {

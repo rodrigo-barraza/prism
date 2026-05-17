@@ -37,8 +37,8 @@ const PROTECTED_RECENT_TURNS = 4;
  * Estimate token count for a single message.
  * Accounts for content, tool calls, tool results, thinking blocks, and images.
  *
- * @param {object} message
- * @returns {number}
+
+
  */
 function estimateMessageTokens(message: any) {
   let tokens = 4; // Per-message overhead (role, formatting)
@@ -91,8 +91,8 @@ function estimateMessageTokens(message: any) {
 /**
  * Estimate total tokens across all messages.
  *
- * @param {Array} messages
- * @returns {number}
+
+
  */
 function estimateTotalTokens(messages: any) {
   return messages.reduce(
@@ -114,8 +114,8 @@ function estimateTotalTokens(messages: any) {
  * Recent tool results (within the last `protectedTurns` user turns) are
  * preserved in full — the LLM is actively reasoning about them.
  *
- * @param {Array} messages
- * @param {number} [protectedTurns] - Number of recent user turns to protect
+
+
  * @returns {Array} Messages with truncated tool results
  */
 function truncateToolResults(
@@ -165,9 +165,8 @@ function truncateToolResults(
  * Replaces assistant content with a "[Earlier response summarized]" marker.
  * Preserves tool call names but drops results.
  *
- * @param {Array} messages
- * @param {number} protectedCount - Number of recent turns to protect
- * @returns {Array}
+
+
  */
 function compressOldAssistantMessages(
   messages: any,
@@ -234,9 +233,8 @@ function compressOldAssistantMessages(
  * Keeps the system prompt, first user message (for task context),
  * and the most recent N turns.
  *
- * @param {Array} messages
- * @param {number} maxTokens - Token budget
- * @returns {Array}
+
+
  */
 function slidingWindowTruncation(messages: any, maxTokens: any) {
   if (messages.length <= 3) return messages;
@@ -288,11 +286,8 @@ export default class ContextWindowManager {
    * Applies truncation strategies in order of aggressiveness until
    * the estimated token count fits within the model's context window.
    *
-   * @param {Array} messages - The messages array (mutated in-place)
-   * @param {object} options
-   * @param {number} [options.maxInputTokens] - Model's context window (from config.js maxInputTokens)
-   * @param {number} [options.maxOutputTokens] - Reserved output tokens
-   * @param {number} [options.toolCount=0] - Number of tools (for schema overhead estimation)
+
+
    * @returns {{ messages: Array, truncated: boolean, strategy: string|null, estimatedTokens: number }}
    */
   static enforce(messages: any, options = {}) {
@@ -389,8 +384,8 @@ export default class ContextWindowManager {
 
   /**
    * Estimate token count for messages (exposed for diagnostics).
-   * @param {Array} messages
-   * @returns {number}
+
+
    */
   static estimateTokens(messages: any) {
     return estimateTotalTokens(messages);
@@ -398,8 +393,8 @@ export default class ContextWindowManager {
 
   /**
    * Estimate tokens for a single message (exposed for diagnostics).
-   * @param {object} message
-   * @returns {number}
+
+
    */
   static estimateMessageTokens(message: any) {
     return estimateMessageTokens(message);

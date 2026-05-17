@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Agentic session persistence — regression tests for message deduplication.
  *

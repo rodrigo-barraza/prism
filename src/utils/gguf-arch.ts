@@ -256,7 +256,7 @@ const GiB = 1024 ** 3;
  *   - Models near VRAM limits get partially CPU-offloaded by LM Studio
  *     silently, so raw estimate can exceed actual usage by 1–3 GiB
  *
- * @param {object} opts
+
  * @param {number} opts.sizeBytes — model file size in bytes
  * @param {object} opts.archParams — resolved architecture params { layers, kvHeads, headDim, attnRatio }
  * @param {number} opts.gpuLayers — number of layers offloaded to GPU

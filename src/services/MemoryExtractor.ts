@@ -111,13 +111,12 @@ export default class MemoryExtractor {
   /**
    * Extract memories from a conversation and store in the unified memories collection.
    *
-   * @param {object} params
+
    * @param {string} params.project - Project identifier
    * @param {string} params.username - Username
    * @param {Array} params.messages - Full conversation messages
-   * @param {string} [params.traceId] - Session ID for attribution
-   * @param {string} [params.conversationId] - Conversation ID for tracking
-   * @param {Array} [params.toolCalls] - Tool calls from the current turn (for mutual exclusion)
+
+
    * @returns {Promise<Array>} Stored memory documents
    */
   static async extractAndStore({
@@ -376,7 +375,7 @@ export default class MemoryExtractor {
    * Create an afterResponse hook handler for AgentHooks.
    * Runs as fire-and-forget (non-blocking).
    *
-   * @returns {Function}
+
    */
   static createHook() {
     return async (context: any, { _text, messages, toolCalls }: any) => {

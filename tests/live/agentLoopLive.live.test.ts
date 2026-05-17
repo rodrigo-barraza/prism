@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Agent Loop — LM Studio Live Integration Tests
  * ═══════════════════════════════════════════════════════════
@@ -70,10 +69,8 @@ async function findTargetModel() {
  * Parse SSE events from a streaming response.
  * Returns a structured result with all events categorized.
  *
- * @param {Response} response - Fetch response (SSE stream)
- * @param {object} [opts]
- * @param {number} [opts.timeoutMs] - Abort if exceeded
- * @param {AbortController} [opts.controller] - External abort controller
+
+
  * @returns {Promise<object>} Parsed result
  */
 async function consumeAgentSSE(response, { timeoutMs = AGENT_TIMEOUT_MS, controller } = {}) {
@@ -219,9 +216,8 @@ async function consumeAgentSSE(response, { timeoutMs = AGENT_TIMEOUT_MS, control
 /**
  * Send an agentic request via SSE streaming.
  *
- * @param {object} payload - Request body for /agent
- * @param {object} [opts]
- * @param {number} [opts.timeoutMs] - Override timeout
+
+
  * @returns {Promise<object>} Parsed SSE result
  */
 async function agentStream(payload, { timeoutMs = AGENT_TIMEOUT_MS } = {}) {

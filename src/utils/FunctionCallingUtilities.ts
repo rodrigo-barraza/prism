@@ -57,9 +57,8 @@ export function truncateToolResult(result: any, maxChars = 8000) {
  * [assistant(tool_calls), tool(result1), tool(result2), ...] per the
  * OpenAI Chat Completions spec.
  *
- * @param {Array} messages - Raw conversation messages (may include deleted, tool, assistant w/ toolCalls)
- * @param {object} [options]
- * @param {boolean} [options.filterDeleted=true] - Strip soft-deleted messages
+
+
  * @returns {Array} Provider-ready messages
  */
 export function expandMessagesForFC(

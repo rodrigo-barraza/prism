@@ -203,8 +203,8 @@ function handleWsLive(
 
   /**
    * Build a WAV from accumulated PCM chunks, upload to MinIO, and return the ref.
-   * @param {string[]} chunks - base64-encoded PCM chunks
-   * @param {number} sampleRate - sample rate of the PCM data
+
+
    * @returns {Promise<string|null>} MinIO ref or null on failure
    */
   // @ts-ignore

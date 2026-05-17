@@ -65,9 +65,8 @@ const elevenlabsProvider = {
 
   /**
    * Stream text to ElevenLabs via WebSocket and yield audio chunks.
-   * @param {AsyncIterable<string>} textStream - Iterator that yields text chunks.
-   * @param {string} voiceId - The voice ID to use.
-   * @param {object} options - Additional options.
+
+
    * @returns {AsyncGenerator<Buffer>} Audio chunks.
    */
   async *generateSpeechStream(

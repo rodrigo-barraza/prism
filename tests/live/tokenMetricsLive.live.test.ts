@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * tokenMetricsLive.test.js
  * ═══════════════════════════════════════════════════════════════
@@ -53,11 +52,8 @@ const LM_STUDIO_PATTERNS = [
  * Stream an /agent or /chat request and collect all token-relevant
  * SSE events into a structured result object.
  *
- * @param {string} provider
- * @param {string} model
- * @param {string} prompt
- * @param {object} opts
- * @returns {Promise<object>}
+
+
  */
 async function streamAndCollect(provider, model, prompt, {
   maxTokens = 500,

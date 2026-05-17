@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Background Cost Propagation — regression tests.
  *

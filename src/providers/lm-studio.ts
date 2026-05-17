@@ -300,8 +300,8 @@ function buildNativeInput(messages: any) {
 }
 /**
  * Factory: create an LM Studio provider instance targeting a specific baseUrl.
- * @param {string} baseUrl - The base URL for the LM Studio server
- * @param {string} [instanceId="lm-studio"] - Unique instance identifier
+
+
  * @returns {object} Provider object with all LM Studio methods
  */
 export function createLmStudioProvider(baseUrl: any, instanceId = "lm-studio") {
@@ -311,7 +311,7 @@ export function createLmStudioProvider(baseUrl: any, instanceId = "lm-studio") {
   // Prevents duplicate model loads when multiple concurrent requests
   // (e.g. worker agents) hit the same instance before the first load finishes.
   // Key: model name → Promise that resolves when the load completes.
-  /** @type {Map<string, Promise<void>>} */
+
   const _loadInflight = new Map();
   return {
     name: instanceId,
@@ -1021,9 +1021,8 @@ export function createLmStudioProvider(baseUrl: any, instanceId = "lm-studio") {
      * LM Studio exposes this for any loaded embedding model (e.g. Granite,
      * nomic-embed, etc.).
      *
-     * @param {string} content - Text to embed
-     * @param {string} model   - Embedding model key
-     * @param {object} [options] - Optional { dimensions }
+
+
      * @returns {Promise<{ embedding: number[], dimensions: number }>}
      */
     async generateEmbedding(content: any, model: any, options = {}) {
@@ -1109,10 +1108,8 @@ export function createLmStudioProvider(baseUrl: any, instanceId = "lm-studio") {
      * - If a different model is loaded, unloads it first.
      * - If no model is loaded, loads the requested one.
      *
-     * @param {string} modelKey - The model key to ensure is loaded.
-     * @param {object} [loadOptions={}] - Options forwarded to loadModel (context_length, etc.).
-     * @param {AbortSignal} [signal] - Optional abort signal.
-     * @param {function} [onStatus] - Optional callback for status messages (loading progress, unloading, etc.).
+
+
      * @returns {{ alreadyLoaded: boolean, contextLength: number|null }} - Info about the loaded model.
      */
     async ensureModelLoaded(

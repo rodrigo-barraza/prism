@@ -103,7 +103,7 @@ async function resolveImageRefs(messages: any, project: any, username: any) {
  * Compress an oversized image data URL in-place.
  * Parses the data URL, checks decoded size, runs through compressImageForSizeLimit,
  * and reconstructs if compression changed the data.
- * @param {string} dataUrl - Full data URL (data:<mime>;base64,<data>)
+
  * @returns {Promise<string>} - Possibly compressed data URL
  */
 async function compressDataUrlIfOversized(dataUrl: any) {
@@ -243,8 +243,8 @@ async function resolveMediaRef(ref: any, project: any, username: any) {
  *
  * @param {Object}   params   Raw request parameters
  * @param {Function} emit     Event emitter callback
- * @param {Object}   [opts]
- * @param {AbortSignal} [opts.signal]
+
+
  * @returns {Promise<Object>} Prepared generation context
  */
 // @ts-ignore
@@ -425,8 +425,8 @@ async function prepareGenerationContext(
       let bestAvailable = -Infinity;
       // @ts-ignore
       for ( const inst of siblings) {
-        const q = localModelQueue._getQueue(inst.id);
-        const available = inst.concurrency - q.activeCount;
+        const queueState = localModelQueue._getQueue(inst.id);
+        const available = inst.concurrency - queueState.activeCount;
         if (available > bestAvailable) {
           bestAvailable = available;
           bestId = inst.id;
@@ -457,11 +457,11 @@ async function prepareGenerationContext(
   let localRelease: any;
   if (localModelQueue.isLocal(providerName)) {
     localRelease = await localModelQueue.acquire(providerName);
-    const q = localModelQueue._getQueue(providerName);
+    const queueState = localModelQueue._getQueue(providerName);
     logger.info(
       `[chat] 🔒 Acquired local GPU slot for ${resolvedModel} (${providerName}) ` +
-        `(${q.activeCount}/${q.maxConcurrency} active` +
-        (q.pending > 0 ? `, ${q.pending} queued)` : ")"),
+        `(${queueState.activeCount}/${queueState.maxConcurrency} active` +
+        (queueState.pending > 0 ? `, ${queueState.pending} queued)` : ")"),
     );
   }
   // Derive userMessage from the last user message

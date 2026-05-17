@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Session Generation Tracker — Live Integration Tests
  * ═══════════════════════════════════════════════════════════════

@@ -16,8 +16,8 @@ import logger from "../utils/logger.js";
 /**
  * Derive a stable agent ID from a display name.
  * Always uppercased and prefixed with CUSTOM_ to avoid collisions.
- * @param {string} name
- * @returns {string}
+
+
  */
 function deriveAgentId(name: any) {
   const slug = name
@@ -35,7 +35,7 @@ function getCollection() {
 const CustomAgentService = {
   /**
    * List all custom agents.
-   * @returns {Promise<Array>}
+
    */
   async list() {
     const col = getCollection();
@@ -45,8 +45,8 @@ const CustomAgentService = {
 
   /**
    * Get a single custom agent by MongoDB _id.
-   * @param {string} id
-   * @returns {Promise<object|null>}
+
+
    */
   async get(id: any) {
     const col = getCollection();
@@ -56,8 +56,8 @@ const CustomAgentService = {
 
   /**
    * Get a custom agent by its derived agentId.
-   * @param {string} agentId - e.g. "CUSTOM_MY_AGENT"
-   * @returns {Promise<object|null>}
+
+
    */
   async getByAgentId(agentId: any) {
     const col = getCollection();
@@ -67,7 +67,7 @@ const CustomAgentService = {
 
   /**
    * Create a new custom agent.
-   * @param {object} data - { name, description?, project?, identity, guidelines?, toolPolicy?, enabledTools?, usesDirectoryTree?, usesCodingGuidelines? }
+
    * @returns {Promise<object>} The created document
    */
   async create(data: any) {
@@ -110,8 +110,8 @@ const CustomAgentService = {
 
   /**
    * Update an existing custom agent.
-   * @param {string} id - MongoDB _id
-   * @param {object} updates - Partial fields to update
+
+
    * @returns {Promise<object>} The updated document
    */
   async update(id: any, updates: any) {
@@ -138,8 +138,8 @@ const CustomAgentService = {
 
   /**
    * Delete a custom agent.
-   * @param {string} id - MongoDB _id
-   * @returns {Promise<boolean>}
+
+
    */
   async delete(id: any) {
     const col = getCollection();

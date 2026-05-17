@@ -92,8 +92,8 @@ export default class AgenticLoopService {
 
   /**
    * Resolve a pending approval for an agent session.
-   * @param {string} agentSessionId
-   * @param {boolean} approved
+
+
    * @returns {boolean} true if resolved
    */
   static resolveApproval(
@@ -118,7 +118,7 @@ export default class AgenticLoopService {
 
   /**
    * Check if an agent session has a pending approval.
-   * @param {string} agentSessionId
+
    * @returns {{ pending: boolean, type?: string, tools?: string[] }}
    */
   static getPendingApproval(agentSessionId: any) {
@@ -138,7 +138,7 @@ export default class AgenticLoopService {
 
   /**
    * Resolve a pending question for an agent session.
-   * @param {string} agentSessionId
+
    * @param {Array<{ answer: string|string[], annotations?: string }>} answers
    * @returns {boolean} true if resolved
    */
@@ -152,7 +152,7 @@ export default class AgenticLoopService {
 
   /**
    * Check if an agent session has a pending question.
-   * @param {string} agentSessionId
+
    * @returns {{ pending: boolean, question?: string, choices?: string[] }}
    */
   static getPendingQuestion(agentSessionId: any) {

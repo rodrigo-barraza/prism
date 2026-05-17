@@ -16,7 +16,7 @@ const registry = new Map();
 
 /**
  * Register a tool with the internal registry.
- * @param {object} tool - Tool module default export
+
  */
 function register(tool: any) {
   if (!tool.name || !tool.execute) {
@@ -69,8 +69,8 @@ init().catch((error: any) =>
 export default class InternalToolRegistry {
   /**
    * Check if a tool name is handled by the internal registry.
-   * @param {string} name
-   * @returns {boolean}
+
+
    */
   static has(name: any) {
     return registry.has(name);
@@ -78,10 +78,8 @@ export default class InternalToolRegistry {
 
   /**
    * Execute an internal tool by name.
-   * @param {string} name - Tool name
-   * @param {object} args - Tool arguments (from LLM)
-   * @param {object} context - Orchestrator context (emit, session, project, etc.)
-   * @returns {Promise<object>}
+
+
    */
   static async execute(name: any, args: any, context = {}) {
     const tool = registry.get(name);
@@ -93,7 +91,7 @@ export default class InternalToolRegistry {
 
   /**
    * Get all internal tool schemas (for LLM consumption — no endpoint metadata).
-   * @returns {Array<object>}
+
    */
   static getSchemas() {
     return [...registry.values()].map((t: any) => t.schema);
@@ -101,7 +99,7 @@ export default class InternalToolRegistry {
 
   /**
    * Get all internal tool schemas with domain/labels (for client UI).
-   * @returns {Array<object>}
+
    */
   static getClientSchemas() {
     return [...registry.values()].map((t: any) => ({
@@ -114,7 +112,7 @@ export default class InternalToolRegistry {
   /**
    * Get the Set of all registered internal tool names.
    * Used by AgenticLoopService for bypass-filter logic.
-   * @returns {Set<string>}
+
    */
   static getNames() {
     return new Set(registry.keys());

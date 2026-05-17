@@ -127,8 +127,8 @@ export default class BaseAgenticHarness {
 
   /**
    * Enforce token budget on messages before sending to provider.
-   * @param {object[]} messages
-   * @param {number}   toolCount
+
+
    * @returns {object[]} — possibly truncated messages
    */
   enforceContextWindow(messages: any, toolCount: any) {
@@ -208,7 +208,7 @@ export default class BaseAgenticHarness {
    * @param {*}      chunk            — raw chunk from provider stream
    * @param {object} pass             — per-iteration pass state
    * @param {Set}    allowedToolNames — tool names in the current schema
-   * @returns {object}
+
    */
   processStreamChunk(chunk: any, pass: any, allowedToolNames: any) {
     // @ts-ignore

@@ -10,9 +10,8 @@ const DEFAULT_COLLECTION = COLLECTIONS.CONVERSATIONS;
 /**
  * Upload any base64 data URLs in message images/audio to external storage.
  * Replaces inline data with minio:// refs when MinIO is available.
- * @param {Array} messages
- * @param {string} project
- * @param {string} username
+
+
  * @returns {Promise<Array>} messages with refs replacing inline data
  */
 export async function extractFiles(
@@ -84,7 +83,7 @@ export async function extractFiles(
 
 /**
  * Compute input/output modalities from messages for lightweight querying.
- * @param {Array} messages
+
  * @returns {Object} modalities flags
  */
 export function computeModalities(messages: any) {
@@ -186,9 +185,8 @@ export function computeModalities(messages: any) {
 
 /**
  * Extract unique providers from messages and settings.
- * @param {Array} messages
- * @param {Object} settings
- * @returns {string[]}
+
+
  */
 export function extractProviders(messages: any, settings: any) {
   const providers = new Set();
@@ -203,8 +201,8 @@ export function extractProviders(messages: any, settings: any) {
 
 /**
  * Compute total estimated cost across all messages.
- * @param {Array} messages
- * @returns {number}
+
+
  */
 export function computeTotalCost(messages: any) {
   let total = 0;
@@ -220,7 +218,7 @@ export function computeTotalCost(messages: any) {
  * Build the $set fields for a conversation/agent-session PATCH request.
  * Centralises the identical logic shared by conversations.js and agent-sessions.js.
  *
- * @param {object} body - req.body from the PATCH request
+
  * @returns {object} $set fields ready for updateOne
  */
 export function buildConversationPatchFields({
@@ -261,14 +259,7 @@ const ConversationService = {
      * Handles file extraction (MinIO upload) and recomputes derived fields.
      * Optionally applies conversation metadata (title, systemPrompt, settings).
      *
-     * @param {string} conversationId
-     * @param {string} project
-     * @param {string} username
-     * @param {Array} newMessages - Messages to append
-     * @param {object} [conversationMeta] - Optional metadata to set on the conversation
-     * @param {string} [conversationMeta.title]
-     * @param {string} [conversationMeta.systemPrompt]
-     * @param {object} [conversationMeta.settings]
+
 
      * @returns {Promise<object>} The updated conversation document
      */
@@ -419,10 +410,8 @@ const ConversationService = {
    * Set or clear the isGenerating flag on a conversation.
    * Lightweight update — only touches isGenerating + updatedAt.
    *
-   * @param {string} conversationId
-   * @param {string} project
-   * @param {string} username
-   * @param {boolean} generating
+
+
    */
   async setGenerating(
     conversationId: any,

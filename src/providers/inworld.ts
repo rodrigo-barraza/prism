@@ -58,9 +58,8 @@ const inworldProvider = {
    * Generate speech via Inworld TTS (MP3).
    * Returns a Node Readable stream suitable for piping to an HTTP response.
    *
-   * @param {string} text - Text to synthesize.
-   * @param {string} voice - Voice ID.
-   * @param {object} options - Extra options (model, temperature).
+
+
    * @returns {{ stream: Readable, contentType: string }}
    */
   async generateSpeech(
@@ -125,9 +124,8 @@ const inworldProvider = {
    * Accepts an async text iterator (same interface as ElevenLabs) and
    * yields raw audio Buffer chunks.
    *
-   * @param {AsyncIterable<string>} textStream - Iterator yielding text chunks.
-   * @param {string} voice - Voice ID.
-   * @param {object} options - Extra options (model, temperature).
+
+
    * @yields {Buffer} PCM audio chunks.
    */
   async *generateSpeechStream(

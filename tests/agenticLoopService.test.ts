@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import AgenticLoopService from "../src/services/AgenticLoopService.js";
 import ContextWindowManager from "../src/utils/ContextWindowManager.js";

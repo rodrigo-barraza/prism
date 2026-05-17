@@ -26,8 +26,8 @@ function prepareOllamaMessages(messages: any) {
 
 /**
  * Factory: create an Ollama provider instance targeting a specific baseUrl.
- * @param {string} baseUrl - The base URL for the Ollama server
- * @param {string} [instanceId="ollama"] - Unique instance identifier
+
+
  * @returns {object} Provider object with all Ollama methods
  */
 export function createOllamaProvider(baseUrl: any, instanceId = "ollama") {

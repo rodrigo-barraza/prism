@@ -250,6 +250,14 @@ setupWebSocket(wss);
         db.collection("agent_skills").createIndex({ project: 1, username: 1 }),
         // mcp_servers
         db.collection("mcp_servers").createIndex({ project: 1, username: 1 }),
+        // mcp_servers — compound for enabled filter (5+ query sites)
+        db
+          .collection("mcp_servers")
+          .createIndex({ project: 1, username: 1, enabled: 1 }),
+        // custom_tools — compound for enabled filter (5+ query sites)
+        db
+          .collection("custom_tools")
+          .createIndex({ project: 1, username: 1, enabled: 1 }),
         // workspaces
         db.collection("workspaces").createIndex({ project: 1, username: 1 }),
         db.collection("workspaces").createIndex({ id: 1 }, { unique: true }),

@@ -1,4 +1,3 @@
-// @ts-nocheck
 // @ts-ignore
 import { TOOLS_SERVICE_URL } from "../../config.js";
 import MCPClientService from "./MCPClientService.js";
@@ -292,7 +291,7 @@ async function executeToolGeneric(name: any, args = {}, context = {}) {
 /**
  * Build X-context headers from the caller context object.
  * These are consumed by tools-api's ToolCallLoggerMiddleware.
- * @param {object} context - Caller context
+
  * @returns {object} Headers object
  */
 function buildContextHeaders(context = {}) {
@@ -594,8 +593,8 @@ export default class ToolOrchestratorService {
 
   /**
    * Update user-configured workspace roots via tools-api.
-   * @param {string[]} roots - New user roots to persist
-   * @returns {Promise<object>}
+
+
    */
   static async updateWorkspaceRoots(roots: any) {
     const response = await fetch(`${TOOLS_SERVICE_URL}/admin/config/workspaces`, {
@@ -626,8 +625,8 @@ export default class ToolOrchestratorService {
 
   /**
    * Validate a single workspace path via tools-api.
-   * @param {string} path - Path to validate
-   * @returns {Promise<object>}
+
+
    */
   static async validateWorkspacePath(path: any) {
     const response = await fetch(
@@ -646,8 +645,8 @@ export default class ToolOrchestratorService {
    * Get the effective workspace root for a session.
    * Returns the worktree path if the session is in an isolated worktree,
    * or the normal workspace root otherwise.
-   * @param {string} [agentSessionId]
-   * @returns {string|null}
+
+
    */
   static getEffectiveWorkspaceRoot(agentSessionId: any) {
     if (agentSessionId && activeWorktrees.has(agentSessionId)) {
@@ -659,7 +658,7 @@ export default class ToolOrchestratorService {
 
   /**
    * Get the active worktree state for a session, if any.
-   * @param {string} agentSessionId
+
    * @returns {{ worktreePath: string, branchName: string, originalRoot: string }|null}
    */
   static getWorktreeState(agentSessionId: any) {
@@ -850,10 +849,8 @@ export default class ToolOrchestratorService {
    * Execute a coordinator tool (team_create, send_message, stop_agent).
    * These are Prism-local — they dispatch to CoordinatorService in-process.
    *
-   * @param {string} name - Tool name
-   * @param {object} args - Tool arguments
-   * @param {object} context - Caller context (carries coordinatorCtx for message injection)
-   * @returns {Promise<object>}
+
+
    */
   static async executeCoordinatorTool(name: any, args = {}, context = {}) {
     const { default: CoordinatorService } =
@@ -924,9 +921,8 @@ export default class ToolOrchestratorService {
    * Execute a tool on an MCP server.
    * Parses the namespaced tool name and delegates to MCPClientService.
    *
-   * @param {string} fullName - Namespaced MCP tool name (mcp__{server}__{tool})
-   * @param {object} args - Tool arguments
-   * @returns {Promise<object>}
+
+
    */
   static async executeMCPTool(fullName: any, args = {}) {
     const parsed = MCPClientService.parseMCPToolName(fullName);
@@ -938,7 +934,7 @@ export default class ToolOrchestratorService {
 
   /**
    * Get all tool schemas from connected MCP servers.
-   * @returns {Array}
+
    */
   static getMCPToolSchemas() {
     return MCPClientService.getToolSchemas();
@@ -964,10 +960,8 @@ export default class ToolOrchestratorService {
    * Calls `onChunk(event, data)` for each stdout/stderr chunk.
    * Returns the full result as a JSON object (same shape as executeTool).
    *
-   * @param {string} name - tool name (must be in STREAMABLE_TOOLS)
-   * @param {object} args - tool arguments (code, command, etc.)
-   * @param {function} onChunk - (event: "stdout"|"stderr"|"start"|"exit", data?: string, meta?: object) => void
-   * @param {object} [context] - Caller context for telemetry headers
+
+
    * @returns {Promise<object>} final result
    */
   static async executeToolStreaming(

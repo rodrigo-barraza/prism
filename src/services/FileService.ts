@@ -44,10 +44,8 @@ const FileService = {
 
   /**
    * Upload a file from a base64 data URL.
-   * @param {string} dataUrl - e.g. "data:image/png;base64,iVBOR..."
-   * @param {"uploads"|"generations"} [category="uploads"] - folder to store in
-   * @param {string} [project] - project name for path organization
-   * @param {string} [username] - username for path organization
+
+
    * @returns {Promise<{ ref: string, size: number, contentType: string }>}
    *   ref is either `minio://...` or the original dataUrl.
    */
@@ -107,7 +105,7 @@ const FileService = {
 
   /**
    * Get a file stream from a MinIO reference.
-   * @param {string} key - The object key (without the "minio://" prefix)
+
    * @returns {Promise<{ stream: import('stream').Readable, contentType: string } | null>}
    */
   async getFile(key: any) {
@@ -134,8 +132,8 @@ const FileService = {
 
   /**
    * Check if a string is a MinIO reference.
-   * @param {string} ref
-   * @returns {boolean}
+
+
    */
   isMinioRef(ref: any) {
     return typeof ref === "string" && ref.startsWith("minio://");
@@ -143,7 +141,7 @@ const FileService = {
 
   /**
    * Extract the object key from a MinIO reference.
-   * @param {string} ref - e.g. "minio://files/abc-123.png"
+
    * @returns {string} - e.g. "files/abc-123.png"
    */
   extractKey(ref: any) {

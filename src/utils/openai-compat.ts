@@ -34,10 +34,8 @@ export function convertToolsToOpenAI(tools: any) {
  *
  * Returns a plain object with only the non-undefined fields set.
  *
- * @param {object} options - The provider options
- * @param {object} [defaults] - Default values
- * @param {number} [defaults.temperature=0.7] - Default temperature
- * @param {number} [defaults.maxTokens=-1] - Default max_tokens
+
+
  * @returns {object} Payload fields to spread into the request body
  */
 export function buildPayloadParams(
@@ -72,7 +70,7 @@ export function buildPayloadParams(
  * Handles both nested OpenAI format ({ function: { name, arguments } })
  * and flat llama.cpp format ({ name, arguments }).
  *
- * @param {object} message - The message object from choices[0].message
+
  * @returns {Array|null} Array of { id, name, args } or null if no tool calls
  */
 export function extractToolCallsFromMessage(message: any) {
@@ -106,7 +104,7 @@ export function extractToolCallsFromMessage(message: any) {
  * The cache field uses the same key as Anthropic (cacheReadInputTokens) so
  * CostCalculator, RequestLogger, and console logging handle it uniformly.
  *
- * @param {object} [rawUsage] - The usage object from the API response
+
  * @returns {{ inputTokens: number, outputTokens: number, cacheReadInputTokens?: number, reasoningOutputTokens?: number }}
  */
 export function normalizeUsage(rawUsage: any) {
@@ -166,10 +164,8 @@ export const MEDIA_STRATEGIES = {
  * Call this BEFORE prepareOpenAICompatMessages() for providers that need
  * video-as-frames support.
  *
- * @param {Array} messages - The message array (mutated in-place)
- * @param {object} [options]
- * @param {number} [options.fps=1] - Frames per second to extract
- * @param {number} [options.maxFrames=30] - Maximum frames per video
+
+
  * @returns {Promise<Array>} The same messages array with videos expanded
  */
 export async function expandVideoToFrames(messages: any, options = {}) {
@@ -226,9 +222,8 @@ export async function expandVideoToFrames(messages: any, options = {}) {
  * Handles images, tool results, assistant tool calls, and optionally
  * audio/video/PDF based on the media strategy.
  *
- * @param {Array} messages - The message array
- * @param {object} [options]
- * @param {string} [options.mediaStrategy="images_only"] - How to handle non-image media
+
+
  * @returns {Array} OpenAI-compatible messages
  */
 export function prepareOpenAICompatMessages(
@@ -367,9 +362,8 @@ export function prepareOpenAICompatMessages(
  * When thinkingEnabled is false, thinking content is folded into the text
  * output and the `thinking` field is null.
  *
- * @param {object} data - The parsed JSON response body
- * @param {object} [options]
- * @param {boolean} [options.thinkingEnabled] - When false, suppress thinking separation
+
+
  * @returns {{ text: string, thinking: string|null, usage: object, toolCalls: Array|null }}
  */
 export function processNonStreamingResponse(data: any, options = {}) {
@@ -409,12 +403,8 @@ export function processNonStreamingResponse(data: any, options = {}) {
  * and <think> tag content) is yielded as plain text strings instead of
  * { type: "thinking" } events.
  *
- * @param {ReadableStreamDefaultReader} reader - The response body reader
- * @param {object} [options]
- * @param {AbortSignal} [options.signal] - Abort signal
- * @param {boolean} [options.thinkingEnabled] - When false, emit thinking as text
- * @param {function} [options.onUsage] - Called with raw usage JSON for provider-specific extensions (e.g. llama.cpp timings)
- * @param {function} [options.onChunkJson] - Called with each parsed SSE JSON object for provider-specific processing
+
+
  */
 export async function* parseSSEStream(reader: any, options = {}) {
   const decoder = new TextDecoder();
@@ -589,10 +579,8 @@ export async function* parseSSEStream(reader: any, options = {}) {
  * Make a fetch request to an OpenAI-compatible endpoint and handle
  * error responses consistently.
  *
- * @param {string} url - The endpoint URL
- * @param {object} payload - The request body
- * @param {object} [options]
- * @param {AbortSignal} [options.signal] - Abort signal
+
+
  * @returns {Promise<Response>} The fetch response (guaranteed to be ok)
  * @throws {Error} With a parsed error message from the API
  */

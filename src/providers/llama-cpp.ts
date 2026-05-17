@@ -48,8 +48,8 @@ import {
 
 /**
  * Factory: create a llama.cpp provider instance targeting a specific baseUrl.
- * @param {string} baseUrl - The base URL for the llama-server
- * @param {string} [instanceId="llama-cpp"] - Unique instance identifier
+
+
  * @returns {object} Provider object with all llama.cpp methods
  */
 export function createLlamaCppProvider(baseUrl: any, instanceId = "llama-cpp") {

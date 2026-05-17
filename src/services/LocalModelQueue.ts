@@ -14,10 +14,6 @@ const queues = new Map();
 const DEFAULT_CONCURRENCY = 1;
 
 class InstanceQueue {
-  /**
-   * @param {string} instanceId
-   * @param {number} maxConcurrency
-   */
   constructor(instanceId: any, maxConcurrency: any) {
     // @ts-ignore
     this.instanceId = instanceId;
@@ -96,8 +92,8 @@ class LocalModelQueue {
   /**
    * Check whether a provider requires the local GPU lock.
    * Checks both base provider types and instance IDs.
-   * @param {string} provider
-   * @returns {boolean}
+
+
    */
   isLocal(provider: any) {
     if (LOCAL_PROVIDERS.has(provider)) return true;
@@ -108,8 +104,8 @@ class LocalModelQueue {
 
   /**
    * Get or create the semaphore queue for an instance.
-   * @param {string} instanceId
-   * @returns {InstanceQueue}
+
+
    */
   _getQueue(instanceId: any) {
     if (queues.has(instanceId)) return queues.get(instanceId);
@@ -130,7 +126,7 @@ class LocalModelQueue {
    * Acquire a semaphore slot for an instance. Resolves immediately if a
    * slot is available, otherwise enqueues and waits (FIFO order).
    *
-   * @param {string} [instanceId] - Instance ID. If omitted, uses a shared
+
    *   default queue (backward compat for callers that don't pass an ID).
    * @returns {Promise<() => void>} A release function — MUST be called
    *   when inference is complete (use try/finally).

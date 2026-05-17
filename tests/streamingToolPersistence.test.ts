@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Streaming tool output persistence — regression tests.
  *
@@ -60,7 +59,7 @@ vi.mock("../src/utils/AbortController.js", () => ({
 /**
  * Create a mock Response whose body is a ReadableStream of SSE events.
  * @param {Array<object>} events — SSE event objects to emit
- * @returns {Response}
+
  */
 function createSSEResponse(events) {
   const encoder = new TextEncoder();
