@@ -291,8 +291,7 @@ export default class MemoryExtractor {
       const agentId = agent || "CODING";
       const stored = [];
 
-      // @ts-ignore
-      for ( const mem of memories) {
+      for ( const mem of memories as any[]) {
         if (!mem.content || !mem.title) continue;
 
         // Validate type — default to "project" if unknown

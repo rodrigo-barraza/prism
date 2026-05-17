@@ -753,7 +753,7 @@ async function processBatch(
     return [];
   }
 
-  return parsed.actions || [];
+  return (parsed as any).actions || [];
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────

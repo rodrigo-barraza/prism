@@ -334,8 +334,7 @@ const MemoryService = {
       `[MemoryService] Extracted ${facts.length} fact(s), generating embeddings...`,
     );
     const storedMemories = [];
-    // @ts-ignore
-    for ( const fact of facts) {
+    for ( const fact of facts as any[]) {
       try {
         const embedding = await generateEmbedding(fact.fact, {
           project,

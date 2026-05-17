@@ -469,7 +469,7 @@ const anthropicProvider = {
     logger.provider("Anthropic", `generateText model=${model}`);
 
     const prepared = await prepareMessages(messages);
-    const payload = {
+    const payload: Record<string, any> = {
       cache_control: { type: "ephemeral" },
       system: prepared.systemMessage,
       model,
@@ -681,7 +681,7 @@ const anthropicProvider = {
     logger.provider("Anthropic", `generateTextStream model=${model}`);
     try {
       const prepared = await prepareMessages(messages);
-      const streamPayload = {
+      const streamPayload: Record<string, any> = {
         cache_control: { type: "ephemeral" },
         system: prepared.systemMessage,
         model,

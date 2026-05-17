@@ -1827,7 +1827,7 @@ export default class CoordinatorService {
       },
     });
 
-    const parsed = parseJsonFromLlmResponse(result.text);
+    const parsed = parseJsonFromLlmResponse(result.text) as any;
     if (!parsed) {
       return {
         error: "Failed to parse decomposition result",

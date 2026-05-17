@@ -758,7 +758,7 @@ class LocalProviderGateway {
         { models: [] },
       );
 
-      const rawModels = rawResult?.models || rawResult?.data || [];
+      const rawModels = rawResult?.models || (rawResult as any)?.data || [];
       if (!Array.isArray(rawModels) || rawModels.length === 0) return [];
 
       // @ts-ignore
@@ -931,7 +931,7 @@ class LocalProviderGateway {
           timeoutMs,
           { models: [] },
         );
-        const models = result?.models || result?.data || [];
+        const models = result?.models || (result as any)?.data || [];
         const found = models.some((m: any) => {
           const key = m.key || m.id || m.model || m.name;
           return key === modelName;
@@ -1005,7 +1005,7 @@ class LocalProviderGateway {
                 status: "timeout",
               };
             }
-            const models = result?.models || result?.data || [];
+            const models = result?.models || (result as any)?.data || [];
             return {
               id: inst.id,
               type: inst.type,

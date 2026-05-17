@@ -382,7 +382,7 @@ const ConversationService = {
     await col.updateOne(
       { id: conversationId, project, username },
       {
-        $push: { messages: { $each: processedMessages } },
+        $push: { messages: { $each: processedMessages } } as any,
         $set: setFields,
         $setOnInsert: setOnInsert,
       },
