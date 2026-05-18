@@ -16,7 +16,7 @@
 import { describe, it, expect, vi } from "vitest";
 
 // ── Mock logger (top-level as vitest requires) ──────────────────
-vi.mock("../src/utils/logger.js", () => ({
+vi.mock("../src/utils/logger.ts", () => ({
   default: {
     info: vi.fn(),
     warn: vi.fn(),
@@ -25,17 +25,17 @@ vi.mock("../src/utils/logger.js", () => ({
   },
 }));
 
-vi.mock("../config.js", () => ({
+vi.mock("../config.ts", () => ({
   MONGO_DB_NAME: "prism-test",
 }));
 
 // Import after mocks
-const { computeTotalCost } = await import("../src/services/ConversationService.js");
+const { computeTotalCost } = await import("../src/services/ConversationService.ts");
 const {
   mergeUsage,
   createUsageAccumulator,
   calculateTextCost,
-} = await import("../src/utils/CostCalculator.js");
+} = await import("../src/utils/CostCalculator.ts");
 
 // ═══════════════════════════════════════════════════════════════
 describe("Session Cost Reconciliation", () => {

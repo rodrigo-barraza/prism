@@ -1,7 +1,7 @@
 import { vi } from "vitest";
 
 // Suppress logger output during tests
-vi.mock("../src/utils/logger.js", () => ({
+vi.mock("../src/utils/logger.ts", () => ({
   default: {
     info: vi.fn(),
     warn: vi.fn(),

@@ -20,7 +20,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // ═══════════════════════════════════════════════════════════════
 
 // ── Mock the entire world ──────────────────────────────────────
-vi.mock("../src/utils/logger.js", () => ({
+vi.mock("../src/utils/logger.ts", () => ({
   default: {
     info: vi.fn(),
     warn: vi.fn(),
@@ -31,7 +31,7 @@ vi.mock("../src/utils/logger.js", () => ({
   },
 }));
 
-vi.mock("../../config.js", () => ({
+vi.mock("../../config.ts", () => ({
   PRISM_SERVICE_PORT: 0,
   GATEWAY_SECRET: "test-secret",
   OPENAI_API_KEY: "fake",
@@ -49,7 +49,7 @@ vi.mock("../../config.js", () => ({
   MONGO_DB_NAME: "prism-test",
 }));
 
-vi.mock("../src/wrappers/MongoWrapper.js", () => ({
+vi.mock("../src/wrappers/MongoWrapper.ts", () => ({
   default: {
     createClient: vi.fn().mockResolvedValue(undefined),
     getDb: vi.fn().mockReturnValue(null),
@@ -57,7 +57,7 @@ vi.mock("../src/wrappers/MongoWrapper.js", () => ({
   },
 }));
 
-vi.mock("../src/services/FileService.js", () => ({
+vi.mock("../src/services/FileService.ts", () => ({
   default: {
     isExternalStorage: () => false,
     isMinioRef: () => false,
@@ -65,14 +65,14 @@ vi.mock("../src/services/FileService.js", () => ({
   },
 }));
 
-vi.mock("../src/services/RequestLogger.js", () => ({
+vi.mock("../src/services/RequestLogger.ts", () => ({
   default: {
     log: vi.fn(),
     logChatGeneration: vi.fn().mockResolvedValue(),
   },
 }));
 
-vi.mock("../src/services/ConversationService.js", () => ({
+vi.mock("../src/services/ConversationService.ts", () => ({
   default: {
     appendMessages: vi.fn().mockResolvedValue(undefined),
     setGenerating: vi.fn().mockResolvedValue(undefined),
@@ -80,7 +80,7 @@ vi.mock("../src/services/ConversationService.js", () => ({
   extractFiles: vi.fn().mockImplementation(async (msgs) => msgs),
 }));
 
-vi.mock("../src/services/SettingsService.js", () => ({
+vi.mock("../src/services/SettingsService.ts", () => ({
   default: {
     get: vi.fn().mockResolvedValue({}),
     getSection: vi.fn().mockResolvedValue({}),
@@ -88,8 +88,8 @@ vi.mock("../src/services/SettingsService.js", () => ({
 }));
 
 // ── Import SUT ─────────────────────────────────────────────────
-const { finalizeTextGeneration } = await import("../src/routes/ChatRoutes.js");
-const ConversationService = (await import("../src/services/ConversationService.js")).default;
+const { finalizeTextGeneration } = await import("../src/routes/ChatRoutes.ts");
+const ConversationService = (await import("../src/services/ConversationService.ts")).default;
 
 // ── Helpers ────────────────────────────────────────────────────
 function makeCtx(overrides = {}) {

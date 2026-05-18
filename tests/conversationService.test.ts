@@ -13,12 +13,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ── Mock config ────────────────────────────────────────────────
-vi.mock("../config.js", () => ({
+vi.mock("../config.ts", () => ({
   MONGO_DB_NAME: "prism-test",
 }));
 
 // ── Mock FileService (no MinIO in tests) ───────────────────────
-vi.mock("../src/services/FileService.js", () => ({
+vi.mock("../src/services/FileService.ts", () => ({
   default: {
     isExternalStorage: () => false,
     isMinioRef: () => false,
@@ -96,7 +96,7 @@ function createMockCollection() {
 let mockCollection;
 
 // MongoWrapper mock — supports both getCollection() and getDb().collection()
-vi.mock("../src/wrappers/MongoWrapper.js", () => {
+vi.mock("../src/wrappers/MongoWrapper.ts", () => {
   const getCollectionFn = vi.fn();
   const getDbFn = vi.fn();
   return {
@@ -108,7 +108,7 @@ vi.mock("../src/wrappers/MongoWrapper.js", () => {
 });
 
 // Import AFTER mocks are wired
-const MongoWrapperModule = await import("../src/wrappers/MongoWrapper.js");
+const MongoWrapperModule = await import("../src/wrappers/MongoWrapper.ts");
 const MongoWrapper = MongoWrapperModule.default;
 const { default: ConversationService } = await import(
   "../src/services/ConversationService.js"

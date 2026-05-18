@@ -3,7 +3,7 @@ import AgenticLoopService from "../src/services/AgenticLoopService.ts";
 import ContextWindowManager from "../src/utils/ContextWindowManager.ts";
 import { TYPES } from "../src/config.ts";
 
-vi.mock("../src/utils/logger.js", () => ({
+vi.mock("../src/utils/logger.ts", () => ({
   default: {
     info: vi.fn(),
     warn: vi.fn(),
@@ -14,7 +14,7 @@ vi.mock("../src/utils/logger.js", () => ({
   },
 }));
 
-vi.mock("../src/services/ToolOrchestratorService.js", () => ({
+vi.mock("../src/services/ToolOrchestratorService.ts", () => ({
   default: {
     ensureSchemas: vi.fn().mockResolvedValue(),
     getToolSchemas: vi.fn().mockReturnValue([
@@ -33,7 +33,7 @@ vi.mock("../src/services/ToolOrchestratorService.js", () => ({
   },
 }));
 
-vi.mock("../src/wrappers/MongoWrapper.js", () => ({
+vi.mock("../src/wrappers/MongoWrapper.ts", () => ({
   default: {
     getDb: vi.fn().mockReturnValue({
       collection: vi.fn().mockReturnValue({
@@ -45,25 +45,25 @@ vi.mock("../src/wrappers/MongoWrapper.js", () => ({
   },
 }));
 
-vi.mock("../src/services/FileService.js", () => ({
+vi.mock("../src/services/FileService.ts", () => ({
   default: {
     uploadFile: vi.fn().mockResolvedValue({ ref: "minio-ref" }),
   },
 }));
 
-vi.mock("../src/services/RequestLogger.js", () => ({
+vi.mock("../src/services/RequestLogger.ts", () => ({
   default: {
     logChatGeneration: vi.fn().mockResolvedValue(),
   },
 }));
 
-vi.mock("../src/services/local-tools/InternalToolRegistry.js", () => ({
+vi.mock("../src/services/local-tools/InternalToolRegistry.ts", () => ({
   default: {
     getNames: vi.fn().mockReturnValue(new Set()),
   },
 }));
 
-vi.mock("../src/utils/ContextWindowManager.js", () => ({
+vi.mock("../src/utils/ContextWindowManager.ts", () => ({
   default: {
     enforce: vi.fn().mockImplementation((messages) => ({
       truncated: false,
@@ -74,7 +74,7 @@ vi.mock("../src/utils/ContextWindowManager.js", () => ({
   },
 }));
 
-vi.mock("../src/services/SessionGenerationTracker.js", () => ({
+vi.mock("../src/services/SessionGenerationTracker.ts", () => ({
   default: {
     register: vi.fn(),
     update: vi.fn(),
@@ -92,7 +92,7 @@ vi.mock("../src/services/SessionGenerationTracker.js", () => ({
   },
 }));
 
-vi.mock("../src/services/SystemPromptAssembler.js", () => ({
+vi.mock("../src/services/SystemPromptAssembler.ts", () => ({
   default: class {
     constructor() {}
     createHook() {
@@ -101,24 +101,24 @@ vi.mock("../src/services/SystemPromptAssembler.js", () => ({
   },
 }));
 
-vi.mock("../src/services/SettingsService.js", () => ({
+vi.mock("../src/services/SettingsService.ts", () => ({
   default: {
     get: vi.fn().mockResolvedValue({ agents: { harness: "standard" } }),
     getSection: vi.fn().mockResolvedValue({ harness: "standard" }),
   },
 }));
 
-vi.mock("../src/routes/ChatRoutes.js", () => ({
+vi.mock("../src/routes/ChatRoutes.ts", () => ({
   finalizeTextGeneration: vi.fn().mockResolvedValue(),
 }));
 
-vi.mock("../src/services/MemoryExtractor.js", () => ({
+vi.mock("../src/services/MemoryExtractor.ts", () => ({
   default: {
     createHook: vi.fn().mockReturnValue(async () => {}),
   },
 }));
 
-vi.mock("../src/services/PlanningModeService.js", () => ({
+vi.mock("../src/services/PlanningModeService.ts", () => ({
   default: {
     injectPlanningInstruction: vi.fn(),
     stripPlanningInstruction: vi.fn(),
@@ -369,7 +369,7 @@ describe("AgenticLoopService", () => {
     await AgenticLoopService.runAgenticLoop(mockCtx);
 
     // Should register generation against the parent/coordinator session
-    const SessionGenerationTracker = (await import("../src/services/SessionGenerationTracker.js")).default;
+    const SessionGenerationTracker = (await import("../src/services/SessionGenerationTracker.ts")).default;
     
     // Verify register was called with the parent session ID and source: worker
     expect(SessionGenerationTracker.register).toHaveBeenCalledWith(
@@ -387,7 +387,7 @@ describe("AgenticLoopService", () => {
 
   it("should load custom tools from MongoDB and pass them to the LLM", async () => {
     // Override Mongo mock for this test
-    const MongoWrapper = (await import("../src/wrappers/MongoWrapper.js")).default;
+    const MongoWrapper = (await import("../src/wrappers/MongoWrapper.ts")).default;
     MongoWrapper.getDb.mockReturnValueOnce({
       collection: () => ({
         find: () => ({

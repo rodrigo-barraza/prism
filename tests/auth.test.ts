@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
-import { app } from './setup.js';
+import { app } from './setup.ts';
 
 describe('Auth Middleware', () => {
   it('returns 200 for requests without any auth headers', async () => {

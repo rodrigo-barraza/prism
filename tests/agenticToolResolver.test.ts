@@ -61,7 +61,7 @@ const MOCK_CUSTOM_TOOLS = [
 ];
 
 // Mock ToolOrchestratorService
-vi.mock("../src/services/ToolOrchestratorService.js", () => ({
+vi.mock("../src/services/ToolOrchestratorService.ts", () => ({
   default: {
     ensureSchemas: vi.fn().mockResolvedValue(undefined),
     getToolSchemas: vi.fn(() => MOCK_TOOLS_API_SCHEMAS),
@@ -78,7 +78,7 @@ vi.mock("../src/services/ToolOrchestratorService.js", () => ({
 
 // Mock MongoWrapper — return custom tools from the mock array
 const mockFindToArray = vi.fn().mockResolvedValue(MOCK_CUSTOM_TOOLS);
-vi.mock("../src/wrappers/MongoWrapper.js", () => ({
+vi.mock("../src/wrappers/MongoWrapper.ts", () => ({
   default: {
     getDb: vi.fn(() => ({
       collection: () => ({
@@ -88,12 +88,12 @@ vi.mock("../src/wrappers/MongoWrapper.js", () => ({
   },
 }));
 
-vi.mock("../../config.js", () => ({
+vi.mock("../../config.ts", () => ({
   MONGO_DB_NAME: "prism-test",
   TYPES: { IMAGE: "image" },
 }));
 
-vi.mock("../config.js", () => ({
+vi.mock("../config.ts", () => ({
   MONGO_DB_NAME: "prism-test",
   TYPES: { IMAGE: "image" },
 }));
@@ -102,25 +102,25 @@ vi.mock("../config.js", () => ({
 const mockPersona = {
   enabledTools: ["read_file", "write_file", "create_custom_tool"],
 };
-vi.mock("../src/services/AgentPersonaRegistry.js", () => ({
+vi.mock("../src/services/AgentPersonaRegistry.ts", () => ({
   default: {
     get: vi.fn((agent) => (agent === "CODING" ? mockPersona : null)),
   },
 }));
 
 // Mock CoordinatorPrompt
-vi.mock("../src/services/CoordinatorPrompt.js", () => ({
+vi.mock("../src/services/CoordinatorPrompt.ts", () => ({
   COORDINATOR_ONLY_TOOLS: ["team_create", "send_message", "stop_agent"],
 }));
 
 // Mock InternalToolRegistry
-vi.mock("../src/services/local-tools/InternalToolRegistry.js", () => ({
+vi.mock("../src/services/local-tools/InternalToolRegistry.ts", () => ({
   default: {
     getNames: vi.fn(() => new Set(["think", "sleep"])),
   },
 }));
 
-vi.mock("../src/utils/logger.js", () => ({
+vi.mock("../src/utils/logger.ts", () => ({
   default: {
     info: vi.fn(),
     warn: vi.fn(),

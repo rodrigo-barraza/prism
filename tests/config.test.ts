@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
-import { app } from './setup.js';
+import { app } from './setup.ts';
 
 describe('GET /config', () => {
   it('returns the full config catalog', async () => {

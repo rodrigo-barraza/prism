@@ -16,7 +16,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ── Mock logger ────────────────────────────────────────────────
-vi.mock("../src/utils/logger.js", () => ({
+vi.mock("../src/utils/logger.ts", () => ({
   default: {
     info: vi.fn(),
     warn: vi.fn(),
@@ -28,20 +28,20 @@ vi.mock("../src/utils/logger.js", () => ({
 }));
 
 // ── Mock config ────────────────────────────────────────────────
-vi.mock("../../config.js", () => ({
+vi.mock("../../config.ts", () => ({
   TOOLS_SERVICE_URL: "http://localhost:5590",
   MONGO_DB_NAME: "prism-test",
 }));
 
 // ── Mock dependencies ──────────────────────────────────────────
-vi.mock("../src/services/MCPClientService.js", () => ({
+vi.mock("../src/services/MCPClientService.ts", () => ({
   default: {
     isMCPTool: vi.fn().mockReturnValue(false),
     getToolSchemas: vi.fn().mockReturnValue([]),
   },
 }));
 
-vi.mock("../src/services/local-tools/InternalToolRegistry.js", () => ({
+vi.mock("../src/services/local-tools/InternalToolRegistry.ts", () => ({
   default: {
     has: vi.fn().mockReturnValue(false),
     getSchemas: vi.fn().mockReturnValue([]),
@@ -50,7 +50,7 @@ vi.mock("../src/services/local-tools/InternalToolRegistry.js", () => ({
   },
 }));
 
-vi.mock("../src/utils/AbortController.js", () => ({
+vi.mock("../src/utils/AbortController.ts", () => ({
   createAbortController: vi.fn().mockReturnValue(new AbortController()),
 }));
 

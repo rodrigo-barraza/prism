@@ -43,23 +43,23 @@ const configMock = {
 };
 
 // Root config.js — exports MONGO_DB_NAME (used by ConversationService etc.)
-vi.mock("../config.js", () => configMock);
+vi.mock("../config.ts", () => configMock);
 // src/config.js — exports TYPES, getPricing, model catalog (used by MemoryExtractor, etc.)
-vi.mock("../src/config.js", () => configMock);
+vi.mock("../src/config.ts", () => configMock);
 
 // ── Mock providers ──────────────────────────────────────────────
 const mockGenerateText = vi.fn().mockResolvedValue({
   text: '[]', // Empty extraction result by default
 });
 
-vi.mock("../src/providers/index.js", () => ({
+vi.mock("../src/providers/index.ts", () => ({
   getProvider: () => ({
     generateText: mockGenerateText,
   }),
 }));
 
 // ── Mock SettingsService ────────────────────────────────────────
-vi.mock("../src/services/SettingsService.js", () => ({
+vi.mock("../src/services/SettingsService.ts", () => ({
   default: {
     getSection: vi.fn().mockResolvedValue({
       extractionProvider: "test-provider",
@@ -82,7 +82,7 @@ vi.mock("../src/services/SettingsService.js", () => ({
 }));
 
 // ── Mock RequestLogger (fire-and-forget, we don't test it here) ─
-vi.mock("../src/services/RequestLogger.js", () => ({
+vi.mock("../src/services/RequestLogger.ts", () => ({
   default: {
     logBackgroundLlmCall: vi.fn(),
     log: vi.fn(),
@@ -90,7 +90,7 @@ vi.mock("../src/services/RequestLogger.js", () => ({
 }));
 
 // ── Mock MemoryService ──────────────────────────────────────────
-vi.mock("../src/services/MemoryService.js", () => ({
+vi.mock("../src/services/MemoryService.ts", () => ({
   default: {
     store: vi.fn().mockResolvedValue({ id: "mem-1", title: "Test memory" }),
     search: vi.fn().mockResolvedValue([]),
@@ -99,21 +99,21 @@ vi.mock("../src/services/MemoryService.js", () => ({
 }));
 
 // ── Mock MemoryConsolidationService (for MemoryExtractor tests) ─
-vi.mock("../src/services/MemoryConsolidationService.js", () => ({
+vi.mock("../src/services/MemoryConsolidationService.ts", () => ({
   default: {
     checkAndRun: vi.fn(),
   },
 }));
 
 // ── Mock AgentPersonaRegistry (for consolidation tests) ─────────
-vi.mock("../src/services/AgentPersonaRegistry.js", () => ({
+vi.mock("../src/services/AgentPersonaRegistry.ts", () => ({
   default: {
     get: vi.fn().mockReturnValue({ type: "coding" }),
   },
 }));
 
 // ── Mock MongoWrapper (for consolidation tests) ─────────────────
-vi.mock("../src/wrappers/MongoWrapper.js", () => ({
+vi.mock("../src/wrappers/MongoWrapper.ts", () => ({
   default: {
     getDb: vi.fn().mockReturnValue(null), // prevents actual DB calls
     getCollection: vi.fn(),
@@ -121,7 +121,7 @@ vi.mock("../src/wrappers/MongoWrapper.js", () => ({
 }));
 
 // ── Mock EmbeddingService (for consolidation's MemoryService) ───
-vi.mock("../src/services/EmbeddingService.js", () => ({
+vi.mock("../src/services/EmbeddingService.ts", () => ({
   default: {
     embed: vi.fn().mockResolvedValue([0.1, 0.2, 0.3]),
     generate: vi.fn().mockResolvedValue({ embedding: [0.1, 0.2, 0.3], dimensions: 3 }),
@@ -129,7 +129,7 @@ vi.mock("../src/services/EmbeddingService.js", () => ({
 }));
 
 // ── Mock logger ─────────────────────────────────────────────────
-vi.mock("../src/utils/logger.js", () => ({
+vi.mock("../src/utils/logger.ts", () => ({
   default: {
     info: vi.fn(),
     warn: vi.fn(),
@@ -139,8 +139,8 @@ vi.mock("../src/utils/logger.js", () => ({
 }));
 
 // ── Import AFTER mocks ─────────────────────────────────────────
-const { default: MemoryExtractor } = await import("../src/services/MemoryExtractor.js");
-const { calculateTextCost } = await import("../src/utils/CostCalculator.js");
+const { default: MemoryExtractor } = await import("../src/services/MemoryExtractor.ts");
+const { calculateTextCost } = await import("../src/utils/CostCalculator.ts");
 
 // ═══════════════════════════════════════════════════════════════
 describe("Background Cost Propagation", () => {
@@ -289,7 +289,7 @@ describe("Background Cost Propagation", () => {
       const emit = (event) => emittedEvents.push(event);
 
       // Override settings to return a model not in our pricing table
-      const SettingsService = (await import("../src/services/SettingsService.js")).default;
+      const SettingsService = (await import("../src/services/SettingsService.ts")).default;
       SettingsService.getSection.mockResolvedValueOnce({
         extractionProvider: "test-provider",
         extractionModel: "unknown-model-not-in-pricing",

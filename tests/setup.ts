@@ -5,7 +5,7 @@
 import { vi } from 'vitest';
 
 // ── Mock secrets before anything imports them ──────────────────────────
-vi.mock('../config.js', () => ({
+vi.mock('../config.ts', () => ({
     PRISM_SERVICE_PORT: 0,
     GATEWAY_SECRET: 'test-secret',
     OPENAI_API_KEY: 'fake',
@@ -24,7 +24,7 @@ vi.mock('../config.js', () => ({
 }));
 
 // ── Mock MongoDB wrapper to avoid real connections ────────────────────
-vi.mock('../src/wrappers/MongoWrapper.js', () => ({
+vi.mock('../src/wrappers/MongoWrapper.ts', () => ({
     default: {
         createClient: vi.fn().mockResolvedValue(undefined),
         getDb: vi.fn().mockReturnValue(null),
@@ -33,7 +33,7 @@ vi.mock('../src/wrappers/MongoWrapper.js', () => ({
 }));
 
 // ── Mock SettingsService to avoid DB dependency in EmbeddingService ────
-vi.mock('../src/services/SettingsService.js', () => ({
+vi.mock('../src/services/SettingsService.ts', () => ({
     default: {
         get: vi.fn().mockResolvedValue({
             memory: {
@@ -64,7 +64,7 @@ vi.mock('../src/services/SettingsService.js', () => ({
 }));
 
 // ── Mock ConversationService to avoid DB writes ───────────────────────
-vi.mock('../src/services/ConversationService.js', () => ({
+vi.mock('../src/services/ConversationService.ts', () => ({
     default: {
         appendMessages: vi.fn().mockResolvedValue(undefined),
         setGenerating: vi.fn().mockResolvedValue(undefined),
@@ -75,7 +75,7 @@ vi.mock('../src/services/ConversationService.js', () => ({
 }));
 
 // ── Mock RequestLogger to avoid DB writes ─────────────────────────────
-vi.mock('../src/services/RequestLogger.js', () => ({
+vi.mock('../src/services/RequestLogger.ts', () => ({
     default: {
         log: vi.fn(),
         logChatGeneration: vi.fn(),
@@ -124,7 +124,7 @@ export const MOCK_GENERATE_EMBEDDING = vi.fn().mockResolvedValue({
 });
 
 // ── Mock providers ────────────────────────────────────────────────────
-vi.mock('../src/providers/index.js', () => {
+vi.mock('../src/providers/index.ts', () => {
     // Re-import at the top of the factory is not allowed, so we inline
     const mockProviderFull = {
         generateText: (...args) => MOCK_GENERATE_TEXT(...args),
@@ -177,14 +177,14 @@ vi.mock('../src/providers/index.js', () => {
 // ── Build app (import AFTER mocks are set up) ─────────────────────────
 const { default: express } = await import('express');
 const { default: cors } = await import('cors');
-const { errorHandler } = await import('../src/utils/errors.js');
-const { authMiddleware } = await import('../src/middleware/AuthMiddleware.js');
-const { listProviders } = await import('../src/providers/index.js');
+const { errorHandler } = await import('../src/utils/errors.ts');
+const { authMiddleware } = await import('../src/middleware/AuthMiddleware.ts');
+const { listProviders } = await import('../src/providers/index.ts');
 
-const { default: chatRouter } = await import('../src/routes/ChatRoutes.js');
-const { default: audioRouter } = await import('../src/routes/AudioRoutes.js');
-const { default: embedRouter } = await import('../src/routes/EmbedRoutes.js');
-const { default: configRouter } = await import('../src/routes/ConfigRoutes.js');
+const { default: chatRouter } = await import('../src/routes/ChatRoutes.ts');
+const { default: audioRouter } = await import('../src/routes/AudioRoutes.ts');
+const { default: embedRouter } = await import('../src/routes/EmbedRoutes.ts');
+const { default: configRouter } = await import('../src/routes/ConfigRoutes.ts');
 
 export const app = express();
 app.use(cors());
