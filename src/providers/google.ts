@@ -47,7 +47,7 @@ function isSafetyBlockError(error: any) {
 /**
  * Add a WAV header to raw PCM audio data.
  */
-function addWavHeader(buffer: any, sampleRate = 24000, numChannels = 1) {
+function addWavHeader(buffer: any, sampleRate: any = 24000, numChannels: any = 1) {
   const headerLength = 44;
   const dataLength = buffer.length;
   const fileSize = dataLength + headerLength - 8;
@@ -105,7 +105,7 @@ const GOOGLE_UNSUPPORTED_KEYS = new Set([
 ]);
 
 // @ts-ignore
-function sanitizeSchemaForGoogle(schema: any, isPropertyMap = false) {
+function sanitizeSchemaForGoogle(schema: any, isPropertyMap: any = false) {
   if (!schema || typeof schema !== "object") return schema;
   // @ts-ignore
   if (Array.isArray(schema))
@@ -151,17 +151,17 @@ export function convertToolsToGoogle(tools: any) {
 }
 
 async function convertMessages(messages: any) {
-  const result = [];
+  const result: any[] = [];
 
   for (let i = 0; i < messages.length; i++) {
     const item = messages[i];
-    const parts = [];
+    const parts: any[] = [];
 
     // ── Consecutive tool result messages → single user turn ──
     // Gemini requires ALL functionResponse parts for a model turn
     // to be grouped in one user message.
     if (item.role === "tool") {
-      const responseParts = [];
+      const responseParts: any[] = [];
       let j = i;
       while (j < messages.length && messages[j].role === "tool") {
         const toolMsg = messages[j];
@@ -260,8 +260,8 @@ const googleProvider = {
   async generateText(
     messages: any,
     // @ts-ignore
-    model = getDefaultModels(TYPES.TEXT, TYPES.TEXT).google,
-    options = {},
+    model: any = getDefaultModels(TYPES.TEXT, TYPES.TEXT).google,
+    options: any = {},
   ) {
     logger.provider("Google", `generateText model=${model}`);
     try {
@@ -387,9 +387,9 @@ const googleProvider = {
       });
 
       // Check for function calls, images, and text in the response
-      const toolCalls = [];
-      const textParts = [];
-      const images = [];
+      const toolCalls: any[] = [];
+      const textParts: any[] = [];
+      const images: any[] = [];
       // @ts-ignore
       const maxImages = options.imageCount || 1;
       // @ts-ignore
@@ -442,8 +442,8 @@ const googleProvider = {
   async *generateTextStream(
     messages: any,
     // @ts-ignore
-    model = getDefaultModels(TYPES.TEXT, TYPES.TEXT).google,
-    options = {},
+    model: any = getDefaultModels(TYPES.TEXT, TYPES.TEXT).google,
+    options: any = {},
   ) {
     logger.provider("Google", `generateTextStream model=${model}`);
     try {
@@ -531,7 +531,7 @@ const googleProvider = {
         }
       }
       // Build tools array based on enabled options
-      const tools = [];
+      const tools: any[] = [];
       // @ts-ignore
       if (options.webSearch) tools.push({ googleSearch: {} });
       // @ts-ignore
@@ -651,7 +651,7 @@ const googleProvider = {
    * Bridges the event-driven Live API into an async generator matching
    * the same interface as generateTextStream().
    */
-  async *generateTextStreamLive(messages: any, model: any, options = {}) {
+  async *generateTextStreamLive(messages: any, model: any, options: any = {}) {
     logger.provider(
       "Google",
       `generateTextStreamLive (Live API) model=${model}`,
@@ -715,7 +715,7 @@ const googleProvider = {
       }
 
       // Tools
-      const tools = [];
+      const tools: any[] = [];
       // @ts-ignore
       if (options.webSearch) tools.push({ googleSearch: {} });
       // @ts-ignore
@@ -733,7 +733,7 @@ const googleProvider = {
 
       // ── Async queue to bridge callbacks → async generator ─────────
       // @ts-ignore
-      const queue = [];
+      const queue: any[] = [];
       // @ts-ignore
       let resolver = null;
       let done = false;
@@ -885,10 +885,10 @@ const googleProvider = {
 
       // Build Content objects for prior history turns
       if (priorMessages.length > 0) {
-        const historyTurns = [];
+        const historyTurns: any[] = [];
         // @ts-ignore
         for ( const message of priorMessages) {
-          const parts = [];
+          const parts: any[] = [];
 
           if (message.content) {
             parts.push({ text: message.content });
@@ -962,15 +962,15 @@ const googleProvider = {
 
   async captionImage(
     images: any,
-    prompt = "Describe this image.",
+    prompt: any = "Describe this image.",
     // @ts-ignore
-    model = getDefaultModels(TYPES.IMAGE, TYPES.TEXT).google,
+    model: any = getDefaultModels(TYPES.IMAGE, TYPES.TEXT).google,
     systemPrompt: any,
   ) {
     logger.provider("Google", `captionImage model=${model}`);
     try {
       // Process each image into inline data parts
-      const imageParts = [];
+      const imageParts: any[] = [];
       // @ts-ignore
       for ( const imageUrlOrBase64 of images) {
         let imageData = imageUrlOrBase64;
@@ -1025,8 +1025,8 @@ const googleProvider = {
 
   async generateImage(
     prompt: any,
-    images = [],
-    model = MODELS.GEMINI_3_PRO_IMAGE.name,
+    images: any = [],
+    model: any = MODELS.GEMINI_3_PRO_IMAGE.name,
     systemPrompt: any,
   ) {
     logger.provider("Google", `generateImage model=${model}`);
@@ -1101,7 +1101,7 @@ const googleProvider = {
     }
   },
 
-  async generateSpeech(text: any, voice = DEFAULT_VOICES.google, options = {}) {
+  async generateSpeech(text: any, voice: any = DEFAULT_VOICES.google, options: any = {}) {
     logger.provider("Google", `generateSpeech voice=${voice}`);
     try {
       const config = {
@@ -1161,8 +1161,8 @@ const googleProvider = {
   async transcribeAudio(
     audioBuffer: any,
     mimeType: any,
-    model = GOOGLE_TTS_MODEL,
-    options = {},
+    model: any = GOOGLE_TTS_MODEL,
+    options: any = {},
   ) {
     logger.provider("Google", `transcribeAudio model=${model}`);
     try {
@@ -1207,7 +1207,7 @@ const googleProvider = {
     }
   },
 
-  async generateEmbedding(content: any, model: any, options = {}) {
+  async generateEmbedding(content: any, model: any, options: any = {}) {
     model =
       model ||
       // @ts-ignore

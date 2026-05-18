@@ -4,8 +4,8 @@ export class ProviderError extends Error {
   constructor(
     provider: any,
     message: any,
-    statusCode = 500,
-    originalError = null,
+    statusCode: any = 500,
+    originalError: any = null,
   ) {
     super(message);
     this.name = "ProviderError";

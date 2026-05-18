@@ -182,7 +182,7 @@ router.get(
           let passed = 0;
           let failed = 0;
           let errored = 0;
-          const perBenchmark = [];
+          const perBenchmark: any[] = [];
 
           // @ts-ignore
           for ( const r of benchmarkResults) {

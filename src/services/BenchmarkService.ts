@@ -33,7 +33,7 @@ const MATCH_MODES = {
 function evaluate(
   response: any,
   expected: any,
-  matchMode = MATCH_MODES.CONTAINS,
+  matchMode: any = MATCH_MODES.CONTAINS,
 ) {
   if (!response || !expected) return false;
   const norm = (s: any) => s.trim().toLowerCase();
@@ -160,7 +160,7 @@ function evaluateAgentAssertions(benchmark: any, executionData: any) {
  * Returns flat array of { provider, model, label }.
  */
 function getConversationModels() {
-  const results = [];
+  const results: any[] = [];
   // @ts-ignore
   for ( const m of Object.values(MODELS)) {
     if (m.modelType !== MODEL_TYPES.CONVERSATION) continue;
@@ -207,7 +207,7 @@ async function runSingleModel(
   project: any,
   username: any,
   // @ts-ignore
-  { signal, onEvent } = {},
+  { signal, onEvent }: any = {},
 ) {
   // Config flags carried on every result for stats differentiation
   const configFlags = {
@@ -237,7 +237,7 @@ async function runSingleModel(
     };
   }
   const start = performance.now();
-  const messages = [];
+  const messages: any[] = [];
   // Optional system prompt
   if (benchmark.systemPrompt) {
     messages.push({ role: "system", content: benchmark.systemPrompt });
@@ -246,7 +246,7 @@ async function runSingleModel(
   logger.info(`[benchmark] ▶ Running ${model.provider}/${model.model}`);
   try {
     // @ts-ignore
-    const events = [];
+    const events: any[] = [];
     const handler = model.agent ? handleAgent : handleConversation;
     await handler(
       {
@@ -476,7 +476,7 @@ const BenchmarkService = {
     project: any,
     username: any,
     // @ts-ignore
-    { onRunStart, onModelStart, onModelComplete, onEvent, signal } = {},
+    { onRunStart, onModelStart, onModelComplete, onEvent, signal }: any = {},
   ) {
     // Resolve target models
     let models: any;
@@ -536,7 +536,7 @@ const BenchmarkService = {
     let aborted = false;
     const bucketPromises = [...buckets.entries()].map(
       async ([_key, bucketModels]: any) => {
-        const bucketResults = [];
+        const bucketResults: any[] = [];
         for (let i = 0; i < bucketModels.length; i++) {
           // Check abort signal before each model
           if (signal?.aborted || aborted) {

@@ -96,7 +96,7 @@ function prepareOpenAIMessages(messages: any) {
     }
 
     if (m.images && m.images.length > 0) {
-      const content = [];
+      const content: any[] = [];
       // @ts-ignore
       for ( const mediaRef of m.images) {
         const urlType = getUrlType(mediaRef);
@@ -169,7 +169,7 @@ function prepareOpenAIMessages(messages: any) {
  * System messages become developer messages; images use input_image, PDFs use input_file.
  */
 function prepareResponsesInput(messages: any) {
-  const result = [];
+  const result: any[] = [];
   // @ts-ignore
   for ( const m of messages) {
     // Assistant message with tool calls → expand into function_call items
@@ -217,7 +217,7 @@ function prepareResponsesInput(messages: any) {
     // @ts-ignore
     if (m.name) base.name = m.name;
     if (m.images && m.images.length > 0) {
-      const content = [];
+      const content: any[] = [];
       // @ts-ignore
       for ( const mediaRef of m.images) {
         const urlType = getUrlType(mediaRef);
@@ -296,8 +296,8 @@ const openaiProvider = {
   async generateText(
     messages: any,
     // @ts-ignore
-    model = getDefaultModels(TYPES.TEXT, TYPES.TEXT).openai,
-    options = {},
+    model: any = getDefaultModels(TYPES.TEXT, TYPES.TEXT).openai,
+    options: any = {},
   ) {
     logger.provider("OpenAI", `generateText model=${model}`);
     try {
@@ -405,8 +405,8 @@ const openaiProvider = {
     const rateLimits = extractOpenAIRateLimits(rawResponse, model);
 
     // Collect tool calls and images from output items
-    const images = [];
-    const toolCalls = [];
+    const images: any[] = [];
+    const toolCalls: any[] = [];
     if (response.output) {
       // @ts-ignore
       for ( const item of response.output) {
@@ -589,8 +589,8 @@ const openaiProvider = {
   async *generateTextStream(
     messages: any,
     // @ts-ignore
-    model = getDefaultModels(TYPES.TEXT, TYPES.TEXT).openai,
-    options = {},
+    model: any = getDefaultModels(TYPES.TEXT, TYPES.TEXT).openai,
+    options: any = {},
   ) {
     logger.provider("OpenAI", `generateTextStream model=${model}`);
     try {
@@ -996,7 +996,7 @@ const openaiProvider = {
     }
   },
 
-  async generateSpeech(text: any, voice = DEFAULT_VOICES.openai, options = {}) {
+  async generateSpeech(text: any, voice: any = DEFAULT_VOICES.openai, options: any = {}) {
     logger.provider("OpenAI", `generateSpeech voice=${voice}`);
     try {
       const response = await getClient().audio.speech.create({
@@ -1021,7 +1021,7 @@ const openaiProvider = {
     }
   },
 
-  async generateImage(prompt: any, images = [], model = "gpt-image-1.5") {
+  async generateImage(prompt: any, images: any = [], model: any = "gpt-image-1.5") {
     logger.provider(
       "OpenAI",
       `generateImage model=${model} images=${images.length}`,
@@ -1096,9 +1096,9 @@ const openaiProvider = {
 
   async captionImage(
     images: any,
-    prompt = "What's in this image?",
+    prompt: any = "What's in this image?",
     // @ts-ignore
-    model = getDefaultModels(TYPES.TEXT, TYPES.TEXT).openai,
+    model: any = getDefaultModels(TYPES.TEXT, TYPES.TEXT).openai,
     systemPrompt: any,
   ) {
     logger.provider("OpenAI", `captionImage model=${model}`);
@@ -1110,7 +1110,7 @@ const openaiProvider = {
           image_url: { url: image },
         })),
       ];
-      const messages = [];
+      const messages: any[] = [];
       if (systemPrompt) {
         messages.push({ role: "system", content: systemPrompt });
       }
@@ -1138,7 +1138,7 @@ const openaiProvider = {
   async generateEmbedding(
     text: any,
     // @ts-ignore
-    model = getDefaultModels(TYPES.TEXT, TYPES.EMBEDDING).openai,
+    model: any = getDefaultModels(TYPES.TEXT, TYPES.EMBEDDING).openai,
   ) {
     logger.provider("OpenAI", `generateEmbedding model=${model}`);
     try {
@@ -1160,8 +1160,8 @@ const openaiProvider = {
   async transcribeAudio(
     audioBuffer: any,
     mimeType: any,
-    model = OPENAI_TRANSCRIPTION_MODEL,
-    options = {},
+    model: any = OPENAI_TRANSCRIPTION_MODEL,
+    options: any = {},
   ) {
     logger.provider("OpenAI", `transcribeAudio model=${model}`);
     try {

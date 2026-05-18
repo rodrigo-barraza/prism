@@ -167,11 +167,11 @@ function handleWsLive(
   let liveSession = null;
   /** @type {string[]} Accumulated base64 PCM audio chunks for current turn (model output, 24kHz) */
   // @ts-ignore
-  let turnAudioChunks = [];
+  let turnAudioChunks: any[] = [];
   let audioSampleRate = 24000;
   /** @type {string[]} Accumulated base64 PCM audio chunks for current turn (user input, 16kHz) */
   // @ts-ignore
-  const userInputAudioChunks = [];
+  const userInputAudioChunks: any[] = [];
   const userInputSampleRate = 16000;
   /** Whether user audio upload has been triggered for this turn */
   let userAudioUploading = false;
@@ -190,7 +190,7 @@ function handleWsLive(
   let turnText = "";
   let turnThinking = "";
   // @ts-ignore
-  let turnToolCalls = [];
+  let turnToolCalls: any[] = [];
   let turnInputText = "";
   // @ts-ignore
   let turnUserAudioRef = null;
@@ -210,8 +210,8 @@ function handleWsLive(
   // @ts-ignore
   async function buildAndUploadAudio(
     // @ts-ignore
-    chunks = turnAudioChunks,
-    sampleRate = audioSampleRate,
+    chunks: any = turnAudioChunks,
+    sampleRate: any = audioSampleRate,
   ) {
     if (chunks.length === 0) return null;
     try {
@@ -285,7 +285,7 @@ function handleWsLive(
         data.conversationId || clientConfig?.conversationId || null;
 
       // Tools setup
-      const tools = [];
+      const tools: any[] = [];
       if (
         clientConfig.enabledTools &&
         Array.isArray(clientConfig.enabledTools)

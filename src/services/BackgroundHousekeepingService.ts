@@ -49,9 +49,9 @@ const STALE_SESSION_CUTOFF_MS = hours(2);
  */
 async function pruneOrphanedWorktrees() {
   // @ts-ignore
-  const pruned = [];
+  const pruned: any[] = [];
   // @ts-ignore
-  const errors = [];
+  const errors: any[] = [];
 
   let entries: any;
   try {
@@ -194,7 +194,7 @@ async function pruneMinioOrphans() {
     const prefixes = new Set();
     // @ts-ignore
     for ( const object of objects) {
-      const prefix = (object.name || object).split("/")[0];
+      const prefix = ((object.name || object) as any).split("/")[0];
       if (prefix && !validIds.has(prefix) && !STRUCTURAL_PREFIXES.has(prefix)) {
         prefixes.add(prefix);
       }
@@ -234,7 +234,7 @@ const BackgroundHousekeepingService = {
 
    * @returns {Promise<object>} Summary of actions taken
    */
-  async run({ trigger = "boot" } = {}) {
+  async run({ trigger = "boot" }: any = {}) {
     const startTime = performance.now();
     logger.info(`[Housekeeping] Starting (trigger: ${trigger})…`);
 

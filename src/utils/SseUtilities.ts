@@ -121,7 +121,7 @@ export async function handleSseRequest(
   req: any,
   res: any,
   params: any,
-  handler = handleConversation,
+  handler: any = handleConversation,
 ) {
   initSseResponse(res);
 
@@ -149,10 +149,10 @@ export async function handleJsonRequest(
   res: any,
   next: any,
   params: any,
-  handler = handleConversation,
+  handler: any = handleConversation,
 ) {
   // @ts-ignore
-  const events = [];
+  const events: any[] = [];
   await handler(params, (event: any) => events.push(event));
 
   // @ts-ignore

@@ -11,7 +11,7 @@
  */
 export function extractThinkTags(raw: any) {
   const thinkRegex = /<think>([\s\S]*?)<\/think>/gi;
-  const thinkParts = [];
+  const thinkParts: any[] = [];
   let match: any;
   while ((match = thinkRegex.exec(raw)) !== null) {
     thinkParts.push(match[1].trim());
@@ -42,7 +42,7 @@ export class ThinkTagParser {
   feed(chunk: any) {
     // @ts-ignore
     this.buffer += chunk;
-    const results = [];
+    const results: any[] = [];
 
     // @ts-ignore
     while (this.buffer.length > 0) {

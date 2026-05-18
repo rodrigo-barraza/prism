@@ -131,17 +131,17 @@ class LocalModelQueue {
    * @returns {Promise<() => void>} A release function — MUST be called
    *   when inference is complete (use try/finally).
    */
-  acquire(instanceId = "_default") {
+  acquire(instanceId: any = "_default") {
     return this._getQueue(instanceId).acquire();
   }
 
   /** Number of requests waiting for a specific instance. */
-  pending(instanceId = "_default") {
+  pending(instanceId: any = "_default") {
     return queues.get(instanceId)?.pending || 0;
   }
 
   /** Whether all slots are in use for a specific instance. */
-  busy(instanceId = "_default") {
+  busy(instanceId: any = "_default") {
     return queues.get(instanceId)?.busy || false;
   }
 
@@ -154,7 +154,7 @@ class LocalModelQueue {
   }
 
   /** Max concurrency for a specific instance (or default). */
-  maxConcurrency(instanceId = "_default") {
+  maxConcurrency(instanceId: any = "_default") {
     return queues.get(instanceId)?.maxConcurrency || DEFAULT_CONCURRENCY;
   }
 

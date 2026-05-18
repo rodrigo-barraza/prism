@@ -24,7 +24,7 @@ const TRUNCATABLE_ARRAY_KEYS = [
  * The full result is still stored in the DB and shown in the UI;
  * this only affects what gets re-sent to the model.
  */
-export function truncateToolResult(result: any, maxChars = 8000) {
+export function truncateToolResult(result: any, maxChars: any = 8000) {
   if (!result || typeof result !== "object") return result;
 
   // If result has a known array wrapper, cap items at 10
@@ -63,7 +63,7 @@ export function truncateToolResult(result: any, maxChars = 8000) {
  */
 export function expandMessagesForFC(
   messages: any,
-  { filterDeleted = true } = {},
+  { filterDeleted = true }: any = {},
 ) {
   const filtered = filterDeleted
     ? messages.filter(

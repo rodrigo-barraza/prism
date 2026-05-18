@@ -229,7 +229,7 @@ function selectAndReserveInstance(
   // fallback unnecessarily.
 
   // Build ordered candidate list: coordinator's instance first, then rest in order
-  const ordered = [];
+  const ordered: any[] = [];
   // @ts-ignore
   for ( const inst of siblings) {
     if (inst.id === coordinatorInstanceId) {
@@ -848,9 +848,9 @@ export default class CoordinatorService {
    * @returns {{ stopped: string[], alreadyStopped: string[] }}
    */
   static async abortWorkersBySession(parentAgentSessionId: any) {
-    const stopped = [];
-    const alreadyStopped = [];
-    const cleanupPromises = [];
+    const stopped: any[] = [];
+    const alreadyStopped: any[] = [];
+    const cleanupPromises: any[] = [];
 
     // @ts-ignore
     for ( const [agentId, worker] of activeWorkers) {
@@ -941,7 +941,7 @@ export default class CoordinatorService {
 
    */
   // @ts-ignore
-  static listWorkers({ parentAgentSessionId } = {}) {
+  static listWorkers({ parentAgentSessionId }: any = {}) {
     let workers = Array.from(activeWorkers.values());
     if (parentAgentSessionId) {
       workers = workers.filter(
@@ -1041,7 +1041,7 @@ export default class CoordinatorService {
     // and pick the same instance. Fix: resolve model availability once,
     // then assign instances in a serial loop with synchronous increments.
     // @ts-ignore
-    const assignments = []; // { provider, model } per member
+    const assignments: any[] = []; // { provider, model } per member
 
     if (localModelQueue.isLocal(providerName)) {
       const providerType = getInstanceType(providerName) || providerName;
@@ -1260,7 +1260,7 @@ export default class CoordinatorService {
     const parentEmit = coordinatorCtx.emit;
     let workerOutput = "";
     // @ts-ignore
-    const workerToolCalls = [];
+    const workerToolCalls: any[] = [];
     // @ts-ignore
     let lastWorkerPhase = null;
 
@@ -1855,7 +1855,7 @@ export default class CoordinatorService {
 
    * @returns {Promise<object>} Execution results with diffs
    */
-  static async execute(plan: any, options = {}) {
+  static async execute(plan: any, options: any = {}) {
     const { taskId, subTasks, repoPath } = plan;
 
     if (activeTasks.has(taskId)) {
@@ -2014,7 +2014,7 @@ export default class CoordinatorService {
 
       let workerOutput = "";
       // @ts-ignore
-      const workerToolCalls = [];
+      const workerToolCalls: any[] = [];
       const workerEmit = (event: any) => {
         if (event.type === "chunk") {
           workerOutput += event.content || "";
@@ -2158,7 +2158,7 @@ export default class CoordinatorService {
     const completedWorkers = task.workers.filter(
       (w: any) => w.status === "complete" && w.diff?.hasChanges,
     );
-    const results = [];
+    const results: any[] = [];
 
     // @ts-ignore
     for ( const worker of completedWorkers) {

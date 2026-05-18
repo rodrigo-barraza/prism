@@ -64,8 +64,8 @@ const inworldProvider = {
    */
   async generateSpeech(
     text: any,
-    voice = DEFAULT_VOICES.inworld,
-    options = {},
+    voice: any = DEFAULT_VOICES.inworld,
+    options: any = {},
   ) {
     logger.provider("Inworld", `generateSpeech voice=${voice}`);
 
@@ -130,8 +130,8 @@ const inworldProvider = {
    */
   async *generateSpeechStream(
     textStream: any,
-    voice = DEFAULT_VOICES.inworld,
-    options = {},
+    voice: any = DEFAULT_VOICES.inworld,
+    options: any = {},
   ) {
     logger.provider("Inworld", `generateSpeechStream voice=${voice}`);
 

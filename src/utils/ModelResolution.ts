@@ -58,7 +58,7 @@ export function findBestQuantFallback(targetModel: any, availableModels: any) {
   const { base: targetBase, quant: targetQuant } = parseModelQuant(targetModel);
 
   // Find all available models that share the same base name (any quant variant)
-  const candidates = [];
+  const candidates: any[] = [];
   // @ts-ignore
   for ( const m of availableModels) {
     const mKey = m.key || m.id;
@@ -132,7 +132,7 @@ export async function resolveModelForInstances(modelKey: any, siblings: any) {
     );
 
     // Build usable instances list
-    const usable = [];
+    const usable: any[] = [];
     for (let i = 0; i < siblings.length; i++) {
       if (checks[i].status !== "fulfilled") continue;
       // @ts-ignore

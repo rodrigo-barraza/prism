@@ -120,7 +120,7 @@ function estimateTotalTokens(messages: any) {
  */
 function truncateToolResults(
   messages: any,
-  protectedTurns = PROTECTED_RECENT_TURNS,
+  protectedTurns: any = PROTECTED_RECENT_TURNS,
 ) {
   // Find the protection boundary (same logic as compressOldAssistantMessages)
   let userTurnsSeen = 0;
@@ -170,7 +170,7 @@ function truncateToolResults(
  */
 function compressOldAssistantMessages(
   messages: any,
-  protectedCount = PROTECTED_RECENT_TURNS,
+  protectedCount: any = PROTECTED_RECENT_TURNS,
 ) {
   // Count user turns from the end to determine protection boundary
   let userTurnsSeen = 0;
@@ -240,7 +240,7 @@ function slidingWindowTruncation(messages: any, maxTokens: any) {
   if (messages.length <= 3) return messages;
 
   // Always keep: system message, first user message
-  const head = [];
+  const head: any[] = [];
   let headEnd = 0;
 
   for (let i = 0; i < messages.length; i++) {
@@ -250,7 +250,7 @@ function slidingWindowTruncation(messages: any, maxTokens: any) {
   }
 
   // Build tail from the end until we approach budget
-  const tail = [];
+  const tail: any[] = [];
   let tailTokens = 0;
   const headTokens = estimateTotalTokens(head);
   const availableForTail = maxTokens - headTokens - 200; // 200 token buffer for marker
@@ -290,7 +290,7 @@ export default class ContextWindowManager {
 
    * @returns {{ messages: Array, truncated: boolean, strategy: string|null, estimatedTokens: number }}
    */
-  static enforce(messages: any, options = {}) {
+  static enforce(messages: any, options: any = {}) {
     const {
       // @ts-ignore
       maxInputTokens = 128_000,

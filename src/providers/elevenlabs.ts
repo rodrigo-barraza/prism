@@ -17,8 +17,8 @@ const elevenlabsProvider = {
 
   async generateSpeech(
     text: any,
-    voiceId = DEFAULT_VOICES.elevenlabs,
-    options = {},
+    voiceId: any = DEFAULT_VOICES.elevenlabs,
+    options: any = {},
   ) {
     logger.provider("ElevenLabs", `generateSpeech voiceId=${voiceId}`);
     try {
@@ -71,8 +71,8 @@ const elevenlabsProvider = {
    */
   async *generateSpeechStream(
     textStream: any,
-    voiceId = DEFAULT_VOICES.elevenlabs,
-    options = {},
+    voiceId: any = DEFAULT_VOICES.elevenlabs,
+    options: any = {},
   ) {
     logger.provider("ElevenLabs", `generateSpeechStream voiceId=${voiceId}`);
     const apiKey = getApiKey();
@@ -107,7 +107,7 @@ const elevenlabsProvider = {
 
     // Message queue for yielding in order
     // @ts-ignore
-    const messageQueue = [];
+    const messageQueue: any[] = [];
     // @ts-ignore
     let resolveMessage = null;
     let ended = false;

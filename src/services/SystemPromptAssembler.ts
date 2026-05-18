@@ -29,7 +29,7 @@ const SKILL_RELEVANCE_THRESHOLD = 0.3;
  * of the default coding agent sections.
  */
 export default class SystemPromptAssembler {
-  constructor(options = {}) {
+  constructor(options: any = {}) {
     // @ts-ignore
     this.workspaceRoot =
       // @ts-ignore
@@ -104,7 +104,7 @@ export default class SystemPromptAssembler {
   _formatDirectoryTree(data: any) {
     if (!data || !data.entries) return "";
 
-    const lines = [];
+    const lines: any[] = [];
     // @ts-ignore
     for ( const entry of data.entries) {
       const prefix = entry.type === "directory" ? "📁" : "📄";
@@ -157,7 +157,7 @@ export default class SystemPromptAssembler {
     }
 
     // Build categorised sections with parameter details
-    const sections = [];
+    const sections: any[] = [];
     // @ts-ignore
     for ( const [domain, domainTools] of groups) {
       const entries = domainTools.map((tool: any) => {
@@ -198,7 +198,7 @@ export default class SystemPromptAssembler {
     project: any,
     queryText: any,
     // @ts-ignore
-    { traceId, agentSessionId, endpoint, _username } = {},
+    { traceId, agentSessionId, endpoint, _username }: any = {},
   ) {
     try {
       const memories = await MemoryService.search({
@@ -238,7 +238,7 @@ export default class SystemPromptAssembler {
     username: any,
     queryText: any,
     // @ts-ignore
-    { traceId, agentSessionId, endpoint, agent } = {},
+    { traceId, agentSessionId, endpoint, agent }: any = {},
   ) {
     try {
       const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -342,7 +342,7 @@ export default class SystemPromptAssembler {
    * @returns {Promise<{ prompt: string, skillNames: string[] }>} Complete system prompt + skill names for UI emission
    */
   async assemble(context: any) {
-    const sections = [];
+    const sections: any[] = [];
     // null/undefined agent = direct chat mode (no persona)
     const isDirectMode = !context.agent;
     const agentId = context.agent || "CODING";
@@ -515,7 +515,7 @@ export default class SystemPromptAssembler {
       },
     );
     // @ts-ignore
-    const skillNames = [];
+    const skillNames: any[] = [];
     if (skills.length > 0) {
       const skillBlocks = skills.map((s: any) => {
         skillNames.push(s.name);

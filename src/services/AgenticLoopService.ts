@@ -99,7 +99,7 @@ export default class AgenticLoopService {
   static resolveApproval(
     agentSessionId: any,
     approved: any,
-    { approveAll = false } = {},
+    { approveAll = false }: any = {},
   ) {
     const entry = pendingApprovals.get(agentSessionId);
     if (!entry) return false;

@@ -32,7 +32,7 @@ const listMcpResources = {
     if (servers.length === 0) {
       return { resources: [], count: 0, message: "No MCP servers connected." };
     }
-    const allResources = [];
+    const allResources: any[] = [];
     // @ts-ignore
     for ( const server of servers) {
       const result = await MCPClientService.listResources(server.name);

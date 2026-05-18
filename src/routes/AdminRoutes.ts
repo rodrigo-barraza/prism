@@ -143,9 +143,9 @@ router.get(
         .findOne({ requestId: req.params.id });
       if (!request) return res.status(404).json({ error: "Request not found" });
 
-      let conversations = [];
-      let workflows = [];
-      let traces = [];
+      let conversations: any[] = [];
+      let workflows: any[] = [];
+      let traces: any[] = [];
 
       if (request.conversationId) {
         // Find conversations matching this conversationId
@@ -2513,7 +2513,7 @@ router.get(
         .toArray();
 
       // ── Agent-generated images from requests (captures skipConversation callers) ──
-      let requestGenItems = [];
+      let requestGenItems: any[] = [];
       if (!type || type === "image") {
         if (origin !== "user") {
           const reqMatch = {

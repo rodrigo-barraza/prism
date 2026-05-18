@@ -40,7 +40,7 @@ export function convertToolsToOpenAI(tools: any) {
  */
 export function buildPayloadParams(
   options: any,
-  { temperature = 0.7, maxTokens = -1 } = {},
+  { temperature = 0.7, maxTokens = -1 }: any = {},
 ) {
   return {
     temperature:
@@ -168,7 +168,7 @@ export const MEDIA_STRATEGIES = {
 
  * @returns {Promise<Array>} The same messages array with videos expanded
  */
-export async function expandVideoToFrames(messages: any, options = {}) {
+export async function expandVideoToFrames(messages: any, options: any = {}) {
   const { extractVideoFrames, getDataUrlMimeType } = await import("./media.js");
 
   // @ts-ignore
@@ -176,8 +176,8 @@ export async function expandVideoToFrames(messages: any, options = {}) {
     // Collect video data URLs from both `video` and `images` arrays.
     // The frontend may place video files in `images` if it doesn't
     // categorize by MIME type (backwards compatibility).
-    const videoUrls = [];
-    const keptImages = [];
+    const videoUrls: any[] = [];
+    const keptImages: any[] = [];
 
     // Check explicit video field
     if (message.video && Array.isArray(message.video)) {
@@ -201,7 +201,7 @@ export async function expandVideoToFrames(messages: any, options = {}) {
 
     if (videoUrls.length === 0) continue;
 
-    const allFrames = [];
+    const allFrames: any[] = [];
     // @ts-ignore
     for ( const videoDataUrl of videoUrls) {
       const frames = await extractVideoFrames(videoDataUrl, options);
@@ -228,7 +228,7 @@ export async function expandVideoToFrames(messages: any, options = {}) {
  */
 export function prepareOpenAICompatMessages(
   messages: any,
-  { mediaStrategy = MEDIA_STRATEGIES.IMAGES_ONLY } = {},
+  { mediaStrategy = MEDIA_STRATEGIES.IMAGES_ONLY }: any = {},
 ) {
   return messages.map((m: any) => {
     const base = { role: m.role };
@@ -266,7 +266,7 @@ export function prepareOpenAICompatMessages(
     }
 
     // Collect media content based on strategy
-    const content = [];
+    const content: any[] = [];
 
     if (mediaStrategy === MEDIA_STRATEGIES.IMAGES_ONLY) {
       // Simple image-only handling (lm-studio)
@@ -366,7 +366,7 @@ export function prepareOpenAICompatMessages(
 
  * @returns {{ text: string, thinking: string|null, usage: object, toolCalls: Array|null }}
  */
-export function processNonStreamingResponse(data: any, options = {}) {
+export function processNonStreamingResponse(data: any, options: any = {}) {
   const message = data.choices?.[0]?.message;
   const rawText = message?.content || "";
 
@@ -406,7 +406,7 @@ export function processNonStreamingResponse(data: any, options = {}) {
 
 
  */
-export async function* parseSSEStream(reader: any, options = {}) {
+export async function* parseSSEStream(reader: any, options: any = {}) {
   const decoder = new TextDecoder();
   let buffer = "";
   let usage = null;
@@ -584,7 +584,7 @@ export async function* parseSSEStream(reader: any, options = {}) {
  * @returns {Promise<Response>} The fetch response (guaranteed to be ok)
  * @throws {Error} With a parsed error message from the API
  */
-export async function fetchOpenAICompat(url: any, payload: any, options = {}) {
+export async function fetchOpenAICompat(url: any, payload: any, options: any = {}) {
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

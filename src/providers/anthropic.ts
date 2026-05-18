@@ -127,7 +127,7 @@ async function prepareMessages(messages: any) {
 
         // Convert assistant messages with toolCalls to multi-part content
         if (m.role === "assistant" && m.toolCalls?.length > 0) {
-          const contentBlocks = [];
+          const contentBlocks: any[] = [];
           // Preserve thinking blocks for multi-step reasoning continuity.
           // The signature field is REQUIRED by Anthropic's API for multi-turn
           // conversations — without it the API returns a 400.
@@ -161,7 +161,7 @@ async function prepareMessages(messages: any) {
         // Convert messages with media to Anthropic content block format
         const images = m.images;
         if (images && images.length > 0) {
-          const contentBlocks = [];
+          const contentBlocks: any[] = [];
           // @ts-ignore
           for ( const dataUrl of images) {
             const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
@@ -238,7 +238,7 @@ async function prepareMessages(messages: any) {
         // Only include thinking when we have the signature; conversations
         // without it must omit the block to avoid API 400 errors.
         if (m.role === "assistant" && m.thinking && !m.toolCalls?.length) {
-          const contentBlocks = [];
+          const contentBlocks: any[] = [];
           if (m.thinkingSignature) {
             contentBlocks.push({
               type: "thinking",
@@ -367,7 +367,7 @@ async function prepareMessages(messages: any) {
  * Build the tools array based on options.
  */
 function buildTools(options: any) {
-  const tools = [];
+  const tools: any[] = [];
   if (options.webSearch) {
     tools.push({
       type: "web_search_20260209",
@@ -409,8 +409,8 @@ function extractResponseContent(contentBlocks: any) {
   let text = "";
   let thinking = null;
   let thinkingSignature = null;
-  const citations = [];
-  const toolCalls = [];
+  const citations: any[] = [];
+  const toolCalls: any[] = [];
 
   // @ts-ignore
   for ( const block of contentBlocks || []) {
@@ -463,8 +463,8 @@ const anthropicProvider = {
   async generateText(
     messages: any,
     // @ts-ignore
-    model = getDefaultModels(TYPES.TEXT, TYPES.TEXT).anthropic,
-    options = {},
+    model: any = getDefaultModels(TYPES.TEXT, TYPES.TEXT).anthropic,
+    options: any = {},
   ) {
     logger.provider("Anthropic", `generateText model=${model}`);
 
@@ -595,14 +595,14 @@ const anthropicProvider = {
    */
   async captionImage(
     images: any,
-    prompt = "Describe this image.",
+    prompt: any = "Describe this image.",
     // @ts-ignore
-    model = getDefaultModels(TYPES.TEXT, TYPES.TEXT).anthropic,
+    model: any = getDefaultModels(TYPES.TEXT, TYPES.TEXT).anthropic,
     systemPrompt: any,
   ) {
     logger.provider("Anthropic", `captionImage model=${model}`);
     try {
-      const contentBlocks = [];
+      const contentBlocks: any[] = [];
 
       // @ts-ignore
       for ( const imageUrlOrBase64 of images) {
@@ -674,8 +674,8 @@ const anthropicProvider = {
   async *generateTextStream(
     messages: any,
     // @ts-ignore
-    model = getDefaultModels(TYPES.TEXT, TYPES.TEXT).anthropic,
-    options = {},
+    model: any = getDefaultModels(TYPES.TEXT, TYPES.TEXT).anthropic,
+    options: any = {},
   ) {
     logger.provider("Anthropic", `generateTextStream model=${model}`);
     try {

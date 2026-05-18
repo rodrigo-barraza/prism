@@ -51,9 +51,9 @@ const FileService = {
    */
   async uploadFile(
     dataUrl: any,
-    category = "uploads",
-    project = null,
-    username = null,
+    category: any = "uploads",
+    project: any = null,
+    username: any = null,
   ) {
     // If MinIO is not available, return the data URL as-is (MongoDB inline)
     if (!MinioWrapper.isAvailable()) {
@@ -118,7 +118,7 @@ const FileService = {
       return {
         stream,
         contentType:
-          stat.metaData?.["content-type"] || "application/octet-stream",
+          (stat as any).metaData?.["content-type"] || "application/octet-stream",
       };
     };
 

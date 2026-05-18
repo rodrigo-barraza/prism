@@ -143,7 +143,7 @@ const MCPClientService = {
 
     // Discover tools
     // @ts-ignore
-    let mcpTools = [];
+    let mcpTools: any[] = [];
     try {
       const result = await client.listTools();
       mcpTools = result.tools || [];
@@ -222,7 +222,7 @@ const MCPClientService = {
    * @returns {Promise<object>} Tool result
    */
   // @ts-ignore
-  async callTool(serverName: any, toolName: any, args = {}) {
+  async callTool(serverName: any, toolName: any, args: any = {}) {
     const conn = connections.get(serverName);
     if (!conn) {
       return { error: `MCP server "${serverName}" is not connected` };
@@ -288,7 +288,7 @@ const MCPClientService = {
    * @returns {Array} Namespaced tool schemas
    */
   getToolSchemas() {
-    const allSchemas = [];
+    const allSchemas: any[] = [];
     // @ts-ignore
     for ( const conn of connections.values()) {
       allSchemas.push(...conn.tools);
@@ -301,7 +301,7 @@ const MCPClientService = {
    * @returns {Array<{ name, status, toolCount, transport, connectedAt }>}
    */
   getConnectedServers() {
-    const servers = [];
+    const servers: any[] = [];
     // @ts-ignore
     for ( const [name, conn] of connections) {
       servers.push({
@@ -444,7 +444,7 @@ const MCPClientService = {
 
    * @returns {Promise<object>} Reconnection result
    */
-  async authenticate(serverName: any, auth = {}) {
+  async authenticate(serverName: any, auth: any = {}) {
     const conn = connections.get(serverName);
     if (!conn) {
       return { error: `MCP server "${serverName}" is not connected` };

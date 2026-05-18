@@ -271,8 +271,8 @@ router.get(
         const mergedModalities = {};
         const toolCounts = {};
         // Collect per-request tok/s for generation-only average
-        const tpsValues = [];
-        const ttftValues = [];
+        const tpsValues: any[] = [];
+        const ttftValues: any[] = [];
 
         // @ts-ignore
         for ( const r of reqs) {

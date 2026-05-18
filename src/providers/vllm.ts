@@ -22,7 +22,7 @@ import {
 
  * @returns {object} Provider object with all vLLM methods
  */
-export function createVllmProvider(baseUrl: any, instanceId = "vllm") {
+export function createVllmProvider(baseUrl: any, instanceId: any = "vllm") {
   const getBaseUrl = () => baseUrl;
 
   return {
@@ -31,8 +31,8 @@ export function createVllmProvider(baseUrl: any, instanceId = "vllm") {
     async generateText(
       messages: any,
       // @ts-ignore
-      model = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["vllm"],
-      options = {},
+      model: any = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["vllm"],
+      options: any = {},
     ) {
       const baseUrl = getBaseUrl();
       logger.provider("vLLM", `generateText model=${model} baseUrl=${baseUrl}`);
@@ -108,8 +108,8 @@ export function createVllmProvider(baseUrl: any, instanceId = "vllm") {
     async *generateTextStream(
       messages: any,
       // @ts-ignore
-      model = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["vllm"],
-      options = {},
+      model: any = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["vllm"],
+      options: any = {},
     ) {
       const baseUrl = getBaseUrl();
       logger.provider(
@@ -185,9 +185,9 @@ export function createVllmProvider(baseUrl: any, instanceId = "vllm") {
 
     async captionImage(
       images: any,
-      prompt = "Describe this image.",
+      prompt: any = "Describe this image.",
       // @ts-ignore
-      model = getDefaultModels(TYPES.IMAGE, TYPES.TEXT)["vllm"],
+      model: any = getDefaultModels(TYPES.IMAGE, TYPES.TEXT)["vllm"],
       systemPrompt: any,
     ) {
       const baseUrl = getBaseUrl();
@@ -200,7 +200,7 @@ export function createVllmProvider(baseUrl: any, instanceId = "vllm") {
             image_url: { url: image },
           })),
         ];
-        const messages = [];
+        const messages: any[] = [];
         if (systemPrompt) {
           messages.push({ role: "system", content: systemPrompt });
         }
@@ -244,7 +244,7 @@ export function createVllmProvider(baseUrl: any, instanceId = "vllm") {
 
      * @returns {Promise<{ embedding: number[], dimensions: number }>}
      */
-    async generateEmbedding(content: any, model: any, options = {}) {
+    async generateEmbedding(content: any, model: any, options: any = {}) {
       const baseUrl = getBaseUrl();
       logger.provider(
         "vLLM",

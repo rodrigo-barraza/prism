@@ -81,7 +81,7 @@ const SessionGenerationTracker = {
     agentSessionId: any,
     requestId: any,
     // @ts-ignore
-    { provider, model, source = "orchestrator", workerId = null } = {},
+    { provider, model, source = "orchestrator", workerId = null }: any = {},
   ) {
     if (!agentSessionId || !requestId) return;
 
@@ -129,7 +129,7 @@ const SessionGenerationTracker = {
 
    */
   // @ts-ignore
-  update(requestId: any, { outputTokens, inputTokens, ttft } = {}) {
+  update(requestId: any, { outputTokens, inputTokens, ttft }: any = {}) {
     const entry = activeRequests.get(requestId);
     if (!entry) return;
 
@@ -161,7 +161,7 @@ const SessionGenerationTracker = {
 
 
    */
-  recordChunkTiming(requestId: any, charCount = 0) {
+  recordChunkTiming(requestId: any, charCount: any = 0) {
     const entry = activeRequests.get(requestId);
     if (!entry) return;
     const now = performance.now();

@@ -33,7 +33,7 @@ class MutationQueue {
 
 
    */
-  async acquire(filePath: any, workerId = "unknown") {
+  async acquire(filePath: any, workerId: any = "unknown") {
     // @ts-ignore
     if (!this._locks.has(filePath)) {
       // @ts-ignore
@@ -111,7 +111,7 @@ class MutationQueue {
 
    * @returns {Promise<*>} Result of fn()
    */
-  async withLock(filePath: any, fn: any, workerId = "unknown") {
+  async withLock(filePath: any, fn: any, workerId: any = "unknown") {
     const handle = await this.acquire(filePath, workerId);
     try {
       return await fn();
@@ -126,7 +126,7 @@ class MutationQueue {
    * @returns {Array<{ filePath: string, holder: string|null, queueLength: number }>}
    */
   getStatus() {
-    const entries = [];
+    const entries: any[] = [];
     // @ts-ignore
     for ( const [filePath, lock] of this._locks) {
       entries.push({

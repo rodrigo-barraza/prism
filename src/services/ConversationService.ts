@@ -16,12 +16,12 @@ const DEFAULT_COLLECTION = COLLECTIONS.CONVERSATIONS;
  */
 export async function extractFiles(
   messages: any,
-  project = null,
-  username = null,
+  project: any = null,
+  username: any = null,
 ) {
   if (!messages || !FileService.isExternalStorage()) return messages;
 
-  const processed = [];
+  const processed: any[] = [];
   // @ts-ignore
   for ( const message of messages) {
     let updated = message;
@@ -29,7 +29,7 @@ export async function extractFiles(
     // Handle images
     if (message.images && message.images.length > 0) {
       const category = message.role === "assistant" ? "generations" : "uploads";
-      const newImages = [];
+      const newImages: any[] = [];
       // @ts-ignore
       for ( const image of message.images) {
         if (FileService.isMinioRef(image) || image.startsWith("http")) {
@@ -268,8 +268,8 @@ const ConversationService = {
     project: any,
     username: any,
     newMessages: any,
-    conversationMeta = null,
-    { collection = DEFAULT_COLLECTION } = {},
+    conversationMeta: any = null,
+    { collection = DEFAULT_COLLECTION }: any = {},
   ) {
     // @ts-ignore
     const traceId = conversationMeta?.traceId || null;
@@ -418,7 +418,7 @@ const ConversationService = {
     project: any,
     username: any,
     generating: any,
-    { collection = DEFAULT_COLLECTION } = {},
+    { collection = DEFAULT_COLLECTION }: any = {},
   ) {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return;

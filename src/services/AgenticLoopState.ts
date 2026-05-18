@@ -12,7 +12,7 @@ import { createUsageAccumulator } from "../utils/CostCalculator.js";
  * persistence code without inheritance coupling.
  */
 export default class AgenticLoopState {
-  constructor({ originalMessageCount = 0, planModeActive = false } = {}) {
+  constructor({ originalMessageCount = 0, planModeActive = false }: any = {}) {
     // ── Iteration tracking ──────────────────────────────────
     // @ts-ignore
     this.iterations = 0;
@@ -100,9 +100,9 @@ export default class AgenticLoopState {
    * Get clean display segments (trimmed, empty-filtered) for DB persistence.
    */
   getCleanDisplayData() {
-    const cleanSegments = [];
-    const cleanTextFragments = [];
-    const cleanThinkingFragments = [];
+    const cleanSegments: any[] = [];
+    const cleanTextFragments: any[] = [];
+    const cleanThinkingFragments: any[] = [];
 
     // @ts-ignore
     for ( const seg of this.displaySegments) {

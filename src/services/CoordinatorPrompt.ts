@@ -15,7 +15,7 @@
 
  * @returns {string} System prompt section to append
  */
-export function getCoordinatorPromptAddendum({ workerTools = [] } = {}) {
+export function getCoordinatorPromptAddendum({ workerTools = [] }: any = {}) {
   const workerToolList =
     workerTools.length > 0
       ? workerTools.sort().join(", ")

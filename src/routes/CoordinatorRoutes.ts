@@ -173,7 +173,7 @@ router.get(
           { id: agentSessionId },
           { projection: { workers: 1 } },
         );
-        if (session?.workers?.length > 0) {
+        if (session && session.workers && session.workers.length > 0) {
           workers = session.workers;
         }
       } catch (error: any) {

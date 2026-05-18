@@ -78,7 +78,7 @@ router.put(
       const updated = await CustomAgentService.update(id, updates);
 
       // Unregister old ID if it changed, then register new
-      if (oldDoc.agentId !== updated.agentId) {
+      if (updated && oldDoc.agentId !== updated.agentId!) {
         AgentPersonaRegistry.unregister(oldDoc.agentId);
       }
       AgentPersonaRegistry.registerCustom(updated);

@@ -80,9 +80,9 @@ async function resolveImageRefs(messages: any, project: any, username: any) {
       const array = message[field];
       if (array && Array.isArray(array) && array.length > 0) {
         // @ts-ignore
-        const providerArr = [];
+        const providerArr: any[] = [];
         // @ts-ignore
-        const storageArr = [];
+        const storageArr: any[] = [];
         await Promise.all(
           array.map(async (ref: any, j: any) => {
             const resolved = await resolveMediaRef(ref, project, username);
@@ -183,7 +183,7 @@ async function resolveMediaRef(ref: any, project: any, username: any) {
         logger.warn(`[chat] Could not resolve MinIO ref: ${ref}`);
         return { providerRef: ref, storageRef: ref };
       }
-      const chunks = [];
+      const chunks: any[] = [];
       // @ts-ignore
       for await ( const chunk of file.stream) {
         chunks.push(chunk);
@@ -252,7 +252,7 @@ async function prepareGenerationContext(
   params: any,
   emit: any,
   // @ts-ignore
-  { signal } = {},
+  { signal }: any = {},
 ) {
   const requestStart = performance.now();
   const requestId = crypto.randomUUID();
@@ -512,7 +512,7 @@ export async function handleConversation(
   params: any,
   emit: any,
   // @ts-ignore
-  { signal } = {},
+  { signal }: any = {},
 ) {
   let context: any;
   try {
@@ -672,7 +672,7 @@ export async function handleConversation(
  * Used exclusively by the /agent route.
  */
 // @ts-ignore
-export async function handleAgent(params: any, emit: any, { signal } = {}) {
+export async function handleAgent(params: any, emit: any, { signal }: any = {}) {
   let context: any;
   try {
     context = await prepareGenerationContext(params, emit, { signal });
@@ -823,7 +823,7 @@ async function handleImageAPIModel(context: any) {
   const lastUserMsg = messages.filter((m: any) => m.role === "user").pop();
   const prompt = lastUserMsg?.content || "";
   // Collect all images from the conversation
-  const allImages = [];
+  const allImages: any[] = [];
   // @ts-ignore
   for ( const message of messages) {
     if (message.images && message.images.length > 0) {
@@ -920,7 +920,7 @@ async function handleImageAPIModel(context: any) {
   // Link conversation to session
   // Auto-append to conversation
   if (conversationId) {
-    const messagesToAppend = [];
+    const messagesToAppend: any[] = [];
     // Only append the user message on the first call for this turn
     // (indicated by conversationMeta). Follow-up tool iterations reuse
     // the same conversationId but omit conversationMeta, so the user
@@ -981,7 +981,7 @@ export async function finalizeTextGeneration(
     textFragments,
     thinkingFragments,
   }: any,
-  overrideMessagesToAppend = null,
+  overrideMessagesToAppend: any = null,
 ) {
   const {
     providerName,
@@ -1173,7 +1173,7 @@ export async function finalizeTextGeneration(
   // ── Link conversation to trace ──────────────────────────────
   // ── Conversation persistence ──────────────────────────────────
   if (conversationId) {
-    let messagesToAppend = [];
+    let messagesToAppend: any[] = [];
     if (overrideMessagesToAppend) {
       messagesToAppend = [...overrideMessagesToAppend];
       // When the agentic loop ran multiple iterations, intermediate assistant
@@ -1603,7 +1603,7 @@ async function handleNonStreamingText(context: any) {
     }
   }
   // Handle images from the generation result (e.g. Gemini image models)
-  const images = [];
+  const images: any[] = [];
   if (genResult.images && genResult.images.length > 0) {
     // @ts-ignore
     for ( const image of genResult.images) {

@@ -65,7 +65,7 @@ router.post(
       if (!isMultimodal && text) {
         content = text;
       } else {
-        const parts = [];
+        const parts: any[] = [];
 
         if (text) {
           parts.push({ text });

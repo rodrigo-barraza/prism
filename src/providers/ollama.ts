@@ -30,7 +30,7 @@ function prepareOllamaMessages(messages: any) {
 
  * @returns {object} Provider object with all Ollama methods
  */
-export function createOllamaProvider(baseUrl: any, instanceId = "ollama") {
+export function createOllamaProvider(baseUrl: any, instanceId: any = "ollama") {
   const getBaseUrl = () => baseUrl;
 
   return {
@@ -41,8 +41,8 @@ export function createOllamaProvider(baseUrl: any, instanceId = "ollama") {
     async generateText(
       messages: any,
       // @ts-ignore
-      model = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["ollama"],
-      options = {},
+      model: any = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["ollama"],
+      options: any = {},
     ) {
       const baseUrl = getBaseUrl();
       logger.provider(
@@ -95,8 +95,8 @@ export function createOllamaProvider(baseUrl: any, instanceId = "ollama") {
     async *generateTextStream(
       messages: any,
       // @ts-ignore
-      model = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["ollama"],
-      options = {},
+      model: any = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["ollama"],
+      options: any = {},
     ) {
       const baseUrl = getBaseUrl();
       logger.provider(
@@ -238,9 +238,9 @@ export function createOllamaProvider(baseUrl: any, instanceId = "ollama") {
 
     async captionImage(
       images: any,
-      prompt = "Describe this image.",
+      prompt: any = "Describe this image.",
       // @ts-ignore
-      model = getDefaultModels(TYPES.IMAGE, TYPES.TEXT)["ollama"],
+      model: any = getDefaultModels(TYPES.IMAGE, TYPES.TEXT)["ollama"],
       systemPrompt: any,
     ) {
       const baseUrl = getBaseUrl();
@@ -257,7 +257,7 @@ export function createOllamaProvider(baseUrl: any, instanceId = "ollama") {
           return image;
         });
 
-        const messages = [];
+        const messages: any[] = [];
         if (systemPrompt) {
           messages.push({ role: "system", content: systemPrompt });
         }

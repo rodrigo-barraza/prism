@@ -19,26 +19,26 @@ import InternalToolRegistry from "./local-tools/InternalToolRegistry.js";
 
 /** @type {Array} Full tool schemas (with endpoint metadata) */
 // @ts-ignore
-let cachedSchemas = [];
+let cachedSchemas: any[] = [];
 
 /** @type {Array} Clean schemas for LLM (without endpoint metadata) */
 // @ts-ignore
-let cachedAISchemas = [];
+let cachedAISchemas: any[] = [];
 
 /** @type {Array} Client-facing schemas (with domain/dataSource/labels, without endpoint) */
 // @ts-ignore
-let cachedClientSchemas = [];
+let cachedClientSchemas: any[] = [];
 
 /** @type {Map<string, object>} Tool name → full schema (for routing) */
 const toolMap = new Map();
 
 /** @type {string[]} Allowed workspace root paths (fetched from tools-api) */
 // @ts-ignore
-let cachedWorkspaceRoots = [];
+let cachedWorkspaceRoots: any[] = [];
 
 /** @type {string[]} Static roots from config.js (immutable, for "pinned" UI) */
 // @ts-ignore
-let cachedStaticRoots = [];
+let cachedStaticRoots: any[] = [];
 
 /** @type {boolean} Whether initial fetch has completed */
 let initialized = false;
@@ -154,7 +154,7 @@ fetchSchemas();
 // Generic URL Builder — uses endpoint metadata
 // ────────────────────────────────────────────────────────────
 
-function buildUrlFromEndpoint(endpoint: any, args = {}) {
+function buildUrlFromEndpoint(endpoint: any, args: any = {}) {
   let path = endpoint.path;
   if (endpoint.conditionalPath) {
     const { param, template } = endpoint.conditionalPath;
@@ -206,7 +206,7 @@ const ARG_REMAPS = {
   search_products: { query: "q" },
 };
 
-async function executeToolGeneric(name: any, args = {}, context = {}) {
+async function executeToolGeneric(name: any, args: any = {}, context: any = {}) {
   const schema = toolMap.get(name);
   if (!schema || !schema.endpoint) {
     return { error: `Unknown tool: ${name}` };
@@ -294,7 +294,7 @@ async function executeToolGeneric(name: any, args = {}, context = {}) {
 
  * @returns {object} Headers object
  */
-function buildContextHeaders(context = {}) {
+function buildContextHeaders(context: any = {}) {
   const headers = {};
   // @ts-ignore
   if (context.project) headers["X-Project"] = context.project;
@@ -319,7 +319,7 @@ function buildContextHeaders(context = {}) {
   return headers;
 }
 
-async function fetchJson(url: any, extraHeaders = {}, signal: any) {
+async function fetchJson(url: any, extraHeaders: any = {}, signal: any) {
   try {
     const response = await fetch(url, {
       headers: { ...extraHeaders },
@@ -350,7 +350,7 @@ async function fetchJson(url: any, extraHeaders = {}, signal: any) {
 async function fetchJsonPost(
   url: any,
   body: any,
-  extraHeaders = {},
+  extraHeaders: any = {},
   signal: any,
 ) {
   try {
@@ -689,7 +689,7 @@ export default class ToolOrchestratorService {
       online = false;
     }
 
-    const apiStatus = { [TOOLS_SERVICE_URL]: online };
+    const apiStatus = { [TOOLS_SERVICE_URL as string]: online };
 
     const offline = new Set();
     if (!online) {
@@ -711,7 +711,7 @@ export default class ToolOrchestratorService {
     return initialized;
   }
 
-  static async executeTool(name: any, args = {}, context = {}) {
+  static async executeTool(name: any, args: any = {}, context: any = {}) {
     // ── Internal tools — delegated to InternalToolRegistry ──────
     if (InternalToolRegistry.has(name)) {
       return InternalToolRegistry.execute(name, args, context);
@@ -734,7 +734,7 @@ export default class ToolOrchestratorService {
     // stale images from conversation history.
     // @ts-ignore
     if (name === "generate_image" && context.messages) {
-      const referenceImages = [];
+      const referenceImages: any[] = [];
       // Find the last user message with images
       // @ts-ignore
       for (let i = context.messages.length - 1; i >= 0; i--) {
@@ -852,7 +852,7 @@ export default class ToolOrchestratorService {
 
 
    */
-  static async executeCoordinatorTool(name: any, args = {}, context = {}) {
+  static async executeCoordinatorTool(name: any, args: any = {}, context: any = {}) {
     const { default: CoordinatorService } =
       await import("./CoordinatorService.js");
 
@@ -924,7 +924,7 @@ export default class ToolOrchestratorService {
 
 
    */
-  static async executeMCPTool(fullName: any, args = {}) {
+  static async executeMCPTool(fullName: any, args: any = {}) {
     const parsed = MCPClientService.parseMCPToolName(fullName);
     if (!parsed) {
       return { error: `Invalid MCP tool name: ${fullName}` };
@@ -966,9 +966,9 @@ export default class ToolOrchestratorService {
    */
   static async executeToolStreaming(
     name: any,
-    args = {},
+    args: any = {},
     onChunk: any,
-    context = {},
+    context: any = {},
   ) {
     // @ts-ignore
     const streamPath = ToolOrchestratorService.STREAMABLE_TOOLS[name];
@@ -1043,8 +1043,8 @@ export default class ToolOrchestratorService {
       const decoder = new TextDecoder();
       let buffer = "";
       let finalResult = null;
-      const stdoutChunks = [];
-      const stderrChunks = [];
+      const stdoutChunks: any[] = [];
+      const stderrChunks: any[] = [];
 
       while (true) {
         const { done, value } = await reader.read();
@@ -1116,7 +1116,7 @@ export default class ToolOrchestratorService {
     );
   }
 
-  static async executeCustomTool(toolDef: any, args = {}) {
+  static async executeCustomTool(toolDef: any, args: any = {}) {
     // ── Code-based tools — execute JS via tools-service ────────
     // The execution tier (sandboxed/privileged) is stored on the tool
     // document and controls which vm globals are injected.

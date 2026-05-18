@@ -288,7 +288,7 @@ export default class MemoryExtractor {
 
       // ── Store each memory via MemoryService ─────────────────────
       const agentId = agent || "CODING";
-      const stored = [];
+      const stored: any[] = [];
 
       for ( const mem of memories as any[]) {
         if (!mem.content || !mem.title) continue;

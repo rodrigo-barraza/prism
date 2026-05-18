@@ -305,7 +305,7 @@ PERSONAS.set("CODING", {
   interactionRules: "",
   toolPolicy: (context: any) => {
     const enabled = new Set(context.enabledTools || []);
-    const tips = [];
+    const tips: any[] = [];
 
     // ── File editing tips ──
     if (enabled.has("multi_file_read")) {
@@ -329,7 +329,7 @@ PERSONAS.set("CODING", {
       );
     }
 
-    const sections = [];
+    const sections: any[] = [];
     if (tips.length > 0) {
       sections.push(`## Tool Tips\n${tips.join("\n")}`);
     }
@@ -765,7 +765,7 @@ PERSONAS.set("OOG", {
   interactionRules: "",
   toolPolicy: (context: any) => {
     const enabled = new Set(context.enabledTools || []);
-    const tips = [];
+    const tips: any[] = [];
 
     if (enabled.has("str_replace_file") && enabled.has("write_file")) {
       tips.push(

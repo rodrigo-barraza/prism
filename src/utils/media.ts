@@ -60,7 +60,7 @@ const MAX_IMAGE_DIMENSION = 2000;
 export async function compressImageForSizeLimit(
   base64Data: any,
   mediaType: any,
-  maxBytes = ANTHROPIC_IMAGE_MAX_BYTES,
+  maxBytes: any = ANTHROPIC_IMAGE_MAX_BYTES,
 ) {
   // Step 0: enforce pixel dimension limits first (avoids sending oversized pixels)
   const dimensionResult = await constrainImageDimensions(base64Data, mediaType);
@@ -102,7 +102,7 @@ export async function compressImageForSizeLimit(
 export async function constrainImageDimensions(
   base64Data: any,
   mediaType: any,
-  maxDim = MAX_IMAGE_DIMENSION,
+  maxDim: any = MAX_IMAGE_DIMENSION,
 ) {
   // GIFs are animated — skip (ffmpeg handles them in compressGifWithFfmpeg)
   if (mediaType === "image/gif") {
@@ -408,7 +408,7 @@ export function inferMimeFromUrl(url: any) {
 
  * @returns {Promise<string[]>} Array of data:image/jpeg;base64,... URLs
  */
-export async function extractVideoFrames(videoDataUrl: any, options = {}) {
+export async function extractVideoFrames(videoDataUrl: any, options: any = {}) {
   // @ts-ignore
   const { fps = 1, maxFrames = 8, quality = 5 } = options;
 
@@ -481,7 +481,7 @@ export async function extractVideoFrames(videoDataUrl: any, options = {}) {
     });
 
     // Read extracted frames and convert to data URLs
-    const frames = [];
+    const frames: any[] = [];
     for (let i = 1; i <= maxFrames; i++) {
       const framePath = join(tmpDir, `frame_${String(i).padStart(4, "0")}.jpg`);
       try {

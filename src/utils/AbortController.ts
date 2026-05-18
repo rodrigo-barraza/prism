@@ -23,7 +23,7 @@ const DEFAULT_MAX_LISTENERS = 50;
 
 
  */
-export function createAbortController(maxListeners = DEFAULT_MAX_LISTENERS) {
+export function createAbortController(maxListeners: any = DEFAULT_MAX_LISTENERS) {
   const controller = new AbortController();
   setMaxListeners(maxListeners, controller.signal);
   return controller;

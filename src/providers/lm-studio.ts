@@ -37,7 +37,7 @@ import { COORDINATOR_ONLY_TOOLS } from "../services/CoordinatorPrompt.js";
 // message.start/delta/end, content.start/delta/end, chat.end.
 // This generator yields the same event types as parseSSEStream so both
 // paths integrate seamlessly with the rest of the pipeline.
-async function* parseNativeSSEStream(reader: any, options = {}) {
+async function* parseNativeSSEStream(reader: any, options: any = {}) {
   const decoder = new TextDecoder();
   let buffer = "";
   let usage = null;
@@ -252,7 +252,7 @@ function buildNativeInput(messages: any) {
   // Build conversation history prefix (prior turns only)
   let historyPrefix = "";
   if (historyMessages.length > 0) {
-    const lines = [];
+    const lines: any[] = [];
     // @ts-ignore
     for ( const message of historyMessages) {
       const role = message.role === "user" ? "User" : "Assistant";
@@ -276,7 +276,7 @@ function buildNativeInput(messages: any) {
   }
   // Check if the last user message has images (multi-part)
   if (Array.isArray(lastUser.content)) {
-    const parts = [];
+    const parts: any[] = [];
     // Prepend history as a text part if present
     let textContent = lastUser.content
       .filter((c: any) => c.type === "text")
@@ -304,7 +304,7 @@ function buildNativeInput(messages: any) {
 
  * @returns {object} Provider object with all LM Studio methods
  */
-export function createLmStudioProvider(baseUrl: any, instanceId = "lm-studio") {
+export function createLmStudioProvider(baseUrl: any, instanceId: any = "lm-studio") {
   const getBaseUrl = () => baseUrl;
   const MCP_SERVER_URL = DEFAULT_MCP_SERVER_URL;
   // ── Per-instance model load mutex (singleflight) ──────────
@@ -318,8 +318,8 @@ export function createLmStudioProvider(baseUrl: any, instanceId = "lm-studio") {
     async generateText(
       messages: any,
       // @ts-ignore
-      model = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["lm-studio"],
-      options = {},
+      model: any = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["lm-studio"],
+      options: any = {},
     ) {
       const baseUrl = getBaseUrl();
       logger.provider(
@@ -375,8 +375,8 @@ export function createLmStudioProvider(baseUrl: any, instanceId = "lm-studio") {
     async *generateTextStream(
       messages: any,
       // @ts-ignore
-      model = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["lm-studio"],
-      options = {},
+      model: any = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["lm-studio"],
+      options: any = {},
     ) {
       const baseUrl = getBaseUrl();
       logger.provider(
@@ -1025,7 +1025,7 @@ export function createLmStudioProvider(baseUrl: any, instanceId = "lm-studio") {
 
      * @returns {Promise<{ embedding: number[], dimensions: number }>}
      */
-    async generateEmbedding(content: any, model: any, options = {}) {
+    async generateEmbedding(content: any, model: any, options: any = {}) {
       const baseUrl = getBaseUrl();
       logger.provider(
         "LM Studio",
@@ -1053,9 +1053,9 @@ export function createLmStudioProvider(baseUrl: any, instanceId = "lm-studio") {
     },
     async captionImage(
       images: any,
-      prompt = "Describe this image.",
+      prompt: any = "Describe this image.",
       // @ts-ignore
-      model = getDefaultModels(TYPES.IMAGE, TYPES.TEXT)["lm-studio"],
+      model: any = getDefaultModels(TYPES.IMAGE, TYPES.TEXT)["lm-studio"],
       systemPrompt: any,
     ) {
       const baseUrl = getBaseUrl();
@@ -1071,7 +1071,7 @@ export function createLmStudioProvider(baseUrl: any, instanceId = "lm-studio") {
             image_url: { url: image },
           })),
         ];
-        const messages = [];
+        const messages: any[] = [];
         if (systemPrompt) {
           messages.push({ role: "system", content: systemPrompt });
         }
@@ -1114,7 +1114,7 @@ export function createLmStudioProvider(baseUrl: any, instanceId = "lm-studio") {
      */
     async ensureModelLoaded(
       modelKey: any,
-      loadOptions = {},
+      loadOptions: any = {},
       signal: any,
       onStatus: any,
     ) {
@@ -1205,7 +1205,7 @@ export function createLmStudioProvider(baseUrl: any, instanceId = "lm-studio") {
     /**
      * Load a model into LM Studio memory.
      */
-    async loadModel(model: any, options = {}, signal: any) {
+    async loadModel(model: any, options: any = {}, signal: any) {
       const baseUrl = getBaseUrl();
       logger.provider("LM Studio", `loadModel model=${model}`);
       try {

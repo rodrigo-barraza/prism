@@ -60,7 +60,7 @@ function daysSince(isoDate: any) {
  * Find clusters of semantically similar memories using Union-Find.
  * Returns arrays of memory groups (each group has 2+ memories).
  */
-function findClusters(memories: any, threshold = CLUSTER_THRESHOLD) {
+function findClusters(memories: any, threshold: any = CLUSTER_THRESHOLD) {
   const n = memories.length;
   if (n < 2) return [];
   // Union-Find
@@ -247,7 +247,7 @@ function buildConversationalBatchInput(
   staleBatch: any,
   partitionMeta: any,
 ) {
-  const sections = [];
+  const sections: any[] = [];
 
   if (partitionMeta) {
     sections.push(`## Attribution Context`);
@@ -289,7 +289,7 @@ function buildConversationalBatchInput(
  * Returns null if both arrays are empty.
  */
 function buildBatchInput(clusterBatch: any, staleBatch: any) {
-  const sections = [];
+  const sections: any[] = [];
   if (clusterBatch.length > 0) {
     sections.push("## Clusters of Similar Memories\n");
     clusterBatch.forEach((cluster: any, i: any) => {
@@ -322,14 +322,14 @@ function buildBatchInput(clusterBatch: any, staleBatch: any) {
  * clusters and BATCH_MAX_STALE stale memories, with a hard token cap.
  */
 function buildBatches(clusters: any, staleMemories: any) {
-  const batches = [];
+  const batches: any[] = [];
 
   let clusterIdx = 0;
   let staleIdx = 0;
 
   // First, batch clusters (primary merge candidates)
   while (clusterIdx < clusters.length) {
-    const batchClusters = [];
+    const batchClusters: any[] = [];
     let batchTokens = 0;
 
     while (
@@ -354,7 +354,7 @@ function buildBatches(clusters: any, staleMemories: any) {
     }
 
     // Attach stale memories to the first cluster batch that has room
-    const batchStale = [];
+    const batchStale: any[] = [];
     while (
       staleIdx < staleMemories.length &&
       batchStale.length < BATCH_MAX_STALE
@@ -381,7 +381,7 @@ function buildBatches(clusters: any, staleMemories: any) {
 
   // Any remaining stale memories that didn't fit into cluster batches
   while (staleIdx < staleMemories.length) {
-    const batchStale = [];
+    const batchStale: any[] = [];
     let batchTokens = 0;
 
     while (
@@ -424,7 +424,7 @@ async function applyActions(
   project: any,
   username: any,
   // @ts-ignore
-  { traceId, endpoint, memoryLookup } = {},
+  { traceId, endpoint, memoryLookup }: any = {},
 ) {
   const results = { merged: 0, deleted: 0, errors: 0 };
   const isConversational = agentType === "conversational";
@@ -1126,7 +1126,7 @@ const MemoryConsolidationService = {
 
    * @returns {Promise<Array>} Consolidation history entries, newest first
    */
-  async getHistory(project: any, limit = 10) {
+  async getHistory(project: any, limit: any = 10) {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db) return [];
     return db

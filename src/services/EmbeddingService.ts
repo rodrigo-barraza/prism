@@ -29,7 +29,7 @@ const EmbeddingService = {
 
    * @returns {Promise<{ embedding: number[], dimensions: number, provider: string, model: string }>}
    */
-  async generate(content: any, options = {}) {
+  async generate(content: any, options: any = {}) {
     const requestId = crypto.randomUUID();
     const requestStart = performance.now();
     // Resolve defaults from settings when no explicit provider/model given
@@ -186,7 +186,7 @@ const EmbeddingService = {
 
 
    */
-  async embed(text: any, options = {}) {
+  async embed(text: any, options: any = {}) {
     const result = await this.generate(text, options);
     return result.embedding;
   },

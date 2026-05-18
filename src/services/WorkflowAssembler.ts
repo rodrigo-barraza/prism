@@ -25,8 +25,8 @@ function isUtilityStep(step: any) {
  * Build compound port IDs for a conversation input node.
  * Format: "{messageIndex}.{modality}" e.g. "0.text", "1.text", "1.image"
  */
-function buildConversationPorts(messages: any, supportedModalities = ["text"]) {
-  const ports = [];
+function buildConversationPorts(messages: any, supportedModalities: any = ["text"]) {
+  const ports: any[] = [];
   for (let i = 0; i < messages.length; i++) {
     const message = messages[i];
     ports.push(`${i}.text`);
@@ -103,9 +103,9 @@ function assembleGraph(steps: any) {
   }
 
   // @ts-ignore
-  const allNodes = [];
+  const allNodes: any[] = [];
   // @ts-ignore
-  const allEdges = [];
+  const allEdges: any[] = [];
   const nodeResults = {};
 
   // Track the last non-utility model ID for chain edges
@@ -153,7 +153,7 @@ function assembleGraph(steps: any) {
 
     // ── 3. Conversation Node ──
     const convId = `${stepPrefix}_conv`;
-    const messages = [];
+    const messages: any[] = [];
     if (step.systemPrompt)
       messages.push({ role: "system", content: step.systemPrompt });
     const userMsg = { role: "user", content: step.input || "" };

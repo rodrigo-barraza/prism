@@ -52,7 +52,7 @@ import {
 
  * @returns {object} Provider object with all llama.cpp methods
  */
-export function createLlamaCppProvider(baseUrl: any, instanceId = "llama-cpp") {
+export function createLlamaCppProvider(baseUrl: any, instanceId: any = "llama-cpp") {
   const getBaseUrl = () => baseUrl;
 
   return {
@@ -64,8 +64,8 @@ export function createLlamaCppProvider(baseUrl: any, instanceId = "llama-cpp") {
     async generateText(
       messages: any,
       // @ts-ignore
-      model = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["llama-cpp"],
-      options = {},
+      model: any = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["llama-cpp"],
+      options: any = {},
     ) {
       const baseUrl = getBaseUrl();
       logger.provider(
@@ -148,8 +148,8 @@ export function createLlamaCppProvider(baseUrl: any, instanceId = "llama-cpp") {
     async *generateTextStream(
       messages: any,
       // @ts-ignore
-      model = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["llama-cpp"],
-      options = {},
+      model: any = getDefaultModels(TYPES.TEXT, TYPES.TEXT)["llama-cpp"],
+      options: any = {},
     ) {
       const baseUrl = getBaseUrl();
       logger.provider(
@@ -233,9 +233,9 @@ export function createLlamaCppProvider(baseUrl: any, instanceId = "llama-cpp") {
 
     async captionImage(
       images: any,
-      prompt = "Describe this image.",
+      prompt: any = "Describe this image.",
       // @ts-ignore
-      model = getDefaultModels(TYPES.IMAGE, TYPES.TEXT)["llama-cpp"],
+      model: any = getDefaultModels(TYPES.IMAGE, TYPES.TEXT)["llama-cpp"],
       systemPrompt: any,
     ) {
       const baseUrl = getBaseUrl();
@@ -251,7 +251,7 @@ export function createLlamaCppProvider(baseUrl: any, instanceId = "llama-cpp") {
             image_url: { url: image },
           })),
         ];
-        const messages = [];
+        const messages: any[] = [];
         if (systemPrompt) {
           messages.push({ role: "system", content: systemPrompt });
         }

@@ -33,7 +33,7 @@ export default class AgenticToolResolver {
     const toolsApiSchemas = ToolOrchestratorService.getToolSchemas();
 
     // Load custom tools from MongoDB
-    let customToolsData = [];
+    let customToolsData: any[] = [];
     try {
       const db = MongoWrapper.getDb(MONGO_DB_NAME);
       if (db) {

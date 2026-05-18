@@ -164,7 +164,7 @@ function matchesAny(nameLower: any, patterns: any) {
 
  * @returns {object} Detected capabilities
  */
-function detectCapabilities(modelKey: any, providerMeta = {}) {
+function detectCapabilities(modelKey: any, providerMeta: any = {}) {
   const nameLower = (modelKey || "").toLowerCase();
 
   // Thinking / reasoning
@@ -192,7 +192,7 @@ function detectCapabilities(modelKey: any, providerMeta = {}) {
   const supportsAudio = matchesAny(nameLower, AUDIO_PATTERNS);
 
   // Build tools list
-  const tools = [];
+  const tools: any[] = [];
   if (supportsThinking) tools.push("Thinking");
   if (supportsFunctionCalling) tools.push("Tool Calling");
 
@@ -676,7 +676,7 @@ class LocalProviderGateway {
 
    * @returns {Promise<{ [instanceId: string]: object[] }>} Normalized models grouped by instance
    */
-  async discoverModels({ timeoutMs = 3000, enrich = true } = {}) {
+  async discoverModels({ timeoutMs = 3000, enrich = true }: any = {}) {
     const instances = listInstances();
     const models = {};
 
@@ -727,7 +727,7 @@ class LocalProviderGateway {
    */
   async discoverModelsForInstance(
     instanceId: any,
-    { timeoutMs = 3000, enrich = true } = {},
+    { timeoutMs = 3000, enrich = true }: any = {},
   ) {
     const inst = getInstance(instanceId);
     if (!inst) {
@@ -792,9 +792,9 @@ class LocalProviderGateway {
 
    * @returns {Promise<Array<{ instanceId: string, model: object }>>}
    */
-  async searchModels(filter = {}) {
+  async searchModels(filter: any = {}) {
     const allModels = await this.discoverModels();
-    const results = [];
+    const results: any[] = [];
 
     // @ts-ignore
     for ( const [instanceId, models] of Object.entries(allModels)) {
@@ -904,7 +904,7 @@ class LocalProviderGateway {
 
    * @returns {Promise<{ instanceId: string, type: string, provider: object } | null>}
    */
-  async resolveProvider(modelName: any, { timeoutMs = 3000 } = {}) {
+  async resolveProvider(modelName: any, { timeoutMs = 3000 }: any = {}) {
     const instances = listInstances();
 
     const checks = await Promise.allSettled(
@@ -953,7 +953,7 @@ class LocalProviderGateway {
 
    * @returns {Promise<{ [instanceId: string]: { ok: boolean, status: string, type: string, models?: number } }>}
    */
-  async checkHealth(timeoutMs = 3000) {
+  async checkHealth(timeoutMs: any = 3000) {
     const instances = listInstances();
     const health = {};
 
@@ -991,7 +991,7 @@ class LocalProviderGateway {
                 status: "timeout",
               };
             }
-            const models = result?.models || (result as any)?.data || [];
+            const models = (result as any)?.models || (result as any)?.data || [];
             return {
               id: inst.id,
               type: inst.type,
@@ -1036,7 +1036,7 @@ class LocalProviderGateway {
 
    * @returns {{ gpuGiB: number, totalGiB: number, cpuOffloaded: boolean, archParams: object, totalLayers: number } | null}
    */
-  estimateVRAM(modelData: any, options = {}) {
+  estimateVRAM(modelData: any, options: any = {}) {
     if (!modelData) return null;
 
     const sizeBytes = modelData.size_bytes || 0;
@@ -1083,7 +1083,7 @@ class LocalProviderGateway {
 
 
    */
-  async estimateVRAMForModel(instanceId: any, modelKey: any, options = {}) {
+  async estimateVRAMForModel(instanceId: any, modelKey: any, options: any = {}) {
     const provider = getProvider(instanceId);
     if (!provider?.listModels) return null;
 
@@ -1107,7 +1107,7 @@ class LocalProviderGateway {
 
 
    */
-  async loadModel(instanceId: any, modelKey: any, options = {}, signal: any) {
+  async loadModel(instanceId: any, modelKey: any, options: any = {}, signal: any) {
     const provider = getProvider(instanceId);
     if (!provider?.loadModel) {
       throw new Error(`Provider ${instanceId} does not support model loading`);
@@ -1126,7 +1126,7 @@ class LocalProviderGateway {
   async ensureModelLoaded(
     instanceId: any,
     modelKey: any,
-    options = {},
+    options: any = {},
     signal: any,
     onStatus: any,
   ) {
@@ -1170,7 +1170,7 @@ class LocalProviderGateway {
 
    * @returns {object} The mutated options object (for chaining)
    */
-  applyLocalDefaults(providerName: any, options: any, clientParams = {}) {
+  applyLocalDefaults(providerName: any, options: any, clientParams: any = {}) {
     if (!this.isLocal(providerName)) return options;
 
     // Default thinkingEnabled=true for providers that emit <think> tags,
@@ -1200,7 +1200,7 @@ class LocalProviderGateway {
 
    * @returns {Promise<{ text: string, thinking: string|null, usage: object }>}
    */
-  async generateText(messages: any, model: any, options = {}, instanceId: any) {
+  async generateText(messages: any, model: any, options: any = {}, instanceId: any) {
     const provider = await this._getProviderForModel(model, instanceId);
     return provider.generateText(messages, model, options);
   }
@@ -1215,7 +1215,7 @@ class LocalProviderGateway {
   async *generateTextStream(
     messages: any,
     model: any,
-    options = {},
+    options: any = {},
     instanceId: any,
   ) {
     const provider = await this._getProviderForModel(model, instanceId);
@@ -1232,7 +1232,7 @@ class LocalProviderGateway {
   async generateEmbedding(
     content: any,
     model: any,
-    options = {},
+    options: any = {},
     instanceId: any,
   ) {
     const provider = await this._getProviderForModel(model, instanceId);

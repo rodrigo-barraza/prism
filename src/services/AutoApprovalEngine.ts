@@ -101,7 +101,7 @@ const TIER_LABELS = {
  * Registered as a `beforeToolCall` hook in AgentHooks.
  */
 export default class AutoApprovalEngine {
-  constructor(options = {}) {
+  constructor(options: any = {}) {
     // @ts-ignore
     this.fullAuto = options.fullAuto || false;
     // @ts-ignore
@@ -164,8 +164,8 @@ export default class AutoApprovalEngine {
    * @returns {{ autoApproved: Array, needsApproval: Array }}
    */
   checkBatch(toolCalls: any) {
-    const autoApproved = [];
-    const needsApproval = [];
+    const autoApproved: any[] = [];
+    const needsApproval: any[] = [];
 
     // @ts-ignore
     for ( const tc of toolCalls) {

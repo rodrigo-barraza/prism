@@ -16,7 +16,7 @@ const MAX_TOKENS_PER_SEC = 10_000;
 
  * @returns {number|null} Rounded to 1 decimal, or null if not computable
  */
-export function calculateTokensPerSec(tokens: any, sec: any, opts = {}) {
+export function calculateTokensPerSec(tokens: any, sec: any, opts: any = {}) {
   // 1. Provider-reported value takes priority
   // @ts-ignore
   if (opts.providerReported != null && opts.providerReported > 0) {

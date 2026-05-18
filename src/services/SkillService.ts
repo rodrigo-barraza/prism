@@ -108,7 +108,7 @@ const SkillService = {
 
    */
   // @ts-ignore
-  async list({ project, limit = 50 } = {}) {
+  async list({ project, limit = 50 }: any = {}) {
     const col = getCollection();
     if (!col) return { skills: [], total: 0 };
 
@@ -171,7 +171,7 @@ const SkillService = {
 
    * @returns {Promise<object>} { prompt, config } or { error }
    */
-  async prepare(skillId: any, variables = {}) {
+  async prepare(skillId: any, variables: any = {}) {
     const col = getCollection();
     if (!col) return { error: "Database not available" };
 

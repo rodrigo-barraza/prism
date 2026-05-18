@@ -81,7 +81,7 @@ export default class InternalToolRegistry {
 
 
    */
-  static async execute(name: any, args: any, context = {}) {
+  static async execute(name: any, args: any, context: any = {}) {
     const tool = registry.get(name);
     if (!tool) {
       return { error: `Unknown internal tool: ${name}` };

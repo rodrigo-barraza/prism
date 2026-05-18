@@ -60,7 +60,7 @@ router.get(
       const staticRoots = ToolOrchestratorService.getStaticRoots();
 
       // Fetch full config from tools-api to get agent metadata
-      let agents = [];
+      let agents: any[] = [];
       try {
         const configRes = await fetch(`${TOOLS_SERVICE_URL}/admin/config`, {
           signal: AbortSignal.timeout(3000),

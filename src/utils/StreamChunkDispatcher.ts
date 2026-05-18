@@ -44,7 +44,7 @@ export async function uploadImageChunk(
   chunk: any,
   project: any,
   username: any,
-  logPrefix = "stream",
+  logPrefix: any = "stream",
 ) {
   if (!chunk.data) return null;
   try {
@@ -72,7 +72,7 @@ export async function uploadImageChunk(
 export function imageRefOrInline(
   minioRef: any,
   data: any,
-  mimeType = "image/png",
+  mimeType: any = "image/png",
 ) {
   return minioRef || `data:${mimeType};base64,${data}`;
 }
@@ -108,7 +108,7 @@ export async function dispatchChunk(
   chunk: any,
   state: any,
   context: any,
-  options = {},
+  options: any = {},
 ) {
   const { emit, project, username } = context;
   // @ts-ignore

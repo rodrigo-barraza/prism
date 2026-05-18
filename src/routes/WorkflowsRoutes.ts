@@ -23,9 +23,9 @@ const MEDIA_FIELDS = ["images", "audio", "video", "pdf"];
  */
 async function uploadIfDataUrl(
   value: any,
-  category = "uploads",
-  project = null,
-  username = null,
+  category: any = "uploads",
+  project: any = null,
+  username: any = null,
 ) {
   if (typeof value === "string" && value.startsWith("data:")) {
     try {
@@ -51,12 +51,12 @@ async function uploadIfDataUrl(
  */
 async function extractWorkflowFiles(
   nodes: any,
-  project = null,
-  username = null,
+  project: any = null,
+  username: any = null,
 ) {
   if (!Array.isArray(nodes) || !FileService.isExternalStorage()) return nodes;
 
-  const processed = [];
+  const processed: any[] = [];
   // @ts-ignore
   for ( const node of nodes) {
     const updated = { ...node };
@@ -76,7 +76,7 @@ async function extractWorkflowFiles(
 
     // 2. Messages array (conversation / model nodes)
     if (Array.isArray(updated.messages)) {
-      const newMessages = [];
+      const newMessages: any[] = [];
       // @ts-ignore
       for ( const message of updated.messages) {
         const m = { ...message };
@@ -84,7 +84,7 @@ async function extractWorkflowFiles(
         for ( const field of MEDIA_FIELDS) {
           const value = m[field];
           if (Array.isArray(value)) {
-            const array = [];
+            const array: any[] = [];
             // @ts-ignore
             for ( const item of value) {
               array.push(
@@ -131,8 +131,8 @@ async function extractWorkflowFiles(
  */
 async function extractNodeResultFiles(
   nodeResults: any,
-  project = null,
-  username = null,
+  project: any = null,
+  username: any = null,
 ) {
   if (
     !nodeResults ||
@@ -154,7 +154,7 @@ async function extractNodeResultFiles(
     for ( const [mod, data] of Object.entries(outputs)) {
       // conversation modality is an array of message objects with nested media
       if (mod === "conversation" && Array.isArray(data)) {
-        const msgs = [];
+        const msgs: any[] = [];
         // @ts-ignore
         for ( const message of data) {
           const m = { ...message };
@@ -162,7 +162,7 @@ async function extractNodeResultFiles(
           for ( const field of MEDIA_FIELDS) {
             const value = m[field];
             if (Array.isArray(value)) {
-              const array = [];
+              const array: any[] = [];
               // @ts-ignore
               for ( const item of value) {
                 array.push(

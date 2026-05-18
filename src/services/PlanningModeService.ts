@@ -84,7 +84,7 @@ export default class PlanningModeService {
    */
   static extractSteps(planText: any) {
     const stepRegex = /^\d+\.\s+(.+)$/gm;
-    const steps = [];
+    const steps: any[] = [];
     let match: any;
     while ((match = stepRegex.exec(planText)) !== null) {
       steps.push(match[1].trim());

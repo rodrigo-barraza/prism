@@ -169,7 +169,7 @@ export function resolveArchParams(
   architecture: any,
   paramsString: any,
   sizeBytes: any,
-  bitsPerWeight = 4,
+  bitsPerWeight: any = 4,
 ) {
   let billions = 0;
   if (paramsString) {

@@ -166,8 +166,8 @@ export function calculateLiveCost(usage: any, pricing: any) {
 export function calculateImageCost(
   prompt: any,
   pricing: any,
-  inputImages = 0,
-  outputImageTokens = 1120,
+  inputImages: any = 0,
+  outputImageTokens: any = 1120,
 ) {
   if (!pricing || !prompt) return null;
 

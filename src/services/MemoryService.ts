@@ -42,7 +42,7 @@ export const CODING_MEMORY_TYPES = ["user", "feedback", "project", "reference"];
 
 
  */
-async function generateEmbedding(text: any, options = {}) {
+async function generateEmbedding(text: any, options: any = {}) {
   return EmbeddingService.embed(text, { source: "memory", ...options });
 }
 /**
@@ -80,7 +80,7 @@ function freshnessCaveat(createdAt: any) {
 async function extractFactsFromConversation(
   messages: any,
   participants: any,
-  meta = {},
+  meta: any = {},
 ) {
   // @ts-ignore
   const endpoint = meta.endpoint || null;
@@ -328,7 +328,7 @@ const MemoryService = {
     logger.info(
       `[MemoryService] Extracted ${facts.length} fact(s), generating embeddings...`,
     );
-    const storedMemories = [];
+    const storedMemories: any[] = [];
     for ( const fact of facts as any[]) {
       try {
         const embedding = await generateEmbedding(fact.fact, {

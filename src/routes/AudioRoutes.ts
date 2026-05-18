@@ -163,7 +163,7 @@ export async function handleVoice(params: any, emitBinary: any, emitJSON: any) {
       } catch (error: any) {
         logger.error(`Failed to upload TTS audio: ${error.message}`);
       }
-      const messagesToAppend = [];
+      const messagesToAppend: any[] = [];
       // Derive user message from text
       messagesToAppend.push({
         role: "user",
@@ -252,7 +252,7 @@ router.post(
       // ── Data URL format: collect chunks → base64-encode → return JSON ──
       if (req.query.format === "dataUrl") {
         // @ts-ignore
-        const audioChunks = [];
+        const audioChunks: any[] = [];
         const resultContentType = await handleVoice(
           {
             ...req.body,
