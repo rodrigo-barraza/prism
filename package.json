@@ -4,7 +4,6 @@
   "description": "Prism the AI Gateway — a centralized backend for routing requests to multiple AI providers",
   "type": "module",
   "main": "dist/boot.js",
-  "types": "dist/boot.d.ts",
   "scripts": {
     "start": "node dist/boot.js",
     "dev": "tsx watch src/boot.ts",
@@ -62,6 +61,7 @@
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.6.0",
     "prettier": "^3.8.3",
+    "@types/supertest": "^7.2.0",
     "supertest": "^7.2.2",
     "ts-morph": "^28.0.0",
     "tsx": "^4.22.0",
