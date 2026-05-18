@@ -3,12 +3,12 @@ import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 // @ts-ignore
 import { sleep } from "@rodrigo-barraza/utilities-library";
 import express from "express";
-import { getProvider } from "../providers/index.js";
-import { isInstance } from "../providers/instance-registry.js";
-import logger from "../utils/logger.js";
-import LocalProviderGateway from "../services/LocalProviderGateway.js";
-import {} from "../utils/utilities.js";
-import { initSseResponse } from "../utils/SseUtilities.js";
+import { getProvider } from "../providers/index.ts";
+import { isInstance } from "../providers/instance-registry.ts";
+import logger from "../utils/logger.ts";
+import LocalProviderGateway from "../services/LocalProviderGateway.ts";
+import {} from "../utils/utilities.ts";
+import { initSseResponse } from "../utils/SseUtilities.ts";
 const router = express.Router();
 /** Resolve instance ID from request — supports ?instance=lm-studio-2 */
 function resolveInstanceId(req: any) {

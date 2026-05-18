@@ -1,5 +1,5 @@
-import { handleConversation } from "../routes/ChatRoutes.js";
-import { handleVoice } from "../routes/AudioRoutes.js";
+import { handleConversation } from "../routes/ChatRoutes.ts";
+import { handleVoice } from "../routes/AudioRoutes.ts";
 import {
   GoogleGenAI,
   Modality,
@@ -7,14 +7,14 @@ import {
   EndSensitivity,
 } from "@google/genai";
 // @ts-ignore
-import { GOOGLE_API_KEY, LIVE_AUDIO_MODEL } from "../../config.js";
+import { GOOGLE_API_KEY, LIVE_AUDIO_MODEL } from "../../config.ts";
 import crypto from "crypto";
-import logger from "../utils/logger.js";
-import RequestLogger from "../services/RequestLogger.js";
-import ConversationService from "../services/ConversationService.js";
-import { calculateLiveCost } from "../utils/CostCalculator.js";
-import { getModelByName } from "../config.js";
-import { calculateTokensPerSec } from "../utils/math.js";
+import logger from "../utils/logger.ts";
+import RequestLogger from "../services/RequestLogger.ts";
+import ConversationService from "../services/ConversationService.ts";
+import { calculateLiveCost } from "../utils/CostCalculator.ts";
+import { getModelByName } from "../config.ts";
+import { calculateTokensPerSec } from "../utils/math.ts";
 
 /**
  * Set up WebSocket handlers on the HTTP server.

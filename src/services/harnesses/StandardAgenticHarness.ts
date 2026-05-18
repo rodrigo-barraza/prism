@@ -1,20 +1,20 @@
-import BaseAgenticHarness from "./BaseAgenticHarness.js";
-import ToolOrchestratorService from "../ToolOrchestratorService.js";
-import MongoWrapper from "../../wrappers/MongoWrapper.js";
+import BaseAgenticHarness from "./BaseAgenticHarness.ts";
+import ToolOrchestratorService from "../ToolOrchestratorService.ts";
+import MongoWrapper from "../../wrappers/MongoWrapper.ts";
 // @ts-ignore
-import { MONGO_DB_NAME } from "../../../config.js";
-import logger from "../../utils/logger.js";
+import { MONGO_DB_NAME } from "../../../config.ts";
+import logger from "../../utils/logger.ts";
 
-import { finalizeTextGeneration } from "../../routes/ChatRoutes.js";
-import { mergeUsage } from "../../utils/CostCalculator.js";
-import AgentHooks from "../AgentHooks.js";
-import AutoApprovalEngine from "../AutoApprovalEngine.js";
-import SystemPromptAssembler from "../SystemPromptAssembler.js";
-import PlanningModeService from "../PlanningModeService.js";
-import MemoryExtractor from "../MemoryExtractor.js";
-import SessionGenerationTracker from "../SessionGenerationTracker.js";
-import { pendingApprovals } from "../ApprovalRegistry.js";
-import { expandMessagesForFC } from "../../utils/FunctionCallingUtilities.js";
+import { finalizeTextGeneration } from "../../routes/ChatRoutes.ts";
+import { mergeUsage } from "../../utils/CostCalculator.ts";
+import AgentHooks from "../AgentHooks.ts";
+import AutoApprovalEngine from "../AutoApprovalEngine.ts";
+import SystemPromptAssembler from "../SystemPromptAssembler.ts";
+import PlanningModeService from "../PlanningModeService.ts";
+import MemoryExtractor from "../MemoryExtractor.ts";
+import SessionGenerationTracker from "../SessionGenerationTracker.ts";
+import { pendingApprovals } from "../ApprovalRegistry.ts";
+import { expandMessagesForFC } from "../../utils/FunctionCallingUtilities.ts";
 
 const MAX_TOOL_ITERATIONS = 25;
 const MAX_CONSECUTIVE_TOOL_ERRORS = 3;

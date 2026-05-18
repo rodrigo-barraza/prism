@@ -1,6 +1,6 @@
-import MongoWrapper from "../wrappers/MongoWrapper.js";
+import MongoWrapper from "../wrappers/MongoWrapper.ts";
 // @ts-ignore
-import { MONGO_DB_NAME } from "../../config.js";
+import { MONGO_DB_NAME } from "../../config.ts";
 
 /**
  * Express middleware that attaches the MongoDB database instance to `req.db`.

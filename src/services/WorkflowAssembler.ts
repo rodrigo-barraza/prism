@@ -1,4 +1,4 @@
-import { getModelByName } from "../config.js";
+import { getModelByName } from "../config.ts";
 
 // ─── LAYOUT CONSTANTS ───────────────────────────────────────
 

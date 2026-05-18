@@ -4,9 +4,9 @@ import {
     calculateImageCost,
     calculateLiveCost,
     getTotalInputTokens,
-} from "../src/utils/CostCalculator.js";
-import { normalizeUsage } from "../src/utils/openai-compat.js";
-import { TYPES, getPricing, getModelByName } from "../src/config.js";
+} from "../src/utils/CostCalculator.ts";
+import { normalizeUsage } from "../src/utils/openai-compat.ts";
+import { TYPES, getPricing, getModelByName } from "../src/config.ts";
 
 
 // ═══════════════════════════════════════════════════════════════

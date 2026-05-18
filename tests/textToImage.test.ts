@@ -4,7 +4,7 @@ import {
   app,
   TEST_SECRET,
   MOCK_GENERATE_IMAGE,
-} from "./setup.js";
+} from "./setup.ts";
 
 describe("POST /chat (text-to-image via imageAPI model)", () => {
   beforeEach(() => {

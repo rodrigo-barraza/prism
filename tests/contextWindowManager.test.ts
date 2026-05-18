@@ -11,7 +11,7 @@ vi.mock("../src/utils/logger.js", () => ({
   },
 }));
 
-import ContextWindowManager from "../src/utils/ContextWindowManager.js";
+import ContextWindowManager from "../src/utils/ContextWindowManager.ts";
 
 // ═══════════════════════════════════════════════════════════════
 // Token Estimation

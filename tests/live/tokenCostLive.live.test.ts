@@ -20,8 +20,8 @@
  * ═══════════════════════════════════════════════════════════
  */
 import { describe, it, expect, beforeAll } from "vitest";
-import { calculateTextCost } from "../../src/utils/CostCalculator.js";
-import { TYPES, getPricing } from "../../src/config.js";
+import { calculateTextCost } from "../../src/utils/CostCalculator.ts";
+import { TYPES, getPricing } from "../../src/config.ts";
 
 const PRISM_SERVICE_URL = "http://localhost:7777";
 const TEXT_PRICING = getPricing(TYPES.TEXT, TYPES.TEXT);

@@ -6,7 +6,7 @@
  * Google does not expose rate-limit headers — static tier data is used instead.
  */
 
-import rateLimitStore from "../services/RateLimitStore.js";
+import rateLimitStore from "../services/RateLimitStore.ts";
 
 /**
  * Extract rate-limit headers from an OpenAI HTTP response.

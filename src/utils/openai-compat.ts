@@ -4,8 +4,8 @@
 // Shared helpers for providers that use the OpenAI Chat Completions
 // API format: lm-studio, vllm, llama-cpp, and openai itself.
 
-import { getDataUrlMimeType } from "./media.js";
-import { ThinkTagParser, extractThinkTags } from "./ThinkTagParser.js";
+import { getDataUrlMimeType } from "./media.ts";
+import { ThinkTagParser, extractThinkTags } from "./ThinkTagParser.ts";
 
 // ── Tool Conversion ─────────────────────────────────────────
 

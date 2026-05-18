@@ -1,17 +1,17 @@
 // @ts-ignore
 import { daysSinceIso } from "@rodrigo-barraza/utilities-library";
 import crypto from "crypto";
-import MongoWrapper from "../wrappers/MongoWrapper.js";
-import { getProvider } from "../providers/index.js";
+import MongoWrapper from "../wrappers/MongoWrapper.ts";
+import { getProvider } from "../providers/index.ts";
 // @ts-ignore
-import { MONGO_DB_NAME } from "../../config.js";
-import EmbeddingService from "./EmbeddingService.js";
-import RequestLogger from "./RequestLogger.js";
-import logger from "../utils/logger.js";
-import { cosineSimilarity } from "../utils/math.js";
-import { parseJsonFromLlmResponse } from "../utils/utilities.js";
-import { COLLECTIONS } from "../constants.js";
-import SettingsService from "./SettingsService.js";
+import { MONGO_DB_NAME } from "../../config.ts";
+import EmbeddingService from "./EmbeddingService.ts";
+import RequestLogger from "./RequestLogger.ts";
+import logger from "../utils/logger.ts";
+import { cosineSimilarity } from "../utils/math.ts";
+import { parseJsonFromLlmResponse } from "../utils/utilities.ts";
+import { COLLECTIONS } from "../constants.ts";
+import SettingsService from "./SettingsService.ts";
 // ─── Constants ────────────────────────────────────────────────────────────────
 /** Single unified collection for all agent memories. */
 const COLLECTION = COLLECTIONS.MEMORIES;

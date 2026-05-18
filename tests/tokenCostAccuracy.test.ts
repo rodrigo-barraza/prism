@@ -4,9 +4,9 @@ import {
   app,
   MOCK_GENERATE_TEXT,
   MOCK_GENERATE_TEXT_STREAM,
-} from "./setup.js";
-import { calculateTextCost } from "../src/utils/CostCalculator.js";
-import { TYPES, getPricing } from "../src/config.js";
+} from "./setup.ts";
+import { calculateTextCost } from "../src/utils/CostCalculator.ts";
+import { TYPES, getPricing } from "../src/config.ts";
 
 // ═══════════════════════════════════════════════════════════════
 // Token & Cost Accuracy Tests

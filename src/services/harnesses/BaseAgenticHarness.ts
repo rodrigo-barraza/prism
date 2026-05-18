@@ -1,17 +1,17 @@
-import { expandMessagesForFC } from "../../utils/FunctionCallingUtilities.js";
+import { expandMessagesForFC } from "../../utils/FunctionCallingUtilities.ts";
 import {
   mergeUsage,
   createUsageAccumulator,
-} from "../../utils/CostCalculator.js";
-import { calculateTextCost } from "../../utils/CostCalculator.js";
-import { calculateTokensPerSec } from "../../utils/math.js";
-import { getPricing, TYPES } from "../../config.js";
-import { stripToolCallMarkup } from "../../utils/StreamChunkDispatcher.js";
-import ContextWindowManager from "../../utils/ContextWindowManager.js";
-import SessionGenerationTracker from "../SessionGenerationTracker.js";
-import RequestLogger from "../RequestLogger.js";
-import FileService from "../FileService.js";
-import logger from "../../utils/logger.js";
+} from "../../utils/CostCalculator.ts";
+import { calculateTextCost } from "../../utils/CostCalculator.ts";
+import { calculateTokensPerSec } from "../../utils/math.ts";
+import { getPricing, TYPES } from "../../config.ts";
+import { stripToolCallMarkup } from "../../utils/StreamChunkDispatcher.ts";
+import ContextWindowManager from "../../utils/ContextWindowManager.ts";
+import SessionGenerationTracker from "../SessionGenerationTracker.ts";
+import RequestLogger from "../RequestLogger.ts";
+import FileService from "../FileService.ts";
+import logger from "../../utils/logger.ts";
 
 /**
  * BaseAgenticHarness — abstract base class that defines the contract

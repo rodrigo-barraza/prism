@@ -1,4 +1,4 @@
-import logger from "../utils/logger.js";
+import logger from "../utils/logger.ts";
 
 /**
  * Tool approval tiers — deterministic, rule-based permission system.

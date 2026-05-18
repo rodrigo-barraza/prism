@@ -1,10 +1,10 @@
-import MongoWrapper from "../wrappers/MongoWrapper.js";
+import MongoWrapper from "../wrappers/MongoWrapper.ts";
 // @ts-ignore
 import { deepMerge } from "@rodrigo-barraza/utilities-library";
 // @ts-ignore
-import { MONGO_DB_NAME } from "../../config.js";
-import { COLLECTIONS } from "../constants.js";
-import logger from "../utils/logger.js";
+import { MONGO_DB_NAME } from "../../config.ts";
+import { COLLECTIONS } from "../constants.ts";
+import logger from "../utils/logger.ts";
 
 // ─── Default Settings ─────────────────────────────────────────────────────────
 

@@ -1,5 +1,5 @@
-import logger from "../utils/logger.js";
-import { L } from "./ToolTaxonomyConstants.js";
+import logger from "../utils/logger.ts";
+import { L } from "./ToolTaxonomyConstants.ts";
 
 // ════════════════════════════════════════════════════════════════
 // Agent Persona Registry

@@ -1,5 +1,5 @@
-import ConversationService from "../services/ConversationService.js";
-import logger from "./logger.js";
+import ConversationService from "../services/ConversationService.ts";
+import logger from "./logger.ts";
 
 // ─── Conversation persistence helpers ───────────────────────
 

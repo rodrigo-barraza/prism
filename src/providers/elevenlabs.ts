@@ -1,9 +1,9 @@
 import WebSocket from "ws";
-import { ProviderError } from "../utils/errors.js";
-import logger from "../utils/logger.js";
+import { ProviderError } from "../utils/errors.ts";
+import logger from "../utils/logger.ts";
 // @ts-ignore
-import { ELEVENLABS_API_KEY } from "../../config.js";
-import { TYPES, DEFAULT_VOICES, getDefaultModels } from "../config.js";
+import { ELEVENLABS_API_KEY } from "../../config.ts";
+import { TYPES, DEFAULT_VOICES, getDefaultModels } from "../config.ts";
 
 function getApiKey() {
   if (!ELEVENLABS_API_KEY) {

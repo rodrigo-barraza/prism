@@ -1,9 +1,9 @@
-import MongoWrapper from "../wrappers/MongoWrapper.js";
+import MongoWrapper from "../wrappers/MongoWrapper.ts";
 // @ts-ignore
-import { MONGO_DB_NAME } from "../../config.js";
-import logger from "../utils/logger.js";
-import { COLLECTIONS, CHANGE_STREAM_RECONNECT_MS, CHANGE_STREAM_RETRY_MS } from "../constants.js";
-import { registerCleanup } from "../utils/CleanupRegistry.js";
+import { MONGO_DB_NAME } from "../../config.ts";
+import logger from "../utils/logger.ts";
+import { COLLECTIONS, CHANGE_STREAM_RECONNECT_MS, CHANGE_STREAM_RETRY_MS } from "../constants.ts";
+import { registerCleanup } from "../utils/CleanupRegistry.ts";
 
 /**
  * ChangeStreamService — watches MongoDB collections via Change Streams

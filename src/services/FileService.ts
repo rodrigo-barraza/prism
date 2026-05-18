@@ -1,6 +1,6 @@
 import crypto from "crypto";
-import MinioWrapper from "../wrappers/MinioWrapper.js";
-import logger from "../utils/logger.js";
+import MinioWrapper from "../wrappers/MinioWrapper.ts";
+import logger from "../utils/logger.ts";
 
 /**
  * MIME type → file extension map for common file types.

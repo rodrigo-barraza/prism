@@ -1,9 +1,9 @@
 // @ts-ignore
 import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
-import CustomAgentService from "../services/CustomAgentService.js";
-import AgentPersonaRegistry from "../services/AgentPersonaRegistry.js";
-import logger from "../utils/logger.js";
+import CustomAgentService from "../services/CustomAgentService.ts";
+import AgentPersonaRegistry from "../services/AgentPersonaRegistry.ts";
+import logger from "../utils/logger.ts";
 
 const router = express.Router();
 

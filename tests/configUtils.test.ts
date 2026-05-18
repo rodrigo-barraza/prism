@@ -11,7 +11,7 @@
  */
 import { describe, it, expect } from "vitest";
 import request from "supertest";
-import { app } from "./setup.js";
+import { app } from "./setup.ts";
 
 // ═══════════════════════════════════════════════════════════════
 // Pattern detection — verify the extracted constants work correctly

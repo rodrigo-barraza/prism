@@ -4,47 +4,47 @@ import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import { formatCostTag, roundMs } from "@rodrigo-barraza/utilities-library";
 import express from "express";
 import crypto from "crypto";
-import { getProvider } from "../providers/index.js";
-import { ProviderError } from "../utils/errors.js";
+import { getProvider } from "../providers/index.ts";
+import { ProviderError } from "../utils/errors.ts";
 import {
   TYPES,
   getDefaultModels,
   getPricing,
   getModelByName,
-} from "../config.js";
+} from "../config.ts";
 import {
   estimateTokens,
   calculateTextCost,
   calculateImageCost,
   getTotalInputTokens,
   mergeUsage,
-} from "../utils/CostCalculator.js";
-import logger from "../utils/logger.js";
-import RequestLogger from "../services/RequestLogger.js";
-import FileService from "../services/FileService.js";
+} from "../utils/CostCalculator.ts";
+import logger from "../utils/logger.ts";
+import RequestLogger from "../services/RequestLogger.ts";
+import FileService from "../services/FileService.ts";
 import {
   createStreamState,
   dispatchChunk,
-} from "../utils/StreamChunkDispatcher.js";
-import { calculateTokensPerSec } from "../utils/math.js";
+} from "../utils/StreamChunkDispatcher.ts";
+import { calculateTokensPerSec } from "../utils/math.ts";
 import {
   compressImageForSizeLimit,
   constrainImageDimensions,
-} from "../utils/media.js";
-import {} from "../utils/utilities.js";
-import SessionGenerationTracker from "../services/SessionGenerationTracker.js";
-import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
-import localModelQueue from "../services/LocalModelQueue.js";
-import LocalProviderGateway from "../services/LocalProviderGateway.js";
-import { getInstancesByType } from "../providers/instance-registry.js";
-import { resolveModelForInstances } from "../utils/ModelResolution.js";
+} from "../utils/media.ts";
+import {} from "../utils/utilities.ts";
+import SessionGenerationTracker from "../services/SessionGenerationTracker.ts";
+import ToolOrchestratorService from "../services/ToolOrchestratorService.ts";
+import localModelQueue from "../services/LocalModelQueue.ts";
+import LocalProviderGateway from "../services/LocalProviderGateway.ts";
+import { getInstancesByType } from "../providers/instance-registry.ts";
+import { resolveModelForInstances } from "../utils/ModelResolution.ts";
 import {
   markGenerating,
   appendAndFinalize,
-} from "../utils/ConversationUtilities.js";
-import { handleSseRequest, handleJsonRequest } from "../utils/SseUtilities.js";
-import { COLLECTIONS } from "../constants.js";
-import AgentPersonaRegistry from "../services/AgentPersonaRegistry.js";
+} from "../utils/ConversationUtilities.ts";
+import { handleSseRequest, handleJsonRequest } from "../utils/SseUtilities.ts";
+import { COLLECTIONS } from "../constants.ts";
+import AgentPersonaRegistry from "../services/AgentPersonaRegistry.ts";
 const router = express.Router();
 /**
  * Resolve the MongoDB collection for conversation persistence.

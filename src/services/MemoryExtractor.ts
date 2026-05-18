@@ -1,17 +1,17 @@
 import crypto from "crypto";
-import { getProvider } from "../providers/index.js";
-import MemoryService, { CODING_MEMORY_TYPES } from "./MemoryService.js";
-import MemoryConsolidationService from "./MemoryConsolidationService.js";
-import RequestLogger from "./RequestLogger.js";
-import SettingsService from "./SettingsService.js";
-import logger from "../utils/logger.js";
-import { parseJsonFromLlmResponse } from "../utils/utilities.js";
+import { getProvider } from "../providers/index.ts";
+import MemoryService, { CODING_MEMORY_TYPES } from "./MemoryService.ts";
+import MemoryConsolidationService from "./MemoryConsolidationService.ts";
+import RequestLogger from "./RequestLogger.ts";
+import SettingsService from "./SettingsService.ts";
+import logger from "../utils/logger.ts";
+import { parseJsonFromLlmResponse } from "../utils/utilities.ts";
 import {
   estimateTokens,
   calculateTextCost,
   getTotalInputTokens,
-} from "../utils/CostCalculator.js";
-import { TYPES, getPricing } from "../config.js";
+} from "../utils/CostCalculator.ts";
+import { TYPES, getPricing } from "../config.ts";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 

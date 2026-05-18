@@ -1,12 +1,12 @@
-import ToolOrchestratorService from "./ToolOrchestratorService.js";
-import MongoWrapper from "../wrappers/MongoWrapper.js";
+import ToolOrchestratorService from "./ToolOrchestratorService.ts";
+import MongoWrapper from "../wrappers/MongoWrapper.ts";
 // @ts-ignore
-import { MONGO_DB_NAME } from "../../config.js";
-import logger from "../utils/logger.js";
-import AgentPersonaRegistry from "./AgentPersonaRegistry.js";
-import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
-import InternalToolRegistry from "./local-tools/InternalToolRegistry.js";
-import { TYPES } from "../config.js";
+import { MONGO_DB_NAME } from "../../config.ts";
+import logger from "../utils/logger.ts";
+import AgentPersonaRegistry from "./AgentPersonaRegistry.ts";
+import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.ts";
+import InternalToolRegistry from "./local-tools/InternalToolRegistry.ts";
+import { TYPES } from "../config.ts";
 
 /** Coordinator tools bypass the enabledTools filter (always available) */
 const COORDINATOR_TOOL_NAMES = new Set(COORDINATOR_ONLY_TOOLS);

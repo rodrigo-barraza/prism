@@ -1,4 +1,4 @@
-import { createUsageAccumulator } from "../utils/CostCalculator.js";
+import { createUsageAccumulator } from "../utils/CostCalculator.ts";
 
 /**
  * AgenticLoopState — encapsulates all mutable accumulated state

@@ -1,16 +1,16 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 import crypto from "crypto";
 import { Readable } from "stream";
-import { ProviderError } from "../utils/errors.js";
-import logger from "../utils/logger.js";
+import { ProviderError } from "../utils/errors.ts";
+import logger from "../utils/logger.ts";
 // @ts-ignore
 import {
   GOOGLE_API_KEY,
   GOOGLE_TTS_MODEL,
   GOOGLE_EMBEDDING_MODEL,
 // @ts-ignore
-} from "../../config.js";
-import { TYPES, MODELS, DEFAULT_VOICES, getDefaultModels } from "../config.js";
+} from "../../config.ts";
+import { TYPES, MODELS, DEFAULT_VOICES, getDefaultModels } from "../config.ts";
 
 // @ts-ignore
 let client = null;

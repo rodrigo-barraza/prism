@@ -2,12 +2,12 @@
 import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import { Router } from "express";
 import { ObjectId } from "mongodb";
-import logger from "../utils/logger.js";
-import requireDb from "../middleware/RequireDbMiddleware.js";
-import FileService from "../services/FileService.js";
-import MinioWrapper from "../wrappers/MinioWrapper.js";
-import { assembleGraph } from "../services/WorkflowAssembler.js";
-import { COLLECTIONS } from "../constants.js";
+import logger from "../utils/logger.ts";
+import requireDb from "../middleware/RequireDbMiddleware.ts";
+import FileService from "../services/FileService.ts";
+import MinioWrapper from "../wrappers/MinioWrapper.ts";
+import { assembleGraph } from "../services/WorkflowAssembler.ts";
+import { COLLECTIONS } from "../constants.ts";
 
 const router = Router();
 router.use(requireDb);

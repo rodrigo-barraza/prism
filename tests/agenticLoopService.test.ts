@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import AgenticLoopService from "../src/services/AgenticLoopService.js";
-import ContextWindowManager from "../src/utils/ContextWindowManager.js";
-import { TYPES } from "../src/config.js";
+import AgenticLoopService from "../src/services/AgenticLoopService.ts";
+import ContextWindowManager from "../src/utils/ContextWindowManager.ts";
+import { TYPES } from "../src/config.ts";
 
 vi.mock("../src/utils/logger.js", () => ({
   default: {

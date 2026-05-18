@@ -1,17 +1,17 @@
 // @ts-ignore
-import { TOOLS_SERVICE_URL } from "../../config.js";
-import MCPClientService from "./MCPClientService.js";
-import logger from "../utils/logger.js";
-import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
-import { createAbortController } from "../utils/AbortController.js";
+import { TOOLS_SERVICE_URL } from "../../config.ts";
+import MCPClientService from "./MCPClientService.ts";
+import logger from "../utils/logger.ts";
+import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.ts";
+import { createAbortController } from "../utils/AbortController.ts";
 import {
   TOOL_SCHEMA_FETCH_TIMEOUT_MS,
   TOOL_CONFIG_FETCH_TIMEOUT_MS,
   TOOL_WORKSPACE_UPDATE_TIMEOUT_MS,
   TOOL_WORKSPACE_VALIDATE_TIMEOUT_MS,
   TOOL_API_HEALTH_TIMEOUT_MS
-} from "../constants.js";
-import InternalToolRegistry from "./local-tools/InternalToolRegistry.js";
+} from "../constants.ts";
+import InternalToolRegistry from "./local-tools/InternalToolRegistry.ts";
 
 // ────────────────────────────────────────────────────────────
 // Schema Cache — fetched from tools-api at startup

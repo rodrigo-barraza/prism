@@ -1,8 +1,8 @@
 // @ts-ignore
 import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
-import FileService from "../services/FileService.js";
-import logger from "../utils/logger.js";
+import FileService from "../services/FileService.ts";
+import logger from "../utils/logger.ts";
 
 const router = express.Router();
 

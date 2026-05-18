@@ -3,14 +3,14 @@ import cors from "cors";
 import http from "http";
 import { WebSocketServer } from "ws";
 
-import { errorHandler } from "./utils/errors.js";
-import logger from "./utils/logger.js";
-import { listProviders } from "./providers/index.js";
-import { TYPES } from "./config.js";
-import { setupWebSocket } from "./websocket/index.js";
-import { authMiddleware } from "./middleware/AuthMiddleware.js";
-import { requestLoggerMiddleware } from "./middleware/RequestLoggerMiddleware.js";
-import { CORS_MAX_AGE_SECONDS } from "./constants.js";
+import { errorHandler } from "./utils/errors.ts";
+import logger from "./utils/logger.ts";
+import { listProviders } from "./providers/index.ts";
+import { TYPES } from "./config.ts";
+import { setupWebSocket } from "./websocket/index.ts";
+import { authMiddleware } from "./middleware/AuthMiddleware.ts";
+import { requestLoggerMiddleware } from "./middleware/RequestLoggerMiddleware.ts";
+import { CORS_MAX_AGE_SECONDS } from "./constants.ts";
 import {
   PRISM_SERVICE_PORT as PORT,
   MONGO_URI,
@@ -20,46 +20,46 @@ import {
   MINIO_SECRET_KEY,
   MINIO_BUCKET_NAME,
   // @ts-ignore
-} from "../config.js";
-import MongoWrapper from "./wrappers/MongoWrapper.js";
-import MinioWrapper from "./wrappers/MinioWrapper.js";
-import ChangeStreamService from "./services/ChangeStreamService.js";
-import MemoryConsolidationService from "./services/MemoryConsolidationService.js";
-import BackgroundHousekeepingService from "./services/BackgroundHousekeepingService.js";
-import { installShutdownHandlers, registerCleanup } from "./utils/CleanupRegistry.js";
+} from "../config.ts";
+import MongoWrapper from "./wrappers/MongoWrapper.ts";
+import MinioWrapper from "./wrappers/MinioWrapper.ts";
+import ChangeStreamService from "./services/ChangeStreamService.ts";
+import MemoryConsolidationService from "./services/MemoryConsolidationService.ts";
+import BackgroundHousekeepingService from "./services/BackgroundHousekeepingService.ts";
+import { installShutdownHandlers, registerCleanup } from "./utils/CleanupRegistry.ts";
 
 // Install process-level shutdown handlers (SIGTERM, SIGINT → runCleanupFunctions)
 installShutdownHandlers();
 
 // Routes
-import chatRouter from "./routes/ChatRoutes.js";
-import agentRouter from "./routes/AgentRoutes.js";
-import audioRouter from "./routes/AudioRoutes.js";
-import embedRouter from "./routes/EmbedRoutes.js";
-import configRouter, { localConfigRouter } from "./routes/ConfigRoutes.js";
-import conversationsRouter from "./routes/ConversationsRoutes.js";
-import filesRouter from "./routes/FilesRoutes.js";
-import memoryRouter from "./routes/MemoryRoutes.js";
-import MemoryService from "./services/MemoryService.js";
-import adminRouter from "./routes/AdminRoutes.js";
-import workflowsRouter from "./routes/WorkflowsRoutes.js";
-import mediaRouter from "./routes/MediaRoutes.js";
-import textRouter from "./routes/TextRoutes.js";
-import lmStudioRouter from "./routes/LmStudioRoutes.js";
-import customToolsRouter from "./routes/CustomToolsRoutes.js";
-import skillsRouter from "./routes/SkillsRoutes.js";
-import agentMemoriesRouter from "./routes/AgentMemoriesRoutes.js";
-import mcpServersRouter from "./routes/McpServersRoutes.js";
-import favoritesRouter from "./routes/FavoritesRoutes.js";
-import agentSessionsRouter from "./routes/AgentSessionsRoutes.js";
-import statsRouter from "./routes/StatsRoutes.js";
-import benchmarkRouter from "./routes/BenchmarkRoutes.js";
-import synthesisRouter from "./routes/SynthesisRoutes.js";
-import vramBenchmarksRouter from "./routes/VramBenchmarksRoutes.js";
-import coordinatorRouter from "./routes/CoordinatorRoutes.js";
-import settingsRouter from "./routes/SettingsRoutes.js";
-import customAgentsRouter from "./routes/CustomAgentsRoutes.js";
-import workspacesRouter from "./routes/WorkspacesRoutes.js";
+import chatRouter from "./routes/ChatRoutes.ts";
+import agentRouter from "./routes/AgentRoutes.ts";
+import audioRouter from "./routes/AudioRoutes.ts";
+import embedRouter from "./routes/EmbedRoutes.ts";
+import configRouter, { localConfigRouter } from "./routes/ConfigRoutes.ts";
+import conversationsRouter from "./routes/ConversationsRoutes.ts";
+import filesRouter from "./routes/FilesRoutes.ts";
+import memoryRouter from "./routes/MemoryRoutes.ts";
+import MemoryService from "./services/MemoryService.ts";
+import adminRouter from "./routes/AdminRoutes.ts";
+import workflowsRouter from "./routes/WorkflowsRoutes.ts";
+import mediaRouter from "./routes/MediaRoutes.ts";
+import textRouter from "./routes/TextRoutes.ts";
+import lmStudioRouter from "./routes/LmStudioRoutes.ts";
+import customToolsRouter from "./routes/CustomToolsRoutes.ts";
+import skillsRouter from "./routes/SkillsRoutes.ts";
+import agentMemoriesRouter from "./routes/AgentMemoriesRoutes.ts";
+import mcpServersRouter from "./routes/McpServersRoutes.ts";
+import favoritesRouter from "./routes/FavoritesRoutes.ts";
+import agentSessionsRouter from "./routes/AgentSessionsRoutes.ts";
+import statsRouter from "./routes/StatsRoutes.ts";
+import benchmarkRouter from "./routes/BenchmarkRoutes.ts";
+import synthesisRouter from "./routes/SynthesisRoutes.ts";
+import vramBenchmarksRouter from "./routes/VramBenchmarksRoutes.ts";
+import coordinatorRouter from "./routes/CoordinatorRoutes.ts";
+import settingsRouter from "./routes/SettingsRoutes.ts";
+import customAgentsRouter from "./routes/CustomAgentsRoutes.ts";
+import workspacesRouter from "./routes/WorkspacesRoutes.ts";
 
 const app = express();
 const server = http.createServer(app);

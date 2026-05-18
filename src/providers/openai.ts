@@ -1,21 +1,21 @@
 import OpenAI, { toFile } from "openai";
-import { ProviderError } from "../utils/errors.js";
-import logger from "../utils/logger.js";
-import { extractOpenAIRateLimits } from "../utils/rateLimits.js";
+import { ProviderError } from "../utils/errors.ts";
+import logger from "../utils/logger.ts";
+import { extractOpenAIRateLimits } from "../utils/rateLimits.ts";
 // @ts-ignore
-import { OPENAI_API_KEY, OPENAI_TRANSCRIPTION_MODEL } from "../../config.js";
+import { OPENAI_API_KEY, OPENAI_TRANSCRIPTION_MODEL } from "../../config.ts";
 import {
   TYPES,
   DEFAULT_VOICES,
   getDefaultModels,
   getModelByName,
-} from "../config.js";
-import { convertToolsToOpenAI } from "../utils/openai-compat.js";
+} from "../config.ts";
+import { convertToolsToOpenAI } from "../utils/openai-compat.ts";
 import {
   getDataUrlMimeType,
   getUrlType,
   inferMimeFromUrl,
-} from "../utils/media.js";
+} from "../utils/media.ts";
 
 /**
  * Check if a model should use the Responses API.

@@ -4,8 +4,8 @@
 // Shared by the /chat route load balancer and CoordinatorService.
 // Handles GGUF quantization-aware model matching across instances.
 
-import logger from "./logger.js";
-import { getProvider } from "../providers/index.js";
+import logger from "./logger.ts";
+import { getProvider } from "../providers/index.ts";
 
 /**
  * Regex to match GGUF quantization suffixes.

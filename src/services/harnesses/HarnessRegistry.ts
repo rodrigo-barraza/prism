@@ -1,4 +1,4 @@
-import StandardAgenticHarness from "./StandardAgenticHarness.js";
+import StandardAgenticHarness from "./StandardAgenticHarness.ts";
 
 /**
  * HarnessRegistry — maps harness IDs to their implementation classes.

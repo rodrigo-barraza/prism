@@ -1,9 +1,9 @@
-import MongoWrapper from "../wrappers/MongoWrapper.js";
-import FileService from "./FileService.js";
+import MongoWrapper from "../wrappers/MongoWrapper.ts";
+import FileService from "./FileService.ts";
 // @ts-ignore
-import { MONGO_DB_NAME } from "../../config.js";
-import logger from "../utils/logger.js";
-import { COLLECTIONS } from "../constants.js";
+import { MONGO_DB_NAME } from "../../config.ts";
+import logger from "../utils/logger.ts";
+import { COLLECTIONS } from "../constants.ts";
 
 const DEFAULT_COLLECTION = COLLECTIONS.CONVERSATIONS;
 

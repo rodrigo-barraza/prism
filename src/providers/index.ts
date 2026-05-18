@@ -1,10 +1,10 @@
-import openaiProvider from "./openai.js";
-import anthropicProvider from "./anthropic.js";
-import googleProvider from "./google.js";
-import elevenlabsProvider from "./elevenlabs.js";
-import inworldProvider from "./inworld.js";
-import ActiveGenerationTracker from "../services/ActiveGenerationTracker.js";
-import { getInstanceProvider, isInstance } from "./instance-registry.js";
+import openaiProvider from "./openai.ts";
+import anthropicProvider from "./anthropic.ts";
+import googleProvider from "./google.ts";
+import elevenlabsProvider from "./elevenlabs.ts";
+import inworldProvider from "./inworld.ts";
+import ActiveGenerationTracker from "../services/ActiveGenerationTracker.ts";
+import { getInstanceProvider, isInstance } from "./instance-registry.ts";
 
 // Static cloud providers — local providers are resolved via instance registry
 const providers = {

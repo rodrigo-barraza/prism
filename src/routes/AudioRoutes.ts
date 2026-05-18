@@ -4,15 +4,15 @@ import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import { formatCostTag, roundMs } from "@rodrigo-barraza/utilities-library";
 import express from "express";
 import crypto from "crypto";
-import { getProvider } from "../providers/index.js";
-import { ProviderError } from "../utils/errors.js";
-import { TYPES, getPricing, getModelByName } from "../config.js";
-import { calculateAudioCost } from "../utils/CostCalculator.js";
-import ConversationService from "../services/ConversationService.js";
-import FileService from "../services/FileService.js";
-import logger from "../utils/logger.js";
-import RequestLogger from "../services/RequestLogger.js";
-import {} from "../utils/utilities.js";
+import { getProvider } from "../providers/index.ts";
+import { ProviderError } from "../utils/errors.ts";
+import { TYPES, getPricing, getModelByName } from "../config.ts";
+import { calculateAudioCost } from "../utils/CostCalculator.ts";
+import ConversationService from "../services/ConversationService.ts";
+import FileService from "../services/FileService.ts";
+import logger from "../utils/logger.ts";
+import RequestLogger from "../services/RequestLogger.ts";
+import {} from "../utils/utilities.ts";
 const router = express.Router();
 // ─── used by both REST and WebSocket ────────────────────────
 /**

@@ -1,12 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { ProviderError } from "../utils/errors.js";
-import logger from "../utils/logger.js";
-import { extractAnthropicRateLimits } from "../utils/rateLimits.js";
-import { compressImageForSizeLimit } from "../utils/media.js";
-import { EMPTY_USAGE } from "../utils/openai-compat.js";
+import { ProviderError } from "../utils/errors.ts";
+import logger from "../utils/logger.ts";
+import { extractAnthropicRateLimits } from "../utils/rateLimits.ts";
+import { compressImageForSizeLimit } from "../utils/media.ts";
+import { EMPTY_USAGE } from "../utils/openai-compat.ts";
 // @ts-ignore
-import { ANTHROPIC_API_KEY } from "../../config.js";
-import { TYPES, getDefaultModels } from "../config.js";
+import { ANTHROPIC_API_KEY } from "../../config.ts";
+import { TYPES, getDefaultModels } from "../config.ts";
 // @ts-ignore
 import { sleep } from "@rodrigo-barraza/utilities-library";
 

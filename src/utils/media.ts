@@ -7,7 +7,7 @@ import { writeFile, readFile, mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import sharp from "sharp";
-import logger from "./logger.js";
+import logger from "./logger.ts";
 
 // ── ffmpeg availability (cached per process) ────────────────
 // @ts-ignore

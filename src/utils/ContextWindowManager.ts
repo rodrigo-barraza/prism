@@ -1,5 +1,5 @@
-import logger from "./logger.js";
-import { estimateTokens } from "./CostCalculator.js";
+import logger from "./logger.ts";
+import { estimateTokens } from "./CostCalculator.ts";
 
 // ────────────────────────────────────────────────────────────
 // ContextWindowManager — Token-Budget Truncation

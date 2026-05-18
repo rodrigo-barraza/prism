@@ -1,4 +1,4 @@
-import logger from "./logger.js";
+import logger from "./logger.ts";
 
 export class ProviderError extends Error {
   constructor(

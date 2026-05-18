@@ -1,18 +1,18 @@
-import ToolOrchestratorService from "./ToolOrchestratorService.js";
-import MemoryService from "./MemoryService.js";
-import AgentPersonaRegistry from "./AgentPersonaRegistry.js";
-import EmbeddingService from "./EmbeddingService.js";
-import MongoWrapper from "../wrappers/MongoWrapper.js";
+import ToolOrchestratorService from "./ToolOrchestratorService.ts";
+import MemoryService from "./MemoryService.ts";
+import AgentPersonaRegistry from "./AgentPersonaRegistry.ts";
+import EmbeddingService from "./EmbeddingService.ts";
+import MongoWrapper from "../wrappers/MongoWrapper.ts";
 // @ts-ignore
-import { TOOLS_SERVICE_URL, MONGO_DB_NAME } from "../../config.js";
-import logger from "../utils/logger.js";
-import { cosineSimilarity } from "../utils/math.js";
+import { TOOLS_SERVICE_URL, MONGO_DB_NAME } from "../../config.ts";
+import logger from "../utils/logger.ts";
+import { cosineSimilarity } from "../utils/math.ts";
 import {
   getCoordinatorPromptAddendum,
   COORDINATOR_ONLY_TOOLS,
-} from "./CoordinatorPrompt.js";
-import { createAbortController } from "../utils/AbortController.js";
-import { DIRECTORY_CACHE_TTL_MS, DIRECTORY_FETCH_TIMEOUT_MS } from "../constants.js";
+} from "./CoordinatorPrompt.ts";
+import { createAbortController } from "../utils/AbortController.ts";
+import { DIRECTORY_CACHE_TTL_MS, DIRECTORY_FETCH_TIMEOUT_MS } from "../constants.ts";
 
 const SKILL_RELEVANCE_THRESHOLD = 0.3;
 

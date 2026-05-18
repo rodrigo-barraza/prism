@@ -27,10 +27,10 @@
 //   500 { status: "error" }
 // ─────────────────────────────────────────────────────────────
 
-import { ProviderError } from "../utils/errors.js";
-import logger from "../utils/logger.js";
+import { ProviderError } from "../utils/errors.ts";
+import logger from "../utils/logger.ts";
 
-import { TYPES, getDefaultModels } from "../config.js";
+import { TYPES, getDefaultModels } from "../config.ts";
 import {
   convertToolsToOpenAI,
   buildPayloadParams,
@@ -40,7 +40,7 @@ import {
   parseSSEStream,
   fetchOpenAICompat,
   MEDIA_STRATEGIES,
-} from "../utils/openai-compat.js";
+} from "../utils/openai-compat.ts";
 
 // ── Helpers ──────────────────────────────────────────────────
 

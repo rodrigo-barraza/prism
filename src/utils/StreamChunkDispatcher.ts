@@ -5,8 +5,8 @@
 // handleStreamingText (chat.js) and AgenticLoopService.
 // ─────────────────────────────────────────────────────────────
 
-import FileService from "../services/FileService.js";
-import logger from "./logger.js";
+import FileService from "../services/FileService.ts";
+import logger from "./logger.ts";
 
 /**
  * Strip XML tool call markup that some local models (e.g. Gemma 4) leak into

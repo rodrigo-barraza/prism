@@ -13,7 +13,7 @@ vi.mock("../src/utils/logger.js", () => ({
 
 import AutoApprovalEngine, {
   APPROVAL_TIERS,
-} from "../src/services/AutoApprovalEngine.js";
+} from "../src/services/AutoApprovalEngine.ts";
 
 // ═══════════════════════════════════════════════════════════════
 // Tier Constants

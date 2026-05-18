@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import request from "supertest";
-import { app, MOCK_GENERATE_SPEECH } from "./setup.js";
+import { app, MOCK_GENERATE_SPEECH } from "./setup.ts";
 
 describe("POST /text-to-audio", () => {
   beforeEach(() => {

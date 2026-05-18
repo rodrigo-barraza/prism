@@ -1,6 +1,6 @@
 // @ts-ignore
 import { createLogger } from "@rodrigo-barraza/utilities-library/node";
-import { getRequestContext } from "./RequestContext.js";
+import { getRequestContext } from "./RequestContext.ts";
 
 const base = createLogger("prism");
 

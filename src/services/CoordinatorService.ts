@@ -3,26 +3,26 @@ import {
   TOOLS_SERVICE_URL,
   COORDINATOR_DECOMPOSITION_MODEL,
 // @ts-ignore
-} from "../../config.js";
+} from "../../config.ts";
 import { resolve, relative } from "node:path";
 import { existsSync } from "node:fs";
-import logger from "../utils/logger.js";
-import mutationQueue from "./MutationQueue.js";
-import { getProvider } from "../providers/index.js";
+import logger from "../utils/logger.ts";
+import mutationQueue from "./MutationQueue.ts";
+import { getProvider } from "../providers/index.ts";
 import {
   getInstancesByType,
   getInstanceType,
-} from "../providers/instance-registry.js";
-import RequestLogger from "./RequestLogger.js";
-import { parseJsonFromLlmResponse } from "../utils/utilities.js";
-import localModelQueue from "./LocalModelQueue.js";
-import ToolOrchestratorService from "./ToolOrchestratorService.js";
-import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.js";
-import SettingsService from "./SettingsService.js";
-import { createAbortController } from "../utils/AbortController.js";
-import { registerCleanup } from "../utils/CleanupRegistry.js";
-import SessionGenerationTracker from "./SessionGenerationTracker.js";
-import { resolveModelForInstances } from "../utils/ModelResolution.js";
+} from "../providers/instance-registry.ts";
+import RequestLogger from "./RequestLogger.ts";
+import { parseJsonFromLlmResponse } from "../utils/utilities.ts";
+import localModelQueue from "./LocalModelQueue.ts";
+import ToolOrchestratorService from "./ToolOrchestratorService.ts";
+import { COORDINATOR_ONLY_TOOLS } from "./CoordinatorPrompt.ts";
+import SettingsService from "./SettingsService.ts";
+import { createAbortController } from "../utils/AbortController.ts";
+import { registerCleanup } from "../utils/CleanupRegistry.ts";
+import SessionGenerationTracker from "./SessionGenerationTracker.ts";
+import { resolveModelForInstances } from "../utils/ModelResolution.ts";
 
 // ────────────────────────────────────────────────────────────
 // CoordinatorService — Multi-Agent Orchestration

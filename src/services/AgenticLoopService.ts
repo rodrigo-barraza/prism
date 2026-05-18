@@ -1,9 +1,9 @@
-import AgenticToolResolver from "./AgenticToolResolver.js";
-import AgenticLoopState from "./AgenticLoopState.js";
-import HarnessRegistry from "./harnesses/HarnessRegistry.js";
-import { pendingApprovals, pendingQuestions } from "./ApprovalRegistry.js";
-import SessionGenerationTracker from "./SessionGenerationTracker.js";
-import logger from "../utils/logger.js";
+import AgenticToolResolver from "./AgenticToolResolver.ts";
+import AgenticLoopState from "./AgenticLoopState.ts";
+import HarnessRegistry from "./harnesses/HarnessRegistry.ts";
+import { pendingApprovals, pendingQuestions } from "./ApprovalRegistry.ts";
+import SessionGenerationTracker from "./SessionGenerationTracker.ts";
+import logger from "../utils/logger.ts";
 
 /**
  * AgenticLoopService — public façade for agentic loop execution.

@@ -1,15 +1,15 @@
 // @ts-ignore
 import { formatCostTag, roundMs } from "@rodrigo-barraza/utilities-library";
 import crypto from "crypto";
-import { getProvider } from "../providers/index.js";
-import { TYPES, getDefaultModels, getPricing } from "../config.js";
-import { estimateTokens } from "../utils/CostCalculator.js";
-import { ProviderError } from "../utils/errors.js";
-import RequestLogger from "./RequestLogger.js";
-import logger from "../utils/logger.js";
-import { calculateTokensPerSec } from "../utils/math.js";
-import {} from "../utils/utilities.js";
-import SettingsService from "./SettingsService.js";
+import { getProvider } from "../providers/index.ts";
+import { TYPES, getDefaultModels, getPricing } from "../config.ts";
+import { estimateTokens } from "../utils/CostCalculator.ts";
+import { ProviderError } from "../utils/errors.ts";
+import RequestLogger from "./RequestLogger.ts";
+import logger from "../utils/logger.ts";
+import { calculateTokensPerSec } from "../utils/math.ts";
+import {} from "../utils/utilities.ts";
+import SettingsService from "./SettingsService.ts";
 /** Resolve the current embedding provider + model from settings. */
 async function getEmbeddingConfig() {
   return SettingsService.getMemoryModelConfig("embedding");

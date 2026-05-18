@@ -1,24 +1,24 @@
 // @ts-ignore
 import { daysSinceIso } from "@rodrigo-barraza/utilities-library";
 import crypto from "crypto";
-import { getProvider } from "../providers/index.js";
-import MemoryService from "./MemoryService.js";
-import RequestLogger from "./RequestLogger.js";
-import MongoWrapper from "../wrappers/MongoWrapper.js";
+import { getProvider } from "../providers/index.ts";
+import MemoryService from "./MemoryService.ts";
+import RequestLogger from "./RequestLogger.ts";
+import MongoWrapper from "../wrappers/MongoWrapper.ts";
 // @ts-ignore
-import { MONGO_DB_NAME } from "../../config.js";
-import logger from "../utils/logger.js";
-import { cosineSimilarity } from "../utils/math.js";
-import { parseJsonFromLlmResponse } from "../utils/utilities.js";
-import { COLLECTIONS } from "../constants.js";
-import AgentPersonaRegistry from "./AgentPersonaRegistry.js";
-import SettingsService from "./SettingsService.js";
+import { MONGO_DB_NAME } from "../../config.ts";
+import logger from "../utils/logger.ts";
+import { cosineSimilarity } from "../utils/math.ts";
+import { parseJsonFromLlmResponse } from "../utils/utilities.ts";
+import { COLLECTIONS } from "../constants.ts";
+import AgentPersonaRegistry from "./AgentPersonaRegistry.ts";
+import SettingsService from "./SettingsService.ts";
 import {
   estimateTokens,
   calculateTextCost,
   getTotalInputTokens,
-} from "../utils/CostCalculator.js";
-import { TYPES, getPricing } from "../config.js";
+} from "../utils/CostCalculator.ts";
+import { TYPES, getPricing } from "../config.ts";
 // ─── Constants ────────────────────────────────────────────────────────────────
 /** Resolve the current consolidation provider + model from settings. */
 async function getConsolidationConfig() {

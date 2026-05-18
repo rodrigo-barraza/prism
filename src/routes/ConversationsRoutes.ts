@@ -1,12 +1,12 @@
 // @ts-ignore
 import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
-import requireDb from "../middleware/RequireDbMiddleware.js";
+import requireDb from "../middleware/RequireDbMiddleware.ts";
 import ConversationService, {
   buildConversationPatchFields,
-} from "../services/ConversationService.js";
-import { COLLECTIONS } from "../constants.js";
-import logger from "../utils/logger.js";
+} from "../services/ConversationService.ts";
+import { COLLECTIONS } from "../constants.ts";
+import logger from "../utils/logger.ts";
 
 const router = express.Router();
 router.use(requireDb);

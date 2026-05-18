@@ -2,10 +2,10 @@
 import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
 import { EventEmitter } from "node:events";
-import BenchmarkService from "../services/BenchmarkService.js";
-import logger from "../utils/logger.js";
-import { createAbortController } from "../utils/AbortController.js";
-import { registerCleanup } from "../utils/CleanupRegistry.js";
+import BenchmarkService from "../services/BenchmarkService.ts";
+import logger from "../utils/logger.ts";
+import { createAbortController } from "../utils/AbortController.ts";
+import { registerCleanup } from "../utils/CleanupRegistry.ts";
 
 const router = express.Router();
 

@@ -3,9 +3,9 @@ import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
 import { basename } from "node:path";
 // @ts-ignore
-import { TOOLS_SERVICE_URL } from "../../config.js";
-import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
-import logger from "../utils/logger.js";
+import { TOOLS_SERVICE_URL } from "../../config.ts";
+import ToolOrchestratorService from "../services/ToolOrchestratorService.ts";
+import logger from "../utils/logger.ts";
 
 const router = express.Router();
 

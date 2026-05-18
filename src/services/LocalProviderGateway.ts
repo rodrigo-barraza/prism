@@ -1,13 +1,13 @@
 // ─── Unified Gateway for Local Model Providers ──────────────
 
-import logger from "../utils/logger.js";
+import logger from "../utils/logger.ts";
 // @ts-ignore
 import {
   formatBytes,
   withTimeoutFallback,
 // @ts-ignore
 } from "@rodrigo-barraza/utilities-library";
-import { getProvider } from "../providers/index.js";
+import { getProvider } from "../providers/index.ts";
 import {
   listInstances,
   getInstancesByType,
@@ -15,9 +15,9 @@ import {
   getInstance,
   getInstanceType,
   listInstanceTypes,
-} from "../providers/instance-registry.js";
-import { TYPES } from "../config.js";
-import { resolveArchParams, estimateMemory } from "../utils/gguf-arch.js";
+} from "../providers/instance-registry.ts";
+import { TYPES } from "../config.ts";
+import { resolveArchParams, estimateMemory } from "../utils/gguf-arch.ts";
 
 // ─── PROVIDER TYPE CONSTANTS ────────────────────────────────
 // Canonical provider type identifiers used across the system.

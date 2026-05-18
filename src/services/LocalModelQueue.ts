@@ -1,8 +1,8 @@
 // ─── Per-Instance Counting Semaphore for Local GPU Models ───
 
-import logger from "../utils/logger.js";
-import { getInstance, isInstance } from "../providers/instance-registry.js";
-import { LOCAL_PROVIDER_TYPES } from "./LocalProviderGateway.js";
+import logger from "../utils/logger.ts";
+import { getInstance, isInstance } from "../providers/instance-registry.ts";
+import { LOCAL_PROVIDER_TYPES } from "./LocalProviderGateway.ts";
 
 // Providers that hit the local GPU — sourced from LocalProviderGateway
 const LOCAL_PROVIDERS = LOCAL_PROVIDER_TYPES;

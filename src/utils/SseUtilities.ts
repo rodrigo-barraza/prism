@@ -1,6 +1,6 @@
-import { handleConversation } from "../routes/ChatRoutes.js";
-import { ProviderError } from "./errors.js";
-import { createAbortController } from "./AbortController.js";
+import { handleConversation } from "../routes/ChatRoutes.ts";
+import { ProviderError } from "./errors.ts";
+import { createAbortController } from "./AbortController.ts";
 
 // ─── shared by /chat and /agent routes ──────────────────────
 

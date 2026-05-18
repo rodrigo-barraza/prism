@@ -1,6 +1,6 @@
 import { formatBytes } from "@rodrigo-barraza/utilities-library";
-import logger from "../utils/logger.js";
-import { requestContext } from "../utils/RequestContext.js";
+import logger from "../utils/logger.ts";
+import { requestContext } from "../utils/RequestContext.ts";
 
 /**
  * Express middleware that:

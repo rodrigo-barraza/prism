@@ -1,4 +1,4 @@
-import logger from "../../utils/logger.js";
+import logger from "../../utils/logger.ts";
 
 // ── Worktree Isolation Tools ────────────────────────────────
 // Allows the agent to self-isolate into a git worktree for

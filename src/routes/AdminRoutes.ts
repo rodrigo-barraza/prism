@@ -1,24 +1,24 @@
 // @ts-ignore
 import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
-import MongoWrapper from "../wrappers/MongoWrapper.js";
+import MongoWrapper from "../wrappers/MongoWrapper.ts";
 // @ts-ignore
-import { MONGO_DB_NAME } from "../../config.js";
-import { getProvider } from "../providers/index.js";
-import ChangeStreamService from "../services/ChangeStreamService.js";
-import BenchmarkService from "../services/BenchmarkService.js";
-import ActiveGenerationTracker from "../services/ActiveGenerationTracker.js";
-import logger from "../utils/logger.js";
-import { resolveArchParams, estimateMemory } from "../utils/gguf-arch.js";
+import { MONGO_DB_NAME } from "../../config.ts";
+import { getProvider } from "../providers/index.ts";
+import ChangeStreamService from "../services/ChangeStreamService.ts";
+import BenchmarkService from "../services/BenchmarkService.ts";
+import ActiveGenerationTracker from "../services/ActiveGenerationTracker.ts";
+import logger from "../utils/logger.ts";
+import { resolveArchParams, estimateMemory } from "../utils/gguf-arch.ts";
 import {
   COLLECTIONS,
   COST_SUM_EXPR,
   TOTAL_TOKENS_EXPR,
   AVG_TOKENS_PER_SEC_EXPR,
   SSE_KEEPALIVE_INTERVAL_MS,
-} from "../constants.js";
-import AgentPersonaRegistry from "../services/AgentPersonaRegistry.js";
-import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
+} from "../constants.ts";
+import AgentPersonaRegistry from "../services/AgentPersonaRegistry.ts";
+import ToolOrchestratorService from "../services/ToolOrchestratorService.ts";
 // @ts-ignore
 import {
   MS_PER_MINUTE,

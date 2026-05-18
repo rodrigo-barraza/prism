@@ -1,9 +1,9 @@
 import { Readable } from "stream";
-import { ProviderError } from "../utils/errors.js";
-import logger from "../utils/logger.js";
+import { ProviderError } from "../utils/errors.ts";
+import logger from "../utils/logger.ts";
 // @ts-ignore
-import { INWORLD_BASIC } from "../../config.js";
-import { DEFAULT_VOICES, getDefaultModels, TYPES } from "../config.js";
+import { INWORLD_BASIC } from "../../config.ts";
+import { DEFAULT_VOICES, getDefaultModels, TYPES } from "../config.ts";
 
 const INWORLD_TTS_URL = "https://api.inworld.ai/tts/v1/voice:stream";
 

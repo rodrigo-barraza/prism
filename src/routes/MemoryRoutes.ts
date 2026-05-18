@@ -1,8 +1,8 @@
 // @ts-ignore
 import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
-import MemoryService from "../services/MemoryService.js";
-import logger from "../utils/logger.js";
+import MemoryService from "../services/MemoryService.ts";
+import logger from "../utils/logger.ts";
 
 const router = express.Router();
 

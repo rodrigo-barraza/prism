@@ -11,7 +11,7 @@
 
 // @ts-ignore
 import { MinioManager } from "@rodrigo-barraza/service-library/minio";
-import logger from "../utils/logger.js";
+import logger from "../utils/logger.ts";
 
 const MinioWrapper = {
   /**

@@ -1,9 +1,9 @@
 // @ts-ignore
 import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
-import requireDb from "../middleware/RequireDbMiddleware.js";
-import logger from "../utils/logger.js";
-import { COLLECTIONS } from "../constants.js";
+import requireDb from "../middleware/RequireDbMiddleware.ts";
+import logger from "../utils/logger.ts";
+import { COLLECTIONS } from "../constants.ts";
 
 const router = express.Router();
 router.use(requireDb);

@@ -7,18 +7,18 @@ import { sleep } from "@rodrigo-barraza/utilities-library";
 //   - `integrations[]` for MCP-based function calling via tools-api
 // Non-streaming + captionImage still use OpenAI-compat.
 // ─────────────────────────────────────────────────────────────
-import { ProviderError } from "../utils/errors.js";
-import logger from "../utils/logger.js";
-import { resolveArchParams } from "../utils/gguf-arch.js";
+import { ProviderError } from "../utils/errors.ts";
+import logger from "../utils/logger.ts";
+import { resolveArchParams } from "../utils/gguf-arch.ts";
 // @ts-ignore
 import {
   TOOLS_SERVICE_URL,
   LM_STUDIO_EVAL_BATCH_SIZE,
   LM_STUDIO_DEFAULT_MAX_CONTEXT,
 // @ts-ignore
-} from "../../config.js";
-import { TYPES, getDefaultModels } from "../config.js";
-import {} from "../utils/utilities.js";
+} from "../../config.ts";
+import { TYPES, getDefaultModels } from "../config.ts";
+import {} from "../utils/utilities.ts";
 // Default MCP server URL for ephemeral tool integrations (vault-resolved)
 const DEFAULT_MCP_SERVER_URL = TOOLS_SERVICE_URL;
 import {
@@ -30,8 +30,8 @@ import {
   fetchOpenAICompat,
   parseSSEStream,
   MEDIA_STRATEGIES,
-} from "../utils/openai-compat.js";
-import { COORDINATOR_ONLY_TOOLS } from "../services/CoordinatorPrompt.js";
+} from "../utils/openai-compat.ts";
+import { COORDINATOR_ONLY_TOOLS } from "../services/CoordinatorPrompt.ts";
 // ── Native /api/v1/chat SSE stream parser ────────────────────
 // The native endpoint emits named SSE events: reasoning.start/delta/end,
 // message.start/delta/end, content.start/delta/end, chat.end.

@@ -2,16 +2,16 @@
 import { sleep, roundMs } from "@rodrigo-barraza/utilities-library";
 // ─── Custom LLM Accuracy Benchmarking ───────────────────────
 import crypto from "crypto";
-import { handleConversation, handleAgent } from "../routes/ChatRoutes.js";
-import { MODELS, MODEL_TYPES, getModelByName } from "../config.js";
-import { getProvider } from "../providers/index.js";
-import { isInstance } from "../providers/instance-registry.js";
-import MongoWrapper from "../wrappers/MongoWrapper.js";
+import { handleConversation, handleAgent } from "../routes/ChatRoutes.ts";
+import { MODELS, MODEL_TYPES, getModelByName } from "../config.ts";
+import { getProvider } from "../providers/index.ts";
+import { isInstance } from "../providers/instance-registry.ts";
+import MongoWrapper from "../wrappers/MongoWrapper.ts";
 // @ts-ignore
-import { MONGO_DB_NAME } from "../../config.js";
-import logger from "../utils/logger.js";
-import {} from "../utils/utilities.js";
-import { COLLECTIONS } from "../constants.js";
+import { MONGO_DB_NAME } from "../../config.ts";
+import logger from "../utils/logger.ts";
+import {} from "../utils/utilities.ts";
+import { COLLECTIONS } from "../constants.ts";
 const BENCHMARKS_COL = COLLECTIONS.BENCHMARKS;
 const RUNS_COL = COLLECTIONS.BENCHMARK_RUNS;
 // In-memory counter: how many benchmark model calls are actively generating

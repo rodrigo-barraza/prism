@@ -1,5 +1,5 @@
-import logger from "../../utils/logger.js";
-import MCPClientService from "../MCPClientService.js";
+import logger from "../../utils/logger.ts";
+import MCPClientService from "../MCPClientService.ts";
 
 const listMcpResources = {
   name: "list_mcp_resources",

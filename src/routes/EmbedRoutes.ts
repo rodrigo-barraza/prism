@@ -1,8 +1,8 @@
 // @ts-ignore
 import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
-import { ProviderError } from "../utils/errors.js";
-import EmbeddingService from "../services/EmbeddingService.js";
+import { ProviderError } from "../utils/errors.ts";
+import EmbeddingService from "../services/EmbeddingService.ts";
 
 const router = express.Router();
 

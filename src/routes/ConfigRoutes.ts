@@ -9,15 +9,15 @@ import {
   DEFAULT_VOICES,
   getModelOptions,
   getDefaultModels,
-} from "../config.js";
-import { listInstances } from "../providers/instance-registry.js";
-import { ARENA_SCORES } from "../arrays.js";
-import ToolOrchestratorService from "../services/ToolOrchestratorService.js";
-import AgentPersonaRegistry from "../services/AgentPersonaRegistry.js";
-import rateLimitStore from "../services/RateLimitStore.js";
-import MinioWrapper from "../wrappers/MinioWrapper.js";
-import LocalProviderGateway from "../services/LocalProviderGateway.js";
-import { COORDINATOR_ONLY_TOOLS } from "../services/CoordinatorPrompt.js";
+} from "../config.ts";
+import { listInstances } from "../providers/instance-registry.ts";
+import { ARENA_SCORES } from "../arrays.ts";
+import ToolOrchestratorService from "../services/ToolOrchestratorService.ts";
+import AgentPersonaRegistry from "../services/AgentPersonaRegistry.ts";
+import rateLimitStore from "../services/RateLimitStore.ts";
+import MinioWrapper from "../wrappers/MinioWrapper.ts";
+import LocalProviderGateway from "../services/LocalProviderGateway.ts";
+import { COORDINATOR_ONLY_TOOLS } from "../services/CoordinatorPrompt.ts";
 import {
   OPENAI_API_KEY,
   ANTHROPIC_API_KEY,
@@ -25,7 +25,7 @@ import {
   ELEVENLABS_API_KEY,
   INWORLD_BASIC,
   // @ts-ignore
-} from "../../config.js";
+} from "../../config.ts";
 
 const router = express.Router();
 

@@ -1,19 +1,19 @@
 // @ts-ignore
 import { roundMs } from "@rodrigo-barraza/utilities-library";
-import MongoWrapper from "../wrappers/MongoWrapper.js";
+import MongoWrapper from "../wrappers/MongoWrapper.ts";
 // @ts-ignore
-import { MONGO_DB_NAME } from "../../config.js";
-import logger from "../utils/logger.js";
+import { MONGO_DB_NAME } from "../../config.ts";
+import logger from "../utils/logger.ts";
 import {
   getTotalInputTokens,
   estimateTokens,
   calculateTextCost,
-} from "../utils/CostCalculator.js";
-import { computeModalities } from "./ConversationService.js";
-import {} from "../utils/utilities.js";
-import { COLLECTIONS } from "../constants.js";
-import { TYPES, getPricing } from "../config.js";
-import { calculateTokensPerSec } from "../utils/math.js";
+} from "../utils/CostCalculator.ts";
+import { computeModalities } from "./ConversationService.ts";
+import {} from "../utils/utilities.ts";
+import { COLLECTIONS } from "../constants.ts";
+import { TYPES, getPricing } from "../config.ts";
+import { calculateTokensPerSec } from "../utils/math.ts";
 const COLLECTION = COLLECTIONS.REQUESTS;
 const API_TO_CANONICAL = {
   googleSearch: "Google Search",

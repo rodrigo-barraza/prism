@@ -2,10 +2,10 @@
 import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
 import { ObjectId } from "mongodb";
-import requireDb from "../middleware/RequireDbMiddleware.js";
-import EmbeddingService from "../services/EmbeddingService.js";
-import logger from "../utils/logger.js";
-import { COLLECTIONS } from "../constants.js";
+import requireDb from "../middleware/RequireDbMiddleware.ts";
+import EmbeddingService from "../services/EmbeddingService.ts";
+import logger from "../utils/logger.ts";
+import { COLLECTIONS } from "../constants.ts";
 
 const router = express.Router();
 router.use(requireDb);

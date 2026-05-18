@@ -1,8 +1,8 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import logger from "../utils/logger.js";
-import { registerCleanup } from "../utils/CleanupRegistry.js";
+import logger from "../utils/logger.ts";
+import { registerCleanup } from "../utils/CleanupRegistry.ts";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 

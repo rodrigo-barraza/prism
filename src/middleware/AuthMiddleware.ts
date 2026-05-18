@@ -1,4 +1,4 @@
-import { requestContext } from "../utils/RequestContext.js";
+import { requestContext } from "../utils/RequestContext.ts";
 
 /**
  * Express middleware that attaches x-project, x-username, and x-workspace-id

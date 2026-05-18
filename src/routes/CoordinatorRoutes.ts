@@ -1,8 +1,8 @@
 // @ts-ignore
 import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import { Router } from "express";
-import CoordinatorService from "../services/CoordinatorService.js";
-import logger from "../utils/logger.js";
+import CoordinatorService from "../services/CoordinatorService.ts";
+import logger from "../utils/logger.ts";
 
 const router = Router();
 

@@ -17,12 +17,12 @@ import { readdir, stat, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 // @ts-ignore
 import { MS_PER_DAY, hours } from "@rodrigo-barraza/utilities-library";
-import MongoWrapper from "../wrappers/MongoWrapper.js";
-import MinioWrapper from "../wrappers/MinioWrapper.js";
+import MongoWrapper from "../wrappers/MongoWrapper.ts";
+import MinioWrapper from "../wrappers/MinioWrapper.ts";
 // @ts-ignore
-import { MONGO_DB_NAME } from "../../config.js";
-import { COLLECTIONS } from "../constants.js";
-import logger from "../utils/logger.js";
+import { MONGO_DB_NAME } from "../../config.ts";
+import { COLLECTIONS } from "../constants.ts";
+import logger from "../utils/logger.ts";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 

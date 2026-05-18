@@ -1,5 +1,5 @@
 import { EventEmitter } from "events";
-import logger from "../utils/logger.js";
+import logger from "../utils/logger.ts";
 
 /**
  * AgentHooks — EventEmitter-based lifecycle system for the agentic loop.

@@ -1,13 +1,13 @@
 // @ts-ignore
 import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import { Router } from "express";
-import logger from "../utils/logger.js";
-import requireDb from "../middleware/RequireDbMiddleware.js";
+import logger from "../utils/logger.ts";
+import requireDb from "../middleware/RequireDbMiddleware.ts";
 import {
   COLLECTIONS,
   COST_SUM_EXPR,
   AVG_TOKENS_PER_SEC_EXPR,
-} from "../constants.js";
+} from "../constants.ts";
 
 const router = Router();
 router.use(requireDb);

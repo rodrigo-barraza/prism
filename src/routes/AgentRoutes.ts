@@ -1,10 +1,10 @@
 // @ts-ignore
 import { asyncHandler } from "@rodrigo-barraza/utilities-library/express";
 import express from "express";
-import AgenticLoopService from "../services/AgenticLoopService.js";
-import { handleAgent } from "./ChatRoutes.js";
-import logger from "../utils/logger.js";
-import { handleSseRequest, handleJsonRequest } from "../utils/SseUtilities.js";
+import AgenticLoopService from "../services/AgenticLoopService.ts";
+import { handleAgent } from "./ChatRoutes.ts";
+import logger from "../utils/logger.ts";
+import { handleSseRequest, handleJsonRequest } from "../utils/SseUtilities.ts";
 
 const router = express.Router();
 

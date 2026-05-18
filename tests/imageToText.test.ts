@@ -3,7 +3,7 @@ import request from "supertest";
 import {
   app,
   MOCK_GENERATE_TEXT_STREAM,
-} from "./setup.js";
+} from "./setup.ts";
 
 describe("POST /chat (image-to-text / vision)", () => {
   beforeEach(() => {
