@@ -88,7 +88,7 @@ vi.mock("../src/services/SettingsService.ts", () => ({
 }));
 
 // ── Import SUT ─────────────────────────────────────────────────
-const { finalizeTextGeneration } = await import("../src/routes/ChatRoutes.ts");
+const { finalizeTextGeneration } = await import("../src/services/harnesses/lifecycle/Finalizer.ts");
 const ConversationService = (await import("../src/services/ConversationService.ts")).default;
 
 // ── Helpers ────────────────────────────────────────────────────
