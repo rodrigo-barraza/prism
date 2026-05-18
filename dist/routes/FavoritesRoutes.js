@@ -44,7 +44,7 @@ router.post("/", asyncHandler(async (req, res, next) => {
         if (!type || !key) {
             return res.status(400).json({ error: "type and key are required" });
         }
-        const doc = {
+        const document = {
             project,
             username,
             type,
@@ -55,8 +55,8 @@ router.post("/", asyncHandler(async (req, res, next) => {
         // Upsert to prevent duplicates
         await db
             .collection(COLLECTION)
-            .updateOne({ project, username, type, key }, { $set: doc }, { upsert: true });
-        res.json({ success: true, favorite: doc });
+            .updateOne({ project, username, type, key }, { $set: document }, { upsert: true });
+        res.json({ success: true, favorite: document });
     }
     catch (error) {
         logger.error(`Error adding favorite: ${error.message}`);

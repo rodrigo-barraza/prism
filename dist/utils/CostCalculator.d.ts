@@ -2,8 +2,8 @@
  * Estimate token count from a text string using the ~4 chars/token heuristic.
  * Accurate enough for budget enforcement without requiring a real tokenizer.
  *
- * @param {string} text
- * @returns {number}
+
+
  */
 export declare function estimateTokens(text: any): number;
 /**
@@ -12,7 +12,7 @@ export declare function estimateTokens(text: any): number;
  * new + cache_read + cache_write. This aggregates all three.
  *
  * @param {{ inputTokens?: number, cacheReadInputTokens?: number, cacheCreationInputTokens?: number }} usage
- * @returns {number}
+
  */
 export declare function getTotalInputTokens(usage: any): any;
 /**
@@ -31,8 +31,8 @@ export declare function createUsageAccumulator(): {
  * Centralises the `target.X += source.X || 0` pattern that was duplicated
  * across AgenticLoopService, chat.js, and StreamChunkDispatcher.
  *
- * @param {object} target - The accumulator to merge into (mutated in place)
- * @param {object} source - The usage object from a provider chunk
+
+
  * @returns {object} The target accumulator (for chaining)
  */
 export declare function mergeUsage(target: any, source: any): any;
@@ -45,7 +45,7 @@ export declare function mergeUsage(target: any, source: any): any;
  * @param {{ inputPerMillion: number, outputPerMillion: number, cachedInputPerMillion?: number, cacheWriteInputPerMillion?: number }} pricing
  * @returns {number|null} Cost in USD, or null if pricing is unavailable.
  */
-export declare function calculateTextCost(usage: any, pricing: any): number;
+export declare function calculateTextCost(usage: any, pricing: any): number | null;
 /**
  * Calculate the estimated cost for an audio-to-text request.
  * Supports two strategies — per-minute pricing takes priority.
@@ -54,7 +54,7 @@ export declare function calculateTextCost(usage: any, pricing: any): number;
  * @param {{ perMinute?: number, audioInputPerMillion?: number, outputPerMillion?: number }} pricing
  * @returns {number|null} Cost in USD, or null if pricing is unavailable.
  */
-export declare function calculateAudioCost(usage: any, pricing: any): number;
+export declare function calculateAudioCost(usage: any, pricing: any): number | null;
 /**
  * Calculate the estimated cost for a Live API session turn.
  * The Live API streams audio in and out, so input tokens should
@@ -65,7 +65,7 @@ export declare function calculateAudioCost(usage: any, pricing: any): number;
  * @param {{ inputPerMillion?: number, audioInputPerMillion?: number, outputPerMillion?: number, audioOutputPerMillion?: number }} pricing
  * @returns {number|null} Cost in USD, or null if pricing is unavailable.
  */
-export declare function calculateLiveCost(usage: any, pricing: any): number;
+export declare function calculateLiveCost(usage: any, pricing: any): number | null;
 /**
  * Calculate the estimated cost for a text-to-image request.
  * Estimates input tokens from prompt length (~4 chars per token).
@@ -73,11 +73,11 @@ export declare function calculateLiveCost(usage: any, pricing: any): number;
  *   - Google 512px ≈ 747 tokens, 1024px ≈ 1120 tokens, 2048px ≈ 1680 tokens, 4096px ≈ 2520 tokens
  *   - OpenAI 1024×1024 high-quality ≈ 1056 tokens
  *
- * @param {string} prompt - The text prompt used for generation
+
  * @param {{ inputPerMillion?: number, outputPerMillion?: number, imageOutputPerMillion?: number, imageInputPerMillion?: number }} pricing
- * @param {number} [inputImages=0] - Number of input images (for edit requests)
- * @param {number} [outputImageTokens=1120] - Estimated output image tokens (provider-specific)
+
+
  * @returns {number|null} Cost in USD, or null if pricing is unavailable.
  */
-export declare function calculateImageCost(prompt: any, pricing: any, inputImages?: number, outputImageTokens?: number): number;
+export declare function calculateImageCost(prompt: any, pricing: any, inputImages?: number, outputImageTokens?: number): number | null;
 //# sourceMappingURL=CostCalculator.d.ts.map

@@ -5,12 +5,8 @@ import logger from "./logger.js";
  * Mark a conversation as generating (or not). Fire-and-forget with
  * error logging — the caller should not await or chain on this.
  *
- * @param {string}  conversationId
- * @param {string}  project
- * @param {string}  username
- * @param {boolean} generating
- * @param {object}  [opts]
- * @param {string}  [opts.collection] - Override MongoDB collection
+
+
  */
 export function markGenerating(conversationId, project, username, generating, opts) {
     if (!conversationId)
@@ -25,13 +21,8 @@ export function markGenerating(conversationId, project, username, generating, op
  * fails — preventing sessions from being permanently stuck as
  * "generating" when the $push operation encounters errors.
  *
- * @param {string}        conversationId
- * @param {string}        project
- * @param {string}        username
- * @param {Array<object>} messagesToAppend
- * @param {object|undefined} meta - conversationMeta with settings
- * @param {object}  [opts]
- * @param {string}  [opts.collection] - Override MongoDB collection
+
+
  */
 export function appendAndFinalize(conversationId, project, username, messagesToAppend, meta, opts) {
     if (!conversationId)

@@ -30,12 +30,12 @@ const API_TO_CANONICAL = {
 };
 function sanitizeMsg(m) {
     const sanitizeStr = (s) => typeof s === "string" && s.startsWith("data:") ? `[base64 data]` : s;
-    const sanitizeMedia = (val) => {
-        if (Array.isArray(val))
-            return val.map(sanitizeStr);
-        if (typeof val === "string")
-            return sanitizeStr(val);
-        return val;
+    const sanitizeMedia = (value) => {
+        if (Array.isArray(value))
+            return value.map(sanitizeStr);
+        if (typeof value === "string")
+            return sanitizeStr(value);
+        return value;
     };
     return {
         role: m.role,
@@ -60,7 +60,7 @@ const RequestLogger = {
                 logger.error("RequestLogger: MongoDB client not available");
                 return;
             }
-            const doc = {
+            const document = {
                 requestId,
                 timestamp: new Date().toISOString(),
                 endpoint,
@@ -102,7 +102,7 @@ const RequestLogger = {
                 modalities,
                 rateLimits,
             };
-            await db.collection(COLLECTION).insertOne(doc);
+            await db.collection(COLLECTION).insertOne(document);
         }
         catch (error) {
             logger.error("RequestLogger: failed to save request", error.message);

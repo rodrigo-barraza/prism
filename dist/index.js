@@ -18,7 +18,7 @@ import MinioWrapper from "./wrappers/MinioWrapper.js";
 import ChangeStreamService from "./services/ChangeStreamService.js";
 import MemoryConsolidationService from "./services/MemoryConsolidationService.js";
 import BackgroundHousekeepingService from "./services/BackgroundHousekeepingService.js";
-import { installShutdownHandlers } from "./utils/CleanupRegistry.js";
+import { installShutdownHandlers, registerCleanup } from "./utils/CleanupRegistry.js";
 // Install process-level shutdown handlers (SIGTERM, SIGINT → runCleanupFunctions)
 installShutdownHandlers();
 // Routes
@@ -221,6 +221,14 @@ setupWebSocket(wss);
                 db.collection("agent_skills").createIndex({ project: 1, username: 1 }),
                 // mcp_servers
                 db.collection("mcp_servers").createIndex({ project: 1, username: 1 }),
+                // mcp_servers — compound for enabled filter (5+ query sites)
+                db
+                    .collection("mcp_servers")
+                    .createIndex({ project: 1, username: 1, enabled: 1 }),
+                // custom_tools — compound for enabled filter (5+ query sites)
+                db
+                    .collection("custom_tools")
+                    .createIndex({ project: 1, username: 1, enabled: 1 }),
                 // workspaces
                 db.collection("workspaces").createIndex({ project: 1, username: 1 }),
                 db.collection("workspaces").createIndex({ id: 1 }, { unique: true }),
@@ -314,7 +322,7 @@ setupWebSocket(wss);
     // @ts-ignore
     const { hours } = await import("@rodrigo-barraza/utilities-library");
     const CONSOLIDATION_INTERVAL_MS = hours(24);
-    setInterval(async () => {
+    const consolidationInterval = setInterval(async () => {
         try {
             const db = MongoWrapper.getDb(MONGO_DB_NAME);
             if (!db)
@@ -358,15 +366,17 @@ setupWebSocket(wss);
             logger.error(`[AutoDream] Scheduled consolidation sweep failed: ${error.message}`);
         }
     }, CONSOLIDATION_INTERVAL_MS);
+    registerCleanup(async () => clearInterval(consolidationInterval));
     logger.info(`[AutoDream] Scheduled consolidation every ${CONSOLIDATION_INTERVAL_MS / 3_600_000}h`);
     // ── Background Housekeeping ────────────────────────────────
     // Boot-time run: clean up orphans from previous crashes
     BackgroundHousekeepingService.run({ trigger: "boot" }).catch((error) => logger.error(`[Housekeeping] Boot-time run failed: ${error.message}`));
     // Scheduled run: every 6h (independent of consolidation interval)
     const HOUSEKEEPING_INTERVAL_MS = hours(6);
-    setInterval(() => {
+    const housekeepingInterval = setInterval(() => {
         BackgroundHousekeepingService.run({ trigger: "scheduled" }).catch((error) => logger.error(`[Housekeeping] Scheduled run failed: ${error.message}`));
     }, HOUSEKEEPING_INTERVAL_MS);
+    registerCleanup(async () => clearInterval(housekeepingInterval));
     logger.info(`[Housekeeping] Scheduled cleanup every ${HOUSEKEEPING_INTERVAL_MS / 3_600_000}h`);
     // Initialize MinIO if all secrets are configured
     if (MINIO_ENDPOINT &&

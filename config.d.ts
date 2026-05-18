@@ -1,25 +1,41 @@
 export declare const PRISM_SERVICE_PORT: string | number;
-export declare const OPENAI_API_KEY: string;
-export declare const ANTHROPIC_API_KEY: string;
-export declare const GOOGLE_API_KEY: string;
-export declare const ELEVENLABS_API_KEY: string;
-export declare const INWORLD_BASIC: string;
-export declare const PROVIDER_LM_STUDIO: any[];
-export declare const PROVIDER_VLLM: any[];
-export declare const PROVIDER_OLLAMA: any[];
-export declare const PROVIDER_LLAMA_CPP: any[];
-export declare const MONGO_URI: string;
+export declare const OPENAI_API_KEY: string | undefined;
+export declare const ANTHROPIC_API_KEY: string | undefined;
+export declare const GOOGLE_API_KEY: string | undefined;
+export declare const ELEVENLABS_API_KEY: string | undefined;
+export declare const INWORLD_BASIC: string | undefined;
+export declare const PROVIDER_LM_STUDIO: {
+    url: string;
+    concurrency: number;
+    nickname?: string;
+}[];
+export declare const PROVIDER_VLLM: {
+    url: string;
+    concurrency: number;
+    nickname?: string;
+}[];
+export declare const PROVIDER_OLLAMA: {
+    url: string;
+    concurrency: number;
+    nickname?: string;
+}[];
+export declare const PROVIDER_LLAMA_CPP: {
+    url: string;
+    concurrency: number;
+    nickname?: string;
+}[];
+export declare const MONGO_URI: string | undefined;
 export declare const MONGO_DB_NAME: string;
-export declare const MINIO_ENDPOINT: string;
-export declare const MINIO_ACCESS_KEY: string;
-export declare const MINIO_SECRET_KEY: string;
-export declare const MINIO_BUCKET_NAME: string;
-export declare const TOOLS_SERVICE_URL: string;
-export declare const COORDINATOR_DECOMPOSITION_MODEL: string;
-export declare const LIVE_AUDIO_MODEL: string;
-export declare const OPENAI_TRANSCRIPTION_MODEL: string;
-export declare const GOOGLE_TTS_MODEL: string;
-export declare const GOOGLE_EMBEDDING_MODEL: string;
+export declare const MINIO_ENDPOINT: string | undefined;
+export declare const MINIO_ACCESS_KEY: string | undefined;
+export declare const MINIO_SECRET_KEY: string | undefined;
+export declare const MINIO_BUCKET_NAME: string | undefined;
+export declare const TOOLS_SERVICE_URL: string | undefined;
+export declare const COORDINATOR_DECOMPOSITION_MODEL: string | undefined;
+export declare const LIVE_AUDIO_MODEL: string | undefined;
+export declare const OPENAI_TRANSCRIPTION_MODEL: string | undefined;
+export declare const GOOGLE_TTS_MODEL: string | undefined;
+export declare const GOOGLE_EMBEDDING_MODEL: string | undefined;
 export declare const LM_STUDIO_EVAL_BATCH_SIZE: number;
 export declare const LM_STUDIO_DEFAULT_MAX_CONTEXT: number;
 //# sourceMappingURL=config.d.ts.map

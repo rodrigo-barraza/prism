@@ -2,8 +2,8 @@
  * Estimate token count from a text string using the ~4 chars/token heuristic.
  * Accurate enough for budget enforcement without requiring a real tokenizer.
  *
- * @param {string} text
- * @returns {number}
+
+
  */
 export function estimateTokens(text) {
     if (!text)
@@ -16,7 +16,7 @@ export function estimateTokens(text) {
  * new + cache_read + cache_write. This aggregates all three.
  *
  * @param {{ inputTokens?: number, cacheReadInputTokens?: number, cacheCreationInputTokens?: number }} usage
- * @returns {number}
+
  */
 export function getTotalInputTokens(usage) {
     if (!usage)
@@ -43,8 +43,8 @@ export function createUsageAccumulator() {
  * Centralises the `target.X += source.X || 0` pattern that was duplicated
  * across AgenticLoopService, chat.js, and StreamChunkDispatcher.
  *
- * @param {object} target - The accumulator to merge into (mutated in place)
- * @param {object} source - The usage object from a provider chunk
+
+
  * @returns {object} The target accumulator (for chaining)
  */
 export function mergeUsage(target, source) {
@@ -132,10 +132,10 @@ export function calculateLiveCost(usage, pricing) {
  *   - Google 512px ≈ 747 tokens, 1024px ≈ 1120 tokens, 2048px ≈ 1680 tokens, 4096px ≈ 2520 tokens
  *   - OpenAI 1024×1024 high-quality ≈ 1056 tokens
  *
- * @param {string} prompt - The text prompt used for generation
+
  * @param {{ inputPerMillion?: number, outputPerMillion?: number, imageOutputPerMillion?: number, imageInputPerMillion?: number }} pricing
- * @param {number} [inputImages=0] - Number of input images (for edit requests)
- * @param {number} [outputImageTokens=1120] - Estimated output image tokens (provider-specific)
+
+
  * @returns {number|null} Cost in USD, or null if pricing is unavailable.
  */
 export function calculateImageCost(prompt, pricing, inputImages = 0, outputImageTokens = 1120) {

@@ -102,13 +102,12 @@ export default class MemoryExtractor {
     /**
      * Extract memories from a conversation and store in the unified memories collection.
      *
-     * @param {object} params
+  
      * @param {string} params.project - Project identifier
      * @param {string} params.username - Username
      * @param {Array} params.messages - Full conversation messages
-     * @param {string} [params.traceId] - Session ID for attribution
-     * @param {string} [params.conversationId] - Conversation ID for tracking
-     * @param {Array} [params.toolCalls] - Tool calls from the current turn (for mutual exclusion)
+  
+  
      * @returns {Promise<Array>} Stored memory documents
      */
     static async extractAndStore({ project, username, messages, traceId, agentSessionId, conversationId, endpoint, agent, toolCalls, emit, }) {
@@ -325,44 +324,44 @@ export default class MemoryExtractor {
      * Create an afterResponse hook handler for AgentHooks.
      * Runs as fire-and-forget (non-blocking).
      *
-     * @returns {Function}
+  
      */
     static createHook() {
-        return async (ctx, { _text, messages, toolCalls }) => {
+        return async (context, { _text, messages, toolCalls }) => {
             // Fire-and-forget — don't block the response
             MemoryExtractor.extractAndStore({
-                project: ctx.project,
-                username: ctx.username,
-                messages: messages || ctx.messages,
-                traceId: ctx.traceId,
-                agentSessionId: ctx.agentSessionId,
-                conversationId: ctx.conversationId,
-                endpoint: ctx.endpoint || "/agent",
-                agent: ctx.agent || null,
+                project: context.project,
+                username: context.username,
+                messages: messages || context.messages,
+                traceId: context.traceId,
+                agentSessionId: context.agentSessionId,
+                conversationId: context.conversationId,
+                endpoint: context.endpoint || "/agent",
+                agent: context.agent || null,
                 toolCalls: toolCalls || [],
-                emit: ctx.emit || null,
+                emit: context.emit || null,
             })
                 .then((stored) => {
-                if (stored?.length > 0 && ctx.emit) {
-                    ctx.emit({
+                if (stored?.length > 0 && context.emit) {
+                    context.emit({
                         type: "status",
                         message: "memories_updated",
                         count: stored.length,
                     });
                 }
                 // Build a broadcast callback from ctx.emit for consolidation notifications
-                const broadcast = ctx.emit
-                    ? (payload) => ctx.emit(payload)
+                const broadcast = context.emit
+                    ? (payload) => context.emit(payload)
                     : undefined;
                 // Check if consolidation should run (tracks session count)
                 MemoryConsolidationService.checkAndRun({
-                    project: ctx.project,
-                    username: ctx.username,
+                    project: context.project,
+                    username: context.username,
                     broadcast,
-                    endpoint: ctx.endpoint || "/agent",
-                    agent: ctx.agent || null,
-                    traceId: ctx.traceId || null,
-                    agentSessionId: ctx.agentSessionId || null,
+                    endpoint: context.endpoint || "/agent",
+                    agent: context.agent || null,
+                    traceId: context.traceId || null,
+                    agentSessionId: context.agentSessionId || null,
                 });
             })
                 .catch((error) => logger.error(`[MemoryExtractor] Background extraction failed: ${error.message}`));

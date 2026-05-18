@@ -7,24 +7,24 @@ import { TYPES, getDefaultModels } from "../config.js";
  */
 function prepareOllamaMessages(messages) {
     return messages.map((m) => {
-        const msg = { role: m.role, content: m.content || "" };
+        const message = { role: m.role, content: m.content || "" };
         if (m.images && m.images.length > 0) {
             // Ollama's native API expects images as raw base64 strings
             // @ts-ignore
-            msg.images = m.images.map((dataUrl) => {
+            message.images = m.images.map((dataUrl) => {
                 if (dataUrl.startsWith("data:")) {
                     return dataUrl.split(",")[1]; // strip data:image/...;base64, prefix
                 }
                 return dataUrl;
             });
         }
-        return msg;
+        return message;
     });
 }
 /**
  * Factory: create an Ollama provider instance targeting a specific baseUrl.
- * @param {string} baseUrl - The base URL for the Ollama server
- * @param {string} [instanceId="ollama"] - Unique instance identifier
+
+
  * @returns {object} Provider object with all Ollama methods
  */
 export function createOllamaProvider(baseUrl, instanceId = "ollama") {
@@ -206,11 +206,11 @@ export function createOllamaProvider(baseUrl, instanceId = "ollama") {
             logger.provider("Ollama", `captionImage model=${model} baseUrl=${baseUrl}`);
             try {
                 // Extract raw base64 from data URLs
-                const imageBase64List = images.map((img) => {
-                    if (img.startsWith("data:")) {
-                        return img.split(",")[1];
+                const imageBase64List = images.map((image) => {
+                    if (image.startsWith("data:")) {
+                        return image.split(",")[1];
                     }
-                    return img;
+                    return image;
                 });
                 const messages = [];
                 if (systemPrompt) {

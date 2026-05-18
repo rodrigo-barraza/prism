@@ -14,14 +14,12 @@ declare const FileService: {
     isExternalStorage(): boolean;
     /**
      * Upload a file from a base64 data URL.
-     * @param {string} dataUrl - e.g. "data:image/png;base64,iVBOR..."
-     * @param {"uploads"|"generations"} [category="uploads"] - folder to store in
-     * @param {string} [project] - project name for path organization
-     * @param {string} [username] - username for path organization
+  
+  
      * @returns {Promise<{ ref: string, size: number, contentType: string }>}
      *   ref is either `minio://...` or the original dataUrl.
      */
-    uploadFile(dataUrl: any, category?: string, project?: any, username?: any): Promise<{
+    uploadFile(dataUrl: any, category?: string, project?: null, username?: null): Promise<{
         ref: any;
         size: number;
         contentType: string;
@@ -32,22 +30,22 @@ declare const FileService: {
     }>;
     /**
      * Get a file stream from a MinIO reference.
-     * @param {string} key - The object key (without the "minio://" prefix)
+  
      * @returns {Promise<{ stream: import('stream').Readable, contentType: string } | null>}
      */
     getFile(key: any): Promise<{
         stream: import("node:stream").Readable;
         contentType: any;
-    }>;
+    } | null>;
     /**
      * Check if a string is a MinIO reference.
-     * @param {string} ref
-     * @returns {boolean}
+  
+  
      */
     isMinioRef(ref: any): boolean;
     /**
      * Extract the object key from a MinIO reference.
-     * @param {string} ref - e.g. "minio://files/abc-123.png"
+  
      * @returns {string} - e.g. "files/abc-123.png"
      */
     extractKey(ref: any): any;

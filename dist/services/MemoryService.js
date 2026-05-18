@@ -39,9 +39,8 @@ export const CODING_MEMORY_TYPES = ["user", "feedback", "project", "reference"];
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 /**
  * Generate an embedding for text via EmbeddingService.
- * @param {string} text
- * @param {object} [options] - Extra options forwarded to EmbeddingService
- * @returns {Promise<number[]>}
+
+
  */
 async function generateEmbedding(text, options = {}) {
     return EmbeddingService.embed(text, { source: "memory", ...options });
@@ -57,30 +56,29 @@ function memoryAgeDays(createdAt) {
  * "47 days ago" triggers staleness reasoning better than a raw ISO timestamp.
  */
 function memoryAge(createdAt) {
-    const d = memoryAgeDays(createdAt);
-    if (d === 0)
+    const ageDays = memoryAgeDays(createdAt);
+    if (ageDays === 0)
         return "today";
-    if (d === 1)
+    if (ageDays === 1)
         return "yesterday";
-    return `${d} days ago`;
+    return `${ageDays} days ago`;
 }
 /**
  * Staleness caveat for memories >1 day old.
  * Returns empty string for fresh memories.
  */
 function freshnessCaveat(createdAt) {
-    const d = memoryAgeDays(createdAt);
-    if (d <= 1)
+    const ageDays = memoryAgeDays(createdAt);
+    if (ageDays <= 1)
         return "";
-    return ` ⚠️ ${d} days old — verify against current code before acting on this.`;
+    return ` ⚠️ ${ageDays} days old — verify against current code before acting on this.`;
 }
 // ─── LUPOS Fact Extraction ────────────────────────────────────────────────────
 /**
  * Call an AI provider to extract facts from a conversation.
  * Returns an array of { fact, aboutUserId, aboutUsername, category, confidence }.
- * @param {Array} messages - Recent conversation messages
- * @param {Array} participants - Array of { id, username, displayName }
- * @returns {Promise<Array>}
+
+
  */
 async function extractFactsFromConversation(messages, participants, meta = {}) {
     // @ts-ignore
@@ -196,16 +194,13 @@ const MemoryService = {
     /**
      * Store a single memory with embedding generation and duplicate detection.
      *
-     * @param {object} params
+  
      * @param {string} params.agent - Agent identifier ("LUPOS", "CODING", etc.)
-     * @param {string} [params.project] - Project identifier
-     * @param {string} [params.username] - Who created this memory
-     * @param {string} [params.type] - Memory type (e.g. "user", "feedback", "project", "reference", "personal")
-     * @param {string} [params.title] - Short name (used for relevance scanning)
+  
+  
      * @param {string} params.content - Full memory text
-     * @param {number[]} [params.embedding] - Pre-computed embedding (if omitted, generated from title+content)
-     * @param {object} [params.metadata] - Agent-specific metadata (guildId, aboutUserId, etc.)
-     * @param {string} [params.conversationId] - Source conversation
+  
+  
      * @returns {Promise<object|null>} Stored memory document, or null if duplicate
      */
     async store({ agent, project, username, type, title, content, embedding, metadata = {}, conversationId, traceId, agentSessionId, endpoint, }) {
@@ -253,10 +248,10 @@ const MemoryService = {
             .sort({ createdAt: -1 })
             .limit(200)
             .toArray();
-        const isDuplicate = existing.some((doc) => {
-            if (!doc.embedding)
+        const isDuplicate = existing.some((document) => {
+            if (!document.embedding)
                 return false;
-            return cosineSimilarity(embedding, doc.embedding) > DUPLICATE_THRESHOLD;
+            return cosineSimilarity(embedding, document.embedding) > DUPLICATE_THRESHOLD;
         });
         if (isDuplicate) {
             logger.info(`[MemoryService] Skipping duplicate for ${agent}: "${(title || content).substring(0, 60)}"`);
@@ -286,12 +281,12 @@ const MemoryService = {
     /**
      * Extract and store LUPOS memories from a Discord conversation chunk.
      *
-     * @param {object} params
+  
      * @param {string} params.guildId
      * @param {string} params.channelId
      * @param {Array} params.messages - Recent conversation messages
      * @param {Array} params.participants - Array of { id, username, displayName }
-     * @param {string} [params.sourceMessageId]
+  
      * @returns {Promise<Array>} The stored memory documents
      */
     async extractAndStore({ guildId, channelId, messages, participants, sourceMessageId, traceId, project, endpoint, }) {
@@ -351,13 +346,12 @@ const MemoryService = {
      * Search for relevant memories using cosine similarity.
      * Always scoped by `agent`.
      *
-     * @param {object} params
+  
      * @param {string} params.agent - Agent identifier
-     * @param {string} [params.project] - Project identifier
-     * @param {string} [params.guildId] - Guild filter (LUPOS)
-     * @param {string[]} [params.userIds] - Filter to memories about these users (LUPOS)
+  
+  
      * @param {string} params.queryText - Text to search for
-     * @param {number} [params.limit=10]
+  
      * @returns {Promise<Array>} Relevant memories sorted by relevance
      */
     async search({ agent, project, guildId, userIds, queryText, limit = 10, traceId, agentSessionId, endpoint, }) {
@@ -439,13 +433,10 @@ const MemoryService = {
     /**
      * List memories for a specific agent, optionally filtered by project/guild/user.
      *
-     * @param {object} params
+  
      * @param {string} params.agent - Agent identifier
-     * @param {string} [params.project] - Project filter
-     * @param {string} [params.guildId] - Guild filter (LUPOS)
-     * @param {string} [params.userId] - User filter (LUPOS — aboutUserId)
-     * @param {number} [params.limit=50]
-     * @param {number} [params.skip=0]
+  
+  
      * @returns {Promise<{ memories: Array, total: number }>}
      */
     async list({ agent, project, guildId, userId, limit = 50, skip = 0 }) {
@@ -507,7 +498,7 @@ const MemoryService = {
     /**
      * Delete a specific memory by its id field.
      *
-     * @param {string} memoryId
+  
      * @returns {Promise<boolean>} Whether a document was deleted
      */
     async delete(memoryId) {
@@ -525,9 +516,8 @@ const MemoryService = {
     /**
      * Update an existing memory.
      *
-     * @param {string} memoryId
-     * @param {object} updates - Fields to update (title, content, type)
-     * @returns {Promise<boolean>}
+  
+  
      */
     async update(memoryId, { title, content, type }) {
         const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTION);
@@ -543,11 +533,11 @@ const MemoryService = {
             $set.type = type;
         // Re-generate embedding if content changed
         if (content !== undefined) {
-            const doc = await collection.findOne({ id: memoryId }, { projection: { project: 1, title: 1 } });
-            const embedText = title || doc?.title ? `${title || doc?.title}: ${content}` : content;
+            const document = await collection.findOne({ id: memoryId }, { projection: { project: 1, title: 1 } });
+            const embedText = title || document?.title ? `${title || document?.title}: ${content}` : content;
             // @ts-ignore
             $set.embedding = await generateEmbedding(embedText, {
-                project: doc?.project,
+                project: document?.project,
             });
         }
         const result = await collection.updateOne({ id: memoryId }, { $set });
@@ -558,7 +548,7 @@ const MemoryService = {
      * Format memories for injection into the system prompt.
      * Adds type badges and staleness caveats.
      *
-     * @param {Array} memories - Array from search()
+  
      * @returns {string} Formatted text block
      */
     formatForPrompt(memories) {

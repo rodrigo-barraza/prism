@@ -253,12 +253,12 @@ function buildNativeInput(messages) {
     if (historyMessages.length > 0) {
         const lines = [];
         // @ts-ignore
-        for (const msg of historyMessages) {
-            const role = msg.role === "user" ? "User" : "Assistant";
-            const text = typeof msg.content === "string"
-                ? msg.content
-                : Array.isArray(msg.content)
-                    ? msg.content
+        for (const message of historyMessages) {
+            const role = message.role === "user" ? "User" : "Assistant";
+            const text = typeof message.content === "string"
+                ? message.content
+                : Array.isArray(message.content)
+                    ? message.content
                         .filter((c) => c.type === "text")
                         .map((c) => c.text)
                         .join("\n")
@@ -300,8 +300,8 @@ function buildNativeInput(messages) {
 }
 /**
  * Factory: create an LM Studio provider instance targeting a specific baseUrl.
- * @param {string} baseUrl - The base URL for the LM Studio server
- * @param {string} [instanceId="lm-studio"] - Unique instance identifier
+
+
  * @returns {object} Provider object with all LM Studio methods
  */
 export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
@@ -311,7 +311,6 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
     // Prevents duplicate model loads when multiple concurrent requests
     // (e.g. worker agents) hit the same instance before the first load finishes.
     // Key: model name → Promise that resolves when the load completes.
-    /** @type {Map<string, Promise<void>>} */
     const _loadInflight = new Map();
     return {
         name: instanceId,
@@ -475,11 +474,11 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
                             // @ts-ignore
                             const entry = (refreshed.models || []).find((m) => m.key === model);
                             if (entry?.loaded_instances?.length > 0) {
-                                const ctx = entry.loaded_instances[0]?.config?.context_length;
+                                const context = entry.loaded_instances[0]?.config?.context_length;
                                 // @ts-ignore
-                                if (ctx)
-                                    options._loadedContextLength = ctx;
-                                logger.info(`[LM-Studio:${instanceId}] Singleflight resolved — model "${model}" ready (ctx=${ctx})`);
+                                if (context)
+                                    options._loadedContextLength = context;
+                                logger.info(`[LM-Studio:${instanceId}] Singleflight resolved — model "${model}" ready (ctx=${context})`);
                                 // Skip to inference — model is loaded
                             }
                             else {
@@ -501,10 +500,10 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
                             const isNowLoaded = recheck?.loaded_instances?.length > 0;
                             if (isNowLoaded && !needsReload) {
                                 // Model is loaded — capture context and skip to inference
-                                const ctx = recheck?.loaded_instances?.[0]?.config?.context_length;
+                                const context = recheck?.loaded_instances?.[0]?.config?.context_length;
                                 // @ts-ignore
-                                if (ctx)
-                                    options._loadedContextLength = ctx;
+                                if (context)
+                                    options._loadedContextLength = context;
                             }
                             else if (!_loadInflight.has(model)) {
                                 // ── SYNCHRONOUS registration — no awaits after this point ──
@@ -623,10 +622,10 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
                                         const refreshed = await this.listModels();
                                         // @ts-ignore
                                         const entry = (refreshed.models || []).find((m) => m.key === model);
-                                        const ctx = entry?.loaded_instances?.[0]?.config?.context_length;
+                                        const context = entry?.loaded_instances?.[0]?.config?.context_length;
                                         // @ts-ignore
-                                        if (ctx)
-                                            options._loadedContextLength = ctx;
+                                        if (context)
+                                            options._loadedContextLength = context;
                                     }
                                     catch {
                                         /* ignore */
@@ -661,10 +660,10 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
                                 }));
                                 // @ts-ignore
                                 const entry = (refreshed.models || []).find((m) => m.key === model);
-                                const ctx = entry?.loaded_instances?.[0]?.config?.context_length;
+                                const context = entry?.loaded_instances?.[0]?.config?.context_length;
                                 // @ts-ignore
-                                if (ctx)
-                                    options._loadedContextLength = ctx;
+                                if (context)
+                                    options._loadedContextLength = context;
                             }
                         }
                     }
@@ -957,9 +956,8 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
          * LM Studio exposes this for any loaded embedding model (e.g. Granite,
          * nomic-embed, etc.).
          *
-         * @param {string} content - Text to embed
-         * @param {string} model   - Embedding model key
-         * @param {object} [options] - Optional { dimensions }
+    
+    
          * @returns {Promise<{ embedding: number[], dimensions: number }>}
          */
         async generateEmbedding(content, model, options = {}) {
@@ -993,9 +991,9 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
             try {
                 const content = [
                     { type: "text", text: prompt },
-                    ...images.map((img) => ({
+                    ...images.map((image) => ({
                         type: "image_url",
-                        image_url: { url: img },
+                        image_url: { url: image },
                     })),
                 ];
                 const messages = [];
@@ -1034,10 +1032,8 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
          * - If a different model is loaded, unloads it first.
          * - If no model is loaded, loads the requested one.
          *
-         * @param {string} modelKey - The model key to ensure is loaded.
-         * @param {object} [loadOptions={}] - Options forwarded to loadModel (context_length, etc.).
-         * @param {AbortSignal} [signal] - Optional abort signal.
-         * @param {function} [onStatus] - Optional callback for status messages (loading progress, unloading, etc.).
+    
+    
          * @returns {{ alreadyLoaded: boolean, contextLength: number|null }} - Info about the loaded model.
          */
         async ensureModelLoaded(modelKey, loadOptions = {}, signal, onStatus) {
@@ -1079,8 +1075,8 @@ export function createLmStudioProvider(baseUrl, instanceId = "lm-studio") {
                 const refreshed = await this.listModels();
                 // @ts-ignore
                 const entry = (refreshed.models || []).find((m) => m.key === modelKey);
-                const ctx = entry?.loaded_instances?.[0]?.config?.context_length || null;
-                return { alreadyLoaded: false, contextLength: ctx };
+                const context = entry?.loaded_instances?.[0]?.config?.context_length || null;
+                return { alreadyLoaded: false, contextLength: context };
             }
             catch {
                 return { alreadyLoaded: false, contextLength: null };

@@ -48,7 +48,7 @@ router.get("/", asyncHandler(async (req, res, next) => {
 router.post("/", asyncHandler(async (req, res, next) => {
     try {
         const { project, username, db } = req;
-        const doc = {
+        const document = {
             project,
             username,
             name: req.body.name,
@@ -63,9 +63,9 @@ router.post("/", asyncHandler(async (req, res, next) => {
             createdAt: new Date(),
             updatedAt: new Date(),
         };
-        const result = await db.collection(COLLECTION).insertOne(doc);
-        logger.info(`MCP server added: ${doc.name} (${result.insertedId})`);
-        res.status(201).json({ ...doc, id: result.insertedId.toString() });
+        const result = await db.collection(COLLECTION).insertOne(document);
+        logger.info(`MCP server added: ${document.name} (${result.insertedId})`);
+        res.status(201).json({ ...document, id: result.insertedId.toString() });
     }
     catch (error) {
         next(error);

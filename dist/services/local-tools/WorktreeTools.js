@@ -25,11 +25,11 @@ const enterWorktree = {
     },
     domain: "Agentic: Git Isolation",
     labels: ["coding", "git"],
-    async execute(args, ctx) {
+    async execute(args, context) {
         const { default: ToolOrchestratorService } = await import("../ToolOrchestratorService.js");
         const { resolve } = await import("node:path");
         const { existsSync } = await import("node:fs");
-        const sessionId = ctx.agentSessionId;
+        const sessionId = context.agentSessionId;
         if (!sessionId) {
             return {
                 error: "No agent session — worktree isolation requires an active session",
@@ -50,7 +50,7 @@ const enterWorktree = {
             : workspaceRoot;
         const branchName = `worktree/${sessionId.slice(0, 8)}-${Date.now().toString(36)}`;
         // Create worktree via tools-api
-        const createResult = await ToolOrchestratorService._proxyPost("/agentic/git/worktree/create", { path: repoPath, branch: branchName }, ctx);
+        const createResult = await ToolOrchestratorService._proxyPost("/agentic/git/worktree/create", { path: repoPath, branch: branchName }, context);
         // @ts-ignore
         if (createResult.error) {
             // @ts-ignore
@@ -68,9 +68,9 @@ const enterWorktree = {
         logger.info(
         // @ts-ignore
         `[Worktree] enter: ${branchName} → ${createResult.worktreePath}`);
-        if (ctx._emit) {
+        if (context._emit) {
             // @ts-ignore
-            ctx._emit({
+            context._emit({
                 type: "status",
                 message: "worktree_entered",
                 branch: branchName,
@@ -114,9 +114,9 @@ const exitWorktree = {
     },
     domain: "Agentic: Git Isolation",
     labels: ["coding", "git"],
-    async execute(args, ctx) {
+    async execute(args, context) {
         const { default: ToolOrchestratorService } = await import("../ToolOrchestratorService.js");
-        const sessionId = ctx.agentSessionId;
+        const sessionId = context.agentSessionId;
         const wt = ToolOrchestratorService.getWorktreeState(sessionId);
         if (!sessionId || !wt) {
             return {
@@ -126,12 +126,12 @@ const exitWorktree = {
         const { action, commitMessage } = args;
         let mergeResult = null;
         if (action === "merge") {
-            const diffResult = await ToolOrchestratorService._proxyPost("/agentic/git/worktree/diff", { path: wt.repoPath, branch: wt.branchName }, ctx);
+            const diffResult = await ToolOrchestratorService._proxyPost("/agentic/git/worktree/diff", { path: wt.repoPath, branch: wt.branchName }, context);
             mergeResult = await ToolOrchestratorService._proxyPost("/agentic/git/worktree/merge", {
                 path: wt.repoPath,
                 branch: wt.branchName,
                 message: commitMessage || `Merge worktree: ${wt.branchName}`,
-            }, ctx);
+            }, context);
             // @ts-ignore
             if (mergeResult.error) {
                 // @ts-ignore
@@ -144,11 +144,11 @@ const exitWorktree = {
             mergeResult.diff = diffResult.error ? null : diffResult;
         }
         // Remove the worktree (both merge and discard)
-        await ToolOrchestratorService._proxyPost("/agentic/git/worktree/remove", { path: wt.repoPath, worktreePath: wt.worktreePath, deleteBranch: true }, ctx);
+        await ToolOrchestratorService._proxyPost("/agentic/git/worktree/remove", { path: wt.repoPath, worktreePath: wt.worktreePath, deleteBranch: true }, context);
         ToolOrchestratorService._clearWorktree(sessionId);
         logger.info(`[Worktree] exit: ${action} — ${wt.branchName}`);
-        if (ctx._emit) {
-            ctx._emit({
+        if (context._emit) {
+            context._emit({
                 type: "status",
                 message: "worktree_exited",
                 action,

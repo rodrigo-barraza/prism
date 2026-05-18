@@ -6,13 +6,11 @@ export default class CoordinatorService {
      * collects the diff when complete, and injects a [WORKER COMPLETED] notification into
      * the coordinator's conversation.
      *
-     * @param {object} params
+  
      * @param {string} params.description - Short label for the worker
      * @param {string} params.prompt - Self-contained task prompt for the worker
-     * @param {string[]} [params.files] - Optional file paths to focus on
-     * @param {string} [params.model] - Optional model override for the worker
-     * @param {string} [params.assignedProvider] - Pre-assigned provider (from createTeam)
-     * @param {string} [params.assignedModel] - Pre-assigned model (from createTeam)
+  
+  
      * @param {object} params.coordinatorCtx - Coordinator's loop context
      * @returns {Promise<object>} Spawn result with agentId
      */
@@ -23,7 +21,7 @@ export default class CoordinatorService {
         summary: string;
         result: any;
         toolUses: any;
-        toolNames: {};
+        toolNames: {} | undefined;
         iterations: any;
         durationMs: any;
         messages: any;
@@ -32,10 +30,8 @@ export default class CoordinatorService {
     }>;
     /**
      * Send a follow-up message to a running/idle worker.
-     * @param {string} agentId
-     * @param {string} message
-     * @param {object} coordinatorCtx
-     * @returns {Promise<object>}
+  
+  
      */
     static sendMessage(agentId: any, message: any, coordinatorCtx: any): Promise<{
         error: string;
@@ -50,8 +46,8 @@ export default class CoordinatorService {
     }>;
     /**
      * Stop a running worker and clean up its worktree.
-     * @param {string} agentId
-     * @returns {Promise<object>}
+  
+  
      */
     static stopAgent(agentId: any): Promise<{
         error: string;
@@ -65,8 +61,8 @@ export default class CoordinatorService {
     /**
      * Read the output from a previously spawned worker agent.
      * Returns the full result if completed, or partial status if still running.
-     * @param {string} agentId
-     * @returns {object}
+  
+  
      */
     static getTaskOutput(agentId: any): {
         agent_id: any;
@@ -75,7 +71,7 @@ export default class CoordinatorService {
         summary: string;
         result: any;
         toolUses: any;
-        toolNames: {};
+        toolNames: {} | undefined;
         iterations: any;
         durationMs: any;
         messages: any;
@@ -105,7 +101,7 @@ export default class CoordinatorService {
      * Called when the coordinator's SSE connection is severed (user presses stop)
      * or explicitly via the REST endpoint.
      *
-     * @param {string} parentAgentSessionId - The coordinator session ID
+  
      * @returns {{ stopped: string[], alreadyStopped: string[] }}
      */
     static abortWorkersBySession(parentAgentSessionId: any): Promise<{
@@ -114,8 +110,8 @@ export default class CoordinatorService {
     }>;
     /**
      * Get the status of a specific worker.
-     * @param {string} agentId
-     * @returns {object|null}
+  
+  
      */
     static getWorkerStatus(agentId: any): {
         agentId: any;
@@ -125,12 +121,11 @@ export default class CoordinatorService {
         durationMs: any;
         diff: any;
         error: any;
-    };
+    } | null;
     /**
      * List all active workers spawned via chat tools.
-     * @param {object} [options]
-     * @param {string} [options.parentAgentSessionId] - Filter workers by parent coordinator session
-     * @returns {Array}
+  
+  
      */
     static listWorkers({ parentAgentSessionId }?: {}): {
         agentId: any;
@@ -156,7 +151,7 @@ export default class CoordinatorService {
      * Called when the coordinator loop completes/errors to prevent unbounded
      * growth of the in-memory activeWorkers Map.
      *
-     * @param {string} parentAgentSessionId
+  
      */
     static cleanupSession(parentAgentSessionId: any): void;
     /**
@@ -164,11 +159,11 @@ export default class CoordinatorService {
      * Each member is spawned via spawnFromTool and runs concurrently.
      * Returns aggregated results from all members when they all complete.
      *
-     * @param {object} args
+  
      * @param {string} args.name - Team name
      * @param {Array} args.members - [{ description, prompt, files?, model? }]
-     * @param {object} coordinatorCtx - Coordinator loop context
-     * @returns {Promise<object>}
+  
+  
      */
     static createTeam(args: any, coordinatorCtx: any): Promise<{
         error: string;
@@ -187,8 +182,8 @@ export default class CoordinatorService {
     }>;
     /**
      * Stop and remove all workers in a named team.
-     * @param {string} teamName
-     * @returns {Promise<object>}
+  
+  
      */
     static deleteTeam(teamName: any): Promise<{
         error: string;
@@ -211,10 +206,10 @@ export default class CoordinatorService {
     /**
      * Decompose a task into parallel sub-tasks using LLM.
      *
-     * @param {object} params
+  
      * @param {string} params.task - The refactoring task description
      * @param {string[]} params.files - Target file paths
-     * @param {string} [params.repoPath] - Repository root path
+  
      * @returns {Promise<object>} Decomposed plan with sub-tasks
      */
     static decompose({ task, files, repoPath, endpoint, agentSessionId, }: any): Promise<{
@@ -239,13 +234,8 @@ export default class CoordinatorService {
     /**
      * Execute an approved plan — spawn workers in git worktrees.
      *
-     * @param {object} plan - The approved plan from decompose()
-     * @param {object} [options]
-     * @param {string} [options.provider] - LLM provider for workers
-     * @param {string} [options.model] - LLM model for workers
-     * @param {string} [options.project] - Project identifier
-     * @param {string} [options.username] - Username
-     * @param {Function} [options.onProgress] - Progress callback (taskId, workers)
+  
+  
      * @returns {Promise<object>} Execution results with diffs
      */
     static execute(plan: any, options?: {}): Promise<{
@@ -278,8 +268,8 @@ export default class CoordinatorService {
     /**
      * Approve and merge all completed worker branches.
      *
-     * @param {string} taskId
-     * @returns {Promise<object>}
+  
+  
      */
     static approveMerge(taskId: any): Promise<{
         error: string;
@@ -287,14 +277,18 @@ export default class CoordinatorService {
         merged?: undefined;
     } | {
         taskId: any;
-        merged: any[];
+        merged: {
+            workerId: any;
+            merged: boolean;
+            error: any;
+        }[];
         error?: undefined;
     }>;
     /**
      * Abort a running task — kill workers and clean up worktrees.
      *
-     * @param {string} taskId
-     * @returns {Promise<object>}
+  
+  
      */
     static abort(taskId: any): Promise<{
         error: string;
@@ -313,13 +307,13 @@ export default class CoordinatorService {
     /**
      * Get the current status of a coordinator task.
      *
-     * @param {string} taskId
-     * @returns {object|null}
+  
+  
      */
     static getStatus(taskId: any): any;
     /**
      * List all active coordinator tasks.
-     * @returns {Array}
+  
      */
     static listTasks(): {
         taskId: any;

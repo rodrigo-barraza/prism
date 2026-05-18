@@ -7,7 +7,6 @@ import StandardAgenticHarness from "./StandardAgenticHarness.js";
  *   2. Set static `id`, `label`, and `description`
  *   3. Import and register it here
  */
-/** @type {Map<string, typeof BaseAgenticHarness>} */
 const registry = new Map();
 function register(HarnessClass) {
     registry.set(HarnessClass.id, HarnessClass);
@@ -20,8 +19,8 @@ register(StandardAgenticHarness);
 const HarnessRegistry = {
     /**
      * Get a harness class by ID, falling back to "standard".
-     * @param {string} id
-     * @returns {typeof BaseAgenticHarness}
+  
+  
      */
     get(id) {
         return registry.get(id) || registry.get("standard");
@@ -39,8 +38,8 @@ const HarnessRegistry = {
     },
     /**
      * Check if a harness ID exists.
-     * @param {string} id
-     * @returns {boolean}
+  
+  
      */
     has(id) {
         return registry.has(id);

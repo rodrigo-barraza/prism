@@ -1,1 +1,1 @@
-{"version":3,"file":"RequestLoggerMiddleware.d.ts","sourceRoot":"","sources":["../../src/middleware/RequestLoggerMiddleware.ts"],"names":[],"mappings":"AAOA;;;;;;GAMG;AACH,wBAAgB,uBAAuB,CAAC,GAAG,EAAE,GAAG,EAAE,GAAG,EAAE,GAAG,EAAE,IAAI,EAAE,GAAG,QAmEpE"}
+{"version":3,"file":"RequestLoggerMiddleware.d.ts","sourceRoot":"","sources":["../../src/middleware/RequestLoggerMiddleware.ts"],"names":[],"mappings":"AAIA;;;;;;GAMG;AACH,wBAAgB,uBAAuB,CAAC,GAAG,EAAE,GAAG,EAAE,GAAG,EAAE,GAAG,EAAE,IAAI,EAAE,GAAG,QAmEpE"}

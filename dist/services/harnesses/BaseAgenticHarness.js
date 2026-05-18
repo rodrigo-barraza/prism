@@ -30,18 +30,18 @@ export default class BaseAgenticHarness {
     static label = "Base (abstract)";
     static description = "Abstract base harness — do not use directly.";
     /**
-     * @param {object}              ctx    — generation context from ChatRoutes
+     * @param {object}              context    — generation context from ChatRoutes
      * @param {AgenticLoopState}    state  — shared mutable state accumulator
      * @param {object}              tools  — { finalTools, customToolMap, resolvedEnabledTools }
      */
-    constructor(ctx, state, tools) {
+    constructor(context, state, tools) {
         // @ts-ignore
-        this.ctx = ctx;
+        this.ctx = context;
         // @ts-ignore
         this.state = state;
         // @ts-ignore
         this.tools = tools;
-        const { parentAgentSessionId, agentSessionId } = ctx;
+        const { parentAgentSessionId, agentSessionId } = context;
         // @ts-ignore
         this.trackerSessionId = parentAgentSessionId || agentSessionId;
     }
@@ -100,8 +100,8 @@ export default class BaseAgenticHarness {
     // ── Context window enforcement ───────────────────────────
     /**
      * Enforce token budget on messages before sending to provider.
-     * @param {object[]} messages
-     * @param {number}   toolCount
+  
+  
      * @returns {object[]} — possibly truncated messages
      */
     enforceContextWindow(messages, toolCount) {
@@ -171,7 +171,7 @@ export default class BaseAgenticHarness {
      * @param {*}      chunk            — raw chunk from provider stream
      * @param {object} pass             — per-iteration pass state
      * @param {Set}    allowedToolNames — tool names in the current schema
-     * @returns {object}
+  
      */
     processStreamChunk(chunk, pass, allowedToolNames) {
         // @ts-ignore

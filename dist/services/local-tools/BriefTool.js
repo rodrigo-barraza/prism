@@ -32,7 +32,7 @@ export default {
     },
     domain: "Reasoning",
     labels: ["coding"],
-    async execute(args, ctx) {
+    async execute(args, context) {
         const { summary, keyFiles, openQuestions } = args;
         if (!summary || typeof summary !== "string") {
             return { error: "'summary' is required and must be a non-empty string" };
@@ -44,8 +44,8 @@ export default {
             timestamp: new Date().toISOString(),
         };
         logger.info(`[Brief] ${summary.length} chars, ${(keyFiles || []).length} files, ${(openQuestions || []).length} questions`);
-        if (ctx._emit) {
-            ctx._emit({ type: "brief_update", brief });
+        if (context._emit) {
+            context._emit({ type: "brief_update", brief });
         }
         return { acknowledged: true, brief };
     },

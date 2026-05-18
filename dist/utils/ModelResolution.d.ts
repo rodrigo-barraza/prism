@@ -7,7 +7,7 @@
  *   "lmstudio-community/qwen3-32b-GGUF/qwen3-32b-Q8_0.gguf"
  *     → { base: "lmstudio-community/qwen3-32b-GGUF/qwen3-32b", quant: "Q8_0" }
  *
- * @param {string} modelKey
+
  * @returns {{ base: string, quant: string|null }}
  */
 export declare function parseModelQuant(modelKey: any): {
@@ -19,7 +19,7 @@ export declare function parseModelQuant(modelKey: any): {
  * on a specific instance. Ranks by `size_bytes` (file size on disk) —
  * the largest file is the highest-quality quantization.
  *
- * @param {string} targetModel - The model key to find a fallback for
+
  * @param {Array<{key?: string, id?: string, size_bytes?: number}>} availableModels - Models on the instance
  * @returns {string|null} The best available model key (by file size), or null
  */
@@ -31,7 +31,7 @@ export declare function findBestQuantFallback(targetModel: any, availableModels:
  *
  * This is the same logic the CoordinatorService uses for worker agents.
  *
- * @param {string} modelKey - The requested model key
+
  * @param {Array<{id: string, concurrency: number}>} siblings - All instances of this provider type
  * @returns {Promise<{ usable: Array<{id: string, concurrency: number}>, modelOverrides: Map<string, string> }>}
  */

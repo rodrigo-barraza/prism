@@ -11,10 +11,6 @@
  * of the default coding agent sections.
  */
 export default class SystemPromptAssembler {
-    /**
-     * @param {object} [options]
-     * @param {string} [options.workspaceRoot] - Workspace root path
-     */
     constructor(options?: {});
     /**
      * Fetch project directory tree from tools-api.
@@ -25,8 +21,8 @@ export default class SystemPromptAssembler {
     fetchDirectoryTree(): Promise<any>;
     /**
      * Format directory listing into a readable tree string.
-     * @param {object} data - Response from tools-api list endpoint
-     * @returns {string}
+  
+  
      */
     _formatDirectoryTree(data: any): string;
     /**
@@ -36,8 +32,8 @@ export default class SystemPromptAssembler {
      *   - Name + first sentence of description (capability summary)
      *   - Full parameter listing with required markers
      *
-     * @param {Array} [enabledTools] - If provided, only include these tool names
-     * @returns {string}
+  
+  
      */
     buildToolDescriptions(enabledTools: any): string;
     /**
@@ -45,21 +41,16 @@ export default class SystemPromptAssembler {
      * Queries the unified `memories` collection using cosine similarity,
      * scoped by agent and project.
      *
-     * @param {string} agent - Agent identifier
-     * @param {string} project - Project identifier
-     * @param {string} queryText - Query for semantic search
-     * @param {string} [traceId] - Session identifier
-     * @param {string} [endpoint] - Request endpoint
-     * @param {string} [username] - Username
+  
+  
      * @returns {Promise<string>} Formatted memory sections for the system prompt
      */
     fetchMemories(agent: any, project: any, queryText: any, { traceId, agentSessionId, endpoint, _username }?: {}): Promise<any>;
     /**
      * Fetch enabled skills relevant to the user's query via embedding similarity.
      *
-     * @param {string} project - Project identifier
-     * @param {string} username - Username
-     * @param {string} queryText - The user's latest message (used for relevance matching)
+  
+  
      * @returns {Promise<Array<{ name: string, content: string, score: number }>>}
      */
     fetchSkills(project: any, username: any, queryText: any, { traceId, agentSessionId, endpoint, agent }?: {}): Promise<{
@@ -85,16 +76,16 @@ export default class SystemPromptAssembler {
      *   8. Project skills (relevance-filtered)
      *   9. Session memory from past conversations
      *
-     * @param {object} ctx - Request context
-     * @param {string} ctx.project - Project identifier
-     * @param {string} ctx.username - Username
-     * @param {string} [ctx.agent] - Agent identifier (e.g. "LUPOS", "CODING")
-     * @param {object} [ctx.agentContext] - Runtime context from caller
-     * @param {Array} ctx.messages - Current messages array
-     * @param {Array} [ctx.enabledTools] - Enabled tool names
+  
+     * @param {string} context.project - Project identifier
+     * @param {string} context.username - Username
+  
+  
+     * @param {Array} context.messages - Current messages array
+  
      * @returns {Promise<{ prompt: string, skillNames: string[] }>} Complete system prompt + skill names for UI emission
      */
-    assemble(ctx: any): Promise<{
+    assemble(context: any): Promise<{
         prompt: string;
         skillNames: any[];
     }>;
@@ -105,8 +96,8 @@ export default class SystemPromptAssembler {
      * Any existing system message content from the client is ignored — the
      * backend is the single source of truth for the agent system prompt.
      *
-     * @returns {Function}
+  
      */
-    createHook(): (ctx: any) => Promise<void>;
+    createHook(): (context: any) => Promise<void>;
 }
 //# sourceMappingURL=SystemPromptAssembler.d.ts.map

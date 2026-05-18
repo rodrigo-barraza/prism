@@ -27,17 +27,12 @@ const SkillService = {
     /**
      * Create a new skill.
      *
-     * @param {object} data
+  
      * @param {string} data.name - Unique skill name (e.g. "refactor_and_test")
      * @param {string} data.description - What the skill does
      * @param {string} data.prompt - Prompt template. Use {{variable}} for interpolation.
-     * @param {string[]} [data.steps] - Ordered step descriptions (for documentation)
-     * @param {string[]} [data.tools] - Tools to enable for the skill run (default: all)
-     * @param {number} [data.maxIterations] - Max loop iterations (default: 25)
-     * @param {string} [data.model] - Model override for the skill run
-     * @param {string} [data.project] - Project scope
-     * @param {string} [data.agent] - Agent persona override
-     * @returns {Promise<object>}
+  
+  
      */
     async create(data) {
         const col = getCollection();
@@ -62,7 +57,7 @@ const SkillService = {
                 error: `Skill "${skillId}" already exists. Delete it first or use a different name.`,
             };
         }
-        const doc = {
+        const document = {
             skillId,
             name,
             description: description || "",
@@ -79,19 +74,17 @@ const SkillService = {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
         };
-        await col.insertOne(doc);
+        await col.insertOne(document);
         logger.info(`[SkillService] Created skill "${name}" (${skillId})`);
         return {
-            skill: sanitize(doc),
+            skill: sanitize(document),
             message: `Skill "${name}" created. Execute with skill_execute({ skillId: "${skillId}" }).`,
         };
     },
     /**
      * List all skills.
-     * @param {object} [options]
-     * @param {string} [options.project] - Filter by project
-     * @param {number} [options.limit] - Max results
-     * @returns {Promise<object>}
+  
+  
      */
     // @ts-ignore
     async list({ project, limit = 50 } = {}) {
@@ -114,32 +107,32 @@ const SkillService = {
     },
     /**
      * Get a single skill by skillId.
-     * @param {string} skillId
-     * @returns {Promise<object|null>}
+  
+  
      */
     async get(skillId) {
         const col = getCollection();
         if (!col)
             return null;
-        const doc = await col.findOne({ skillId });
-        return doc ? sanitize(doc) : null;
+        const document = await col.findOne({ skillId });
+        return document ? sanitize(document) : null;
     },
     /**
      * Delete a skill by skillId.
-     * @param {string} skillId
-     * @returns {Promise<object>}
+  
+  
      */
     async delete(skillId) {
         const col = getCollection();
         if (!col)
             return { error: "Database not available" };
-        const doc = await col.findOne({ skillId });
-        if (!doc) {
+        const document = await col.findOne({ skillId });
+        if (!document) {
             return { error: `Skill "${skillId}" not found` };
         }
         await col.deleteOne({ skillId });
-        logger.info(`[SkillService] Deleted skill "${doc.name}" (${skillId})`);
-        return { deleted: true, skillId, name: doc.name };
+        logger.info(`[SkillService] Deleted skill "${document.name}" (${skillId})`);
+        return { deleted: true, skillId, name: document.name };
     },
     /**
      * Execute a skill — interpolates variables, increments usage, and
@@ -148,22 +141,22 @@ const SkillService = {
      * The caller (ToolOrchestratorService) is responsible for actually
      * running the agentic loop with the returned config.
      *
-     * @param {string} skillId
-     * @param {object} [variables] - Key-value pairs for {{variable}} interpolation
+  
+  
      * @returns {Promise<object>} { prompt, config } or { error }
      */
     async prepare(skillId, variables = {}) {
         const col = getCollection();
         if (!col)
             return { error: "Database not available" };
-        const doc = await col.findOne({ skillId });
-        if (!doc) {
+        const document = await col.findOne({ skillId });
+        if (!document) {
             return {
                 error: `Skill "${skillId}" not found. Use skill_list to see available skills.`,
             };
         }
         // Interpolate variables into the prompt template
-        let prompt = doc.prompt;
+        let prompt = document.prompt;
         // @ts-ignore
         for (const [key, value] of Object.entries(variables)) {
             prompt = prompt.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), String(value));
@@ -179,26 +172,26 @@ const SkillService = {
             $set: { updatedAt: new Date().toISOString() },
         });
         const config = {
-            maxIterations: doc.maxIterations || 25,
-            model: doc.model || null,
-            tools: doc.tools || null, // null = all tools
-            agent: doc.agent || null,
-            project: doc.project || null,
+            maxIterations: document.maxIterations || 25,
+            model: document.model || null,
+            tools: document.tools || null, // null = all tools
+            agent: document.agent || null,
+            project: document.project || null,
         };
         return {
             skillId,
-            name: doc.name,
+            name: document.name,
             prompt,
             config,
             unresolved: unresolved.length > 0 ? unresolved : undefined,
-            steps: doc.steps?.length > 0 ? doc.steps : undefined,
+            steps: document.steps?.length > 0 ? document.steps : undefined,
         };
     },
 };
-function sanitize(doc) {
-    if (!doc)
+function sanitize(document) {
+    if (!document)
         return null;
-    const { _id, ...rest } = doc;
+    const { _id, ...rest } = document;
     return rest;
 }
 export default SkillService;

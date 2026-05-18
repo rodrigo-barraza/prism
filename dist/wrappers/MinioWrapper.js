@@ -14,10 +14,8 @@ import logger from "../utils/logger.js";
 const MinioWrapper = {
     /**
      * Initialize the MinIO client with positional arguments (legacy Prism API).
-     * @param {string} endpoint - e.g. "http://<host>:9000"
-     * @param {string} accessKey
-     * @param {string} secretKey
-     * @param {string} bucket
+  
+  
      */
     async init(endpoint, accessKey, secretKey, bucket) {
         return MinioManager.init({

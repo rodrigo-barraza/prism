@@ -39,7 +39,7 @@ export default {
     },
     domain: "Agentic: Task Management",
     labels: ["coding"],
-    async execute(args, ctx) {
+    async execute(args, context) {
         const { items } = args;
         if (!Array.isArray(items)) {
             return { error: "'items' must be an array of todo objects" };
@@ -58,8 +58,8 @@ export default {
             completed: normalized.filter((i) => i.status === "completed").length,
         };
         logger.info(`[TodoWrite] ${stats.total} items (${stats.completed} done, ${stats.in_progress} in progress, ${stats.pending} pending)`);
-        if (ctx._emit) {
-            ctx._emit({ type: "todo_update", items: normalized, stats });
+        if (context._emit) {
+            context._emit({ type: "todo_update", items: normalized, stats });
         }
         return { acknowledged: true, items: normalized, stats };
     },

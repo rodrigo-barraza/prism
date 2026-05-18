@@ -2,17 +2,12 @@ declare const SkillService: {
     /**
      * Create a new skill.
      *
-     * @param {object} data
+  
      * @param {string} data.name - Unique skill name (e.g. "refactor_and_test")
      * @param {string} data.description - What the skill does
      * @param {string} data.prompt - Prompt template. Use {{variable}} for interpolation.
-     * @param {string[]} [data.steps] - Ordered step descriptions (for documentation)
-     * @param {string[]} [data.tools] - Tools to enable for the skill run (default: all)
-     * @param {number} [data.maxIterations] - Max loop iterations (default: 25)
-     * @param {string} [data.model] - Model override for the skill run
-     * @param {string} [data.project] - Project scope
-     * @param {string} [data.agent] - Agent persona override
-     * @returns {Promise<object>}
+  
+  
      */
     create(data: any): Promise<{
         error: string;
@@ -25,27 +20,25 @@ declare const SkillService: {
     }>;
     /**
      * List all skills.
-     * @param {object} [options]
-     * @param {string} [options.project] - Filter by project
-     * @param {number} [options.limit] - Max results
-     * @returns {Promise<object>}
+  
+  
      */
     list({ project, limit }?: {
-        limit?: number;
+        limit?: number | undefined;
     }): Promise<{
         skills: any[];
         total: number;
     }>;
     /**
      * Get a single skill by skillId.
-     * @param {string} skillId
-     * @returns {Promise<object|null>}
+  
+  
      */
     get(skillId: any): Promise<any>;
     /**
      * Delete a skill by skillId.
-     * @param {string} skillId
-     * @returns {Promise<object>}
+  
+  
      */
     delete(skillId: any): Promise<{
         error: string;
@@ -65,8 +58,8 @@ declare const SkillService: {
      * The caller (ToolOrchestratorService) is responsible for actually
      * running the agentic loop with the returned config.
      *
-     * @param {string} skillId
-     * @param {object} [variables] - Key-value pairs for {{variable}} interpolation
+  
+  
      * @returns {Promise<object>} { prompt, config } or { error }
      */
     prepare(skillId: any, variables?: {}): Promise<{
@@ -88,7 +81,7 @@ declare const SkillService: {
             agent: any;
             project: any;
         };
-        unresolved: unknown[];
+        unresolved: unknown[] | undefined;
         steps: any;
         error?: undefined;
     }>;

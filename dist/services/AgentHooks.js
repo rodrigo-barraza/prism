@@ -29,9 +29,8 @@ export default class AgentHooks extends EventEmitter {
      * Register a named async hook for a lifecycle event.
      * Hooks run sequentially in registration order.
      *
-     * @param {string} event - Lifecycle event name
-     * @param {Function} handler - Async handler function
-     * @param {string} [name] - Optional name for logging
+  
+  
      */
     register(event, handler, name) {
         // @ts-ignore
@@ -48,8 +47,8 @@ export default class AgentHooks extends EventEmitter {
      * Run all registered hooks for an event sequentially.
      * Each hook can mutate ctx or return a control object.
      *
-     * @param {string} event - Lifecycle event name
-     * @param  {...any} args - Arguments passed to each handler
+  
+  
      * @returns {Promise<object|undefined>} Merged results from handlers
      */
     async run(event, ...args) {
@@ -72,8 +71,8 @@ export default class AgentHooks extends EventEmitter {
     }
     /**
      * Check if any hooks are registered for an event.
-     * @param {string} event
-     * @returns {boolean}
+  
+  
      */
     hasHooks(event) {
         // @ts-ignore

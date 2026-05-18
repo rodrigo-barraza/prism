@@ -1,4 +1,3 @@
-// @ts-nocheck
 // ─── Environment Accessors ──────────────────────────────────
 // Typed accessor layer over process.env. The Vault service is
 // the single source of truth — boot.js hydrates process.env

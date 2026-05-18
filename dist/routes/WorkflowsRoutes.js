@@ -51,21 +51,21 @@ async function extractWorkflowFiles(nodes, project = null, username = null) {
         if (Array.isArray(updated.messages)) {
             const newMessages = [];
             // @ts-ignore
-            for (const msg of updated.messages) {
-                const m = { ...msg };
+            for (const message of updated.messages) {
+                const m = { ...message };
                 // @ts-ignore
                 for (const field of MEDIA_FIELDS) {
-                    const val = m[field];
-                    if (Array.isArray(val)) {
-                        const arr = [];
+                    const value = m[field];
+                    if (Array.isArray(value)) {
+                        const array = [];
                         // @ts-ignore
-                        for (const item of val) {
-                            arr.push(await uploadIfDataUrl(item, "uploads", project, username));
+                        for (const item of value) {
+                            array.push(await uploadIfDataUrl(item, "uploads", project, username));
                         }
-                        m[field] = arr;
+                        m[field] = array;
                     }
-                    else if (typeof val === "string" && val.startsWith("data:")) {
-                        m[field] = await uploadIfDataUrl(val, "uploads", project, username);
+                    else if (typeof value === "string" && value.startsWith("data:")) {
+                        m[field] = await uploadIfDataUrl(value, "uploads", project, username);
                     }
                 }
                 newMessages.push(m);
@@ -111,21 +111,21 @@ async function extractNodeResultFiles(nodeResults, project = null, username = nu
             if (mod === "conversation" && Array.isArray(data)) {
                 const msgs = [];
                 // @ts-ignore
-                for (const msg of data) {
-                    const m = { ...msg };
+                for (const message of data) {
+                    const m = { ...message };
                     // @ts-ignore
                     for (const field of MEDIA_FIELDS) {
-                        const val = m[field];
-                        if (Array.isArray(val)) {
-                            const arr = [];
+                        const value = m[field];
+                        if (Array.isArray(value)) {
+                            const array = [];
                             // @ts-ignore
-                            for (const item of val) {
-                                arr.push(await uploadIfDataUrl(item, "uploads", project, username));
+                            for (const item of value) {
+                                array.push(await uploadIfDataUrl(item, "uploads", project, username));
                             }
-                            m[field] = arr;
+                            m[field] = array;
                         }
-                        else if (typeof val === "string" && val.startsWith("data:")) {
-                            m[field] = await uploadIfDataUrl(val, "uploads", project, username);
+                        else if (typeof value === "string" && value.startsWith("data:")) {
+                            m[field] = await uploadIfDataUrl(value, "uploads", project, username);
                         }
                     }
                     msgs.push(m);
@@ -174,15 +174,15 @@ function resolveWorkflowFileRefs(workflow, baseUrl) {
             // Messages array (conversation / model nodes)
             if (Array.isArray(node.messages)) {
                 // @ts-ignore
-                for (const msg of node.messages) {
+                for (const message of node.messages) {
                     // @ts-ignore
                     for (const field of MEDIA_FIELDS) {
-                        const val = msg[field];
-                        if (Array.isArray(val)) {
-                            msg[field] = val.map((item) => resolveMinioRef(item, baseUrl));
+                        const value = message[field];
+                        if (Array.isArray(value)) {
+                            message[field] = value.map((item) => resolveMinioRef(item, baseUrl));
                         }
-                        else if (typeof val === "string") {
-                            msg[field] = resolveMinioRef(val, baseUrl);
+                        else if (typeof value === "string") {
+                            message[field] = resolveMinioRef(value, baseUrl);
                         }
                     }
                 }
@@ -207,15 +207,15 @@ function resolveWorkflowFileRefs(workflow, baseUrl) {
                 // conversation modality is an array of message objects with nested media
                 if (mod === "conversation" && Array.isArray(data)) {
                     // @ts-ignore
-                    for (const msg of data) {
+                    for (const message of data) {
                         // @ts-ignore
                         for (const field of MEDIA_FIELDS) {
-                            const val = msg[field];
-                            if (Array.isArray(val)) {
-                                msg[field] = val.map((item) => resolveMinioRef(item, baseUrl));
+                            const value = message[field];
+                            if (Array.isArray(value)) {
+                                message[field] = value.map((item) => resolveMinioRef(item, baseUrl));
                             }
-                            else if (typeof val === "string") {
-                                msg[field] = resolveMinioRef(val, baseUrl);
+                            else if (typeof value === "string") {
+                                message[field] = resolveMinioRef(value, baseUrl);
                             }
                         }
                     }

@@ -1,15 +1,13 @@
 declare const MinioWrapper: {
     /**
      * Initialize the MinIO client with positional arguments (legacy Prism API).
-     * @param {string} endpoint - e.g. "http://<host>:9000"
-     * @param {string} accessKey
-     * @param {string} secretKey
-     * @param {string} bucket
+  
+  
      */
     init(endpoint: any, accessKey: any, secretKey: any, bucket: any): Promise<void>;
     isAvailable: () => boolean;
-    getBucketUrl: () => string;
-    getPublicUrl: (key: any) => string;
+    getBucketUrl: () => string | null;
+    getPublicUrl: (key: any) => string | null;
     upload: (key: any, buffer: any, contentType: any) => Promise<void>;
     get: (key: any) => Promise<import("node:stream").Readable>;
     remove: (key: any) => Promise<void>;

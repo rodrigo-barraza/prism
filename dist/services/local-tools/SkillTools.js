@@ -78,7 +78,7 @@ const skillExecute = {
     },
     domain: "Agentic: Skills",
     labels: ["coding", "automation"],
-    async execute(args, ctx) {
+    async execute(args, context) {
         const { default: SkillService } = await import("../SkillService.js");
         const prepared = await SkillService.prepare(args.skillId, args.variables || {});
         if (prepared.error)
@@ -96,7 +96,7 @@ const skillExecute = {
                     model: prepared.config.model || undefined,
                 },
             ],
-        }, ctx);
+        }, context);
     },
 };
 const skillList = {
@@ -117,10 +117,10 @@ const skillList = {
     },
     domain: "Agentic: Skills",
     labels: ["coding", "automation"],
-    async execute(args, ctx) {
+    async execute(args, context) {
         const { default: SkillService } = await import("../SkillService.js");
         // @ts-ignore
-        return SkillService.list({ project: args.project || ctx.project });
+        return SkillService.list({ project: args.project || context.project });
     },
 };
 const skillDelete = {

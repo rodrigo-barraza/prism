@@ -6,8 +6,8 @@ import { convertToolsToOpenAI, buildPayloadParams, prepareOpenAICompatMessages, 
 // ── Provider ─────────────────────────────────────────────────
 /**
  * Factory: create a vLLM provider instance targeting a specific baseUrl.
- * @param {string} baseUrl - The base URL for the vLLM server
- * @param {string} [instanceId="vllm"] - Unique instance identifier
+
+
  * @returns {object} Provider object with all vLLM methods
  */
 export function createVllmProvider(baseUrl, instanceId = "vllm") {
@@ -155,9 +155,9 @@ export function createVllmProvider(baseUrl, instanceId = "vllm") {
             try {
                 const content = [
                     { type: "text", text: prompt },
-                    ...images.map((img) => ({
+                    ...images.map((image) => ({
                         type: "image_url",
-                        image_url: { url: img },
+                        image_url: { url: image },
                     })),
                 ];
                 const messages = [];
@@ -195,9 +195,8 @@ export function createVllmProvider(baseUrl, instanceId = "vllm") {
          * vLLM also exposes /v2/embed, but /v1/embeddings keeps the response
          * contract identical to the OpenAI provider.
          *
-         * @param {string} content - Text to embed
-         * @param {string} model - Embedding model name
-         * @param {object} [options] - Optional { dimensions }
+    
+    
          * @returns {Promise<{ embedding: number[], dimensions: number }>}
          */
         async generateEmbedding(content, model, options = {}) {

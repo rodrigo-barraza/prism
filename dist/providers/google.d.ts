@@ -10,7 +10,7 @@ export declare function convertToolsToGoogle(tools: any): {
         description: any;
         parameters: any;
     }[];
-}[];
+}[] | null;
 declare const googleProvider: {
     name: string;
     generateText(messages: any, model?: any, options?: {}): Promise<{
@@ -36,14 +36,14 @@ declare const googleProvider: {
      * the same interface as generateTextStream().
      */
     generateTextStreamLive(messages: any, model: any, options?: {}): AsyncGenerator<any, void, unknown>;
-    captionImage(images: any, prompt: string, model: any, systemPrompt: any): Promise<{
+    captionImage(images: any, prompt: string | undefined, model: any, systemPrompt: any): Promise<{
         text: any;
         usage: {
             inputTokens: any;
             outputTokens: any;
         };
     }>;
-    generateImage(prompt: any, images: any[], model: string, systemPrompt: any): Promise<{
+    generateImage(prompt: any, images: never[] | undefined, model: string | undefined, systemPrompt: any): Promise<{
         imageData: any;
         mimeType: any;
         text: string;
@@ -52,7 +52,7 @@ declare const googleProvider: {
         stream: Readable;
         contentType: string;
     }>;
-    transcribeAudio(audioBuffer: any, mimeType: any, model?: string, options?: {}): Promise<{
+    transcribeAudio(audioBuffer: any, mimeType: any, model?: string | undefined, options?: {}): Promise<{
         text: any;
         usage: {
             inputTokens: any;

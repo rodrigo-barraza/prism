@@ -1,8 +1,8 @@
 declare const AgentPersonaRegistry: {
     /**
      * Get a persona by agent identifier.
-     * @param {string} agentId - e.g. "LUPOS", "CODING"
-     * @returns {AgentPersona|null}
+  
+  
      */
     get(agentId: any): any;
     /**
@@ -10,21 +10,21 @@ declare const AgentPersonaRegistry: {
      * @returns {Array<{ id: string, name: string, custom?: boolean }>}
      */
     list(): {
-        custom?: boolean;
+        custom?: boolean | undefined;
         id: any;
         name: any;
         type: any;
     }[];
     /**
      * Check if a persona exists.
-     * @param {string} agentId
-     * @returns {boolean}
+  
+  
      */
     has(agentId: any): boolean;
     /**
      * Check if a project belongs to a registered agent.
-     * @param {string} project
-     * @returns {boolean}
+  
+  
      */
     isAgentProject(project: any): boolean;
     /**
@@ -32,12 +32,12 @@ declare const AgentPersonaRegistry: {
      * Converts a MongoDB document into a persona object compatible
      * with the built-in format, then inserts into the PERSONAS map.
      *
-     * @param {object} doc - Custom agent document from CustomAgentService
+  
      */
-    registerCustom(doc: any): void;
+    registerCustom(document: any): void;
     /**
      * Unregister a persona by agent ID (only custom agents should be removed).
-     * @param {string} agentId
+  
      */
     unregister(agentId: any): void;
     /**

@@ -14,20 +14,20 @@ export default class PlanningModeService {
      * Inject the planning instruction into the system message.
      * Called once before the agentic loop starts when planFirst=true.
      *
-     * @param {Array} messages - The message array (mutated in place)
+  
      */
     static injectPlanningInstruction(messages: any): void;
     /**
      * Strip the planning instruction from the system message.
      * Called when exiting plan mode so execution doesn't carry stale constraints.
      *
-     * @param {Array} messages - The message array (mutated in place)
+  
      */
     static stripPlanningInstruction(messages: any): void;
     /**
      * Extract step descriptions from a plan for progress tracking.
      *
-     * @param {string} planText - The plan markdown text
+  
      * @returns {Array<string>} Step descriptions
      */
     static extractSteps(planText: any): any[];

@@ -100,14 +100,11 @@ const MCPClientService = {
     /**
      * Connect to an MCP server and discover its tools.
      *
-     * @param {object} config - Server configuration from DB
+  
      * @param {string} config.name - Unique server slug
      * @param {string} config.transport - "stdio" | "streamable-http"
-     * @param {string} [config.command] - Command for stdio transport
-     * @param {string[]} [config.args] - Args for stdio transport
-     * @param {object} [config.env] - Extra env vars for stdio
-     * @param {string} [config.url] - URL for streamable-http transport
-     * @param {object} [config.headers] - Headers for streamable-http
+  
+  
      * @returns {Promise<{ tools: Array, serverName: string }>}
      */
     async connect(config) {
@@ -156,7 +153,7 @@ const MCPClientService = {
     },
     /**
      * Disconnect from an MCP server.
-     * @param {string} serverName
+  
      */
     async disconnect(serverName) {
         const conn = connections.get(serverName);
@@ -182,7 +179,7 @@ const MCPClientService = {
     },
     /**
      * Reconnect to an MCP server (disconnect then connect).
-     * @param {string} serverName
+  
      * @returns {Promise<{ tools: Array, serverName: string }>}
      */
     async reconnect(serverName) {
@@ -194,9 +191,8 @@ const MCPClientService = {
     /**
      * Call a tool on a connected MCP server.
      *
-     * @param {string} serverName - Server slug
-     * @param {string} toolName - Original MCP tool name (not namespaced)
-     * @param {object} args - Tool arguments
+  
+  
      * @returns {Promise<object>} Tool result
      */
     // @ts-ignore
@@ -288,23 +284,23 @@ const MCPClientService = {
     },
     /**
      * Check if a specific server is connected.
-     * @param {string} serverName
-     * @returns {boolean}
+  
+  
      */
     isConnected(serverName) {
         return connections.has(serverName);
     },
     /**
      * Check if a tool name is an MCP tool.
-     * @param {string} toolName
-     * @returns {boolean}
+  
+  
      */
     isMCPTool(toolName) {
         return toolName.startsWith(MCP_PREFIX);
     },
     /**
      * Parse an MCP-namespaced tool name.
-     * @param {string} fullName
+  
      * @returns {{ serverName: string, toolName: string } | null}
      */
     parseMCPToolName(fullName) {
@@ -315,7 +311,7 @@ const MCPClientService = {
      * MCP Resources are read-only data sources (files, DB rows, API data)
      * that can be fetched by URI.
      *
-     * @param {string} serverName - Server slug
+  
      * @returns {Promise<{ resources: Array<{ uri: string, name: string, description?: string, mimeType?: string }> }>}
      */
     async listResources(serverName) {
@@ -353,8 +349,8 @@ const MCPClientService = {
     /**
      * Read a specific resource from a connected MCP server by URI.
      *
-     * @param {string} serverName - Server slug
-     * @param {string} uri - Resource URI (from listResources)
+  
+  
      * @returns {Promise<object>} Resource content
      */
     async readResource(serverName, uri) {
@@ -398,13 +394,8 @@ const MCPClientService = {
      * - API key header auth
      * - Environment variable injection (for stdio servers)
      *
-     * @param {string} serverName - Server slug
-     * @param {object} auth - Authentication details
-     * @param {string} [auth.token] - Bearer token
-     * @param {string} [auth.apiKey] - API key value
-     * @param {string} [auth.apiKeyHeader] - Header name for API key (default: "X-API-Key")
-     * @param {object} [auth.env] - Additional env vars to inject (for stdio servers)
-     * @param {object} [auth.headers] - Additional headers to inject (for HTTP servers)
+  
+  
      * @returns {Promise<object>} Reconnection result
      */
     async authenticate(serverName, auth = {}) {
@@ -474,9 +465,8 @@ const MCPClientService = {
     },
     /**
      * Auto-connect all enabled MCP servers from the database.
-     * @param {object} db - MongoDB database reference
-     * @param {string} project - Project identifier
-     * @param {string} username - Username
+  
+  
      */
     async connectAllFromDB(db, project, username) {
         if (!db)

@@ -3,21 +3,21 @@ declare class LocalModelQueue {
     /**
      * Check whether a provider requires the local GPU lock.
      * Checks both base provider types and instance IDs.
-     * @param {string} provider
-     * @returns {boolean}
+  
+  
      */
     isLocal(provider: any): boolean;
     /**
      * Get or create the semaphore queue for an instance.
-     * @param {string} instanceId
-     * @returns {InstanceQueue}
+  
+  
      */
     _getQueue(instanceId: any): any;
     /**
      * Acquire a semaphore slot for an instance. Resolves immediately if a
      * slot is available, otherwise enqueues and waits (FIFO order).
      *
-     * @param {string} [instanceId] - Instance ID. If omitted, uses a shared
+  
      *   default queue (backward compat for callers that don't pass an ID).
      * @returns {Promise<() => void>} A release function — MUST be called
      *   when inference is complete (use try/finally).

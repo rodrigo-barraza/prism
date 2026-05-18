@@ -1,1 +1,1 @@
-{"version":3,"file":"ollama.d.ts","sourceRoot":"","sources":["../../src/providers/ollama.ts"],"names":[],"mappings":"AA0BA;;;;;GAKG;AACH,wBAAgB,oBAAoB,CAAC,OAAO,EAAE,GAAG,EAAE,UAAU,SAAW;;2BASxD,GAAG;;;;;;;;iCAsDH,GAAG;yBAgJL,GAAG,4CAIG,GAAG;;;;;;;IA2DnB;;;OAGG;;;;EAyBN"}
+{"version":3,"file":"ollama.d.ts","sourceRoot":"","sources":["../../src/providers/ollama.ts"],"names":[],"mappings":"AA0BA;;;;;GAKG;AACH,wBAAgB,oBAAoB,CAAC,OAAO,EAAE,GAAG,EAAE,UAAU,SAAW;;2BASxD,GAAG;;;;;;;;iCAsDH,GAAG;yBAgJL,GAAG,wDAIG,GAAG;;;;;;;IA2DnB;;;OAGG;;;;EAyBN"}

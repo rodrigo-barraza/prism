@@ -77,7 +77,7 @@ declare const _default: ({
     };
     domain: string;
     labels: string[];
-    execute(args: any, ctx: any): Promise<{
+    execute(args: any, context: any): Promise<{
         error: string;
         skillId?: undefined;
         name?: undefined;
@@ -86,27 +86,13 @@ declare const _default: ({
         unresolved?: undefined;
         steps?: undefined;
     } | {
-        skillId: any;
-        name: any;
-        prompt: any;
-        config: {
-            maxIterations: any;
-            model: any;
-            tools: any;
-            agent: any;
-            project: any;
-        };
-        unresolved: unknown[];
-        steps: any;
-        error?: undefined;
-    } | {
         agent_id: any;
         description: any;
         status: any;
         summary: string;
         result: any;
         toolUses: any;
-        toolNames: {};
+        toolNames: {} | undefined;
         iterations: any;
         durationMs: any;
         messages: any;
@@ -158,12 +144,12 @@ declare const _default: ({
                     description: string;
                 };
             };
-            required: any[];
+            required: never[];
         };
     };
     domain: string;
     labels: string[];
-    execute(args: any, ctx: any): Promise<{
+    execute(args: any, context: any): Promise<{
         skills: any[];
         total: number;
     }>;

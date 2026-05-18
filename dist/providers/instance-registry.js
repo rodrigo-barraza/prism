@@ -33,11 +33,10 @@ const PROVIDER_ARRAYS = {
  * @property {string} [nickname]    - Optional display label (e.g. "Desktop")
  * @property {object} provider      - The instantiated provider object
  */
-/** @type {Map<string, InstanceEntry>} */
 const registry = new Map();
 /**
  * Register all instances for a provider type from its array.
- * @param {string} type - Provider type key
+
  * @param {Array<{url: string, concurrency?: number, nickname?: string}>} instances
  */
 function registerType(type, instances) {
@@ -77,7 +76,7 @@ for (const [type, instances] of Object.entries(PROVIDER_ARRAYS)) {
 // ── Public API ──────────────────────────────────────────────
 /**
  * Get a provider instance by ID.
- * @param {string} id - Instance ID (e.g. "lm-studio", "lm-studio-2")
+
  * @returns {object|null} Provider object or null if not found
  */
 export function getInstanceProvider(id) {
@@ -85,38 +84,38 @@ export function getInstanceProvider(id) {
 }
 /**
  * Get full instance entry by ID.
- * @param {string} id - Instance ID
- * @returns {InstanceEntry|null}
+
+
  */
 export function getInstance(id) {
     return registry.get(id) || null;
 }
 /**
  * Check if an ID belongs to a registered instance.
- * @param {string} id
- * @returns {boolean}
+
+
  */
 export function isInstance(id) {
     return registry.has(id);
 }
 /**
  * List all registered instances.
- * @returns {InstanceEntry[]}
+
  */
 export function listInstances() {
     return [...registry.values()];
 }
 /**
  * Get all unique provider types that have at least one instance.
- * @returns {string[]}
+
  */
 export function listInstanceTypes() {
     return [...new Set([...registry.values()].map((e) => e.type))];
 }
 /**
  * Get all instances of a given provider type.
- * @param {string} type - Provider type (e.g. "lm-studio")
- * @returns {InstanceEntry[]}
+
+
  */
 export function getInstancesByType(type) {
     return [...registry.values()].filter((e) => e.type === type);
@@ -124,8 +123,8 @@ export function getInstancesByType(type) {
 /**
  * Resolve the provider type from an instance ID.
  * e.g. "lm-studio-2" → "lm-studio", "ollama" → "ollama"
- * @param {string} id - Instance ID
- * @returns {string|null}
+
+
  */
 export function getInstanceType(id) {
     return registry.get(id)?.type || null;

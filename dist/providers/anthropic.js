@@ -49,11 +49,11 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
  */
 async function enforceImageSizeLimits(messages) {
     // @ts-ignore
-    for (const msg of messages) {
-        if (!Array.isArray(msg.content))
+    for (const message of messages) {
+        if (!Array.isArray(message.content))
             continue;
         // @ts-ignore
-        for (const block of msg.content) {
+        for (const block of message.content) {
             if (block.type !== "image" || block.source?.type !== "base64")
                 continue;
             const data = block.source.data;
@@ -272,11 +272,11 @@ async function prepareMessages(messages) {
     // expansion) and standalone tool-role messages with the same ID,
     // which after merging creates duplicate tool_result blocks.
     // @ts-ignore
-    for (const msg of merged) {
-        if (msg.role !== "user" || !Array.isArray(msg.content))
+    for (const message of merged) {
+        if (message.role !== "user" || !Array.isArray(message.content))
             continue;
         const seenToolResultIds = new Set();
-        msg.content = msg.content.filter((block) => {
+        message.content = message.content.filter((block) => {
             if (block.type !== "tool_result")
                 return true;
             if (seenToolResultIds.has(block.tool_use_id))
@@ -293,10 +293,10 @@ async function prepareMessages(messages) {
     // content blocks but the next message is NOT a tool_result, remove them.
     // This handles stale conversation history loaded from the database.
     for (let i = 0; i < merged.length; i++) {
-        const msg = merged[i];
-        if (msg.role !== "assistant" || !Array.isArray(msg.content))
+        const message = merged[i];
+        if (message.role !== "assistant" || !Array.isArray(message.content))
             continue;
-        const hasToolUse = msg.content.some((b) => b.type === "tool_use");
+        const hasToolUse = message.content.some((b) => b.type === "tool_use");
         if (!hasToolUse)
             continue;
         const next = merged[i + 1];
@@ -305,9 +305,9 @@ async function prepareMessages(messages) {
             next.content.some((b) => b.type === "tool_result");
         if (!nextHasToolResult) {
             // Strip tool_use blocks, keep only text
-            msg.content = msg.content.filter((b) => b.type !== "tool_use");
-            if (msg.content.length === 0) {
-                msg.content = " ";
+            message.content = message.content.filter((b) => b.type !== "tool_use");
+            if (message.content.length === 0) {
+                message.content = " ";
             }
         }
     }
@@ -315,15 +315,15 @@ async function prepareMessages(messages) {
     // with trailing whitespace (400: "final assistant content cannot end with
     // trailing whitespace"). Sanitize all assistant text blocks to be safe.
     // @ts-ignore
-    for (const msg of merged) {
-        if (msg.role !== "assistant")
+    for (const message of merged) {
+        if (message.role !== "assistant")
             continue;
-        if (typeof msg.content === "string") {
-            msg.content = msg.content.trimEnd() || " ";
+        if (typeof message.content === "string") {
+            message.content = message.content.trimEnd() || " ";
         }
-        else if (Array.isArray(msg.content)) {
+        else if (Array.isArray(message.content)) {
             // @ts-ignore
-            for (const block of msg.content) {
+            for (const block of message.content) {
                 if (block.type === "text" && typeof block.text === "string") {
                     block.text = block.text.trimEnd() || " ";
                 }
@@ -541,9 +541,8 @@ const anthropicProvider = {
     },
     /**
      * Caption / describe images (image-to-text).
-     * @param {string[]} images - Array of image URLs or base64 data URLs
-     * @param {string} prompt - Caption prompt
-     * @param {string} model - Model name
+  
+  
      * @returns {Promise<{ text: string, usage: object }>}
      */
     async captionImage(images, prompt = "Describe this image.", 

@@ -69,7 +69,7 @@ declare const _default: {
     };
     domain: string;
     labels: string[];
-    execute(args: any, ctx: any): Promise<{
+    execute(args: any, context: any): Promise<{
         error: string;
         answers?: undefined;
         timedOut?: undefined;
@@ -77,7 +77,7 @@ declare const _default: {
         questions?: undefined;
         answer?: undefined;
     } | {
-        answers: any;
+        answers: null;
         timedOut: boolean;
         message: string;
         error?: undefined;

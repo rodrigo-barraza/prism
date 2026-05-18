@@ -24,9 +24,9 @@ function buildContextTags(project, username, clientIp) {
 const logger = {
     ...base,
     provider(provider, action, ...args) {
-        const ctx = getRequestContext();
+        const context = getRequestContext();
         // @ts-ignore
-        const tags = buildContextTags(ctx.project, ctx.username, ctx.clientIp);
+        const tags = buildContextTags(context.project, context.username, context.clientIp);
         base.info(`[${provider}] ${action}${tags}`, ...args);
     },
     request(project, username, clientIp, message, ...args) {

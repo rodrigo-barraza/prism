@@ -58,7 +58,7 @@ router.post("/", asyncHandler(async (req, res, next) => {
             return res.status(400).json({ error: "id is required" });
         }
         const now = new Date().toISOString();
-        const doc = {
+        const document = {
             id,
             project,
             username,
@@ -73,8 +73,8 @@ router.post("/", asyncHandler(async (req, res, next) => {
             createdAt: now,
             updatedAt: now,
         };
-        await db.collection(COLLECTION).insertOne(doc);
-        res.json(doc);
+        await db.collection(COLLECTION).insertOne(document);
+        res.json(document);
     }
     catch (error) {
         logger.error(`Error creating synthesis run: ${error.message}`);

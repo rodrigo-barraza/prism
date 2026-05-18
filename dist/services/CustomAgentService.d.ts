@@ -2,24 +2,24 @@ import { ObjectId } from "mongodb";
 declare const CustomAgentService: {
     /**
      * List all custom agents.
-     * @returns {Promise<Array>}
+  
      */
     list(): Promise<import("mongodb").WithId<import("bson").Document>[]>;
     /**
      * Get a single custom agent by MongoDB _id.
-     * @param {string} id
-     * @returns {Promise<object|null>}
+  
+  
      */
-    get(id: any): Promise<import("mongodb").WithId<import("bson").Document>>;
+    get(id: any): Promise<import("mongodb").WithId<import("bson").Document> | null>;
     /**
      * Get a custom agent by its derived agentId.
-     * @param {string} agentId - e.g. "CUSTOM_MY_AGENT"
-     * @returns {Promise<object|null>}
+  
+  
      */
-    getByAgentId(agentId: any): Promise<import("mongodb").WithId<import("bson").Document>>;
+    getByAgentId(agentId: any): Promise<import("mongodb").WithId<import("bson").Document> | null>;
     /**
      * Create a new custom agent.
-     * @param {object} data - { name, description?, project?, identity, guidelines?, toolPolicy?, enabledTools?, usesDirectoryTree?, usesCodingGuidelines? }
+  
      * @returns {Promise<object>} The created document
      */
     create(data: any): Promise<{
@@ -43,15 +43,15 @@ declare const CustomAgentService: {
     }>;
     /**
      * Update an existing custom agent.
-     * @param {string} id - MongoDB _id
-     * @param {object} updates - Partial fields to update
+  
+  
      * @returns {Promise<object>} The updated document
      */
-    update(id: any, updates: any): Promise<import("mongodb").WithId<import("bson").Document>>;
+    update(id: any, updates: any): Promise<import("mongodb").WithId<import("bson").Document> | null>;
     /**
      * Delete a custom agent.
-     * @param {string} id - MongoDB _id
-     * @returns {Promise<boolean>}
+  
+  
      */
     delete(id: any): Promise<boolean>;
 };

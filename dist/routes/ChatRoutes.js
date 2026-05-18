@@ -52,17 +52,17 @@ async function resolveImageRefs(messages, project, username) {
     // Deep copy for the provider — images will be data URLs
     const providerMessages = messages.map((m) => ({ ...m }));
     for (let i = 0; i < messages.length; i++) {
-        const msg = messages[i];
+        const message = messages[i];
         // ── Resolve media array fields: images, audio, video, pdf ──
         // @ts-ignore
         for (const field of ["images", "audio", "video", "pdf"]) {
-            const arr = msg[field];
-            if (arr && Array.isArray(arr) && arr.length > 0) {
+            const array = message[field];
+            if (array && Array.isArray(array) && array.length > 0) {
                 // @ts-ignore
                 const providerArr = [];
                 // @ts-ignore
                 const storageArr = [];
-                await Promise.all(arr.map(async (ref, j) => {
+                await Promise.all(array.map(async (ref, j) => {
                     const resolved = await resolveMediaRef(ref, project, username);
                     providerArr[j] = resolved.providerRef;
                     storageArr[j] = resolved.storageRef;
@@ -80,7 +80,7 @@ async function resolveImageRefs(messages, project, username) {
  * Compress an oversized image data URL in-place.
  * Parses the data URL, checks decoded size, runs through compressImageForSizeLimit,
  * and reconstructs if compression changed the data.
- * @param {string} dataUrl - Full data URL (data:<mime>;base64,<data>)
+
  * @returns {Promise<string>} - Possibly compressed data URL
  */
 async function compressDataUrlIfOversized(dataUrl) {
@@ -210,8 +210,8 @@ async function resolveMediaRef(ref, project, username) {
  *
  * @param {Object}   params   Raw request parameters
  * @param {Function} emit     Event emitter callback
- * @param {Object}   [opts]
- * @param {AbortSignal} [opts.signal]
+
+
  * @returns {Promise<Object>} Prepared generation context
  */
 // @ts-ignore
@@ -327,8 +327,8 @@ async function prepareGenerationContext(params, emit,
             let bestAvailable = -Infinity;
             // @ts-ignore
             for (const inst of siblings) {
-                const q = localModelQueue._getQueue(inst.id);
-                const available = inst.concurrency - q.activeCount;
+                const queueState = localModelQueue._getQueue(inst.id);
+                const available = inst.concurrency - queueState.activeCount;
                 if (available > bestAvailable) {
                     bestAvailable = available;
                     bestId = inst.id;
@@ -357,10 +357,10 @@ async function prepareGenerationContext(params, emit,
     let localRelease;
     if (localModelQueue.isLocal(providerName)) {
         localRelease = await localModelQueue.acquire(providerName);
-        const q = localModelQueue._getQueue(providerName);
+        const queueState = localModelQueue._getQueue(providerName);
         logger.info(`[chat] 🔒 Acquired local GPU slot for ${resolvedModel} (${providerName}) ` +
-            `(${q.activeCount}/${q.maxConcurrency} active` +
-            (q.pending > 0 ? `, ${q.pending} queued)` : ")"));
+            `(${queueState.activeCount}/${queueState.maxConcurrency} active` +
+            (queueState.pending > 0 ? `, ${queueState.pending} queued)` : ")"));
     }
     // Derive userMessage from the last user message
     const userMessage = messages?.filter((m) => m.role === "user").pop() || null;
@@ -408,21 +408,21 @@ async function prepareGenerationContext(params, emit,
 export async function handleConversation(params, emit, 
 // @ts-ignore
 { signal } = {}) {
-    let ctx;
+    let context;
     try {
-        ctx = await prepareGenerationContext(params, emit, { signal });
+        context = await prepareGenerationContext(params, emit, { signal });
     }
     catch (error) {
         emit({ type: "error", message: error.message });
         return;
     }
-    const { providerName, resolvedModel, requestedModel, options, incomingConversationId, incomingConversationMeta, incomingTraceId, skipConversation, project, username, clientIp, requestStart, requestId, localRelease, } = ctx;
+    const { providerName, resolvedModel, requestedModel, options, incomingConversationId, incomingConversationMeta, incomingTraceId, skipConversation, project, username, clientIp, requestStart, requestId, localRelease, } = context;
     // ── Conversation identity ──────────────────────────────────
     let conversationId = skipConversation ? null : incomingConversationId;
     let conversationMeta = skipConversation ? null : incomingConversationMeta;
     if (!skipConversation && !conversationId) {
         conversationId = crypto.randomUUID();
-        const firstUserMsg = ctx.rawMessages
+        const firstUserMsg = context.rawMessages
             ?.filter((m) => m.role === "user")
             .pop();
         const titleSnippet = (firstUserMsg?.content || "").slice(0, 100).trim() || "New Conversation";
@@ -436,17 +436,17 @@ export async function handleConversation(params, emit,
         conversationMeta = { traceId };
     }
     // Merge conversation identity into ctx for sub-handlers
-    const fullCtx = { ...ctx, conversationId, conversationMeta, traceId };
+    const fullCtx = { ...context, conversationId, conversationMeta, traceId };
     try {
         try {
-            if (ctx.isImageAPIModel) {
+            if (context.isImageAPIModel) {
                 await handleImageAPIModel(fullCtx);
                 return;
             }
-            if (!ctx.provider.generateTextStream && !ctx.provider.generateText) {
+            if (!context.provider.generateTextStream && !context.provider.generateText) {
                 throw new ProviderError(providerName, `Provider "${providerName}" does not support text generation`, 400);
             }
-            const useStreaming = ctx.provider.generateTextStream && ctx.modelDef?.streaming !== false;
+            const useStreaming = context.provider.generateTextStream && context.modelDef?.streaming !== false;
             if (useStreaming) {
                 // Native MCP tool execution — provider handles tool calling internally
                 const useNativeMcp = LocalProviderGateway.isNativeMCP(providerName) &&
@@ -464,8 +464,8 @@ export async function handleConversation(params, emit,
                         tools = tools.filter((t) => !disabledSet.has(t.name));
                     }
                     options.tools = tools;
-                    if (ctx.modelDef?.contextLength) {
-                        options.contextLength = ctx.modelDef.contextLength;
+                    if (context.modelDef?.contextLength) {
+                        options.contextLength = context.modelDef.contextLength;
                     }
                     logger.info(`[chat] Native MCP (${providerName}): ${tools.length} tools enabled, enabledTools=${(options.enabledTools || []).length}, builtIn=${builtInTools.length}, contextLength=${options.contextLength || "unset"}`);
                 }
@@ -520,7 +520,7 @@ export async function handleConversation(params, emit,
             success: false,
             errorMessage: error.message,
             totalSec,
-            messages: ctx.rawMessages || [],
+            messages: context.rawMessages || [],
             options: {},
         });
         emit({ type: "error", message: error.message });
@@ -535,15 +535,15 @@ export async function handleConversation(params, emit,
  */
 // @ts-ignore
 export async function handleAgent(params, emit, { signal } = {}) {
-    let ctx;
+    let context;
     try {
-        ctx = await prepareGenerationContext(params, emit, { signal });
+        context = await prepareGenerationContext(params, emit, { signal });
     }
     catch (error) {
         emit({ type: "error", message: error.message });
         return;
     }
-    const { providerName, resolvedModel, requestedModel, options, incomingConversationId, incomingAgentSessionId, incomingConversationMeta, incomingTraceId, project, username, clientIp, agent, requestStart, requestId, localRelease, } = ctx;
+    const { providerName, resolvedModel, requestedModel, options, incomingConversationId, incomingAgentSessionId, incomingConversationMeta, incomingTraceId, project, username, clientIp, agent, requestStart, requestId, localRelease, } = context;
     // ── Agent session identity ─────────────────────────────────
     const agentSessionId = incomingAgentSessionId || incomingConversationId || crypto.randomUUID();
     const traceId = incomingTraceId || null;
@@ -555,27 +555,27 @@ export async function handleAgent(params, emit, { signal } = {}) {
     markGenerating(agentSessionId, project, username, true, getCollectionOpts(project));
     try {
         try {
-            if (!ctx.provider.generateTextStream && !ctx.provider.generateText) {
+            if (!context.provider.generateTextStream && !context.provider.generateText) {
                 throw new ProviderError(providerName, `Provider "${providerName}" does not support text generation`, 400);
             }
             const { default: AgenticLoopService } = await import("../services/AgenticLoopService.js");
             await AgenticLoopService.runAgenticLoop({
-                provider: ctx.provider,
+                provider: context.provider,
                 providerName,
                 resolvedModel,
-                modelDef: ctx.modelDef,
-                messages: ctx.messages,
-                originalMessages: ctx.originalMessages,
+                modelDef: context.modelDef,
+                messages: context.messages,
+                originalMessages: context.originalMessages,
                 options,
                 agentSessionId,
-                userMessage: ctx.userMessage,
+                userMessage: context.userMessage,
                 conversationMeta,
                 traceId,
                 project,
                 username,
                 clientIp,
                 agent,
-                workspaceRoot: ctx.workspaceRoot,
+                workspaceRoot: context.workspaceRoot,
                 requestId,
                 requestStart,
                 emit,
@@ -617,15 +617,15 @@ export async function handleAgent(params, emit, { signal } = {}) {
             success: false,
             errorMessage: error.message,
             totalSec,
-            messages: ctx.rawMessages || [],
+            messages: context.rawMessages || [],
             options: {},
         });
         emit({ type: "error", message: error.message });
     }
 }
 // ─── Dispatch: Image API models (e.g. GPT Image 1.5, OpenAI images) ─
-async function handleImageAPIModel(ctx) {
-    const { provider, providerName, resolvedModel, modelDef, messages, options, conversationId, userMessage, conversationMeta, traceId, project, username, clientIp, requestId, requestStart, emit, } = ctx;
+async function handleImageAPIModel(context) {
+    const { provider, providerName, resolvedModel, modelDef, messages, options, conversationId, userMessage, conversationMeta, traceId, project, username, clientIp, requestId, requestStart, emit, } = context;
     // Mark conversation as generating
     markGenerating(conversationId, project, username, true, getCollectionOpts(project));
     const lastUserMsg = messages.filter((m) => m.role === "user").pop();
@@ -633,9 +633,9 @@ async function handleImageAPIModel(ctx) {
     // Collect all images from the conversation
     const allImages = [];
     // @ts-ignore
-    for (const msg of messages) {
-        if (msg.images && msg.images.length > 0) {
-            allImages.push(...msg.images);
+    for (const message of messages) {
+        if (message.images && message.images.length > 0) {
+            allImages.push(...message.images);
         }
     }
     const result = await provider.generateImage(prompt, allImages, resolvedModel, options?.systemPrompt);
@@ -738,10 +738,10 @@ async function handleImageAPIModel(ctx) {
     }
 }
 // ─── Shared: Post-generation finalization ───────────────────
-export async function finalizeTextGeneration(ctx, { text, thinking, thinkingSignature, images, toolCalls, audioChunks, audioSampleRate, usage, outputCharacters, timeToGenerationSec, generationSec, totalSec, rateLimits, 
+export async function finalizeTextGeneration(context, { text, thinking, thinkingSignature, images, toolCalls, audioChunks, audioSampleRate, usage, outputCharacters, timeToGenerationSec, generationSec, totalSec, rateLimits, 
 // Display segment metadata (from AgenticLoopService)
 contentSegments, textFragments, thinkingFragments, }, overrideMessagesToAppend = null) {
-    const { providerName, resolvedModel, modelDef, messages, originalMessages, options, conversationId: rawConversationId, agentSessionId, parentAgentSessionId, userMessage, conversationMeta, traceId, project, username, clientIp, agent, workspaceRoot, requestId, emit, signal, } = ctx;
+    const { providerName, resolvedModel, modelDef, messages, originalMessages, options, conversationId: rawConversationId, agentSessionId, parentAgentSessionId, userMessage, conversationMeta, traceId, project, username, clientIp, agent, workspaceRoot, requestId, emit, signal, } = context;
     // Agent sessions use agentSessionId as the persistence key
     const conversationId = rawConversationId ?? agentSessionId;
     // ── Cost calculation ──────────────────────────────────────────
@@ -1007,8 +1007,8 @@ contentSegments, textFragments, thinkingFragments, }, overrideMessagesToAppend =
     }
 }
 // ─── Dispatch: Streaming text/multimodal generation ─────────
-async function handleStreamingText(ctx) {
-    const { provider, providerName, resolvedModel, modelDef, messages, options, conversationId, project, username, requestStart, emit, signal, } = ctx;
+async function handleStreamingText(context) {
+    const { provider, providerName, resolvedModel, modelDef, messages, options, conversationId, project, username, requestStart, emit, signal, } = context;
     // Mark conversation as generating
     markGenerating(conversationId, project, username, true, getCollectionOpts(project));
     const stream = modelDef?.liveAPI && provider.generateTextStreamLive
@@ -1174,7 +1174,7 @@ async function handleStreamingText(ctx) {
     }
     // Build normalized result for shared finalization
     const now = performance.now();
-    await finalizeTextGeneration(ctx, {
+    await finalizeTextGeneration(context, {
         text: ss.text,
         thinking: ss.thinking,
         thinkingSignature: ss.thinkingSignature,
@@ -1195,20 +1195,20 @@ async function handleStreamingText(ctx) {
     });
 }
 // ─── Dispatch: Non-streaming text generation (fallback) ─────
-async function handleNonStreamingText(ctx) {
-    const { provider, resolvedModel, messages, options, conversationId, project, username, requestStart, emit, } = ctx;
+async function handleNonStreamingText(context) {
+    const { provider, resolvedModel, messages, options, conversationId, project, username, requestStart, emit, } = context;
     // Mark conversation as generating
     markGenerating(conversationId, project, username, true, getCollectionOpts(project));
     // Track this sub-request in SessionGenerationTracker if it belongs
     // to an active agent session (e.g., tools-api calling /chat?stream=false
     // for generate_image prompt-softening or describe_image).
-    const subRequestId = ctx.agentSessionId
-        ? `sub-${ctx.requestId || crypto.randomUUID()}`
+    const subRequestId = context.agentSessionId
+        ? `sub-${context.requestId || crypto.randomUUID()}`
         : null;
-    if (subRequestId && ctx.agentSessionId) {
-        SessionGenerationTracker.register(ctx.agentSessionId, subRequestId, {
+    if (subRequestId && context.agentSessionId) {
+        SessionGenerationTracker.register(context.agentSessionId, subRequestId, {
             // @ts-ignore
-            provider: ctx.providerName,
+            provider: context.providerName,
             model: resolvedModel,
             source: "tool-sub-request",
         });
@@ -1217,7 +1217,7 @@ async function handleNonStreamingText(ctx) {
     const genResult = await provider.generateText(messages, resolvedModel, options);
     const now = performance.now();
     // Complete sub-request tracking with actual token data
-    if (subRequestId && ctx.agentSessionId) {
+    if (subRequestId && context.agentSessionId) {
         const outTokens = genResult.usage?.outputTokens || 0;
         if (outTokens > 0) {
             SessionGenerationTracker.update(subRequestId, {
@@ -1249,30 +1249,30 @@ async function handleNonStreamingText(ctx) {
     const images = [];
     if (genResult.images && genResult.images.length > 0) {
         // @ts-ignore
-        for (const img of genResult.images) {
+        for (const image of genResult.images) {
             let minioRef = null;
-            if (img.data) {
+            if (image.data) {
                 try {
-                    const mimeType = img.mimeType || "image/png";
-                    const dataUrl = `data:${mimeType};base64,${img.data}`;
+                    const mimeType = image.mimeType || "image/png";
+                    const dataUrl = `data:${mimeType};base64,${image.data}`;
                     const { ref } = await FileService.uploadFile(dataUrl, "generations", project, username);
                     minioRef = ref;
                 }
                 catch (uploadErr) {
                     logger.error(`[chat/non-stream] MinIO upload failed: ${uploadErr.message}`);
                 }
-                images.push(minioRef || `data:${img.mimeType || "image/png"};base64,${img.data}`);
+                images.push(minioRef || `data:${image.mimeType || "image/png"};base64,${image.data}`);
             }
             emit({
                 type: "image",
-                data: img.data,
-                mimeType: img.mimeType,
+                data: image.data,
+                mimeType: image.mimeType,
                 minioRef,
             });
         }
     }
     // Build normalized result for shared finalization
-    await finalizeTextGeneration(ctx, {
+    await finalizeTextGeneration(context, {
         text: genResult.text || "",
         thinking: genResult.thinking || "",
         images,

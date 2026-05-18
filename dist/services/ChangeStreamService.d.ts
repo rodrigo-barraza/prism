@@ -10,12 +10,12 @@ declare const ChangeStreamService: {
     init(): Promise<void>;
     /**
      * Register a listener for collection change events.
-     * @param {Function} callback - (event) => void
+  
      */
     subscribe(callback: any): void;
     /**
      * Unregister a listener.
-     * @param {Function} callback
+  
      */
     unsubscribe(callback: any): void;
     /**

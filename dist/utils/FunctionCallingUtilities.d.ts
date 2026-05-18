@@ -19,12 +19,11 @@ export declare function truncateToolResult(result: any, maxChars?: number): any;
  * [assistant(tool_calls), tool(result1), tool(result2), ...] per the
  * OpenAI Chat Completions spec.
  *
- * @param {Array} messages - Raw conversation messages (may include deleted, tool, assistant w/ toolCalls)
- * @param {object} [options]
- * @param {boolean} [options.filterDeleted=true] - Strip soft-deleted messages
+
+
  * @returns {Array} Provider-ready messages
  */
 export declare function expandMessagesForFC(messages: any, { filterDeleted }?: {
-    filterDeleted?: boolean;
+    filterDeleted?: boolean | undefined;
 }): any;
 //# sourceMappingURL=FunctionCallingUtilities.d.ts.map

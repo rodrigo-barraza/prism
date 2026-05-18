@@ -280,8 +280,8 @@ PERSONAS.set("CODING", {
 - After making changes, verify them by reading the modified section
 - Keep your explanations concise and technical`,
     interactionRules: "",
-    toolPolicy: (ctx) => {
-        const enabled = new Set(ctx.enabledTools || []);
+    toolPolicy: (context) => {
+        const enabled = new Set(context.enabledTools || []);
         const tips = [];
         // ── File editing tips ──
         if (enabled.has("multi_file_read")) {
@@ -341,9 +341,9 @@ PERSONAS.set("LUPOS", {
     name: "Lupos",
     type: "conversational",
     project: "lupos",
-    identity: (ctx) => {
-        const aprilFools = ctx?.agentContext?.aprilFoolsMode === true;
-        const isClockCrew = ctx?.agentContext?.guildId === "249010731910037507";
+    identity: (context) => {
+        const aprilFools = context?.agentContext?.aprilFoolsMode === true;
+        const isClockCrew = context?.agentContext?.guildId === "249010731910037507";
         let personality;
         if (isClockCrew) {
             personality = aprilFools
@@ -690,8 +690,8 @@ PERSONAS.set("OOG", {
     },
     guidelines: "",
     interactionRules: "",
-    toolPolicy: (ctx) => {
-        const enabled = new Set(ctx.enabledTools || []);
+    toolPolicy: (context) => {
+        const enabled = new Set(context.enabledTools || []);
         const tips = [];
         if (enabled.has("str_replace_file") && enabled.has("write_file")) {
             tips.push("- oog prefer str_replace_file over write_file for edit. safer. preserve what not need change");
@@ -975,8 +975,8 @@ PERSONAS.set("MEEPO", {
 const AgentPersonaRegistry = {
     /**
      * Get a persona by agent identifier.
-     * @param {string} agentId - e.g. "LUPOS", "CODING"
-     * @returns {AgentPersona|null}
+  
+  
      */
     get(agentId) {
         if (!agentId)
@@ -1002,16 +1002,16 @@ const AgentPersonaRegistry = {
     },
     /**
      * Check if a persona exists.
-     * @param {string} agentId
-     * @returns {boolean}
+  
+  
      */
     has(agentId) {
         return PERSONAS.has((agentId || "").toUpperCase());
     },
     /**
      * Check if a project belongs to a registered agent.
-     * @param {string} project
-     * @returns {boolean}
+  
+  
      */
     isAgentProject(project) {
         if (!project)
@@ -1028,36 +1028,36 @@ const AgentPersonaRegistry = {
      * Converts a MongoDB document into a persona object compatible
      * with the built-in format, then inserts into the PERSONAS map.
      *
-     * @param {object} doc - Custom agent document from CustomAgentService
+  
      */
-    registerCustom(doc) {
-        if (!doc?.agentId)
+    registerCustom(document) {
+        if (!document?.agentId)
             return;
         const persona = {
-            id: doc.agentId,
-            name: doc.name,
-            type: doc.type || "",
-            description: doc.description || "",
-            project: doc.project || "coding",
+            id: document.agentId,
+            name: document.name,
+            type: document.type || "",
+            description: document.description || "",
+            project: document.project || "coding",
             custom: true,
-            icon: doc.icon || "",
-            color: doc.color || "",
-            backgroundImage: doc.backgroundImage || "",
-            identity: () => doc.identity || "",
-            guidelines: doc.guidelines || "",
+            icon: document.icon || "",
+            color: document.color || "",
+            backgroundImage: document.backgroundImage || "",
+            identity: () => document.identity || "",
+            guidelines: document.guidelines || "",
             interactionRules: "",
-            toolPolicy: doc.toolPolicy || "",
-            enabledTools: Array.isArray(doc.enabledTools) ? doc.enabledTools : [],
+            toolPolicy: document.toolPolicy || "",
+            enabledTools: Array.isArray(document.enabledTools) ? document.enabledTools : [],
             capabilities: "",
-            usesDirectoryTree: doc.usesDirectoryTree || false,
-            usesCodingGuidelines: doc.usesCodingGuidelines || false,
+            usesDirectoryTree: document.usesDirectoryTree || false,
+            usesCodingGuidelines: document.usesCodingGuidelines || false,
         };
-        PERSONAS.set(doc.agentId, persona);
-        logger.info(`[AgentPersonaRegistry] Registered custom agent: "${doc.name}" (${doc.agentId}) with ${persona.enabledTools.length} tools`);
+        PERSONAS.set(document.agentId, persona);
+        logger.info(`[AgentPersonaRegistry] Registered custom agent: "${document.name}" (${document.agentId}) with ${persona.enabledTools.length} tools`);
     },
     /**
      * Unregister a persona by agent ID (only custom agents should be removed).
-     * @param {string} agentId
+  
      */
     unregister(agentId) {
         if (!agentId)
@@ -1084,8 +1084,8 @@ const AgentPersonaRegistry = {
                     PERSONAS.delete(key);
             }
             // @ts-ignore
-            for (const doc of agents) {
-                this.registerCustom(doc);
+            for (const document of agents) {
+                this.registerCustom(document);
             }
             logger.info(`[AgentPersonaRegistry] Loaded ${agents.length} custom agent(s) from database`);
         }

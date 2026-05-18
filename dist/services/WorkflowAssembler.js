@@ -23,9 +23,9 @@ function isUtilityStep(step) {
 function buildConversationPorts(messages, supportedModalities = ["text"]) {
     const ports = [];
     for (let i = 0; i < messages.length; i++) {
-        const msg = messages[i];
+        const message = messages[i];
         ports.push(`${i}.text`);
-        if (msg.role === "user" || msg.role === "assistant") {
+        if (message.role === "user" || message.role === "assistant") {
             // @ts-ignore
             for (const mod of supportedModalities) {
                 if (mod !== "text") {
@@ -83,7 +83,7 @@ function resolveModelModalities(step) {
  * Utility steps (🧠 prefix) are shown in the graph but without viewers
  * or chain edges, keeping the visualization focused on output.
  *
- * @param {Array} steps - Raw step data from the client
+
  * @returns {{ nodes, edges, nodeResults }}
  */
 function assembleGraph(steps) {

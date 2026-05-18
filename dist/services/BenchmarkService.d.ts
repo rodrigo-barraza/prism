@@ -3,14 +3,18 @@
  * @param {string} response   The raw model output
  * @param {string} expected   The expected value
  * @param {string} matchMode  One of: "contains", "exact", "startsWith", "regex"
- * @returns {boolean}
+
  */
 declare function evaluate(response: any, expected: any, matchMode?: string): any;
 /**
  * Get all listed conversation-type models grouped by provider.
  * Returns flat array of { provider, model, label }.
  */
-declare function getConversationModels(): any[];
+declare function getConversationModels(): {
+    provider: string;
+    model: string;
+    label: string;
+}[];
 declare const BenchmarkService: {
     MATCH_MODES: {
         CONTAINS: string;
@@ -26,8 +30,8 @@ declare const BenchmarkService: {
      * Run a benchmark test against the specified models (or all available).
      * @param {Object}   benchmark   The benchmark definition document
      * @param {Array}    [modelTargets]  Optional array of { provider, model } to test
-     * @param {string}   project
-     * @param {string}   username
+  
+  
      * @returns {Object} The completed run document
      */
     runBenchmark(benchmark: any, modelTargets: any, project: any, username: any, { onRunStart, onModelStart, onModelComplete, onEvent, signal }?: {}): Promise<{
@@ -67,11 +71,11 @@ declare const BenchmarkService: {
         updatedAt: string;
     }>;
     list(project: any): Promise<import("mongodb").WithId<import("bson").Document>[]>;
-    getById(id: any, project: any): Promise<import("mongodb").WithId<import("bson").Document>>;
+    getById(id: any, project: any): Promise<import("mongodb").WithId<import("bson").Document> | null>;
     remove(id: any, project: any): Promise<void>;
     getRuns(benchmarkId: any, project: any): Promise<import("mongodb").WithId<import("bson").Document>[]>;
-    getRunById(runId: any, project: any): Promise<import("mongodb").WithId<import("bson").Document>>;
-    getLatestRun(benchmarkId: any, project: any): Promise<import("mongodb").WithId<import("bson").Document>>;
+    getRunById(runId: any, project: any): Promise<import("mongodb").WithId<import("bson").Document> | null>;
+    getLatestRun(benchmarkId: any, project: any): Promise<import("mongodb").WithId<import("bson").Document> | null>;
 };
 export default BenchmarkService;
 //# sourceMappingURL=BenchmarkService.d.ts.map

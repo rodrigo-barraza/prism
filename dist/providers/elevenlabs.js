@@ -52,9 +52,8 @@ const elevenlabsProvider = {
     },
     /**
      * Stream text to ElevenLabs via WebSocket and yield audio chunks.
-     * @param {AsyncIterable<string>} textStream - Iterator that yields text chunks.
-     * @param {string} voiceId - The voice ID to use.
-     * @param {object} options - Additional options.
+  
+  
      * @returns {AsyncGenerator<Buffer>} Audio chunks.
      */
     async *generateSpeechStream(textStream, voiceId = DEFAULT_VOICES.elevenlabs, options = {}) {
@@ -151,11 +150,11 @@ const elevenlabsProvider = {
             while (true) {
                 if (messageQueue.length > 0) {
                     // @ts-ignore
-                    const msg = messageQueue.shift();
-                    if (msg.audio) {
-                        yield Buffer.from(msg.audio, "base64");
+                    const message = messageQueue.shift();
+                    if (message.audio) {
+                        yield Buffer.from(message.audio, "base64");
                     }
-                    if (msg.isFinal) {
+                    if (message.isFinal) {
                         break;
                     }
                 }

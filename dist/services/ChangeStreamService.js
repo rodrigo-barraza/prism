@@ -2,7 +2,8 @@ import MongoWrapper from "../wrappers/MongoWrapper.js";
 // @ts-ignore
 import { MONGO_DB_NAME } from "../../config.js";
 import logger from "../utils/logger.js";
-import { COLLECTIONS, CHANGE_STREAM_RECONNECT_MS } from "../constants.js";
+import { COLLECTIONS, CHANGE_STREAM_RECONNECT_MS, CHANGE_STREAM_RETRY_MS } from "../constants.js";
+import { registerCleanup } from "../utils/CleanupRegistry.js";
 /**
  * ChangeStreamService — watches MongoDB collections via Change Streams
  * and broadcasts lightweight events to registered listeners.
@@ -11,9 +12,7 @@ import { COLLECTIONS, CHANGE_STREAM_RECONNECT_MS } from "../constants.js";
  * not available (standalone mode), the service logs a warning and sets
  * `available = false` — callers should fall back to polling.
  */
-/** @type {Set<Function>} */
 const listeners = new Set();
-/** @type {Map<string, import('mongodb').ChangeStream>} */
 const streams = new Map();
 let available = false;
 // @ts-ignore
@@ -77,7 +76,7 @@ function openStream(db, collectionName) {
                         logger.info(`ChangeStream re-opened on ${collectionName}`);
                     }
                 }
-            }, 5000);
+            }, CHANGE_STREAM_RETRY_MS);
         });
         return stream;
     }
@@ -146,14 +145,14 @@ const ChangeStreamService = {
     },
     /**
      * Register a listener for collection change events.
-     * @param {Function} callback - (event) => void
+  
      */
     subscribe(callback) {
         listeners.add(callback);
     },
     /**
      * Unregister a listener.
-     * @param {Function} callback
+  
      */
     unsubscribe(callback) {
         listeners.delete(callback);
@@ -182,5 +181,8 @@ const ChangeStreamService = {
         available = false;
     },
 };
+registerCleanup(async () => {
+    await ChangeStreamService.close();
+});
 export default ChangeStreamService;
 //# sourceMappingURL=ChangeStreamService.js.map

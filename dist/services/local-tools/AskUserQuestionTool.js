@@ -75,7 +75,7 @@ export default {
     },
     domain: "Agentic: Control Flow",
     labels: ["coding"],
-    async execute(args, ctx) {
+    async execute(args, context) {
         const { question, choices, context: questionContext, questions } = args;
         // ── Normalize into questions array ─────────────────
         let normalizedQuestions;
@@ -141,7 +141,7 @@ export default {
                 error: "Either 'question' (string) or 'questions' (array) is required",
             };
         }
-        const sessionId = ctx.agentSessionId;
+        const sessionId = context.agentSessionId;
         if (!sessionId) {
             return {
                 error: "No agent session — ask_user_question requires an active session",
@@ -152,8 +152,8 @@ export default {
             `${totalOptions} total options — ` +
             `"${normalizedQuestions[0].question.slice(0, 60)}${normalizedQuestions[0].question.length > 60 ? "..." : ""}"`);
         // Emit the SSE event with the full questions array
-        if (ctx._emit) {
-            ctx._emit({
+        if (context._emit) {
+            context._emit({
                 type: "user_question",
                 // Full multi-question payload
                 questions: normalizedQuestions,
@@ -167,9 +167,9 @@ export default {
         const result = await new Promise((resolve) => {
             const timeoutId = setTimeout(() => resolve({ answers: null, timedOut: true }), 300_000);
             AgenticLoopService._setPendingQuestion(sessionId, {
-                resolve: (val) => {
+                resolve: (value) => {
                     clearTimeout(timeoutId);
-                    resolve(val);
+                    resolve(value);
                 },
                 questions: normalizedQuestions,
             });

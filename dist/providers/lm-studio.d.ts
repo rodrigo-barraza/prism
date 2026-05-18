@@ -1,7 +1,7 @@
 /**
  * Factory: create an LM Studio provider instance targeting a specific baseUrl.
- * @param {string} baseUrl - The base URL for the LM Studio server
- * @param {string} [instanceId="lm-studio"] - Unique instance identifier
+
+
  * @returns {object} Provider object with all LM Studio methods
  */
 export declare function createLmStudioProvider(baseUrl: any, instanceId?: string): {
@@ -14,7 +14,7 @@ export declare function createLmStudioProvider(baseUrl: any, instanceId?: string
             outputTokens: any;
         };
     }>;
-    generateTextStream(messages: any, model?: any, options?: {}): AsyncGenerator<any, void, any>;
+    generateTextStream(messages: any, model?: any, options?: {}): AsyncGenerator<any, void, unknown>;
     /**
      * OpenAI-compat streaming path — used when coordinator tools are enabled.
      * Sends a standard /v1/chat/completions request with `tools` array.
@@ -29,16 +29,15 @@ export declare function createLmStudioProvider(baseUrl: any, instanceId?: string
      * LM Studio exposes this for any loaded embedding model (e.g. Granite,
      * nomic-embed, etc.).
      *
-     * @param {string} content - Text to embed
-     * @param {string} model   - Embedding model key
-     * @param {object} [options] - Optional { dimensions }
+
+
      * @returns {Promise<{ embedding: number[], dimensions: number }>}
      */
     generateEmbedding(content: any, model: any, options?: {}): Promise<{
         embedding: any;
         dimensions: any;
     }>;
-    captionImage(images: any, prompt: string, model: any, systemPrompt: any): Promise<{
+    captionImage(images: any, prompt: string | undefined, model: any, systemPrompt: any): Promise<{
         text: any;
         usage: {
             inputTokens: any;
@@ -51,13 +50,11 @@ export declare function createLmStudioProvider(baseUrl: any, instanceId?: string
      * - If a different model is loaded, unloads it first.
      * - If no model is loaded, loads the requested one.
      *
-     * @param {string} modelKey - The model key to ensure is loaded.
-     * @param {object} [loadOptions={}] - Options forwarded to loadModel (context_length, etc.).
-     * @param {AbortSignal} [signal] - Optional abort signal.
-     * @param {function} [onStatus] - Optional callback for status messages (loading progress, unloading, etc.).
+
+
      * @returns {{ alreadyLoaded: boolean, contextLength: number|null }} - Info about the loaded model.
      */
-    ensureModelLoaded(modelKey: any, loadOptions: {}, signal: any, onStatus: any): Promise<{
+    ensureModelLoaded(modelKey: any, loadOptions: {} | undefined, signal: any, onStatus: any): Promise<{
         alreadyLoaded: boolean;
         contextLength: any;
     }>;
@@ -69,7 +66,7 @@ export declare function createLmStudioProvider(baseUrl: any, instanceId?: string
     /**
      * Load a model into LM Studio memory.
      */
-    loadModel(model: any, options: {}, signal: any): Promise<unknown>;
+    loadModel(model: any, options: {} | undefined, signal: any): Promise<unknown>;
     /**
      * Unload a model from LM Studio by its model key.
      * Looks up the loaded instance ID and unloads it.

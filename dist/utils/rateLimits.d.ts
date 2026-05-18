@@ -17,23 +17,23 @@
  *   x-ratelimit-reset-requests      → RPM reset time
  *   x-ratelimit-reset-tokens        → TPM reset time
  *
- * @param {Response|null} response - Fetch Response object from OpenAI SDK
- * @param {string} [model] - Model name for per-model rate-limit tracking
+
+
  * @returns {object|null} Parsed rate-limit data, or null if unavailable
  */
 export declare function extractOpenAIRateLimits(response: any, model: any): {
     provider: string;
     requests: {
-        limit: number;
-        remaining: number;
+        limit: number | null;
+        remaining: number | null;
         reset: any;
     };
     tokens: {
-        limit: number;
-        remaining: number;
+        limit: number | null;
+        remaining: number | null;
         reset: any;
     };
-};
+} | null;
 /**
  * Extract rate-limit headers from an Anthropic HTTP response.
  *
@@ -48,31 +48,31 @@ export declare function extractOpenAIRateLimits(response: any, model: any): {
  *   anthropic-ratelimit-tokens-reset        → TPM reset time
  *   retry-after                             → seconds to wait if 429
  *
- * @param {Response|null} response - Fetch Response object from Anthropic SDK
- * @param {string} [model] - Model name for per-model rate-limit tracking
+
+
  * @returns {object|null} Parsed rate-limit data, or null if unavailable
  */
 export declare function extractAnthropicRateLimits(response: any, model: any): {
     provider: string;
     requests: {
-        limit: number;
-        remaining: number;
+        limit: number | null;
+        remaining: number | null;
         reset: any;
     };
     tokens: {
-        limit: number;
-        remaining: number;
+        limit: number | null;
+        remaining: number | null;
         reset: any;
     };
     inputTokens: {
-        limit: number;
-        remaining: number;
+        limit: number | null;
+        remaining: number | null;
         reset: any;
     };
     outputTokens: {
-        limit: number;
-        remaining: number;
+        limit: number | null;
+        remaining: number | null;
         reset: any;
     };
-};
+} | null;
 //# sourceMappingURL=rateLimits.d.ts.map

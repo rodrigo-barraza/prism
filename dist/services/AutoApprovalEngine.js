@@ -85,11 +85,6 @@ const TIER_LABELS = {
  * Registered as a `beforeToolCall` hook in AgentHooks.
  */
 export default class AutoApprovalEngine {
-    /**
-     * @param {object} [options]
-     * @param {boolean} [options.fullAuto=false] - When true, all tools auto-execute
-     * @param {object} [options.tierOverrides] - Per-tool tier overrides { toolName: tier }
-     */
     constructor(options = {}) {
         // @ts-ignore
         this.fullAuto = options.fullAuto || false;
@@ -98,7 +93,7 @@ export default class AutoApprovalEngine {
     }
     /**
      * Get the approval tier for a tool.
-     * @param {string} toolName
+  
      * @returns {number} Tier constant (1, 2, or 3)
      */
     getTier(toolName) {
@@ -112,8 +107,8 @@ export default class AutoApprovalEngine {
     }
     /**
      * Get the tier label for a tool.
-     * @param {string} toolName
-     * @returns {string}
+  
+  
      */
     getTierLabel(toolName) {
         return TIER_LABELS[this.getTier(toolName)] || "write";
@@ -121,7 +116,7 @@ export default class AutoApprovalEngine {
     /**
      * Check whether a tool call should auto-execute.
      *
-     * @param {object} toolCall - { name, args, id }
+  
      * @returns {{ approved: boolean, tier: number, tierLabel: string, reason: string }}
      */
     check(toolCall) {
@@ -142,7 +137,7 @@ export default class AutoApprovalEngine {
     /**
      * Check a batch of tool calls. Returns the ones needing approval.
      *
-     * @param {Array<object>} toolCalls - Array of { name, args, id }
+  
      * @returns {{ autoApproved: Array, needsApproval: Array }}
      */
     checkBatch(toolCalls) {
@@ -165,7 +160,7 @@ export default class AutoApprovalEngine {
     }
     /**
      * Create a beforeToolCall hook handler for AgentHooks.
-     * @returns {Function}
+  
      */
     createHook() {
         return async (toolCall, _ctx) => {

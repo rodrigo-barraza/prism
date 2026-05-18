@@ -1,7 +1,7 @@
 /**
  * Factory: create a llama.cpp provider instance targeting a specific baseUrl.
- * @param {string} baseUrl - The base URL for the llama-server
- * @param {string} [instanceId="llama-cpp"] - Unique instance identifier
+
+
  * @returns {object} Provider object with all llama.cpp methods
  */
 export declare function createLlamaCppProvider(baseUrl: any, instanceId?: string): {
@@ -15,7 +15,7 @@ export declare function createLlamaCppProvider(baseUrl: any, instanceId?: string
         };
     }>;
     generateTextStream(messages: any, model?: any, options?: {}): AsyncGenerator<any, void, unknown>;
-    captionImage(images: any, prompt: string, model: any, systemPrompt: any): Promise<{
+    captionImage(images: any, prompt: string | undefined, model: any, systemPrompt: any): Promise<{
         text: any;
         usage: {
             inputTokens: any;

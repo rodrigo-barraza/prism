@@ -196,10 +196,10 @@ router.get("/", asyncHandler(async (_req, res) => {
     const availableProviderList = PROVIDER_LIST.filter((p) => AVAILABLE_PROVIDERS.has(p));
     const availableProviderMap = {};
     // @ts-ignore
-    for (const [key, val] of Object.entries(PROVIDERS)) {
+    for (const [key, value] of Object.entries(PROVIDERS)) {
         // @ts-ignore
-        if (AVAILABLE_PROVIDERS.has(val))
-            availableProviderMap[key] = val;
+        if (AVAILABLE_PROVIDERS.has(value))
+            availableProviderMap[key] = value;
     }
     // Build the dynamic Tool Calling system prompt
     const schemas = ToolOrchestratorService.getToolSchemas() || [];

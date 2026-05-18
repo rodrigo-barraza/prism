@@ -30,25 +30,25 @@ const PROTECTED_RECENT_TURNS = 4;
  * Estimate token count for a single message.
  * Accounts for content, tool calls, tool results, thinking blocks, and images.
  *
- * @param {object} msg
- * @returns {number}
+
+
  */
-function estimateMessageTokens(msg) {
+function estimateMessageTokens(message) {
     let tokens = 4; // Per-message overhead (role, formatting)
     // Text content
-    if (msg.content) {
-        tokens += estimateTokens(typeof msg.content === "string"
-            ? msg.content
-            : JSON.stringify(msg.content));
+    if (message.content) {
+        tokens += estimateTokens(typeof message.content === "string"
+            ? message.content
+            : JSON.stringify(message.content));
     }
     // Thinking blocks
-    if (msg.thinking) {
-        tokens += estimateTokens(msg.thinking);
+    if (message.thinking) {
+        tokens += estimateTokens(message.thinking);
     }
     // Tool calls (function name + args + results)
-    if (msg.toolCalls && Array.isArray(msg.toolCalls)) {
+    if (message.toolCalls && Array.isArray(message.toolCalls)) {
         // @ts-ignore
-        for (const tc of msg.toolCalls) {
+        for (const tc of message.toolCalls) {
             tokens += estimateTokens(tc.name || "");
             tokens += estimateTokens(tc.args ? JSON.stringify(tc.args) : "");
             if (tc.result) {
@@ -57,25 +57,25 @@ function estimateMessageTokens(msg) {
         }
     }
     // Tool response content (standalone tool messages)
-    if (msg.role === "tool" && msg.content) {
-        tokens += estimateTokens(typeof msg.content === "string"
-            ? msg.content
-            : JSON.stringify(msg.content));
+    if (message.role === "tool" && message.content) {
+        tokens += estimateTokens(typeof message.content === "string"
+            ? message.content
+            : JSON.stringify(message.content));
     }
     // Images (rough: ~1000 tokens per image reference)
-    if (msg.images && Array.isArray(msg.images)) {
-        tokens += msg.images.length * 1000;
+    if (message.images && Array.isArray(message.images)) {
+        tokens += message.images.length * 1000;
     }
     return tokens;
 }
 /**
  * Estimate total tokens across all messages.
  *
- * @param {Array} messages
- * @returns {number}
+
+
  */
 function estimateTotalTokens(messages) {
-    return messages.reduce((sum, msg) => sum + estimateMessageTokens(msg), 0);
+    return messages.reduce((sum, message) => sum + estimateMessageTokens(message), 0);
 }
 // ────────────────────────────────────────────────────────────
 // Truncation Strategies
@@ -89,8 +89,8 @@ function estimateTotalTokens(messages) {
  * Recent tool results (within the last `protectedTurns` user turns) are
  * preserved in full — the LLM is actively reasoning about them.
  *
- * @param {Array} messages
- * @param {number} [protectedTurns] - Number of recent user turns to protect
+
+
  * @returns {Array} Messages with truncated tool results
  */
 function truncateToolResults(messages, protectedTurns = PROTECTED_RECENT_TURNS) {
@@ -106,14 +106,14 @@ function truncateToolResults(messages, protectedTurns = PROTECTED_RECENT_TURNS) 
             }
         }
     }
-    return messages.map((msg, i) => {
+    return messages.map((message, i) => {
         // Never truncate tool results in recent (protected) messages
         if (i >= protectionIndex)
-            return msg;
-        if (msg.role !== "assistant" || !msg.toolCalls?.length)
-            return msg;
-        const truncated = { ...msg };
-        truncated.toolCalls = msg.toolCalls.map((tc) => {
+            return message;
+        if (message.role !== "assistant" || !message.toolCalls?.length)
+            return message;
+        const truncated = { ...message };
+        truncated.toolCalls = message.toolCalls.map((tc) => {
             if (!tc.result)
                 return tc;
             const resultStr = typeof tc.result === "string" ? tc.result : JSON.stringify(tc.result);
@@ -133,9 +133,8 @@ function truncateToolResults(messages, protectedTurns = PROTECTED_RECENT_TURNS) 
  * Replaces assistant content with a "[Earlier response summarized]" marker.
  * Preserves tool call names but drops results.
  *
- * @param {Array} messages
- * @param {number} protectedCount - Number of recent turns to protect
- * @returns {Array}
+
+
  */
 function compressOldAssistantMessages(messages, protectedCount = PROTECTED_RECENT_TURNS) {
     // Count user turns from the end to determine protection boundary
@@ -150,17 +149,17 @@ function compressOldAssistantMessages(messages, protectedCount = PROTECTED_RECEN
             }
         }
     }
-    return messages.map((msg, i) => {
+    return messages.map((message, i) => {
         // Never compress system messages, user messages, or protected recent messages
-        if (msg.role === "system" || msg.role === "user" || i >= protectionIndex) {
-            return msg;
+        if (message.role === "system" || message.role === "user" || i >= protectionIndex) {
+            return message;
         }
         // Compress assistant messages
-        if (msg.role === "assistant") {
-            const compressed = { ...msg };
+        if (message.role === "assistant") {
+            const compressed = { ...message };
             // Keep a short summary of what the assistant did
-            const toolNames = msg.toolCalls?.map((tc) => tc.name).join(", ") || "";
-            const contentPreview = msg.content?.slice(0, 200) || "";
+            const toolNames = message.toolCalls?.map((tc) => tc.name).join(", ") || "";
+            const contentPreview = message.content?.slice(0, 200) || "";
             compressed.content = `[Earlier response${toolNames ? ` — used: ${toolNames}` : ""}]${contentPreview ? `\n${contentPreview}...` : ""}`;
             compressed.thinking = undefined;
             if (compressed.toolCalls) {
@@ -174,13 +173,13 @@ function compressOldAssistantMessages(messages, protectedCount = PROTECTED_RECEN
             return compressed;
         }
         // Compress standalone tool messages
-        if (msg.role === "tool") {
+        if (message.role === "tool") {
             return {
-                ...msg,
+                ...message,
                 content: "[tool result truncated for context budget]",
             };
         }
-        return msg;
+        return message;
     });
 }
 /**
@@ -188,9 +187,8 @@ function compressOldAssistantMessages(messages, protectedCount = PROTECTED_RECEN
  * Keeps the system prompt, first user message (for task context),
  * and the most recent N turns.
  *
- * @param {Array} messages
- * @param {number} maxTokens - Token budget
- * @returns {Array}
+
+
  */
 function slidingWindowTruncation(messages, maxTokens) {
     if (messages.length <= 3)
@@ -236,11 +234,8 @@ export default class ContextWindowManager {
      * Applies truncation strategies in order of aggressiveness until
      * the estimated token count fits within the model's context window.
      *
-     * @param {Array} messages - The messages array (mutated in-place)
-     * @param {object} options
-     * @param {number} [options.maxInputTokens] - Model's context window (from config.js maxInputTokens)
-     * @param {number} [options.maxOutputTokens] - Reserved output tokens
-     * @param {number} [options.toolCount=0] - Number of tools (for schema overhead estimation)
+  
+  
      * @returns {{ messages: Array, truncated: boolean, strategy: string|null, estimatedTokens: number }}
      */
     static enforce(messages, options = {}) {
@@ -312,19 +307,19 @@ export default class ContextWindowManager {
     }
     /**
      * Estimate token count for messages (exposed for diagnostics).
-     * @param {Array} messages
-     * @returns {number}
+  
+  
      */
     static estimateTokens(messages) {
         return estimateTotalTokens(messages);
     }
     /**
      * Estimate tokens for a single message (exposed for diagnostics).
-     * @param {object} msg
-     * @returns {number}
+  
+  
      */
-    static estimateMessageTokens(msg) {
-        return estimateMessageTokens(msg);
+    static estimateMessageTokens(message) {
+        return estimateMessageTokens(message);
     }
 }
 //# sourceMappingURL=ContextWindowManager.js.map

@@ -57,9 +57,8 @@ class RateLimitStore {
      * Update the stored rate-limit snapshot for a provider + model.
      * Called after every API response that contains rate-limit headers.
      *
-     * @param {string} providerName - e.g. "openai", "anthropic"
-     * @param {string} model - Model name from the API call
-     * @param {object} rateLimits - Parsed rate-limit data from extractXxxRateLimits()
+  
+  
      */
     update(providerName, model, rateLimits) {
         if (!rateLimits || !providerName || !model)
@@ -85,7 +84,7 @@ class RateLimitStore {
         const result = {};
         // Group dynamic models by provider
         // @ts-ignore
-        for (const [key, val] of this._models) {
+        for (const [key, value] of this._models) {
             const [provider, model] = key.split("::");
             // @ts-ignore
             if (!result[provider]) {
@@ -93,7 +92,7 @@ class RateLimitStore {
                 result[provider] = { dynamic: true, models: {} };
             }
             // @ts-ignore
-            result[provider].models[model] = val;
+            result[provider].models[model] = value;
         }
         // Add Google static limits
         // @ts-ignore

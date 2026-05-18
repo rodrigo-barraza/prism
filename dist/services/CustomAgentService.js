@@ -14,8 +14,8 @@ import logger from "../utils/logger.js";
 /**
  * Derive a stable agent ID from a display name.
  * Always uppercased and prefixed with CUSTOM_ to avoid collisions.
- * @param {string} name
- * @returns {string}
+
+
  */
 function deriveAgentId(name) {
     const slug = name
@@ -31,7 +31,7 @@ function getCollection() {
 const CustomAgentService = {
     /**
      * List all custom agents.
-     * @returns {Promise<Array>}
+  
      */
     async list() {
         const col = getCollection();
@@ -41,8 +41,8 @@ const CustomAgentService = {
     },
     /**
      * Get a single custom agent by MongoDB _id.
-     * @param {string} id
-     * @returns {Promise<object|null>}
+  
+  
      */
     async get(id) {
         const col = getCollection();
@@ -52,8 +52,8 @@ const CustomAgentService = {
     },
     /**
      * Get a custom agent by its derived agentId.
-     * @param {string} agentId - e.g. "CUSTOM_MY_AGENT"
-     * @returns {Promise<object|null>}
+  
+  
      */
     async getByAgentId(agentId) {
         const col = getCollection();
@@ -63,7 +63,7 @@ const CustomAgentService = {
     },
     /**
      * Create a new custom agent.
-     * @param {object} data - { name, description?, project?, identity, guidelines?, toolPolicy?, enabledTools?, usesDirectoryTree?, usesCodingGuidelines? }
+  
      * @returns {Promise<object>} The created document
      */
     async create(data) {
@@ -76,7 +76,7 @@ const CustomAgentService = {
         if (existing) {
             throw new Error(`Agent with ID "${agentId}" already exists`);
         }
-        const doc = {
+        const document = {
             name: data.name,
             agentId,
             type: data.type || "",
@@ -94,14 +94,14 @@ const CustomAgentService = {
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
         };
-        const result = await col.insertOne(doc);
-        logger.info(`[CustomAgentService] Created agent "${doc.name}" (${doc.agentId})`);
-        return { ...doc, _id: result.insertedId };
+        const result = await col.insertOne(document);
+        logger.info(`[CustomAgentService] Created agent "${document.name}" (${document.agentId})`);
+        return { ...document, _id: result.insertedId };
     },
     /**
      * Update an existing custom agent.
-     * @param {string} id - MongoDB _id
-     * @param {object} updates - Partial fields to update
+  
+  
      * @returns {Promise<object>} The updated document
      */
     async update(id, updates) {
@@ -122,17 +122,17 @@ const CustomAgentService = {
     },
     /**
      * Delete a custom agent.
-     * @param {string} id - MongoDB _id
-     * @returns {Promise<boolean>}
+  
+  
      */
     async delete(id) {
         const col = getCollection();
         if (!col)
             throw new Error("Database not available");
-        const doc = await col.findOne({ _id: new ObjectId(id) });
+        const document = await col.findOne({ _id: new ObjectId(id) });
         const result = await col.deleteOne({ _id: new ObjectId(id) });
-        if (doc) {
-            logger.info(`[CustomAgentService] Deleted agent "${doc.name}" (${doc.agentId})`);
+        if (document) {
+            logger.info(`[CustomAgentService] Deleted agent "${document.name}" (${document.agentId})`);
         }
         return result.deletedCount > 0;
     },

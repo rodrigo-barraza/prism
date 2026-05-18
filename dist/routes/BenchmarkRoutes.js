@@ -113,14 +113,14 @@ router.get("/stats", asyncHandler(async (req, res, next) => {
                             errored: 0,
                         });
                     }
-                    const cb = cumulativeBenchmarks.get(cumulKey);
-                    cb.total++;
+                    const callback = cumulativeBenchmarks.get(cumulKey);
+                    callback.total++;
                     if (result.error)
-                        cb.errored++;
+                        callback.errored++;
                     else if (result.passed)
-                        cb.passed++;
+                        callback.passed++;
                     else
-                        cb.failed++;
+                        callback.failed++;
                     // Only record the first (latest) result per model config per benchmark
                     if (seenForBenchmark.has(cumulKey))
                         continue;

@@ -37,7 +37,7 @@ let _cache = null;
 const SettingsService = {
     /**
      * Get the current settings, merging with defaults for any missing keys.
-     * @returns {Promise<object>}
+  
      */
     async get() {
         // @ts-ignore
@@ -46,19 +46,19 @@ const SettingsService = {
         const collection = MongoWrapper.getCollection(MONGO_DB_NAME, COLLECTIONS.SETTINGS);
         if (!collection)
             return { ...DEFAULTS };
-        const doc = await collection.findOne({ _key: "global" });
-        if (!doc) {
+        const document = await collection.findOne({ _key: "global" });
+        if (!document) {
             _cache = { ...DEFAULTS };
             return _cache;
         }
         // Deep merge: defaults ← stored
-        _cache = deepMerge(DEFAULTS, doc.data || {});
+        _cache = deepMerge(DEFAULTS, document.data || {});
         return _cache;
     },
     /**
      * Get a specific section of settings (e.g. "memory").
-     * @param {string} section
-     * @returns {Promise<object>}
+  
+  
      */
     async getSection(section) {
         const settings = await this.get();
@@ -67,7 +67,7 @@ const SettingsService = {
     },
     /**
      * Update settings. Performs a deep merge with existing settings.
-     * @param {object} data - Partial settings object to merge
+  
      * @returns {Promise<object>} The full settings after merge
      */
     async update(data) {
@@ -96,7 +96,7 @@ const SettingsService = {
      * Centralises the identical getXxxConfig() helpers in MemoryService,
      * MemoryConsolidationService, and EmbeddingService.
      *
-     * @param {"extraction"|"consolidation"|"embedding"} role
+  
      * @returns {Promise<{ provider: string, model: string }>}
      */
     async getMemoryModelConfig(role) {

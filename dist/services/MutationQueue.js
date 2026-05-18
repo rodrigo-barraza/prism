@@ -26,9 +26,8 @@ class MutationQueue {
      * Acquire an exclusive lock on a file path.
      * If another worker holds the lock, this call blocks until it's released.
      *
-     * @param {string} filePath - Absolute path to the file
-     * @param {string} [workerId="unknown"] - Identifier for the requesting worker (for logging)
-     * @returns {Promise<LockHandle>}
+  
+  
      */
     async acquire(filePath, workerId = "unknown") {
         // @ts-ignore
@@ -64,7 +63,7 @@ class MutationQueue {
      * Release a lock on a file path.
      * If there are queued waiters, the next one is granted the lock.
      *
-     * @param {string} filePath - Absolute path to the file
+  
      */
     release(filePath) {
         // @ts-ignore
@@ -89,9 +88,8 @@ class MutationQueue {
      * Execute a function while holding a lock on the given file path.
      * The lock is automatically released after the function completes (or throws).
      *
-     * @param {string} filePath - Absolute path to the file
-     * @param {Function} fn - Async function to execute while holding the lock
-     * @param {string} [workerId="unknown"]
+  
+  
      * @returns {Promise<*>} Result of fn()
      */
     async withLock(filePath, fn, workerId = "unknown") {

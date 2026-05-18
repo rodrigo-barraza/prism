@@ -11,7 +11,7 @@ declare const _default: ({
                     description: string;
                 };
             };
-            required: any[];
+            required: never[];
         };
     };
     domain: string;
@@ -29,13 +29,13 @@ declare const _default: ({
         error?: undefined;
         note?: undefined;
     } | {
-        resources: any[];
+        resources: never[];
         serverName: any;
         count: number;
         note: string;
         error?: undefined;
     } | {
-        resources: any[];
+        resources: never[];
         count: number;
         message: string;
         servers?: undefined;
@@ -132,7 +132,7 @@ declare const _default: ({
     } | {
         acknowledged: boolean;
         serverName: any;
-        toolCount: any;
+        toolCount: number;
         message: string;
         error?: undefined;
     }>;

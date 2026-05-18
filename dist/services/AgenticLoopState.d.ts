@@ -11,8 +11,8 @@
  */
 export default class AgenticLoopState {
     constructor({ originalMessageCount, planModeActive }?: {
-        originalMessageCount?: number;
-        planModeActive?: boolean;
+        originalMessageCount?: number | undefined;
+        planModeActive?: boolean | undefined;
     });
     /**
      * Get clean display segments (trimmed, empty-filtered) for DB persistence.

@@ -18,11 +18,11 @@ import logger from "../utils/logger.js";
 export default class AgenticLoopService {
     /**
      * Run an agentic loop using the specified (or default) harness.
-     * @param {object} ctx — generation context from ChatRoutes.prepareGenerationContext
+     * @param {object} context — generation context from ChatRoutes.prepareGenerationContext
      * @returns {Promise<{ messages: object[] }>}
      */
-    static async runAgenticLoop(ctx) {
-        const { options, agent, project, username, modelDef, messages, agentSessionId, parentAgentSessionId, } = ctx;
+    static async runAgenticLoop(context) {
+        const { options, agent, project, username, modelDef, messages, agentSessionId, parentAgentSessionId, } = context;
         // 1. Resolve tools
         const resolvedTools = await AgenticToolResolver.resolve({
             options,
@@ -51,7 +51,7 @@ export default class AgenticLoopService {
         const HarnessClass = HarnessRegistry.get(harnessId);
         logger.info(`[AgenticLoop] Using harness: "${HarnessClass.id}" (${HarnessClass.label})`);
         // 4. Instantiate and run
-        const harness = new HarnessClass(ctx, state, resolvedTools);
+        const harness = new HarnessClass(context, state, resolvedTools);
         try {
             return await harness.run();
         }
@@ -75,8 +75,8 @@ export default class AgenticLoopService {
     // ── Approval Resolution API ─────────────────────────────
     /**
      * Resolve a pending approval for an agent session.
-     * @param {string} agentSessionId
-     * @param {boolean} approved
+  
+  
      * @returns {boolean} true if resolved
      */
     static resolveApproval(agentSessionId, approved, { approveAll = false } = {}) {
@@ -97,7 +97,7 @@ export default class AgenticLoopService {
     }
     /**
      * Check if an agent session has a pending approval.
-     * @param {string} agentSessionId
+  
      * @returns {{ pending: boolean, type?: string, tools?: string[] }}
      */
     static getPendingApproval(agentSessionId) {
@@ -115,7 +115,7 @@ export default class AgenticLoopService {
     }
     /**
      * Resolve a pending question for an agent session.
-     * @param {string} agentSessionId
+  
      * @param {Array<{ answer: string|string[], annotations?: string }>} answers
      * @returns {boolean} true if resolved
      */
@@ -129,7 +129,7 @@ export default class AgenticLoopService {
     }
     /**
      * Check if an agent session has a pending question.
-     * @param {string} agentSessionId
+  
      * @returns {{ pending: boolean, question?: string, choices?: string[] }}
      */
     static getPendingQuestion(agentSessionId) {

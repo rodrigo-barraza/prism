@@ -1,8 +1,8 @@
 declare const HarnessRegistry: {
     /**
      * Get a harness class by ID, falling back to "standard".
-     * @param {string} id
-     * @returns {typeof BaseAgenticHarness}
+  
+  
      */
     get(id: any): any;
     /**
@@ -16,8 +16,8 @@ declare const HarnessRegistry: {
     }[];
     /**
      * Check if a harness ID exists.
-     * @param {string} id
-     * @returns {boolean}
+  
+  
      */
     has(id: any): boolean;
 };

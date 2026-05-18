@@ -1,4 +1,4 @@
-import { formatFileSize } from "@rodrigo-barraza/utilities-library";
+import { formatBytes } from "@rodrigo-barraza/utilities-library";
 /** All recognized local provider types. */
 declare const LOCAL_PROVIDER_TYPES: Set<string>;
 /**
@@ -48,8 +48,8 @@ declare const AUDIO_PATTERNS: string[];
 declare function matchesAny(nameLower: any, patterns: any): any;
 /**
  * Detect capabilities for a model based on its name and provider metadata.
- * @param {string} modelKey - Model identifier (e.g. "qwen3-8b@q4_k_m")
- * @param {object} [providerMeta] - Provider-specific metadata (e.g. LM Studio capabilities)
+
+
  * @returns {object} Detected capabilities
  */
 declare function detectCapabilities(modelKey: any, providerMeta?: {}): {
@@ -58,14 +58,12 @@ declare function detectCapabilities(modelKey: any, providerMeta?: {}): {
     vision: any;
     video: any;
     audio: any;
-    tools: any[];
+    tools: string[];
     inputTypes: string[];
     outputTypes: string[];
 };
-/** Format a byte count into a human-readable size string. */
-declare const formatBytes: typeof formatFileSize;
 /** Format a total parameter count into a human-readable string. */
-declare function formatParams(totalParams: any): string;
+declare function formatParams(totalParams: any): string | null;
 /** Extract parameter count from model name (e.g. "qwen3-8b" → "8B"). */
 declare function parseParamsFromName(name: any): any;
 /** Extract quantization from model name (e.g. "model-AWQ" → "AWQ"). */
@@ -96,7 +94,7 @@ declare function normalizeLmStudioModel(raw: any): {
     outputTypes: string[];
     supportsSystemPrompt: boolean;
     streaming: boolean;
-    defaultTemperature: number;
+    defaultTemperature: number | undefined;
     pricing: {
         inputPerMillion: number;
         outputPerMillion: number;
@@ -174,37 +172,37 @@ declare class LocalProviderGateway {
     /**
      * Check whether a provider/instance ID represents a local provider.
      * Handles both base types ("lm-studio") and multi-instance IDs ("lm-studio-2").
-     * @param {string} providerOrInstanceId
-     * @returns {boolean}
+  
+  
      */
     isLocal(providerOrInstanceId: any): boolean;
     /**
      * Check whether a provider uses native MCP tool execution.
      * These providers handle multi-step tool calling internally — the
      * agentic loop should only feed tools on the first pass.
-     * @param {string} providerOrInstanceId
-     * @returns {boolean}
+  
+  
      */
     isNativeMCP(providerOrInstanceId: any): boolean;
     /**
      * Check whether a provider should default thinkingEnabled=true
      * when the client doesn't explicitly set it.
-     * @param {string} providerOrInstanceId
-     * @returns {boolean}
+  
+  
      */
     defaultsThinkingEnabled(providerOrInstanceId: any): boolean;
     /**
      * Check whether a provider supports model management (load/unload).
-     * @param {string} providerOrInstanceId
-     * @returns {boolean}
+  
+  
      */
     supportsModelManagement(providerOrInstanceId: any): boolean;
     /**
      * Resolve the base provider type from any instance ID.
      * e.g. "lm-studio-2" → "lm-studio", "ollama" → "ollama"
      * Returns null for non-local providers.
-     * @param {string} providerOrInstanceId
-     * @returns {string|null}
+  
+  
      */
     getProviderType(providerOrInstanceId: any): any;
     /**
@@ -219,13 +217,13 @@ declare class LocalProviderGateway {
     }[];
     /**
      * Get instances of a specific provider type.
-     * @param {string} type - Provider type (e.g. "lm-studio", "ollama")
-     * @returns {Array}
+  
+  
      */
     getInstancesByType(type: any): any[];
     /**
      * Get all unique provider types that have at least one registered instance.
-     * @returns {string[]}
+  
      */
     getRegisteredTypes(): any[];
     /**
@@ -242,24 +240,23 @@ declare class LocalProviderGateway {
      * Results are normalized into a canonical format and enriched
      * with capability detection and (optionally) HuggingFace metadata.
      *
-     * @param {object} [options]
-     * @param {number} [options.timeoutMs=3000] - Timeout per provider
-     * @param {boolean} [options.enrich=true] - Whether to enrich with HF metadata
+  
+  
      * @returns {Promise<{ [instanceId: string]: object[] }>} Normalized models grouped by instance
      */
     discoverModels({ timeoutMs, enrich }?: {
-        timeoutMs?: number;
-        enrich?: boolean;
+        timeoutMs?: number | undefined;
+        enrich?: boolean | undefined;
     }): Promise<{}>;
     /**
      * Discover models for a single instance.
-     * @param {string} instanceId - Provider instance ID (e.g. "lm-studio", "vllm-2")
-     * @param {object} [options]
+  
+  
      * @returns {Promise<object[]>} Normalized model entries
      */
     discoverModelsForInstance(instanceId: any, { timeoutMs, enrich }?: {
-        timeoutMs?: number;
-        enrich?: boolean;
+        timeoutMs?: number | undefined;
+        enrich?: boolean | undefined;
     }): Promise<any[]>;
     /**
      * Internal: Fetch, normalize, and optionally enrich models for an instance.
@@ -269,18 +266,14 @@ declare class LocalProviderGateway {
     /**
      * Search for models across all local providers matching a capability filter.
      *
-     * @param {object} [filter]
-     * @param {boolean} [filter.thinking] - Only models that support thinking
-     * @param {boolean} [filter.functionCalling] - Only models that support FC
-     * @param {boolean} [filter.vision] - Only models with vision input
-     * @param {boolean} [filter.video] - Only models with video input
-     * @param {boolean} [filter.audio] - Only models with audio input
-     * @param {string} [filter.modelType] - Filter by modelType ("conversation" or "embed")
-     * @param {boolean} [filter.loaded] - Only currently loaded models
-     * @param {string} [filter.query] - Free-text substring search on name/label
+  
+  
      * @returns {Promise<Array<{ instanceId: string, model: object }>>}
      */
-    searchModels(filter?: {}): Promise<any[]>;
+    searchModels(filter?: {}): Promise<{
+        instanceId: string;
+        model: any;
+    }[]>;
     /**
      * Check if a model entry matches the given filter criteria.
      * @private
@@ -288,7 +281,7 @@ declare class LocalProviderGateway {
     _matchesFilter(model: any, filter: any): boolean;
     /**
      * Get aggregate statistics across all local providers.
-     * @returns {Promise<object>}
+  
      */
     getStats(): Promise<{
         instances: number;
@@ -315,18 +308,17 @@ declare class LocalProviderGateway {
      * Resolve which provider instance serves a given model.
      * Queries each instance's model list and returns the first match.
      *
-     * @param {string} modelName - The model key to find
-     * @param {object} [options]
-     * @param {number} [options.timeoutMs=3000] - Timeout per provider health check
+  
+  
      * @returns {Promise<{ instanceId: string, type: string, provider: object } | null>}
      */
     resolveProvider(modelName: any, { timeoutMs }?: {
-        timeoutMs?: number;
+        timeoutMs?: number | undefined;
     }): Promise<{
         instanceId: any;
         type: any;
         provider: any;
-    }>;
+    } | null>;
     /**
      * Check health of all local provider instances.
      * Returns a map of instance ID → health status.
@@ -334,7 +326,7 @@ declare class LocalProviderGateway {
      * For providers that expose checkHealth() (llama.cpp), uses that.
      * For others, performs a lightweight listModels() probe.
      *
-     * @param {number} [timeoutMs=3000] - Timeout per instance
+  
      * @returns {Promise<{ [instanceId: string]: { ok: boolean, status: string, type: string, models?: number } }>}
      */
     checkHealth(timeoutMs?: number): Promise<{}>;
@@ -342,14 +334,8 @@ declare class LocalProviderGateway {
      * Estimate VRAM usage for a GGUF model served by a local provider.
      * Primarily useful for LM Studio models that report GGUF metadata.
      *
-     * @param {object} modelData - Raw model data from the provider's listModels
-     * @param {object} [options]
-     * @param {number} [options.contextLength=4096] - Target context length
-     * @param {number} [options.gpuLayers] - GPU layers (defaults to all layers)
-     * @param {boolean} [options.flashAttention=true] - Whether flash attention is enabled
-     * @param {boolean} [options.offloadKvCache=true] - Whether KV cache is on GPU
-     * @param {number} [options.gpuTotalGiB] - Total GPU VRAM for auto-offload clamping
-     * @param {number} [options.gpuBaselineGiB=0] - Baseline VRAM usage
+  
+  
      * @returns {{ gpuGiB: number, totalGiB: number, cpuOffloaded: boolean, archParams: object, totalLayers: number } | null}
      */
     estimateVRAM(modelData: any, options?: {}): {
@@ -364,15 +350,13 @@ declare class LocalProviderGateway {
         gpuGiB: number;
         totalGiB: number;
         cpuOffloaded: boolean;
-    };
+    } | null;
     /**
      * Estimate VRAM for a model by its key on a specific instance.
      * Fetches model metadata from the provider, then runs estimateVRAM.
      *
-     * @param {string} instanceId - Provider instance ID
-     * @param {string} modelKey - Model key to look up
-     * @param {object} [options] - VRAM estimation options (see estimateVRAM)
-     * @returns {Promise<object|null>}
+  
+  
      */
     estimateVRAMForModel(instanceId: any, modelKey: any, options?: {}): Promise<{
         archParams: {
@@ -386,36 +370,29 @@ declare class LocalProviderGateway {
         gpuGiB: number;
         totalGiB: number;
         cpuOffloaded: boolean;
-    }>;
+    } | null>;
     /**
      * Load a model on a specific instance.
      * Only supported by providers that expose loadModel (LM Studio).
      *
-     * @param {string} instanceId - Target instance
-     * @param {string} modelKey - Model to load
-     * @param {object} [options] - Load options (context_length, etc.)
-     * @param {AbortSignal} [signal] - Optional abort signal
-     * @returns {Promise<object>}
+  
+  
      */
-    loadModel(instanceId: any, modelKey: any, options: {}, signal: any): Promise<any>;
+    loadModel(instanceId: any, modelKey: any, options: {} | undefined, signal: any): Promise<any>;
     /**
      * Ensure a specific model is loaded on a specific instance.
      * Handles unloading of other models if necessary (single-model enforcement).
      *
-     * @param {string} instanceId - Target instance
-     * @param {string} modelKey - Model to ensure is loaded
-     * @param {object} [options] - Load options
-     * @param {AbortSignal} [signal] - Optional abort signal
-     * @param {function} [onStatus] - Optional status callback
+  
+  
      * @returns {Promise<{ alreadyLoaded: boolean, contextLength: number|null }>}
      */
-    ensureModelLoaded(instanceId: any, modelKey: any, options: {}, signal: any, onStatus: any): Promise<any>;
+    ensureModelLoaded(instanceId: any, modelKey: any, options: {} | undefined, signal: any, onStatus: any): Promise<any>;
     /**
      * Unload a model from a specific instance.
      *
-     * @param {string} instanceId - Target instance
-     * @param {string} modelInstanceId - The loaded model instance ID to unload
-     * @returns {Promise<object>}
+  
+  
      */
     unloadModel(instanceId: any, modelInstanceId: any): Promise<any>;
     /**
@@ -425,9 +402,8 @@ declare class LocalProviderGateway {
      *
      * Call this during request preparation (prepareGenerationContext).
      *
-     * @param {string} providerName - Provider/instance ID
-     * @param {object} options - Mutable options object
-     * @param {object} [clientParams] - Raw client parameters for checking explicit vs undefined
+  
+  
      * @returns {object} The mutated options object (for chaining)
      */
     applyLocalDefaults(providerName: any, options: any, clientParams?: {}): any;
@@ -435,42 +411,32 @@ declare class LocalProviderGateway {
      * Generate text (non-streaming) via a local provider.
      * Auto-resolves the provider if only a model name is given.
      *
-     * @param {Array} messages - Chat messages
-     * @param {string} model - Model key
-     * @param {object} [options] - Generation options (canonical format)
-     * @param {string} [instanceId] - Explicit instance ID (skips auto-routing)
+  
+  
      * @returns {Promise<{ text: string, thinking: string|null, usage: object }>}
      */
-    generateText(messages: any, model: any, options: {}, instanceId: any): Promise<any>;
+    generateText(messages: any, model: any, options: {} | undefined, instanceId: any): Promise<any>;
     /**
      * Generate text (streaming) via a local provider.
      * Auto-resolves the provider if only a model name is given.
      *
-     * @param {Array} messages - Chat messages
-     * @param {string} model - Model key
-     * @param {object} [options] - Generation options (canonical format)
-     * @param {string} [instanceId] - Explicit instance ID (skips auto-routing)
-     * @returns {AsyncGenerator}
+  
+  
      */
-    generateTextStream(messages: any, model: any, options: {}, instanceId: any): AsyncGenerator<any, void, any>;
+    generateTextStream(messages: any, model: any, options: {} | undefined, instanceId: any): AsyncGenerator<any, void, any>;
     /**
      * Generate an embedding via a local provider.
      *
-     * @param {string} content - Text to embed
-     * @param {string} model - Embedding model key
-     * @param {object} [options] - Optional { dimensions }
-     * @param {string} [instanceId] - Explicit instance ID
+  
+  
      * @returns {Promise<{ embedding: number[], dimensions: number }>}
      */
-    generateEmbedding(content: any, model: any, options: {}, instanceId: any): Promise<any>;
+    generateEmbedding(content: any, model: any, options: {} | undefined, instanceId: any): Promise<any>;
     /**
      * Caption an image via a local provider.
      *
-     * @param {string[]} images - Image data URLs
-     * @param {string} [prompt] - Caption prompt
-     * @param {string} [model] - Vision model key
-     * @param {string} [systemPrompt] - System prompt
-     * @param {string} [instanceId] - Explicit instance ID
+  
+  
      * @returns {Promise<{ text: string, usage: object }>}
      */
     captionImage(images: any, prompt: any, model: any, systemPrompt: any, instanceId: any): Promise<any>;

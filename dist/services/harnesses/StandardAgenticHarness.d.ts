@@ -20,9 +20,9 @@ export default class StandardAgenticHarness extends BaseAgenticHarness {
     static description: string;
     run(): Promise<{
         messages: any[];
-    }>;
+    } | undefined>;
     _handleExitPlanMode(exitPlanTC: any, pass: any, results: any, currentMessages: any): Promise<boolean>;
     _runExhaustionPass(currentMessages: any): Promise<void>;
-    _finalize(ctx: any, currentMessages: any, hooks: any): Promise<void>;
+    _finalize(context: any, currentMessages: any, hooks: any): Promise<void>;
 }
 //# sourceMappingURL=StandardAgenticHarness.d.ts.map

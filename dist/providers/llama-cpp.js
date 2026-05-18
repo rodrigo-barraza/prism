@@ -34,8 +34,8 @@ import { convertToolsToOpenAI, buildPayloadParams, prepareOpenAICompatMessages, 
 // ── Provider ─────────────────────────────────────────────────
 /**
  * Factory: create a llama.cpp provider instance targeting a specific baseUrl.
- * @param {string} baseUrl - The base URL for the llama-server
- * @param {string} [instanceId="llama-cpp"] - Unique instance identifier
+
+
  * @returns {object} Provider object with all llama.cpp methods
  */
 export function createLlamaCppProvider(baseUrl, instanceId = "llama-cpp") {
@@ -192,9 +192,9 @@ export function createLlamaCppProvider(baseUrl, instanceId = "llama-cpp") {
             try {
                 const content = [
                     { type: "text", text: prompt },
-                    ...images.map((img) => ({
+                    ...images.map((image) => ({
                         type: "image_url",
-                        image_url: { url: img },
+                        image_url: { url: image },
                     })),
                 ];
                 const messages = [];

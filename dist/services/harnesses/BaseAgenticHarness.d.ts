@@ -19,11 +19,11 @@ export default class BaseAgenticHarness {
     static label: string;
     static description: string;
     /**
-     * @param {object}              ctx    — generation context from ChatRoutes
+     * @param {object}              context    — generation context from ChatRoutes
      * @param {AgenticLoopState}    state  — shared mutable state accumulator
      * @param {object}              tools  — { finalTools, customToolMap, resolvedEnabledTools }
      */
-    constructor(ctx: any, state: any, tools: any);
+    constructor(context: any, state: any, tools: any);
     /**
      * Execute the agentic loop. Subclasses MUST override.
      * @returns {Promise<{ messages: object[] }>}
@@ -35,8 +35,8 @@ export default class BaseAgenticHarness {
     maybeEmitProgress(): void;
     /**
      * Enforce token budget on messages before sending to provider.
-     * @param {object[]} messages
-     * @param {number}   toolCount
+  
+  
      * @returns {object[]} — possibly truncated messages
      */
     enforceContextWindow(messages: any, toolCount: any): any;
@@ -57,7 +57,7 @@ export default class BaseAgenticHarness {
      * @param {*}      chunk            — raw chunk from provider stream
      * @param {object} pass             — per-iteration pass state
      * @param {Set}    allowedToolNames — tool names in the current schema
-     * @returns {object}
+  
      */
     processStreamChunk(chunk: any, pass: any, allowedToolNames: any): Promise<{
         action: string;
@@ -85,11 +85,11 @@ export default class BaseAgenticHarness {
         streamedText: string;
         streamedThinking: string;
         thinkingSignature: string;
-        pendingToolCalls: any[];
-        streamedImages: any[];
+        pendingToolCalls: never[];
+        streamedImages: never[];
         start: number;
-        firstTokenTime: any;
-        generationEnd: any;
+        firstTokenTime: null;
+        generationEnd: null;
         outputCharacters: number;
         usage: {
             inputTokens: number;
@@ -99,7 +99,7 @@ export default class BaseAgenticHarness {
             reasoningOutputTokens: number;
         };
         options: any;
-        requestId: any;
+        requestId: null;
     };
     _recordFirstToken(pass: any): void;
     _recordTiming(pass: any): void;

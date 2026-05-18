@@ -449,8 +449,8 @@ async function getRunCount(project) {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
     if (!db)
         return 0;
-    const doc = await db.collection(RUNS_COLLECTION).findOne({ project });
-    return doc?.sessionsSinceLastRun || 0;
+    const document = await db.collection(RUNS_COLLECTION).findOne({ project });
+    return document?.sessionsSinceLastRun || 0;
 }
 async function incrementRunCount(project) {
     const db = MongoWrapper.getDb(MONGO_DB_NAME);
@@ -642,12 +642,11 @@ const MemoryConsolidationService = {
      * Run memory consolidation for a specific agent within a project.
      * Processes memories in batches to avoid context window overflow.
      *
-     * @param {object} params
+  
      * @param {string} params.agent - Agent identifier
      * @param {string} params.project - Project identifier
-     * @param {string} [params.username] - For attribution on merged memories
-     * @param {string} [params.trigger="manual"] - What triggered the run ("manual", "scheduled", "session_threshold")
-     * @param {function} [params.broadcast] - Optional callback for real-time WebSocket notifications
+  
+  
      * @returns {Promise<object>} Consolidation results
      */
     async consolidate({ agent = "CODING", project, username, trigger = "manual", broadcast, endpoint, traceId, agentSessionId, guildId, }) {
@@ -877,10 +876,10 @@ const MemoryConsolidationService = {
      * Check if consolidation should run and trigger if needed.
      * Called by MemoryExtractor after storing new memories.
      *
-     * @param {object} params
+  
      * @param {string} params.project - Project identifier
-     * @param {string} [params.username] - Username for attribution
-     * @param {function} [params.broadcast] - Optional broadcast callback for WebSocket notifications
+  
+  
      */
     async checkAndRun({ project, username, broadcast, endpoint, agent, traceId, agentSessionId, }) {
         try {
@@ -908,8 +907,8 @@ const MemoryConsolidationService = {
     /**
      * Get consolidation run history for a project.
      *
-     * @param {string} project - Project identifier
-     * @param {number} [limit=10] - Max history entries to return
+  
+  
      * @returns {Promise<Array>} Consolidation history entries, newest first
      */
     async getHistory(project, limit = 10) {

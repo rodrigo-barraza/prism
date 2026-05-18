@@ -12,7 +12,7 @@ import logger from "./logger.js";
 let _ffmpegAvailable = null;
 /**
  * Probe whether ffmpeg is on the PATH. Result is cached after first call.
- * @returns {Promise<boolean>}
+
  */
 async function isFfmpegAvailable() {
     // @ts-ignore
@@ -45,9 +45,8 @@ const MAX_IMAGE_DIMENSION = 2000;
  *  - GIFs → ffmpeg resize (preserves animation for models that support it)
  *  - Everything else → sharp JPEG conversion + progressive downscale
  *
- * @param {string} base64Data  - Raw base64 string (no data: prefix)
- * @param {string} mediaType   - MIME type, e.g. "image/png"
- * @param {number} [maxBytes]   - Maximum allowed size in bytes (default: 5 MB)
+
+
  * @returns {Promise<{ data: string, mediaType: string }>} Compressed base64 + updated MIME
  */
 export async function compressImageForSizeLimit(base64Data, mediaType, maxBytes = ANTHROPIC_IMAGE_MAX_BYTES) {
@@ -77,9 +76,8 @@ export async function compressImageForSizeLimit(base64Data, mediaType, maxBytes 
  *
  * GIFs are skipped (ffmpeg handles them separately in byte-size compression).
  *
- * @param {string} base64Data  - Raw base64 string (no data: prefix)
- * @param {string} mediaType   - MIME type, e.g. "image/png"
- * @param {number} [maxDim]    - Max pixels for either axis (default: 7680)
+
+
  * @returns {Promise<{ data: string, mediaType: string }>} Possibly resized base64 + MIME
  */
 export async function constrainImageDimensions(base64Data, mediaType, maxDim = MAX_IMAGE_DIMENSION) {
@@ -274,7 +272,7 @@ async function compressWithSharp(base64Data, maxBytes) {
 }
 /**
  * Detect MIME type from a base64 data URL.
- * @param {string} dataUrl - A data: URL string
+
  * @returns {string|null} The MIME type (e.g. "image/png") or null
  */
 export function getDataUrlMimeType(dataUrl) {
@@ -283,8 +281,8 @@ export function getDataUrlMimeType(dataUrl) {
 }
 /**
  * Check if a string is a valid data: URL, HTTP(S) URL, or other ref type.
- * @param {string} url
- * @returns {"data"|"http"|"unknown"}
+
+
  */
 export function getUrlType(url) {
     if (url.startsWith("data:"))
@@ -295,8 +293,8 @@ export function getUrlType(url) {
 }
 /**
  * Infer MIME category from a URL's file extension.
- * @param {string} url
- * @returns {"image"|"pdf"|"text"|"unknown"}
+
+
  */
 export function inferMimeFromUrl(url) {
     try {
@@ -322,11 +320,8 @@ export function inferMimeFromUrl(url) {
  * keeps total image tokens ~2K, leaving room for text generation in
  * local models with limited context windows (4K-8K typical).
  *
- * @param {string} videoDataUrl - A data:video/...;base64,... URL
- * @param {object} [options]
- * @param {number} [options.fps=1] - Frames per second to extract
- * @param {number} [options.maxFrames=8] - Maximum frames to extract
- * @param {number} [options.quality=5] - JPEG quality (2=best, 31=worst)
+
+
  * @returns {Promise<string[]>} Array of data:image/jpeg;base64,... URLs
  */
 export async function extractVideoFrames(videoDataUrl, options = {}) {
